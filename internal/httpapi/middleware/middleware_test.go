@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,6 +29,29 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+func newTestAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass string) *AuthzMiddleware {
+	authRuntime := authentication.NewRuntime(logger, mode, basicUser, basicPass)
+	return NewAuthzMiddleware(logger, Options{
+		Mode:                    mode,
+		Authentication:          authRuntime.Authentication,
+		Authorization:           authRuntime.Authorization,
+		LocalAuthzError:         authRuntime.LocalAuthzError,
+		LocalAuthzForSubject:    authRuntime.LocalAuthzForSubject,
+		AuthorizationFromClaims: authentication.AuthorizationFromClaims,
+		ExtractToken:            authentication.ExtractBearerLikeToken,
+		ResolveToken: func(ctx context.Context, token string) ([]string, map[string]map[string]bool, bool) {
+			result := authRuntime.TokenResolver.Resolve(ctx, token)
+			return result.Resources, result.Privileges, result.Negative
+		},
+		Mock: MockOptions{
+			Enabled:           authRuntime.Mock.Enabled,
+			RequireAuthHeader: authRuntime.Mock.RequireAuthHeader,
+			Resources:         authRuntime.Mock.Resources,
+			Methods:           authRuntime.Mock.Methods,
+		},
+	})
+}
 
 func injectDummyPluginManager(m *AuthzMiddleware) {
 	m.pluginManager = &DummyPluginManager{}
@@ -69,7 +94,7 @@ func (p *recordingAuthorizationPlugin) Authorize(_ context.Context, in *plugin.A
 }
 
 func TestLocalModeBasicAuthEnforced(t *testing.T) {
-	m := NewAuthzMiddleware(slog.Default(), "local", "user", "pass")
+	m := newTestAuthzMiddleware(slog.Default(), "local", "user", "pass")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -113,7 +138,7 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 
 	for _, tc := range paths {
 		t.Run(tc.name, func(t *testing.T) {
-			m := NewAuthzMiddleware(slog.Default(), "local", "user", "pass")
+			m := newTestAuthzMiddleware(slog.Default(), "local", "user", "pass")
 			app := fiber.New()
 			app.Use(m.FiberMiddleware())
 			app.Get(tc.path, func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
@@ -133,9 +158,15 @@ func TestPluginInputsReceiveRequestID(t *testing.T) {
 	const requestID = "request-id-for-plugin"
 	authn := &recordingAuthenticationPlugin{}
 	authz := &recordingAuthorizationPlugin{}
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
-	m.authnPluginManager = authn
-	m.pluginManager = authz
+	m := NewAuthzMiddleware(slog.Default(), Options{
+		Mode:           "gen3",
+		Authentication: authn,
+		Authorization:  authz,
+		ExtractToken:   authentication.ExtractBearerLikeToken,
+		ResolveToken: func(context.Context, string) ([]string, map[string]map[string]bool, bool) {
+			return nil, nil, true
+		},
+	})
 
 	app := fiber.New()
 	app.Use(NewRequestIDMiddleware(nil).FiberMiddleware())
@@ -160,8 +191,44 @@ func TestPluginInputsReceiveRequestID(t *testing.T) {
 	}
 }
 
+type nilOutputAuthenticationPlugin struct{}
+
+func (nilOutputAuthenticationPlugin) Authenticate(context.Context, *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
+	return nil, nil
+}
+
+func TestNilAuthenticationOutputPreservesExistingPanic(t *testing.T) {
+	if os.Getenv("SYFON_NIL_OUTPUT_CHILD") == "1" {
+		runNilAuthenticationOutputRequest()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run", "^TestNilAuthenticationOutputPreservesExistingPanic$", "-test.v")
+	cmd.Env = append(os.Environ(), "SYFON_NIL_OUTPUT_CHILD=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected nil authentication output to preserve the existing panic")
+	}
+	if !bytes.Contains(output, []byte("invalid memory address")) {
+		t.Fatalf("expected nil authentication output panic, got: %s", output)
+	}
+}
+
+func runNilAuthenticationOutputRequest() {
+	m := NewAuthzMiddleware(slog.Default(), Options{
+		Mode:           "gen3",
+		Authentication: nilOutputAuthenticationPlugin{},
+	})
+	app := fiber.New()
+	app.Use(m.FiberMiddleware())
+	app.Get("/", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(fiber.HeaderAuthorization, "Bearer token")
+	_, _ = app.Test(req)
+}
+
 func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -185,7 +252,7 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 }
 
 func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
 	injectDummyPluginManager(m)
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
@@ -357,7 +424,7 @@ func TestGen3ModePopulatesUserPrivilegesFromFence(t *testing.T) {
 		t.Fatalf("sign token: %v", err)
 	}
 
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
 	injectDummyAuthenticationPluginManager(m, true)
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
@@ -453,7 +520,7 @@ func TestGen3MockAuthInjectsPrivileges(t *testing.T) {
 	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file,/programs/cbds/projects/end_to_end_test")
 	t.Setenv("DRS_AUTH_MOCK_METHODS", "read,file_upload,create,update,delete")
 
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -485,7 +552,7 @@ func TestGen3MockAuthRequireHeader(t *testing.T) {
 	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file")
 	t.Setenv("DRS_AUTH_MOCK_METHODS", "read")
 
-	m := NewAuthzMiddleware(slog.Default(), "gen3", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -518,7 +585,7 @@ func TestLocalAuthzCSVInjectsMethodAwarePrivileges(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := NewAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
+	m := newTestAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -562,7 +629,7 @@ func TestLocalAuthzCSVReplacesSingleAdminCredentials(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := NewAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
+	m := newTestAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -587,7 +654,7 @@ func TestLocalAuthzCSVDeniesAuthenticatedSubjectMissingFromCSV(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := NewAuthzMiddleware(slog.Default(), "local", "", "")
+	m := newTestAuthzMiddleware(slog.Default(), "local", "", "")
 	injectDummyAuthenticationPluginManager(m, true)
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
@@ -732,7 +799,7 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			m := NewAuthzMiddleware(slog.Default(), tc.mode, tc.basicUser, tc.basicPass)
+			m := newTestAuthzMiddleware(slog.Default(), tc.mode, tc.basicUser, tc.basicPass)
 			// Always inject dummy plugin manager for malformed bearer scenario
 			if tc.name == "gen3 malformed bearer" {
 				injectDummyPluginManager(m)

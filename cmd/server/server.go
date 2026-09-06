@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
@@ -148,12 +149,31 @@ var Cmd = &cobra.Command{
 		// Init AuthZ Middleware
 		// We use a standard slog.Logger for data-client compatibility
 		slogLogger := logger
-		authzMiddleware := middleware.NewAuthzMiddleware(
+		authRuntime := authentication.NewRuntime(
 			slogLogger,
 			cfg.Auth.Mode,
 			cfg.Auth.Basic.Username,
 			cfg.Auth.Basic.Password,
 		)
+		authzMiddleware := middleware.NewAuthzMiddleware(slogLogger, middleware.Options{
+			Mode:                    cfg.Auth.Mode,
+			Authentication:          authRuntime.Authentication,
+			Authorization:           authRuntime.Authorization,
+			LocalAuthzError:         authRuntime.LocalAuthzError,
+			LocalAuthzForSubject:    authRuntime.LocalAuthzForSubject,
+			AuthorizationFromClaims: authentication.AuthorizationFromClaims,
+			ExtractToken:            authentication.ExtractBearerLikeToken,
+			ResolveToken: func(ctx context.Context, token string) ([]string, map[string]map[string]bool, bool) {
+				result := authRuntime.TokenResolver.Resolve(ctx, token)
+				return result.Resources, result.Privileges, result.Negative
+			},
+			Mock: middleware.MockOptions{
+				Enabled:           authRuntime.Mock.Enabled,
+				RequireAuthHeader: authRuntime.Mock.RequireAuthHeader,
+				Resources:         authRuntime.Mock.Resources,
+				Methods:           authRuntime.Mock.Methods,
+			},
+		})
 		requestIDMiddleware := middleware.NewRequestIDMiddleware(slogLogger)
 
 		rt := &serverRuntime{

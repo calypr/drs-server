@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"testing"
 
 	conf "github.com/calypr/syfon/client/config"
@@ -64,6 +66,26 @@ func TestLoadMockAuthConfigFromEnv(t *testing.T) {
 	}
 	if len(got.Methods) != 2 || got.Methods[0] != "read" || got.Methods[1] != "create" {
 		t.Fatalf("unexpected mock methods: %v", got.Methods)
+	}
+}
+
+func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
+	missingPlugin := filepath.Join(t.TempDir(), "missing-plugin")
+	missingCSV := filepath.Join(t.TempDir(), "missing-authz.csv")
+	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", missingPlugin)
+	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", missingPlugin)
+	t.Setenv("DRS_LOCAL_AUTHZ_CSV", missingCSV)
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
+
+	runtime := NewRuntime(slog.Default(), "local", "user", "pass")
+	if runtime.Authorization != nil {
+		t.Fatalf("expected failed authorization plugin startup to be swallowed")
+	}
+	if runtime.Authentication == nil {
+		t.Fatalf("expected local authentication fallback after failed plugin startup")
+	}
+	if runtime.LocalAuthzError == nil {
+		t.Fatalf("expected local CSV startup error to remain available to request wiring")
 	}
 }
 
@@ -204,17 +226,17 @@ func TestPluginRPCDelegation(t *testing.T) {
 		_ = serverConn.Close()
 	})
 
-	authnOut, err := (&AuthnRPC{client: client}).Authenticate(context.Background(), &plugin.AuthenticationInput{RequestID: "rid"})
+	authnOut, err := (&authnRPC{client: client}).Authenticate(context.Background(), &plugin.AuthenticationInput{RequestID: "rid"})
 	if err != nil || !authnOut.Authenticated || authnOut.Subject != "rid" {
 		t.Fatalf("unexpected authn rpc output: out=%+v err=%v", authnOut, err)
 	}
-	authzOut, err := (&AuthzRPC{client: client}).Authorize(context.Background(), &plugin.AuthorizationInput{Subject: "alice"})
+	authzOut, err := (&authzRPC{client: client}).Authorize(context.Background(), &plugin.AuthorizationInput{Subject: "alice"})
 	if err != nil || !authzOut.Allow {
 		t.Fatalf("unexpected authz rpc output: out=%+v err=%v", authzOut, err)
 	}
 
-	var authnPlugin hplugin.Plugin = &AuthnPluginRPC{}
-	var authzPlugin hplugin.Plugin = &AuthzPluginRPC{}
+	var authnPlugin hplugin.Plugin = &authnPluginRPC{}
+	var authzPlugin hplugin.Plugin = &authzPluginRPC{}
 	if authnPlugin == nil || authzPlugin == nil {
 		t.Fatal("expected RPC adapters to implement go-plugin Plugin")
 	}

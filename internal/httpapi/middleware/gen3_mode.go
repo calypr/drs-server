@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
@@ -50,16 +49,18 @@ func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authH
 	session.SetClaims(output.Claims)
 	session.SetSource(access.SourceGen3Fence)
 
-	tokenString, err := authentication.ExtractBearerLikeToken(authHeader)
-	if err != nil {
-		m.logger.Debug("failed to extract bearer token for authorization lookup", "error", err)
-	} else {
-		authResult := m.tokenResolver.Resolve(ctx, tokenString)
-		if authResult.Negative {
-			m.logger.Debug("authorization lookup failed or returned no usable privileges")
+	if m.extractToken != nil && m.resolveToken != nil {
+		tokenString, err := m.extractToken(authHeader)
+		if err != nil {
+			m.logger.Debug("failed to extract bearer token for authorization lookup", "error", err)
 		} else {
-			m.logger.Debug("authorization lookup complete", "resources", len(authResult.Resources))
-			session.SetAuthorizations(authResult.Resources, authResult.Privileges, true)
+			resources, privileges, negative := m.resolveToken(ctx, tokenString)
+			if negative {
+				m.logger.Debug("authorization lookup failed or returned no usable privileges")
+			} else {
+				m.logger.Debug("authorization lookup complete", "resources", len(resources))
+				session.SetAuthorizations(resources, privileges, true)
+			}
 		}
 	}
 

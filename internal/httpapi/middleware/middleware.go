@@ -4,72 +4,62 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
 )
 
-type AuthzMiddleware struct {
-	logger             *slog.Logger
-	mode               string
-	basicUser          string
-	basicPass          string
-	mock               authentication.MockConfig
-	pluginManager      plugin.AuthorizationPlugin
-	authnPluginManager plugin.AuthenticationPlugin
-	localUsers         *authentication.LocalAuthzStore
-	localUsersErr      error
-	tokenResolver      *authentication.TokenAuthResolver
+type MockOptions struct {
+	Enabled           bool
+	RequireAuthHeader bool
+	Resources         []string
+	Methods           []string
 }
 
-func NewAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass string) *AuthzMiddleware {
-	m := &AuthzMiddleware{
-		logger:        logger,
-		mode:          strings.ToLower(strings.TrimSpace(mode)),
-		basicUser:     basicUser,
-		basicPass:     basicPass,
-		mock:          authentication.LoadMockAuthConfigFromEnv(),
-		tokenResolver: authentication.NewTokenAuthResolver(logger),
+type Options struct {
+	Mode                    string
+	Authentication          plugin.AuthenticationPlugin
+	Authorization           plugin.AuthorizationPlugin
+	LocalAuthzError         error
+	LocalAuthzForSubject    func(string) ([]string, map[string]map[string]bool, bool)
+	AuthorizationFromClaims func(map[string]interface{}) ([]string, map[string]map[string]bool, bool)
+	ExtractToken            func(string) (string, error)
+	ResolveToken            func(context.Context, string) ([]string, map[string]map[string]bool, bool)
+	Mock                    MockOptions
+}
+
+type AuthzMiddleware struct {
+	logger                  *slog.Logger
+	mode                    string
+	mock                    MockOptions
+	pluginManager           plugin.AuthorizationPlugin
+	authnPluginManager      plugin.AuthenticationPlugin
+	localUsersErr           error
+	localAuthzForSubject    func(string) ([]string, map[string]map[string]bool, bool)
+	authorizationFromClaims func(map[string]interface{}) ([]string, map[string]map[string]bool, bool)
+	extractToken            func(string) (string, error)
+	resolveToken            func(context.Context, string) ([]string, map[string]map[string]bool, bool)
+}
+
+func NewAuthzMiddleware(logger *slog.Logger, options Options) *AuthzMiddleware {
+	if logger == nil {
+		logger = slog.Default()
 	}
-	if m.mode == "local" {
-		localCSV := strings.TrimSpace(os.Getenv("DRS_LOCAL_AUTHZ_CSV"))
-		if localCSV != "" {
-			users, err := authentication.LoadLocalAuthzCSV(localCSV)
-			if err != nil {
-				m.localUsersErr = err
-				logger.Error("failed to load local authz csv", "path", localCSV, "err", err)
-			} else {
-				m.localUsers = users
-			}
-		}
+	return &AuthzMiddleware{
+		logger:                  logger,
+		mode:                    strings.ToLower(strings.TrimSpace(options.Mode)),
+		mock:                    options.Mock,
+		pluginManager:           options.Authorization,
+		authnPluginManager:      options.Authentication,
+		localUsersErr:           options.LocalAuthzError,
+		localAuthzForSubject:    options.LocalAuthzForSubject,
+		authorizationFromClaims: options.AuthorizationFromClaims,
+		extractToken:            options.ExtractToken,
+		resolveToken:            options.ResolveToken,
 	}
-	pluginPath := os.Getenv("SYFON_AUTHZ_PLUGIN_PATH")
-	if pluginPath != "" {
-		pm, err := authentication.NewAuthorizationPluginManager(pluginPath)
-		if err == nil {
-			m.pluginManager = pm
-		}
-	}
-	authnPluginPath := os.Getenv("SYFON_AUTHN_PLUGIN_PATH")
-	if authnPluginPath != "" {
-		apm, err := authentication.NewAuthenticationPluginManager(authnPluginPath)
-		if err == nil {
-			m.authnPluginManager = apm
-		}
-	}
-	if m.authnPluginManager == nil {
-		if m.mode == "local" {
-			m.authnPluginManager = &authentication.LocalAuthPlugin{BasicUser: basicUser, BasicPass: basicPass, Users: m.localUsers}
-		} else if m.mode == "gen3" && !m.mock.Enabled {
-			m.authnPluginManager = &authentication.Gen3AuthPlugin{MockConfig: m.mock}
-		}
-	}
-	return m
 }
 
 // FiberMiddleware returns the request-wiring handler for access context and decisions.
