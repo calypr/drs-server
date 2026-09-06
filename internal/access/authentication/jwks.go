@@ -40,8 +40,8 @@ func discoverJWKSURL(issuer string) (string, error) {
 	return issuer + "/.well-known/jwks.json", nil
 }
 
-// JWKSCache holds JWKS public keys for JWT signature verification
-type JWKSCache struct {
+// jwksCache holds JWKS public keys for JWT signature verification.
+type jwksCache struct {
 	mu        sync.RWMutex
 	keys      map[string]interface{} // kid -> public key
 	jwksURL   string
@@ -49,8 +49,8 @@ type JWKSCache struct {
 	lastFetch time.Time
 }
 
-// JWK represents a JSON Web Key
-type JWK struct {
+// jwk represents a JSON Web Key.
+type jwk struct {
 	Kty string `json:"kty"` // Key type (RSA, EC, etc)
 	Use string `json:"use"` // Use (sig, enc)
 	Kid string `json:"kid"` // Key ID
@@ -58,22 +58,22 @@ type JWK struct {
 	E   string `json:"e"`   // RSA exponent
 }
 
-// JWKS represents a JSON Web Key Set response
-type JWKS struct {
-	Keys []JWK `json:"keys"`
+// jwks represents a JSON Web Key Set response.
+type jwks struct {
+	Keys []jwk `json:"keys"`
 }
 
-// NewJWKSCache creates a new JWKS cache for the given endpoint
-func NewJWKSCache(jwksURL string, ttl time.Duration) *JWKSCache {
-	return &JWKSCache{
+// newJWKSCache creates a new JWKS cache for the given endpoint.
+func newJWKSCache(jwksURL string, ttl time.Duration) *jwksCache {
+	return &jwksCache{
 		keys:    make(map[string]interface{}),
 		jwksURL: jwksURL,
 		ttl:     ttl,
 	}
 }
 
-// FetchKeys retrieves and caches JWKS keys
-func (c *JWKSCache) FetchKeys() error {
+// fetchKeys retrieves and caches JWKS keys.
+func (c *jwksCache) fetchKeys() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -97,14 +97,14 @@ func (c *JWKSCache) FetchKeys() error {
 		return fmt.Errorf("JWKS fetch failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var jwks JWKS
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	var keySet jwks
+	if err := json.NewDecoder(resp.Body).Decode(&keySet); err != nil {
 		return fmt.Errorf("decode JWKS response: %w", err)
 	}
 
 	// Convert JWKs to Go crypto keys
 	keys := make(map[string]interface{})
-	for _, jwk := range jwks.Keys {
+	for _, jwk := range keySet.Keys {
 		if jwk.Kty != "RSA" {
 			continue
 		}
@@ -122,8 +122,8 @@ func (c *JWKSCache) FetchKeys() error {
 	return nil
 }
 
-// GetKey retrieves a key by KID
-func (c *JWKSCache) GetKey(kid string) (interface{}, error) {
+// getKey retrieves a key by KID.
+func (c *jwksCache) getKey(kid string) (interface{}, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -135,7 +135,7 @@ func (c *JWKSCache) GetKey(kid string) (interface{}, error) {
 }
 
 // jwkToRSAPublicKey converts a JWK to an RSA public key
-func jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
+func jwkToRSAPublicKey(jwk jwk) (*rsa.PublicKey, error) {
 	// Decode N (modulus)
 	nBytes, err := decodeBase64URL(jwk.N)
 	if err != nil {

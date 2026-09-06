@@ -47,12 +47,12 @@ func parseToken(tokenString string) (endpoint string, exp float64, err error) {
 			return nil, fmt.Errorf("JWKS endpoint must use HTTPS, got: %s", jwksURL)
 		}
 
-		cache := NewJWKSCache(jwksURL, 15*time.Minute)
-		if err := cache.FetchKeys(); err != nil {
+		cache := newJWKSCache(jwksURL, 15*time.Minute)
+		if err := cache.fetchKeys(); err != nil {
 			return nil, fmt.Errorf("fetch JWKS: %w", err)
 		}
 
-		publicKey, err := cache.GetKey(kid)
+		publicKey, err := cache.getKey(kid)
 		if err != nil {
 			return nil, fmt.Errorf("key not found in JWKS (kid=%s): %w", kid, err)
 		}
