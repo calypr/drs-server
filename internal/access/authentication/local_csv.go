@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/subtle"
@@ -18,7 +18,22 @@ const (
 	localAuthzPrivilegesClaim = "syfon_local_authz_privileges"
 )
 
-type localAuthzStore struct {
+func AuthorizationFromClaims(claims map[string]interface{}) ([]string, map[string]map[string]bool, bool) {
+	if claims == nil {
+		return nil, nil, false
+	}
+	resources, ok := claims[localAuthzResourcesClaim].([]string)
+	if !ok {
+		return nil, nil, false
+	}
+	privileges, ok := claims[localAuthzPrivilegesClaim].(map[string]map[string]bool)
+	if !ok {
+		return nil, nil, false
+	}
+	return append([]string(nil), resources...), clonePrivMap(privileges), true
+}
+
+type LocalAuthzStore struct {
 	users map[string]*localAuthzUser
 }
 
@@ -28,7 +43,7 @@ type localAuthzUser struct {
 	privileges map[string]map[string]bool
 }
 
-func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
+func LoadLocalAuthzCSV(path string) (*LocalAuthzStore, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open local authz csv: %w", err)
@@ -54,7 +69,7 @@ func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 		return nil, fmt.Errorf("local authz csv requires username, password, methods, and either resource or organization columns")
 	}
 
-	store := &localAuthzStore{users: map[string]*localAuthzUser{}}
+	store := &LocalAuthzStore{users: map[string]*localAuthzUser{}}
 	line := 1
 	for {
 		record, err := r.Read()
@@ -115,7 +130,7 @@ func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 	return store, nil
 }
 
-func (s *localAuthzStore) authenticate(authHeader string) (*plugin.AuthenticationOutput, error) {
+func (s *LocalAuthzStore) authenticate(authHeader string) (*plugin.AuthenticationOutput, error) {
 	username, password, err := parseBasicCredentials(authHeader)
 	if err != nil {
 		return &plugin.AuthenticationOutput{Authenticated: false, Reason: err.Error()}, nil
@@ -139,12 +154,31 @@ func (s *localAuthzStore) authenticate(authHeader string) (*plugin.Authenticatio
 	}, nil
 }
 
-func (s *localAuthzStore) authzForSubject(subject string) ([]string, map[string]map[string]bool, bool) {
+func (s *LocalAuthzStore) AuthzForSubject(subject string) ([]string, map[string]map[string]bool, bool) {
 	user := s.users[strings.TrimSpace(subject)]
 	if user == nil {
 		return nil, nil, false
 	}
 	return append([]string(nil), user.resources...), clonePrivMap(user.privileges), true
+}
+
+func clonePrivMap(in map[string]map[string]bool) map[string]map[string]bool {
+	if len(in) == 0 {
+		return map[string]map[string]bool{}
+	}
+	out := make(map[string]map[string]bool, len(in))
+	for k, methods := range in {
+		if methods == nil {
+			out[k] = map[string]bool{}
+			continue
+		}
+		mm := make(map[string]bool, len(methods))
+		for mk, mv := range methods {
+			mm[mk] = mv
+		}
+		out[k] = mm
+	}
+	return out
 }
 
 func parseBasicCredentials(authHeader string) (string, string, error) {

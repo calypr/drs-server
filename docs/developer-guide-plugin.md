@@ -34,7 +34,7 @@ type AuthorizationPlugin interface {
 
 ## Handshake and Communication
 - Use `github.com/hashicorp/go-plugin` for plugin RPC and handshake.
-- The handshake config must match Syfon’s expectations (see `plugin.go`).
+- The handshake config must match Syfon’s expectations (see `plugin/types.go`).
 
 ## Example Plugin Skeleton
 
@@ -43,16 +43,17 @@ package main
 
 import (
     "context"
-    "github.com/hashicorp/go-plugin"
-    "syfon/internal/api/middleware" // adjust import path as needed
+    "net/rpc"
+    hplugin "github.com/hashicorp/go-plugin"
+    "github.com/calypr/syfon/plugin"
 )
 
 type MyAuthzPlugin struct{}
 
-func (p *MyAuthzPlugin) Authorize(ctx context.Context, in *middleware.AuthorizationInput) (*middleware.AuthorizationOutput, error) {
+func (p *MyAuthzPlugin) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
     // Implement your policy logic here
     allow := (in.Subject == "admin")
-    return &middleware.AuthorizationOutput{
+    return &plugin.AuthorizationOutput{
         Allow: allow,
         Reason: "example policy",
         Obligations: map[string]interface{}{
@@ -62,13 +63,25 @@ func (p *MyAuthzPlugin) Authorize(ctx context.Context, in *middleware.Authorizat
     }, nil
 }
 
+type authzPluginRPC struct {
+    hplugin.Plugin
+    Impl *MyAuthzPlugin
+}
+
+func (p *authzPluginRPC) Server(*hplugin.MuxBroker) (interface{}, error) {
+    return p.Impl, nil
+}
+
+func (p *authzPluginRPC) Client(*hplugin.MuxBroker, *rpc.Client) (interface{}, error) {
+    return nil, nil
+}
+
 func main() {
-    plugin.Serve(&plugin.ServeConfig{
-        HandshakeConfig: middleware.PluginHandshake,
-        Plugins: map[string]plugin.Plugin{
-            "authz": &middleware.AuthzPluginImpl{Impl: &MyAuthzPlugin{}},
+    hplugin.Serve(&hplugin.ServeConfig{
+        HandshakeConfig: plugin.Handshake,
+        Plugins: map[string]hplugin.Plugin{
+            "authz": &authzPluginRPC{Impl: &MyAuthzPlugin{}},
         },
-        GRPCServer: plugin.DefaultGRPCServer,
     })
 }
 ```
@@ -83,5 +96,4 @@ func main() {
 
 ## Resources
 - [HashiCorp go-plugin documentation](https://github.com/hashicorp/go-plugin)
-- See Syfon’s `internal/api/middleware/plugin.go` for the full contract and handshake details.
-
+- See `plugin/types.go` for the public contract and follow the local server-wrapper pattern above for RPC registration.

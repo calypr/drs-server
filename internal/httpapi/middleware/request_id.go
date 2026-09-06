@@ -32,7 +32,6 @@ func (m *RequestIDMiddleware) FiberMiddleware() fiber.Handler {
 			requestID = newRequestID()
 		}
 
-		// Inject into context for downstream usage
 		ctx := requestmeta.WithRequestID(c.Context(), requestID)
 		c.SetContext(ctx)
 

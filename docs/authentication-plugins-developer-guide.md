@@ -27,22 +27,36 @@ package main
 
 import (
 	"context"
-	"github.com/hashicorp/go-plugin"
-	"github.com/calypr/syfon/internal/api/middleware"
+	"net/rpc"
+	hplugin "github.com/hashicorp/go-plugin"
+	"github.com/calypr/syfon/plugin"
 )
 
 type MyAuthnPlugin struct{}
 
-func (p *MyAuthnPlugin) Authenticate(ctx context.Context, in *middleware.AuthenticationInput) (*middleware.AuthenticationOutput, error) {
+func (p *MyAuthnPlugin) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
 	// Your logic here
-	return &middleware.AuthenticationOutput{Authenticated: true, Subject: "user"}, nil
+	return &plugin.AuthenticationOutput{Authenticated: true, Subject: "user"}, nil
+}
+
+type authnPluginRPC struct {
+	hplugin.Plugin
+	Impl *MyAuthnPlugin
+}
+
+func (p *authnPluginRPC) Server(*hplugin.MuxBroker) (interface{}, error) {
+	return p.Impl, nil
+}
+
+func (p *authnPluginRPC) Client(*hplugin.MuxBroker, *rpc.Client) (interface{}, error) {
+	return nil, nil
 }
 
 func main() {
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: middleware.Handshake,
-		Plugins: map[string]plugin.Plugin{
-			"authn": &middleware.AuthnPluginRPC{},
+	hplugin.Serve(&hplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]hplugin.Plugin{
+			"authn": &authnPluginRPC{Impl: &MyAuthnPlugin{}},
 		},
 	})
 }

@@ -6,10 +6,10 @@ import (
 	"github.com/calypr/syfon/internal/api/internaldrs"
 	"github.com/calypr/syfon/internal/api/lfs"
 	"github.com/calypr/syfon/internal/api/metrics"
-	"github.com/calypr/syfon/internal/api/middleware"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/db"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/urlmanager"
 	"github.com/gofiber/fiber/v3"
 )

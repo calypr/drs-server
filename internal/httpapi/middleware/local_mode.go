@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
@@ -28,10 +29,11 @@ func (m *AuthzMiddleware) handleLocalAuth(c fiber.Ctx, ctx context.Context, auth
 		session.SetSubject(output.Subject)
 		session.SetClaims(output.Claims)
 		session.SetSource(access.SourceLocalBasic)
-		if m.applyLocalAuthzClaims(session, output) {
+		if resources, privileges, ok := authentication.AuthorizationFromClaims(output.Claims); ok {
+			session.SetAuthorizations(resources, privileges, true)
 			session.SetSource(access.SourceLocalCSV)
 		} else if m.localUsers != nil && output.Subject != "" {
-			if resources, privileges, ok := m.localUsers.authzForSubject(output.Subject); ok {
+			if resources, privileges, ok := m.localUsers.AuthzForSubject(output.Subject); ok {
 				session.SetAuthorizations(resources, privileges, true)
 				session.SetSource(access.SourceLocalCSV)
 			} else {
@@ -43,20 +45,4 @@ func (m *AuthzMiddleware) handleLocalAuth(c fiber.Ctx, ctx context.Context, auth
 		return m.applySession(c, ctx, session)
 	}
 	return m.applySession(c, ctx, session)
-}
-
-func (m *AuthzMiddleware) applyLocalAuthzClaims(session *access.Session, output *plugin.AuthenticationOutput) bool {
-	if output == nil || output.Claims == nil {
-		return false
-	}
-	resources, ok := output.Claims[localAuthzResourcesClaim].([]string)
-	if !ok {
-		return false
-	}
-	privileges, ok := output.Claims[localAuthzPrivilegesClaim].(map[string]map[string]bool)
-	if !ok {
-		return false
-	}
-	session.SetAuthorizations(resources, privileges, true)
-	return true
 }

@@ -11,11 +11,11 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/internalapi"
 	"github.com/calypr/syfon/internal/api/apiutil"
-	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
 	"github.com/calypr/syfon/internal/api/routeutil"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/faults"
+	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/gofiber/fiber/v3"
 )

@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/api/middleware"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 	"github.com/gofiber/fiber/v3"

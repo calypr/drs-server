@@ -13,8 +13,8 @@ cd "$REPO_ROOT"
 
 # Test authentication/authorization fixes (CRIT-1, HIGH-1, HIGH-2)
 echo "[1/5] Testing Authentication & Authorization Fixes (CRIT-1, HIGH-1, HIGH-2)..."
-go test -v ./internal/api/middleware -run TestParseToken_IssuerAllowlistValidation
-go test -v ./internal/api/middleware -run TestIsIssuerAllowed
+go test -v ./internal/access/authentication -run TestParseToken_IssuerAllowlistValidation
+go test -v ./internal/access/authentication -run TestIsIssuerAllowed
 go test -v ./internal/config -run TestLoadConfig_LocalModeWithoutBasicAuthRejected
 go test -v ./internal/config -run TestLoadConfig_LocalModeAllowsExplicitUnauthenticatedDevMode
 go test -v ./internal/config -run TestLoadConfig_MockAuthAllowsGen3Mode

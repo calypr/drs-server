@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/rand"
@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TestJWTSignatureVerification tests that parseToken properly verifies JWT signatures
+// TestJWTSignatureVerification tests JWT signature verification.
 func TestJWTSignatureVerification_ValidSignature(t *testing.T) {
 	// Setup allowed issuer
 	if err := os.Setenv("DRS_FENCE_URL", "https://fence.example.com"); err != nil {

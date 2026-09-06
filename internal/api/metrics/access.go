@@ -9,7 +9,7 @@ import (
 
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/access"
-	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
+	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 )
 
 func (s *MetricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {

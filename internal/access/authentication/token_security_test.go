@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/rand"
@@ -113,7 +113,6 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 		},
 	}
 
-	m := &AuthzMiddleware{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			oldEnv := os.Getenv("DRS_FENCE_URL")
@@ -130,7 +129,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 				"iss": tt.issuerClaim,
 				"exp": tt.expUnix,
 			})
-			endpoint, exp, parseErr := m.parseToken(tokenString)
+			endpoint, exp, parseErr := ParseToken(tokenString)
 
 			if tt.wantErr {
 				if parseErr == nil {
@@ -170,7 +169,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 			"exp": int64(1893456000),
 		})
 
-		endpoint, exp, parseErr := m.parseToken(tokenString)
+		endpoint, exp, parseErr := ParseToken(tokenString)
 		if parseErr == nil {
 			t.Fatalf("expected error for malformed iss, got nil")
 		}

@@ -67,7 +67,7 @@ The generated surface is split deliberately:
 | Add or change a DRS field or model | Upstream spec or Syfon DRS overlay | `make gen` | Refreshes generated DRS client and server shapes. |
 | Change LFS, bucket, metrics, or internal request/response shapes | `apigen/openapi/*.openapi.yaml` | `make gen` | Refreshes the generated package that owns that contract. |
 | Add a local schema whose name collides with a `ClientWithResponses` wrapper | `apigen/codegen/client-oapi-*.yaml` plus the owning `apigen/openapi/*.openapi.yaml` | `make gen` | `oapi-codegen` uses `<OperationId>Response` wrapper names by default, so client configs may need `output-options.response-type-suffix` to avoid duplicate Go type names. |
-| Change route behavior, auth, middleware, or validation logic only | `cmd/server`, `internal/api/*`, `internal/api/middleware/*` | No regen needed | These are handwritten runtime concerns, not generated contracts. |
+| Change route behavior, auth, middleware, or validation logic only | `cmd/server`, `internal/api/*`, `internal/httpapi/middleware/*`, `internal/access/authentication/*` | No regen needed | These are handwritten runtime concerns, not generated contracts. |
 | Update docs served at `/index/openapi.yaml` | `apigen/openapi/*.yaml` and embed/load code | `make gen` plus tests | The runtime docs endpoint reads the bundled spec files. |
 
 ### Service-info type fix

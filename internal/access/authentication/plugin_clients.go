@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"context"
@@ -20,7 +20,7 @@ type AuthenticationPluginManager struct {
 // NewAuthenticationPluginManager loads the plugin binary and returns a manager.
 func NewAuthenticationPluginManager(pluginPath string) (*AuthenticationPluginManager, error) {
 	client := hplugin.NewClient(&hplugin.ClientConfig{
-		HandshakeConfig: Handshake,
+		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
 			"authn": &AuthnPluginRPC{},
 		},
@@ -73,13 +73,6 @@ func (a *AuthnRPC) Authenticate(ctx context.Context, in *plugin.AuthenticationIn
 	return &out, err
 }
 
-// Plugin handshake config for go-plugin
-var Handshake = hplugin.HandshakeConfig{
-	ProtocolVersion:  1,
-	MagicCookieKey:   "SYFON_AUTHZ_PLUGIN",
-	MagicCookieValue: "syfon_authz_plugin_v1",
-}
-
 // PluginClient is the concrete implementation for plugin communication.
 type PluginClient struct {
 	client *hplugin.Client
@@ -87,15 +80,15 @@ type PluginClient struct {
 	mu     sync.Mutex
 }
 
-// PluginManager manages the plugin process and calls Authorize.
-type PluginManager struct {
+// AuthorizationPluginManager manages the plugin process and calls Authorize.
+type AuthorizationPluginManager struct {
 	client *PluginClient
 }
 
-// NewPluginManager loads the plugin binary and returns a manager.
-func NewPluginManager(pluginPath string) (*PluginManager, error) {
+// NewAuthorizationPluginManager loads the plugin binary and returns a manager.
+func NewAuthorizationPluginManager(pluginPath string) (*AuthorizationPluginManager, error) {
 	client := hplugin.NewClient(&hplugin.ClientConfig{
-		HandshakeConfig: Handshake,
+		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
 			"authz": &AuthzPluginRPC{},
 		},
@@ -113,11 +106,11 @@ func NewPluginManager(pluginPath string) (*PluginManager, error) {
 		return nil, err
 	}
 
-	return &PluginManager{client: &PluginClient{client: client, raw: raw}}, nil
+	return &AuthorizationPluginManager{client: &PluginClient{client: client, raw: raw}}, nil
 }
 
 // Authorize delegates to the plugin.
-func (pm *PluginManager) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
+func (pm *AuthorizationPluginManager) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
 	pm.client.mu.Lock()
 	defer pm.client.mu.Unlock()
 	pluginImpl, ok := pm.client.raw.(plugin.AuthorizationPlugin)
@@ -148,5 +141,4 @@ func (a *AuthzRPC) Authorize(ctx context.Context, in *plugin.AuthorizationInput)
 	return &out, err
 }
 
-// Ensure PluginManager implements pluginManagerInterface
-var _ pluginManagerInterface = (*PluginManager)(nil)
+var _ plugin.AuthorizationPlugin = (*AuthorizationPluginManager)(nil)

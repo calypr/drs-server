@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/rsa"
@@ -106,7 +106,7 @@ func (c *JWKSCache) FetchKeys() error {
 	keys := make(map[string]interface{})
 	for _, jwk := range jwks.Keys {
 		if jwk.Kty != "RSA" {
-			continue // Only support RSA for now
+			continue
 		}
 
 		pubKey, err := jwkToRSAPublicKey(jwk)

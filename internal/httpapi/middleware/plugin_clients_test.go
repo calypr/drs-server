@@ -6,7 +6,7 @@ import (
 	"github.com/calypr/syfon/plugin"
 )
 
-// DummyPluginManager implements the same interface as PluginManager for testing.
+// DummyPluginManager implements the public authorization plugin contract for testing.
 type DummyPluginManager struct{}
 
 func (d *DummyPluginManager) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
