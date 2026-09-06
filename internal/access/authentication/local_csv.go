@@ -18,7 +18,7 @@ const (
 	localAuthzPrivilegesClaim = "syfon_local_authz_privileges"
 )
 
-func AuthorizationFromClaims(claims map[string]interface{}) ([]string, map[string]map[string]bool, bool) {
+func authorizationFromClaims(claims map[string]interface{}) ([]string, map[string]map[string]bool, bool) {
 	if claims == nil {
 		return nil, nil, false
 	}
@@ -33,7 +33,7 @@ func AuthorizationFromClaims(claims map[string]interface{}) ([]string, map[strin
 	return append([]string(nil), resources...), clonePrivMap(privileges), true
 }
 
-type LocalAuthzStore struct {
+type localAuthzStore struct {
 	users map[string]*localAuthzUser
 }
 
@@ -43,7 +43,7 @@ type localAuthzUser struct {
 	privileges map[string]map[string]bool
 }
 
-func LoadLocalAuthzCSV(path string) (*LocalAuthzStore, error) {
+func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open local authz csv: %w", err)
@@ -69,7 +69,7 @@ func LoadLocalAuthzCSV(path string) (*LocalAuthzStore, error) {
 		return nil, fmt.Errorf("local authz csv requires username, password, methods, and either resource or organization columns")
 	}
 
-	store := &LocalAuthzStore{users: map[string]*localAuthzUser{}}
+	store := &localAuthzStore{users: map[string]*localAuthzUser{}}
 	line := 1
 	for {
 		record, err := r.Read()
@@ -130,7 +130,7 @@ func LoadLocalAuthzCSV(path string) (*LocalAuthzStore, error) {
 	return store, nil
 }
 
-func (s *LocalAuthzStore) authenticate(authHeader string) (*plugin.AuthenticationOutput, error) {
+func (s *localAuthzStore) authenticate(authHeader string) (*plugin.AuthenticationOutput, error) {
 	username, password, err := parseBasicCredentials(authHeader)
 	if err != nil {
 		return &plugin.AuthenticationOutput{Authenticated: false, Reason: err.Error()}, nil
@@ -154,7 +154,7 @@ func (s *LocalAuthzStore) authenticate(authHeader string) (*plugin.Authenticatio
 	}, nil
 }
 
-func (s *LocalAuthzStore) AuthzForSubject(subject string) ([]string, map[string]map[string]bool, bool) {
+func (s *localAuthzStore) authzForSubject(subject string) ([]string, map[string]map[string]bool, bool) {
 	user := s.users[strings.TrimSpace(subject)]
 	if user == nil {
 		return nil, nil, false

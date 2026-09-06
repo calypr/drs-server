@@ -12,30 +12,30 @@ import (
 	"github.com/calypr/syfon/client/request"
 )
 
-var NewBearerTokenRequestor = request.NewBearerTokenRequestor
+var newBearerTokenRequestor = request.NewBearerTokenRequestor
 
-type TokenAuthResult struct {
+type tokenAuthResult struct {
 	Resources  []string
 	Privileges map[string]map[string]bool
 	Negative   bool
 }
 
-type TokenAuthResolver struct {
+type tokenAuthResolver struct {
 	logger *slog.Logger
 }
 
-func NewTokenAuthResolver(logger *slog.Logger) *TokenAuthResolver {
+func newTokenAuthResolver(logger *slog.Logger) *tokenAuthResolver {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &TokenAuthResolver{logger: logger}
+	return &tokenAuthResolver{logger: logger}
 }
 
-func (r *TokenAuthResolver) Resolve(ctx context.Context, tokenString string) TokenAuthResult {
-	apiEndpoint, _, err := ParseToken(tokenString)
+func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tokenAuthResult {
+	apiEndpoint, _, err := parseToken(tokenString)
 	if err != nil {
 		r.logger.Debug("failed to parse token", "error", err)
-		return TokenAuthResult{Negative: true}
+		return tokenAuthResult{Negative: true}
 	}
 
 	cred := &conf.Credential{
@@ -43,14 +43,14 @@ func (r *TokenAuthResolver) Resolve(ctx context.Context, tokenString string) Tok
 		APIEndpoint: apiEndpoint,
 	}
 	gen3Logger := logs.NewGen3Logger(r.logger, "", "syfon")
-	reqClient := NewBearerTokenRequestor(gen3Logger, cred, nil, apiEndpoint, "syfon-server", nil)
+	reqClient := newBearerTokenRequestor(gen3Logger, cred, nil, apiEndpoint, "syfon-server", nil)
 	privs, err := fetchPrivileges(ctx, reqClient, cred)
 	if err != nil {
 		r.logger.Debug("failed to check privileges with internal auth", "error", err)
-		return TokenAuthResult{Negative: true}
+		return tokenAuthResult{Negative: true}
 	}
-	resources, privileges := ExtractPrivileges(privs)
-	return TokenAuthResult{Resources: resources, Privileges: privileges}
+	resources, privileges := extractPrivileges(privs)
+	return tokenAuthResult{Resources: resources, Privileges: privileges}
 }
 
 func fetchPrivileges(ctx context.Context, reqClient request.Requester, _ *conf.Credential) (map[string]any, error) {
@@ -69,7 +69,7 @@ func fetchPrivileges(ctx context.Context, reqClient request.Requester, _ *conf.C
 	return resourceAccess, nil
 }
 
-func ExtractPrivileges(privs map[string]any) ([]string, map[string]map[string]bool) {
+func extractPrivileges(privs map[string]any) ([]string, map[string]map[string]bool) {
 	resources := make([]string, 0, len(privs))
 	out := make(map[string]map[string]bool, len(privs))
 	for path, raw := range privs {

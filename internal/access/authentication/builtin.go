@@ -10,13 +10,13 @@ import (
 	"github.com/calypr/syfon/plugin"
 )
 
-type LocalAuthPlugin struct {
+type localAuthPlugin struct {
 	BasicUser string
 	BasicPass string
-	Users     *LocalAuthzStore
+	Users     *localAuthzStore
 }
 
-func (p *LocalAuthPlugin) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
+func (p *localAuthPlugin) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
 	if p.Users != nil {
 		return p.Users.authenticate(in.AuthHeader)
 	}
@@ -34,12 +34,12 @@ func (p *LocalAuthPlugin) Authenticate(ctx context.Context, in *plugin.Authentic
 	return &plugin.AuthenticationOutput{Authenticated: true}, nil
 }
 
-type Gen3AuthPlugin struct {
-	MockConfig MockConfig
+type gen3AuthPlugin struct {
+	mockConfig mockConfig
 }
 
-func (p *Gen3AuthPlugin) Authenticate(_ context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
-	if p.MockConfig.Enabled {
+func (p *gen3AuthPlugin) Authenticate(_ context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
+	if p.mockConfig.Enabled {
 		return &plugin.AuthenticationOutput{Authenticated: true}, nil
 	}
 	if in.AuthHeader == "" {

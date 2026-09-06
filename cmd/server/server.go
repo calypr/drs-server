@@ -156,23 +156,8 @@ var Cmd = &cobra.Command{
 			cfg.Auth.Basic.Password,
 		)
 		authzMiddleware := middleware.NewAuthzMiddleware(slogLogger, middleware.Options{
-			Mode:                    cfg.Auth.Mode,
-			Authentication:          authRuntime.Authentication,
-			Authorization:           authRuntime.Authorization,
-			LocalAuthzError:         authRuntime.LocalAuthzError,
-			LocalAuthzForSubject:    authRuntime.LocalAuthzForSubject,
-			AuthorizationFromClaims: authentication.AuthorizationFromClaims,
-			ExtractToken:            authentication.ExtractBearerLikeToken,
-			ResolveToken: func(ctx context.Context, token string) ([]string, map[string]map[string]bool, bool) {
-				result := authRuntime.TokenResolver.Resolve(ctx, token)
-				return result.Resources, result.Privileges, result.Negative
-			},
-			Mock: middleware.MockOptions{
-				Enabled:           authRuntime.Mock.Enabled,
-				RequireAuthHeader: authRuntime.Mock.RequireAuthHeader,
-				Resources:         authRuntime.Mock.Resources,
-				Methods:           authRuntime.Mock.Methods,
-			},
+			Mode:      cfg.Auth.Mode,
+			Evaluator: authRuntime,
 		})
 		requestIDMiddleware := middleware.NewRequestIDMiddleware(slogLogger)
 

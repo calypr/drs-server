@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func ParseToken(tokenString string) (endpoint string, exp float64, err error) {
+func parseToken(tokenString string) (endpoint string, exp float64, err error) {
 	parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}))
 	var claims jwt.MapClaims
 
@@ -121,7 +121,7 @@ func normalizeIssuerOrigin(raw string) (string, error) {
 	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Host), nil
 }
 
-func ExtractBearerLikeToken(authHeader string) (string, error) {
+func extractBearerLikeToken(authHeader string) (string, error) {
 	trimmed := strings.TrimSpace(authHeader)
 	if strings.HasPrefix(strings.ToLower(trimmed), "bearer ") {
 		token := strings.TrimSpace(trimmed[len("Bearer "):])

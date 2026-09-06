@@ -1,96 +1,53 @@
 package middleware
 
 import (
-	"bytes"
-	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"log/slog"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	conf "github.com/calypr/syfon/client/config"
-	"github.com/calypr/syfon/client/logs"
-	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 func newTestAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass string) *AuthzMiddleware {
 	authRuntime := authentication.NewRuntime(logger, mode, basicUser, basicPass)
-	return NewAuthzMiddleware(logger, Options{
-		Mode:                    mode,
-		Authentication:          authRuntime.Authentication,
-		Authorization:           authRuntime.Authorization,
-		LocalAuthzError:         authRuntime.LocalAuthzError,
-		LocalAuthzForSubject:    authRuntime.LocalAuthzForSubject,
-		AuthorizationFromClaims: authentication.AuthorizationFromClaims,
-		ExtractToken:            authentication.ExtractBearerLikeToken,
-		ResolveToken: func(ctx context.Context, token string) ([]string, map[string]map[string]bool, bool) {
-			result := authRuntime.TokenResolver.Resolve(ctx, token)
-			return result.Resources, result.Privileges, result.Negative
-		},
-		Mock: MockOptions{
-			Enabled:           authRuntime.Mock.Enabled,
-			RequireAuthHeader: authRuntime.Mock.RequireAuthHeader,
-			Resources:         authRuntime.Mock.Resources,
-			Methods:           authRuntime.Mock.Methods,
-		},
-	})
+	return NewAuthzMiddleware(logger, Options{Mode: mode, Evaluator: authRuntime})
 }
 
-func injectDummyPluginManager(m *AuthzMiddleware) {
-	m.pluginManager = &DummyPluginManager{}
+func injectDummyAuthorizationEvaluator(m *AuthzMiddleware) {
+	m.evaluator = &fixedEvaluator{decision: authentication.DecisionContinue}
 }
 
-func injectDummyAuthenticationPluginManager(m *AuthzMiddleware, authenticated bool) {
-	m.authnPluginManager = &DummyAuthenticationPluginManager{
-		Authenticated: authenticated,
+func injectDummyAuthenticationEvaluator(m *AuthzMiddleware, authenticated bool) {
+	decision := authentication.DecisionUnauthorized
+	if authenticated {
+		decision = authentication.DecisionContinue
 	}
+	m.evaluator = &fixedEvaluator{decision: decision, basicChallenge: m.mode == "local"}
 }
 
-type DummyAuthenticationPluginManager struct {
-	Authenticated bool
+type fixedEvaluator struct {
+	decision       authentication.Decision
+	basicChallenge bool
 }
 
-func (d *DummyAuthenticationPluginManager) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
-	return &plugin.AuthenticationOutput{
-		Authenticated: d.Authenticated,
-		Subject:       "dummy",
-		Claims:        map[string]interface{}{"role": "test"},
-	}, nil
-}
-
-type recordingAuthenticationPlugin struct {
-	input *plugin.AuthenticationInput
-}
-
-func (p *recordingAuthenticationPlugin) Authenticate(_ context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
-	p.input = in
-	return &plugin.AuthenticationOutput{Authenticated: true, Subject: "recorded"}, nil
-}
-
-type recordingAuthorizationPlugin struct {
-	input *plugin.AuthorizationInput
-}
-
-func (p *recordingAuthorizationPlugin) Authorize(_ context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
-	p.input = in
-	return &plugin.AuthorizationOutput{Allow: true}, nil
+func (e *fixedEvaluator) Evaluate(req authentication.EvaluationRequest) authentication.EvaluationResult {
+	session := access.NewSession(req.Mode)
+	if strings.EqualFold(req.Mode, "gen3") {
+		session.AuthHeaderPresent = strings.TrimSpace(req.AuthHeader) != ""
+		session.AuthzEnforced = true
+	}
+	return authentication.EvaluationResult{
+		Session:        session,
+		Decision:       e.decision,
+		BasicChallenge: e.basicChallenge,
+	}
 }
 
 func TestLocalModeBasicAuthEnforced(t *testing.T) {
@@ -154,19 +111,10 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 	}
 }
 
-func TestPluginInputsReceiveRequestID(t *testing.T) {
-	const requestID = "request-id-for-plugin"
-	authn := &recordingAuthenticationPlugin{}
-	authz := &recordingAuthorizationPlugin{}
-	m := NewAuthzMiddleware(slog.Default(), Options{
-		Mode:           "gen3",
-		Authentication: authn,
-		Authorization:  authz,
-		ExtractToken:   authentication.ExtractBearerLikeToken,
-		ResolveToken: func(context.Context, string) ([]string, map[string]map[string]bool, bool) {
-			return nil, nil, true
-		},
-	})
+func TestMiddlewareInstallsEvaluatorSession(t *testing.T) {
+	const requestID = "request-id-for-evaluator"
+	evaluator := &recordingEvaluator{}
+	m := NewAuthzMiddleware(slog.Default(), Options{Mode: "gen3", Evaluator: evaluator})
 
 	app := fiber.New()
 	app.Use(NewRequestIDMiddleware(nil).FiberMiddleware())
@@ -183,48 +131,18 @@ func TestPluginInputsReceiveRequestID(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
-	if authn.input == nil || authn.input.RequestID != requestID {
-		t.Fatalf("expected authn plugin request ID %q, got %#v", requestID, authn.input)
-	}
-	if authz.input == nil || authz.input.RequestID != requestID {
-		t.Fatalf("expected authz plugin request ID %q, got %#v", requestID, authz.input)
+	if evaluator.request.RequestID != requestID || evaluator.request.AuthHeader == "" {
+		t.Fatalf("expected middleware to pass request metadata to evaluator: %+v", evaluator.request)
 	}
 }
 
-type nilOutputAuthenticationPlugin struct{}
-
-func (nilOutputAuthenticationPlugin) Authenticate(context.Context, *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
-	return nil, nil
+type recordingEvaluator struct {
+	request authentication.EvaluationRequest
 }
 
-func TestNilAuthenticationOutputPreservesExistingPanic(t *testing.T) {
-	if os.Getenv("SYFON_NIL_OUTPUT_CHILD") == "1" {
-		runNilAuthenticationOutputRequest()
-		return
-	}
-	cmd := exec.Command(os.Args[0], "-test.run", "^TestNilAuthenticationOutputPreservesExistingPanic$", "-test.v")
-	cmd.Env = append(os.Environ(), "SYFON_NIL_OUTPUT_CHILD=1")
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected nil authentication output to preserve the existing panic")
-	}
-	if !bytes.Contains(output, []byte("invalid memory address")) {
-		t.Fatalf("expected nil authentication output panic, got: %s", output)
-	}
-}
-
-func runNilAuthenticationOutputRequest() {
-	m := NewAuthzMiddleware(slog.Default(), Options{
-		Mode:           "gen3",
-		Authentication: nilOutputAuthenticationPlugin{},
-	})
-	app := fiber.New()
-	app.Use(m.FiberMiddleware())
-	app.Get("/", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set(fiber.HeaderAuthorization, "Bearer token")
-	_, _ = app.Test(req)
+func (e *recordingEvaluator) Evaluate(request authentication.EvaluationRequest) authentication.EvaluationResult {
+	e.request = request
+	return authentication.EvaluationResult{Session: access.NewSession(request.Mode), Decision: authentication.DecisionContinue}
 }
 
 func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
@@ -253,7 +171,7 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 
 func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
 	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
-	injectDummyPluginManager(m)
+	injectDummyAuthorizationEvaluator(m)
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -272,247 +190,6 @@ func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-}
-
-func TestParseToken(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate rsa key: %v", err)
-	}
-
-	kid := "test-kid"
-	jwks := map[string]any{
-		"keys": []map[string]any{
-			{
-				"kty": "RSA",
-				"use": "sig",
-				"kid": kid,
-				"n":   base64.RawURLEncoding.EncodeToString(privateKey.PublicKey.N.Bytes()),
-				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(privateKey.PublicKey.E)).Bytes()),
-			},
-		},
-	}
-
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/.well-known/jwks.json" {
-			http.NotFound(w, r)
-			return
-		}
-		if err := json.NewEncoder(w).Encode(jwks); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}))
-	defer server.Close()
-
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	defer func() { http.DefaultTransport = oldTransport }()
-
-	issuerOrigin := server.URL
-	t.Setenv("DRS_FENCE_URL", issuerOrigin)
-
-	buildToken := func(claims jwt.MapClaims) string {
-		tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		tok.Header["kid"] = kid
-		s, signErr := tok.SignedString(privateKey)
-		if signErr != nil {
-			t.Fatalf("sign token: %v", signErr)
-		}
-		return s
-	}
-
-	t.Run("valid token extracts endpoint and exp", func(t *testing.T) {
-		const farFutureExp = 4102444800.0 // 2100-01-01T00:00:00Z
-		token := buildToken(jwt.MapClaims{
-			"iss": issuerOrigin + "/user",
-			"exp": farFutureExp,
-		})
-
-		endpoint, exp, parseErr := authentication.ParseToken(token)
-		if parseErr != nil {
-			t.Fatalf("unexpected error: %v", parseErr)
-		}
-		if endpoint != issuerOrigin {
-			t.Fatalf("expected endpoint %s, got %q", issuerOrigin, endpoint)
-		}
-		if exp != farFutureExp {
-			t.Fatalf("expected exp %v, got %v", farFutureExp, exp)
-		}
-	})
-
-	t.Run("missing iss fails", func(t *testing.T) {
-		token := buildToken(jwt.MapClaims{"exp": 42})
-		_, _, parseErr := authentication.ParseToken(token)
-		if parseErr == nil {
-			t.Fatalf("expected parse error for missing iss claim")
-		}
-		if !strings.Contains(parseErr.Error(), "missing or invalid 'iss' claim") {
-			t.Fatalf("unexpected error: %v", parseErr)
-		}
-	})
-
-	t.Run("invalid token fails", func(t *testing.T) {
-		_, _, parseErr := authentication.ParseToken("not-a-token")
-		if parseErr == nil {
-			t.Fatalf("expected parse error")
-		}
-	})
-}
-
-func TestGen3ModePopulatesUserPrivilegesFromFence(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate rsa key: %v", err)
-	}
-
-	kid := "test-kid"
-	jwks := map[string]any{
-		"keys": []map[string]any{
-			{
-				"kty": "RSA",
-				"use": "sig",
-				"kid": kid,
-				"n":   base64.RawURLEncoding.EncodeToString(privateKey.PublicKey.N.Bytes()),
-				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(privateKey.PublicKey.E)).Bytes()),
-			},
-		},
-	}
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/.well-known/jwks.json":
-			if err := json.NewEncoder(w).Encode(jwks); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		case "/user/user":
-			if got := r.Header.Get("Authorization"); !strings.HasPrefix(got, "Bearer ") {
-				t.Fatalf("expected bearer auth forwarded to user lookup, got %q", got)
-			}
-			resp := map[string]any{
-				"authz": map[string]any{
-					"/programs/test/projects/p1": []any{
-						map[string]any{"service": "indexd", "method": "read"},
-						map[string]any{"service": "drs", "method": "create"},
-					},
-				},
-			}
-			if err := json.NewEncoder(w).Encode(resp); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	defer func() { http.DefaultTransport = oldTransport }()
-	t.Setenv("DRS_FENCE_URL", server.URL)
-	oldRequestor := authentication.NewBearerTokenRequestor
-	authentication.NewBearerTokenRequestor = func(logger *logs.Gen3Logger, cred *conf.Credential, mgr conf.ManagerInterface, baseURL string, userAgent string, _ *http.Client) request.Requester {
-		return request.NewBearerTokenRequestor(logger, cred, mgr, baseURL, userAgent, server.Client())
-	}
-	t.Cleanup(func() { authentication.NewBearerTokenRequestor = oldRequestor })
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss": server.URL,
-		"exp": float64(time.Now().Add(time.Hour).Unix()),
-	})
-	token.Header["kid"] = kid
-	tokenString, err := token.SignedString(privateKey)
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-
-	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
-	injectDummyAuthenticationPluginManager(m, true)
-	app := fiber.New()
-	app.Use(m.FiberMiddleware())
-	app.Get("/", func(c fiber.Ctx) error {
-		resources := access.GetUserAuthz(c.Context())
-		if len(resources) != 1 || resources[0] != "/programs/test/projects/p1" {
-			t.Fatalf("expected populated user resources, got %+v", resources)
-		}
-		if !access.HasMethodAccess(c.Context(), "read", []string{"/programs/test/projects/p1"}) {
-			t.Fatalf("expected read access from Fence authz")
-		}
-		if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/test/projects/p1"}) {
-			t.Fatalf("expected create access from Fence authz")
-		}
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+tokenString)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestExtractPrivileges(t *testing.T) {
-	privs := map[string]any{
-		"/programs/a/projects/b": []any{
-			map[string]any{"service": "drs", "method": "read"},
-			map[string]any{"service": "indexd", "method": "create"},
-			map[string]any{"service": "*", "method": "delete"},
-			map[string]any{"service": "arborist", "method": "create-descendant"},
-			map[string]any{"service": "drs"}, // missing method
-			"bad-entry",
-		},
-		"/programs/a": "not-a-list",
-	}
-
-	resources, out := authentication.ExtractPrivileges(privs)
-	if len(resources) != 2 {
-		t.Fatalf("expected 2 resources, got %d", len(resources))
-	}
-	methods := out["/programs/a/projects/b"]
-	if !methods["read"] || !methods["create"] || !methods["delete"] {
-		t.Fatalf("expected read/create/delete methods from accepted services, got %v", methods)
-	}
-	if !methods["arborist:create-descendant"] {
-		t.Fatalf("expected arborist create-descendant to be preserved as a qualified privilege, got %v", methods)
-	}
-	if methods["create-descendant"] {
-		t.Fatalf("did not expect arborist create-descendant to be promoted to an unqualified method")
-	}
-	if len(out["/programs/a"]) != 0 {
-		t.Fatalf("expected empty method map for malformed privilege list")
-	}
-}
-
-func TestExtractBearerLikeToken(t *testing.T) {
-	t.Run("bearer token", func(t *testing.T) {
-		token, err := authentication.ExtractBearerLikeToken("Bearer abc.def.ghi")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if token != "abc.def.ghi" {
-			t.Fatalf("unexpected token: %q", token)
-		}
-	})
-
-	t.Run("basic token in password", func(t *testing.T) {
-		encoded := base64.StdEncoding.EncodeToString([]byte("oauth2:abc.def.ghi"))
-		token, err := authentication.ExtractBearerLikeToken(fmt.Sprintf("Basic %s", encoded))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if token != "abc.def.ghi" {
-			t.Fatalf("unexpected token: %q", token)
-		}
-	})
-
-	t.Run("unsupported scheme", func(t *testing.T) {
-		_, err := authentication.ExtractBearerLikeToken("Digest abc")
-		if err == nil {
-			t.Fatalf("expected error for unsupported scheme")
-		}
-	})
 }
 
 func TestGen3MockAuthInjectsPrivileges(t *testing.T) {
@@ -655,7 +332,7 @@ func TestLocalAuthzCSVDeniesAuthenticatedSubjectMissingFromCSV(t *testing.T) {
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
 	m := newTestAuthzMiddleware(slog.Default(), "local", "", "")
-	injectDummyAuthenticationPluginManager(m, true)
+	m.evaluator = &fixedEvaluator{decision: authentication.DecisionForbidden}
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
@@ -802,20 +479,20 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			m := newTestAuthzMiddleware(slog.Default(), tc.mode, tc.basicUser, tc.basicPass)
 			// Always inject dummy plugin manager for malformed bearer scenario
 			if tc.name == "gen3 malformed bearer" {
-				injectDummyPluginManager(m)
+				injectDummyAuthorizationEvaluator(m)
 			}
 			// Always inject dummy authn plugin manager for authn plugin scenarios
 			if tc.name == "local authn plugin allows access" {
-				injectDummyAuthenticationPluginManager(m, true)
+				injectDummyAuthenticationEvaluator(m, true)
 			}
 			if tc.name == "local authn plugin denies access" {
-				injectDummyAuthenticationPluginManager(m, false)
+				injectDummyAuthenticationEvaluator(m, false)
 			}
 			if tc.name == "gen3 authn plugin allows access" {
-				injectDummyAuthenticationPluginManager(m, true)
+				injectDummyAuthenticationEvaluator(m, true)
 			}
 			if tc.name == "gen3 authn plugin denies access" {
-				injectDummyAuthenticationPluginManager(m, false)
+				injectDummyAuthenticationEvaluator(m, false)
 			}
 			// For gen3 authn plugin denies access, ensure an Authorization header is set
 			if tc.name == "gen3 authn plugin denies access" && tc.authHeader == "" {
@@ -851,96 +528,5 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 				t.Fatalf("did not expect handler to be called")
 			}
 		})
-	}
-}
-
-func TestJWKSDiscovery_OpenIDConfigPreferred(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate rsa key: %v", err)
-	}
-	kid := "test-kid"
-	jwks := map[string]any{
-		"keys": []map[string]any{{
-			"kty": "RSA",
-			"use": "sig",
-			"kid": kid,
-			"n":   base64.RawURLEncoding.EncodeToString(privateKey.PublicKey.N.Bytes()),
-			"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(privateKey.PublicKey.E)).Bytes()),
-		}},
-	}
-	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(jwks); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}))
-	defer jwksServer.Close()
-	openidConfig := map[string]any{"jwks_uri": jwksServer.URL}
-	openidServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			_ = json.NewEncoder(w).Encode(openidConfig)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer openidServer.Close()
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	defer func() { http.DefaultTransport = oldTransport }()
-	issuer := openidServer.URL
-	t.Setenv("DRS_FENCE_URL", issuer)
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": issuer, "exp": time.Now().Add(time.Hour).Unix()})
-	tok.Header["kid"] = kid
-	s, err := tok.SignedString(privateKey)
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	_, _, parseErr := authentication.ParseToken(s)
-	if parseErr != nil {
-		t.Fatalf("unexpected error: %v", parseErr)
-	}
-}
-
-func TestJWKSDiscovery_FallbackJWKS(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate rsa key: %v", err)
-	}
-	kid := "test-kid"
-	jwks := map[string]any{
-		"keys": []map[string]any{{
-			"kty": "RSA",
-			"use": "sig",
-			"kid": kid,
-			"n":   base64.RawURLEncoding.EncodeToString(privateKey.PublicKey.N.Bytes()),
-			"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(privateKey.PublicKey.E)).Bytes()),
-		}},
-	}
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/jwks.json" {
-			_ = json.NewEncoder(w).Encode(jwks)
-			return
-		}
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			http.NotFound(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	defer func() { http.DefaultTransport = oldTransport }()
-	issuer := server.URL
-	t.Setenv("DRS_FENCE_URL", issuer)
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": issuer, "exp": time.Now().Add(time.Hour).Unix()})
-	tok.Header["kid"] = kid
-	s, err := tok.SignedString(privateKey)
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	_, _, parseErr := authentication.ParseToken(s)
-	if parseErr != nil {
-		t.Fatalf("unexpected error: %v", parseErr)
 	}
 }

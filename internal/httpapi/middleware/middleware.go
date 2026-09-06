@@ -7,41 +7,24 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/requestmeta"
-	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
 )
 
-type MockOptions struct {
-	Enabled           bool
-	RequireAuthHeader bool
-	Resources         []string
-	Methods           []string
+type authenticationEvaluator interface {
+	Evaluate(authentication.EvaluationRequest) authentication.EvaluationResult
 }
 
 type Options struct {
-	Mode                    string
-	Authentication          plugin.AuthenticationPlugin
-	Authorization           plugin.AuthorizationPlugin
-	LocalAuthzError         error
-	LocalAuthzForSubject    func(string) ([]string, map[string]map[string]bool, bool)
-	AuthorizationFromClaims func(map[string]interface{}) ([]string, map[string]map[string]bool, bool)
-	ExtractToken            func(string) (string, error)
-	ResolveToken            func(context.Context, string) ([]string, map[string]map[string]bool, bool)
-	Mock                    MockOptions
+	Mode      string
+	Evaluator authenticationEvaluator
 }
 
 type AuthzMiddleware struct {
-	logger                  *slog.Logger
-	mode                    string
-	mock                    MockOptions
-	pluginManager           plugin.AuthorizationPlugin
-	authnPluginManager      plugin.AuthenticationPlugin
-	localUsersErr           error
-	localAuthzForSubject    func(string) ([]string, map[string]map[string]bool, bool)
-	authorizationFromClaims func(map[string]interface{}) ([]string, map[string]map[string]bool, bool)
-	extractToken            func(string) (string, error)
-	resolveToken            func(context.Context, string) ([]string, map[string]map[string]bool, bool)
+	logger    *slog.Logger
+	mode      string
+	evaluator authenticationEvaluator
 }
 
 func NewAuthzMiddleware(logger *slog.Logger, options Options) *AuthzMiddleware {
@@ -49,31 +32,33 @@ func NewAuthzMiddleware(logger *slog.Logger, options Options) *AuthzMiddleware {
 		logger = slog.Default()
 	}
 	return &AuthzMiddleware{
-		logger:                  logger,
-		mode:                    strings.ToLower(strings.TrimSpace(options.Mode)),
-		mock:                    options.Mock,
-		pluginManager:           options.Authorization,
-		authnPluginManager:      options.Authentication,
-		localUsersErr:           options.LocalAuthzError,
-		localAuthzForSubject:    options.LocalAuthzForSubject,
-		authorizationFromClaims: options.AuthorizationFromClaims,
-		extractToken:            options.ExtractToken,
-		resolveToken:            options.ResolveToken,
+		logger:    logger,
+		mode:      strings.ToLower(strings.TrimSpace(options.Mode)),
+		evaluator: options.Evaluator,
 	}
 }
 
 // FiberMiddleware returns the request-wiring handler for access context and decisions.
-
 func (m *AuthzMiddleware) FiberMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		ctx, authHeader, session := m.prepareRequestContext(c)
+		ctx := c.Context()
+		authHeader := c.Get(fiber.HeaderAuthorization)
+		session := m.newSession()
 		if isPublicDRSMetadataRequest(c) && strings.TrimSpace(authHeader) == "" {
 			return m.applySession(c, ctx, session)
 		}
-		if m.mode != "gen3" {
-			return m.handleLocalAuth(c, ctx, authHeader, session)
+		if m.evaluator == nil {
+			return m.applySession(c, ctx, session)
 		}
-		return m.handleGen3Auth(c, ctx, authHeader, session)
+		result := m.evaluator.Evaluate(authentication.EvaluationRequest{
+			Context:    ctx,
+			RequestID:  requestmeta.GetRequestID(ctx),
+			Mode:       m.mode,
+			AuthHeader: authHeader,
+			Method:     c.Method(),
+			Path:       c.Path(),
+		})
+		return m.applyResult(c, ctx, session, result)
 	}
 }
 
@@ -114,15 +99,12 @@ func isPublicDRSMetadataRequest(c fiber.Ctx) bool {
 	}
 }
 
-func (m *AuthzMiddleware) prepareRequestContext(c fiber.Ctx) (context.Context, string, *access.Session) {
-	authHeader := c.Get(fiber.HeaderAuthorization)
+func (m *AuthzMiddleware) newSession() *access.Session {
 	session := access.NewSession(m.mode)
 	if m.mode == "gen3" {
-		session.AuthHeaderPresent = strings.TrimSpace(authHeader) != ""
 		session.AuthzEnforced = true
 	}
-	ctx := access.WithSession(c.Context(), session)
-	return ctx, authHeader, session
+	return session
 }
 
 func (m *AuthzMiddleware) applySession(c fiber.Ctx, ctx context.Context, session *access.Session) error {
@@ -131,24 +113,24 @@ func (m *AuthzMiddleware) applySession(c fiber.Ctx, ctx context.Context, session
 	return c.Next()
 }
 
-func (m *AuthzMiddleware) authorizeWithPlugin(ctx context.Context, session *access.Session, action, resource string) error {
-	if m.pluginManager == nil {
-		return nil
+func (m *AuthzMiddleware) applyResult(c fiber.Ctx, ctx context.Context, fallback *access.Session, result authentication.EvaluationResult) error {
+	session := result.Session
+	if session == nil {
+		session = fallback
 	}
-	authzInput := &plugin.AuthorizationInput{
-		RequestID: requestmeta.GetRequestID(ctx),
-		Subject:   session.Subject,
-		Action:    action,
-		Resource:  resource,
-		Claims:    session.Claims,
-		Metadata:  map[string]interface{}{},
+	switch result.Decision {
+	case authentication.DecisionContinue:
+		return m.applySession(c, ctx, session)
+	case authentication.DecisionUnauthorized:
+		if result.BasicChallenge {
+			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="syfon"`)
+		}
+		return c.SendStatus(fiber.StatusUnauthorized)
+	case authentication.DecisionForbidden:
+		return c.SendStatus(fiber.StatusForbidden)
+	case authentication.DecisionInternalError:
+		return c.SendStatus(fiber.StatusInternalServerError)
+	default:
+		return c.SendStatus(fiber.StatusUnauthorized)
 	}
-	authzOutput, err := m.pluginManager.Authorize(ctx, authzInput)
-	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized)
-	}
-	if !authzOutput.Allow {
-		return fiber.NewError(fiber.StatusForbidden)
-	}
-	return nil
 }

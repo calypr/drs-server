@@ -12,13 +12,13 @@ import (
 	"github.com/calypr/syfon/plugin"
 )
 
-// AuthenticationPluginManager manages the plugin process and calls Authenticate.
-type AuthenticationPluginManager struct {
+// authenticationPluginManager manages the plugin process and calls Authenticate.
+type authenticationPluginManager struct {
 	client *pluginClient
 }
 
-// NewAuthenticationPluginManager loads the plugin binary and returns a manager.
-func NewAuthenticationPluginManager(pluginPath string) (*AuthenticationPluginManager, error) {
+// newAuthenticationPluginManager loads the plugin binary and returns a manager.
+func newAuthenticationPluginManager(pluginPath string) (*authenticationPluginManager, error) {
 	client := hplugin.NewClient(&hplugin.ClientConfig{
 		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
@@ -38,11 +38,11 @@ func NewAuthenticationPluginManager(pluginPath string) (*AuthenticationPluginMan
 		return nil, err
 	}
 
-	return &AuthenticationPluginManager{client: &pluginClient{client: client, raw: raw}}, nil
+	return &authenticationPluginManager{client: &pluginClient{client: client, raw: raw}}, nil
 }
 
 // Authenticate delegates to the plugin.
-func (pm *AuthenticationPluginManager) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
+func (pm *authenticationPluginManager) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
 	pm.client.mu.Lock()
 	defer pm.client.mu.Unlock()
 	pluginImpl, ok := pm.client.raw.(plugin.AuthenticationPlugin)
@@ -77,13 +77,13 @@ type pluginClient struct {
 	mu     sync.Mutex
 }
 
-// AuthorizationPluginManager manages the plugin process and calls Authorize.
-type AuthorizationPluginManager struct {
+// authorizationPluginManager manages the plugin process and calls Authorize.
+type authorizationPluginManager struct {
 	client *pluginClient
 }
 
-// NewAuthorizationPluginManager loads the plugin binary and returns a manager.
-func NewAuthorizationPluginManager(pluginPath string) (*AuthorizationPluginManager, error) {
+// newAuthorizationPluginManager loads the plugin binary and returns a manager.
+func newAuthorizationPluginManager(pluginPath string) (*authorizationPluginManager, error) {
 	client := hplugin.NewClient(&hplugin.ClientConfig{
 		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
@@ -103,11 +103,11 @@ func NewAuthorizationPluginManager(pluginPath string) (*AuthorizationPluginManag
 		return nil, err
 	}
 
-	return &AuthorizationPluginManager{client: &pluginClient{client: client, raw: raw}}, nil
+	return &authorizationPluginManager{client: &pluginClient{client: client, raw: raw}}, nil
 }
 
 // Authorize delegates to the plugin.
-func (pm *AuthorizationPluginManager) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
+func (pm *authorizationPluginManager) Authorize(ctx context.Context, in *plugin.AuthorizationInput) (*plugin.AuthorizationOutput, error) {
 	pm.client.mu.Lock()
 	defer pm.client.mu.Unlock()
 	pluginImpl, ok := pm.client.raw.(plugin.AuthorizationPlugin)
@@ -136,5 +136,5 @@ func (a *authzRPC) Authorize(ctx context.Context, in *plugin.AuthorizationInput)
 	return &out, err
 }
 
-var _ plugin.AuthorizationPlugin = (*AuthorizationPluginManager)(nil)
-var _ plugin.AuthenticationPlugin = (*AuthenticationPluginManager)(nil)
+var _ plugin.AuthorizationPlugin = (*authorizationPluginManager)(nil)
+var _ plugin.AuthenticationPlugin = (*authenticationPluginManager)(nil)

@@ -129,7 +129,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 				"iss": tt.issuerClaim,
 				"exp": tt.expUnix,
 			})
-			endpoint, exp, parseErr := ParseToken(tokenString)
+			endpoint, exp, parseErr := parseToken(tokenString)
 
 			if tt.wantErr {
 				if parseErr == nil {
@@ -169,7 +169,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 			"exp": int64(1893456000),
 		})
 
-		endpoint, exp, parseErr := ParseToken(tokenString)
+		endpoint, exp, parseErr := parseToken(tokenString)
 		if parseErr == nil {
 			t.Fatalf("expected error for malformed iss, got nil")
 		}
