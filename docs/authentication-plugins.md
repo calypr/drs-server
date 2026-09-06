@@ -21,11 +21,15 @@ Syfon supports external authentication plugins using the same go-plugin architec
 Plugins must implement the following Go interface:
 
 ```go
+package plugin
+
+import "context"
+
 // AuthenticationInput is the request sent to the plugin for authentication.
 type AuthenticationInput struct {
-	RequestID string
+	RequestID  string
 	AuthHeader string
-	Metadata  map[string]interface{}
+	Metadata   map[string]interface{}
 }
 
 // AuthenticationOutput is the plugin's response.
@@ -48,14 +52,18 @@ type AuthenticationPlugin interface {
 
 ### Example Plugin Skeleton
 
+The `Server` method returns an RPC adapter. The adapter exposes the `net/rpc` method signature. It forwards each call to the context-aware plugin implementation with `context.Background()`.
+
 ```go
 package main
 
 import (
 	"context"
+	"errors"
 	"net/rpc"
-	hplugin "github.com/hashicorp/go-plugin"
+
 	"github.com/calypr/syfon/plugin"
+	hplugin "github.com/hashicorp/go-plugin"
 )
 
 type MyAuthnPlugin struct{}
@@ -65,13 +73,35 @@ func (p *MyAuthnPlugin) Authenticate(ctx context.Context, in *plugin.Authenticat
 	return &plugin.AuthenticationOutput{Authenticated: true, Subject: "user"}, nil
 }
 
+type authnRPCServer struct {
+	impl *MyAuthnPlugin
+}
+
+func (s *authnRPCServer) Authenticate(in *plugin.AuthenticationInput, reply *plugin.AuthenticationOutput) error {
+	if reply == nil {
+		return errors.New("authentication RPC reply is nil")
+	}
+	if s.impl == nil {
+		return errors.New("authentication plugin implementation is nil")
+	}
+	output, err := s.impl.Authenticate(context.Background(), in)
+	if err != nil {
+		return err
+	}
+	if output == nil {
+		return errors.New("authentication plugin returned nil output")
+	}
+	*reply = *output
+	return nil
+}
+
 type authnPluginRPC struct {
 	hplugin.Plugin
 	Impl *MyAuthnPlugin
 }
 
 func (p *authnPluginRPC) Server(*hplugin.MuxBroker) (interface{}, error) {
-	return p.Impl, nil
+	return &authnRPCServer{impl: p.Impl}, nil
 }
 
 func (p *authnPluginRPC) Client(*hplugin.MuxBroker, *rpc.Client) (interface{}, error) {
