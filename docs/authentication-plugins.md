@@ -21,11 +21,15 @@ Syfon supports external authentication plugins using the same go-plugin architec
 Plugins must implement the following Go interface:
 
 ```go
+package plugin
+
+import "context"
+
 // AuthenticationInput is the request sent to the plugin for authentication.
 type AuthenticationInput struct {
-	RequestID string
+	RequestID  string
 	AuthHeader string
-	Metadata  map[string]interface{}
+	Metadata   map[string]interface{}
 }
 
 // AuthenticationOutput is the plugin's response.
@@ -48,27 +52,67 @@ type AuthenticationPlugin interface {
 
 ### Example Plugin Skeleton
 
+The `Server` method returns an RPC adapter. The adapter exposes the `net/rpc` method signature. It forwards each call to the context-aware plugin implementation with `context.Background()`.
+
 ```go
 package main
 
 import (
 	"context"
-	"github.com/hashicorp/go-plugin"
-	"github.com/calypr/syfon/internal/api/middleware"
+	"errors"
+	"net/rpc"
+
+	"github.com/calypr/syfon/plugin"
+	hplugin "github.com/hashicorp/go-plugin"
 )
 
 type MyAuthnPlugin struct{}
 
-func (p *MyAuthnPlugin) Authenticate(ctx context.Context, in *middleware.AuthenticationInput) (*middleware.AuthenticationOutput, error) {
+func (p *MyAuthnPlugin) Authenticate(ctx context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {
 	// Implement your logic here
-	return &middleware.AuthenticationOutput{Authenticated: true, Subject: "user"}, nil
+	return &plugin.AuthenticationOutput{Authenticated: true, Subject: "user"}, nil
+}
+
+type authnRPCServer struct {
+	impl *MyAuthnPlugin
+}
+
+func (s *authnRPCServer) Authenticate(in *plugin.AuthenticationInput, reply *plugin.AuthenticationOutput) error {
+	if reply == nil {
+		return errors.New("authentication RPC reply is nil")
+	}
+	if s.impl == nil {
+		return errors.New("authentication plugin implementation is nil")
+	}
+	output, err := s.impl.Authenticate(context.Background(), in)
+	if err != nil {
+		return err
+	}
+	if output == nil {
+		return errors.New("authentication plugin returned nil output")
+	}
+	*reply = *output
+	return nil
+}
+
+type authnPluginRPC struct {
+	hplugin.Plugin
+	Impl *MyAuthnPlugin
+}
+
+func (p *authnPluginRPC) Server(*hplugin.MuxBroker) (interface{}, error) {
+	return &authnRPCServer{impl: p.Impl}, nil
+}
+
+func (p *authnPluginRPC) Client(*hplugin.MuxBroker, *rpc.Client) (interface{}, error) {
+	return nil, nil
 }
 
 func main() {
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: middleware.Handshake,
-		Plugins: map[string]plugin.Plugin{
-			"authn": &middleware.AuthnPluginRPC{},
+	hplugin.Serve(&hplugin.ServeConfig{
+		HandshakeConfig: plugin.Handshake,
+		Plugins: map[string]hplugin.Plugin{
+			"authn": &authnPluginRPC{Impl: &MyAuthnPlugin{}},
 		},
 	})
 }

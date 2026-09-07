@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/subtle"
@@ -17,6 +17,21 @@ const (
 	localAuthzResourcesClaim  = "syfon_local_authz_resources"
 	localAuthzPrivilegesClaim = "syfon_local_authz_privileges"
 )
+
+func authorizationFromClaims(claims map[string]interface{}) ([]string, map[string]map[string]bool, bool) {
+	if claims == nil {
+		return nil, nil, false
+	}
+	resources, ok := claims[localAuthzResourcesClaim].([]string)
+	if !ok {
+		return nil, nil, false
+	}
+	privileges, ok := claims[localAuthzPrivilegesClaim].(map[string]map[string]bool)
+	if !ok {
+		return nil, nil, false
+	}
+	return append([]string(nil), resources...), clonePrivMap(privileges), true
+}
 
 type localAuthzStore struct {
 	users map[string]*localAuthzUser
@@ -145,6 +160,25 @@ func (s *localAuthzStore) authzForSubject(subject string) ([]string, map[string]
 		return nil, nil, false
 	}
 	return append([]string(nil), user.resources...), clonePrivMap(user.privileges), true
+}
+
+func clonePrivMap(in map[string]map[string]bool) map[string]map[string]bool {
+	if len(in) == 0 {
+		return map[string]map[string]bool{}
+	}
+	out := make(map[string]map[string]bool, len(in))
+	for k, methods := range in {
+		if methods == nil {
+			out[k] = map[string]bool{}
+			continue
+		}
+		mm := make(map[string]bool, len(methods))
+		for mk, mv := range methods {
+			mm[mk] = mv
+		}
+		out[k] = mm
+	}
+	return out
 }
 
 func parseBasicCredentials(authHeader string) (string, string, error) {

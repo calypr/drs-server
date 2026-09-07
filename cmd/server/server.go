@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/calypr/syfon/internal/api/middleware"
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
@@ -18,6 +18,7 @@ import (
 	"github.com/calypr/syfon/internal/db"
 	"github.com/calypr/syfon/internal/db/postgres"
 	"github.com/calypr/syfon/internal/db/sqlite"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/signer/azure"
 	"github.com/calypr/syfon/internal/signer/file"
@@ -148,12 +149,16 @@ var Cmd = &cobra.Command{
 		// Init AuthZ Middleware
 		// We use a standard slog.Logger for data-client compatibility
 		slogLogger := logger
-		authzMiddleware := middleware.NewAuthzMiddleware(
+		authRuntime := authentication.NewRuntime(
 			slogLogger,
 			cfg.Auth.Mode,
 			cfg.Auth.Basic.Username,
 			cfg.Auth.Basic.Password,
 		)
+		authzMiddleware := middleware.NewAuthzMiddleware(slogLogger, middleware.Options{
+			Mode:      cfg.Auth.Mode,
+			Evaluator: authRuntime,
+		})
 		requestIDMiddleware := middleware.NewRequestIDMiddleware(slogLogger)
 
 		rt := &serverRuntime{

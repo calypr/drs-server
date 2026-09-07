@@ -24,8 +24,8 @@ type AuthorizationInput struct {
 
 // AuthorizationOutput is the plugin's response.
 type AuthorizationOutput struct {
-	Allow      bool
-	Reason     string
+	Allow       bool
+	Reason      string
 	Obligations map[string]interface{}
 }
 
@@ -36,9 +36,9 @@ type AuthorizationPlugin interface {
 
 // AuthenticationInput is the request sent to the plugin for authentication.
 type AuthenticationInput struct {
-	RequestID string
+	RequestID  string
 	AuthHeader string
-	Metadata  map[string]interface{}
+	Metadata   map[string]interface{}
 }
 
 // AuthenticationOutput is the plugin's response.

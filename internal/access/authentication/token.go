@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"encoding/base64"
@@ -11,27 +11,20 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (m *AuthzMiddleware) parseToken(tokenString string) (endpoint string, exp float64, err error) {
-	// SECURITY FIX CRIT-1: Verify JWT signature cryptographically
-	// This is the PRIMARY defense against token forgery attacks
-
-	// 1. Parse the JWT header to get KID and ISS claim
+func parseToken(tokenString string) (endpoint string, exp float64, err error) {
 	parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}))
 	var claims jwt.MapClaims
 
 	token, err := parser.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
-		// CRITICAL: Verify the signing method is RSA (not "none" or symmetric)
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v (expected RSA)", token.Header["alg"])
 		}
 
-		// Extract KID from header
 		kid, ok := token.Header["kid"].(string)
 		if !ok || kid == "" {
 			return nil, fmt.Errorf("missing KID in token header")
 		}
 
-		// Extract ISS claim to determine which JWKS endpoint to use
 		iss, ok := claims["iss"].(string)
 		if !ok || iss == "" {
 			return nil, fmt.Errorf("missing or invalid 'iss' claim in token")
@@ -42,13 +35,10 @@ func (m *AuthzMiddleware) parseToken(tokenString string) (endpoint string, exp f
 			return nil, fmt.Errorf("invalid issuer URL: %w", err)
 		}
 
-		// SECURITY FIX: Validate issuer against allowlist BEFORE fetching keys.
-		// Matching is done on normalized origin (scheme://host), not raw iss text.
 		if !isIssuerAllowed(origin) {
 			return nil, fmt.Errorf("issuer %q not in allowed list", iss)
 		}
 
-		// SECURITY FIX: Enforce HTTPS-only for JWKS fetching
 		jwksURL, err := discoverJWKSURL(origin)
 		if err != nil {
 			return nil, fmt.Errorf("JWKS discovery failed: %w", err)
@@ -57,14 +47,12 @@ func (m *AuthzMiddleware) parseToken(tokenString string) (endpoint string, exp f
 			return nil, fmt.Errorf("JWKS endpoint must use HTTPS, got: %s", jwksURL)
 		}
 
-		// Fetch and cache JWKS keys
-		cache := NewJWKSCache(jwksURL, 15*time.Minute)
-		if err := cache.FetchKeys(); err != nil {
+		cache := newJWKSCache(jwksURL, 15*time.Minute)
+		if err := cache.fetchKeys(); err != nil {
 			return nil, fmt.Errorf("fetch JWKS: %w", err)
 		}
 
-		// Get the public key for this KID
-		publicKey, err := cache.GetKey(kid)
+		publicKey, err := cache.getKey(kid)
 		if err != nil {
 			return nil, fmt.Errorf("key not found in JWKS (kid=%s): %w", kid, err)
 		}
@@ -76,12 +64,10 @@ func (m *AuthzMiddleware) parseToken(tokenString string) (endpoint string, exp f
 		return "", 0, fmt.Errorf("JWT signature verification failed: %w", err)
 	}
 
-	// Verify the token is valid
 	if !token.Valid {
 		return "", 0, fmt.Errorf("invalid token")
 	}
 
-	// Extract claims after successful verification
 	iss, ok := claims["iss"].(string)
 	if !ok || iss == "" {
 		return "", 0, fmt.Errorf("missing 'iss' claim")
@@ -102,9 +88,7 @@ func (m *AuthzMiddleware) parseToken(tokenString string) (endpoint string, exp f
 	return endpoint, exp, nil
 }
 
-// isIssuerAllowed checks if an issuer URL is in the allowed list.
-// The allowlist is configured via DRS_ALLOWED_ISSUERS (comma-separated URLs).
-
+// isIssuerAllowed checks if an issuer URL matches the configured fence URL.
 func isIssuerAllowed(iss string) bool {
 	fenceURL := strings.TrimSpace(os.Getenv("DRS_FENCE_URL"))
 	if fenceURL == "" {

@@ -24,15 +24,15 @@ export SYFON_AUTHZ_PLUGIN_PATH=/opt/syfon-plugins/authz-plugin
 
 You can add this to your systemd unit, Dockerfile, or shell profile as appropriate.
 
-### 3. (Optional) Configure Allowed Issuers
-Set the `DRS_ALLOWED_ISSUERS` environment variable to a comma-separated list of allowed JWT issuers:
+### 3. (Optional) Configure the Fence Issuer
+Set `DRS_FENCE_URL` to the HTTPS origin that is allowed to issue JWTs:
 
 ```
-export DRS_ALLOWED_ISSUERS="https://issuer1.example.com,https://issuer2.example.com"
+export DRS_FENCE_URL="https://fence.example.com"
 ```
 
 ### 4. Start Syfon
-Start the Syfon server as usual. On startup, Syfon will attempt to launch and handshake with the plugin. If the plugin is unavailable or fails, all authorization requests will be denied.
+Start the Syfon server as usual. On startup, Syfon will attempt to launch and handshake with the plugin. If the plugin is unavailable or fails, startup continues with the configured built-in behavior.
 
 ### 5. Monitoring and Troubleshooting
 - Check Syfon logs for plugin startup, handshake, and authorization errors.
@@ -49,4 +49,3 @@ Start the Syfon server as usual. On startup, Syfon will attempt to launch and ha
 Environment=SYFON_AUTHZ_PLUGIN_PATH=/opt/syfon-plugins/authz-plugin
 ExecStart=/usr/local/bin/syfon-server
 ```
-

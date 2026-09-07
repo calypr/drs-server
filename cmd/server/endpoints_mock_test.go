@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/api/middleware"
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 	"github.com/gofiber/fiber/v3"
@@ -194,7 +195,8 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	app := fiber.New()
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	authzMiddleware := middleware.NewAuthzMiddleware(logger, "local", "", "")
+	authRuntime := authentication.NewRuntime(logger, "local", "", "")
+	authzMiddleware := middleware.NewAuthzMiddleware(logger, middleware.Options{Mode: "local", Evaluator: authRuntime})
 	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
 	cfg := &config.Config{Routes: routes}
 	rt := &serverRuntime{

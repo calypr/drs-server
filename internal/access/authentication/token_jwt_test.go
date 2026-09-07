@@ -1,4 +1,4 @@
-package middleware
+package authentication
 
 import (
 	"crypto/rand"
@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TestJWTSignatureVerification tests that parseToken properly verifies JWT signatures
+// TestJWTSignatureVerification tests JWT signature verification.
 func TestJWTSignatureVerification_ValidSignature(t *testing.T) {
 	// Setup allowed issuer
 	if err := os.Setenv("DRS_FENCE_URL", "https://fence.example.com"); err != nil {
@@ -271,7 +271,7 @@ func TestJWTSignatureVerification_IssuerAllowlist(t *testing.T) {
 
 // TestJWKSCache tests JWKS caching and key retrieval
 func TestJWKSCache_KeyRetrieval(t *testing.T) {
-	cache := NewJWKSCache("https://fence.example.com/.well-known/jwks.json", 15*time.Minute)
+	cache := newJWKSCache("https://fence.example.com/.well-known/jwks.json", 15*time.Minute)
 
 	if cache.jwksURL != "https://fence.example.com/.well-known/jwks.json" {
 		t.Errorf("JWKS URL not set correctly")
@@ -280,7 +280,7 @@ func TestJWKSCache_KeyRetrieval(t *testing.T) {
 	// Mock key retrieval
 	cache.keys["key1"] = &rsa.PublicKey{}
 
-	key, err := cache.GetKey("key1")
+	key, err := cache.getKey("key1")
 	if err != nil {
 		t.Errorf("Failed to get key: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestJWKSCache_KeyRetrieval(t *testing.T) {
 	}
 
 	// Non-existent key should error
-	_, err = cache.GetKey("nonexistent")
+	_, err = cache.getKey("nonexistent")
 	if err == nil {
 		t.Errorf("Expected error for non-existent key")
 	}

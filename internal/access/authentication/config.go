@@ -1,14 +1,21 @@
-package middleware
+package authentication
 
 import (
 	"os"
 	"strings"
 )
 
-func loadMockAuthConfigFromEnv() mockAuthConfig {
+type mockConfig struct {
+	Enabled           bool
+	RequireAuthHeader bool
+	Resources         []string
+	Methods           []string
+}
+
+func loadMockAuthConfigFromEnv() mockConfig {
 	enabled := parseBoolEnv("DRS_AUTH_MOCK_ENABLED", false)
 	if !enabled {
-		return mockAuthConfig{}
+		return mockConfig{}
 	}
 	resources := splitCSV(os.Getenv("DRS_AUTH_MOCK_RESOURCES"))
 	if len(resources) == 0 {
@@ -18,7 +25,7 @@ func loadMockAuthConfigFromEnv() mockAuthConfig {
 	if len(methods) == 0 {
 		methods = []string{"*"}
 	}
-	return mockAuthConfig{
+	return mockConfig{
 		Enabled:           true,
 		RequireAuthHeader: parseBoolEnv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", false),
 		Resources:         resources,
