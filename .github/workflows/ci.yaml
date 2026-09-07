@@ -64,6 +64,9 @@ jobs:
       - name: Run unit tests
         run: make test-unit
 
+      - name: Compile the client README example
+        run: scripts/check-client-readme.sh
+
       - name: Run server endpoint router tests
         run: |
           CGO_ENABLED=1 go test ./cmd/server \

@@ -127,6 +127,15 @@ class ReleasePreparationTests(unittest.TestCase):
         self.assertEqual(result["root_tag"], "v0.2.0")
         self.assertEqual(result["client_tag"], "client/v0.1.1")
 
+    def test_patch_release_does_not_roll_over_minor_or_major(self):
+        for tag in ["v0.9.9", "client/v0.3.9", "apigen/v0.3.9"]:
+            self.git("tag", tag)
+        self.git("push", "origin", "--tags")
+        self.change()
+        result = self.prepare()
+        self.assertEqual(result["root_tag"], "v0.9.10")
+        self.assertEqual(result["client_tag"], "client/v0.3.10")
+
     def test_older_source_does_not_replace_a_newer_release(self):
         self.change()
         older_source = self.source
