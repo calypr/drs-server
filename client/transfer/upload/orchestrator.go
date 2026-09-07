@@ -11,8 +11,7 @@ import (
 	drsapi "github.com/calypr/syfon/apigen/client/drs"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
-
-	clientaccess "github.com/calypr/syfon/client/access"
+	syfoncommon "github.com/calypr/syfon/common"
 )
 
 type MetadataClient interface {
@@ -42,7 +41,7 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 		metadataControlledAccess = append([]string(nil), (*drsObject.ControlledAccess)...)
 	}
 	metadata := common.FileMetadata{
-		Authorizations: clientaccess.ControlledAccessToAuthzMap(clientaccess.NormalizeAccessResources(metadataControlledAccess)),
+		Authorizations: syfoncommon.ControlledAccessToAuthzMap(syfoncommon.NormalizeAccessResources(metadataControlledAccess)),
 	}
 
 	// 2. Determine upload filename/key
@@ -91,7 +90,7 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 		if err != nil {
 			return nil, fmt.Errorf("failed to get upload URL: %w", err)
 		}
-		if err := UploadSingle(ctx, resolvedUploadBackend{Uploader: bk, url: uploadURL}, bk.Logger(), filePath, uploadFilename, storageID, bucketName, metadata, false); err != nil {
+		if err := UploadSingle(ctx, bk, bk.Logger(), filePath, uploadFilename, storageID, bucketName, metadata, false); err != nil {
 			return nil, fmt.Errorf("upload failed: %w", err)
 		}
 		canonicalInput = uploadURL
@@ -199,13 +198,4 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 type UploadBackend interface {
 	transfer.Uploader
 	transfer.MultipartBackend
-}
-
-type resolvedUploadBackend struct {
-	transfer.Uploader
-	url string
-}
-
-func (b resolvedUploadBackend) ResolveUploadURL(context.Context, string, string, common.FileMetadata, string) (string, error) {
-	return b.url, nil
 }

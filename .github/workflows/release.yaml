@@ -1,6 +1,8 @@
-# Automatic releases prepare sibling module versions before tagging a release
-# commit. After publishing, sync those requirements back to development.
-# Manual semver/rc tags release the commit selected by the caller.
+# Cuts a GitHub release when the root binary or one of the sibling Go modules
+# materially changes after a branch is merged into development, and also on
+# manual semver/rc tag pushes. Direct commits to development do not auto-release.
+# For development-triggered releases, tags the merged commit first, then commits
+# go.mod cleanup back to development after the GitHub Release is created.
 
 name: Release
 
@@ -18,8 +20,8 @@ on:
       - development
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_run' && 'development' || github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -33,13 +35,7 @@ jobs:
       github.actor != 'nektos/act' &&
       (
         github.event_name == 'push' ||
-        (
-          github.event_name == 'workflow_run' &&
-          github.event.workflow_run.event == 'push' &&
-          github.event.workflow_run.head_repository.full_name == github.repository &&
-          github.event.workflow_run.head_branch == 'development' &&
-          github.event.workflow_run.conclusion == 'success'
-        )
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
       )
 
     permissions:
@@ -56,31 +52,189 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && 'development' || github.ref }}
-
-      - name: Verify workflow source commit
-        if: github.event_name == 'workflow_run'
-        env:
-          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Fetch tags
         run: git fetch --tags --force
 
-      - name: Prepare module versions and release tags
+      - name: Resolve versions and tag merged commit
         id: version
         env:
           HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: scripts/prepare-release.sh
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [[ "$EVENT_NAME" == 'push' ]]; then
+            {
+              echo "root_tag=$REF_NAME"
+              echo "apigen_tag="
+              echo "client_tag="
+              echo "sha=$HEAD_SHA"
+            } >> "$GITHUB_OUTPUT"
+            echo "Using existing root tag: $REF_NAME"
+            exit 0
+          fi
+
+          merged_pr_number="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
+            --jq '.[] | select(.base.ref == "development" and .merged_at != null) | .number' \
+            | head -n1 || true)"
+          if [[ -z "$merged_pr_number" ]]; then
+            {
+              echo "root_tag="
+              echo "apigen_tag="
+              echo "client_tag="
+              echo "sha=$HEAD_SHA"
+            } >> "$GITHUB_OUTPUT"
+            echo "Commit $HEAD_SHA is not associated with a merged PR into development; skipping auto release."
+            exit 0
+          fi
+          echo "Preparing auto release for merged PR #${merged_pr_number} at ${HEAD_SHA}"
+
+          latest_tag_for() {
+            local pattern="$1"
+            local regex="$2"
+            git tag --list "$pattern" --sort=-version:refname | grep -E "$regex" | head -n1 || true
+          }
+
+          bump_patch() {
+            local latest="$1"
+            if [[ -z "$latest" ]]; then
+              echo "v0.1.0"
+              return 0
+            fi
+
+            local base major minor patch
+            base="${latest#*/}"
+            base="${base#v}"
+            IFS=. read -r major minor patch <<<"$base"
+            patch=$((10#$patch + 1))
+            if [[ $patch -gt 9 ]]; then
+              patch=0
+              minor=$((10#$minor + 1))
+              if [[ $minor -gt 9 ]]; then
+                minor=0
+                major=$((10#$major + 1))
+              fi
+            fi
+            echo "v${major}.${minor}.${patch}"
+          }
+
+          changed_files_from() {
+            local base="$1"
+            shift
+            if [[ -n "$base" ]]; then
+              git diff --name-only "${base}..${HEAD_SHA}" -- "$@"
+            else
+              git diff --name-only "${HEAD_SHA}^..${HEAD_SHA}" -- "$@"
+            fi
+          }
+
+          root_latest=$(latest_tag_for 'v[0-9]*' '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          apigen_latest=$(latest_tag_for 'apigen/v[0-9]*' '^apigen/v[0-9]+\.[0-9]+\.[0-9]+$')
+          client_latest=$(latest_tag_for 'client/v[0-9]*' '^client/v[0-9]+\.[0-9]+\.[0-9]+$')
+
+          root_files=$(changed_files_from "$root_latest")
+          apigen_files=$(changed_files_from "$apigen_latest" apigen)
+          client_files=$(changed_files_from "$client_latest" client)
+
+          root_base_changed=false
+          apigen_base_changed=false
+          client_base_changed=false
+
+          if printf '%s\n' "$root_files" \
+            | grep -Ev '^(apigen/|client/)' \
+            | grep -Ev '(_test\.go$|^$)' \
+            | grep -Eq '(^|/).+\.go$|^go\.(mod|sum)$|^Makefile$|^Dockerfile$|^install\.sh$|^\.github/workflows/release\.yml$'; then
+            root_base_changed=true
+          fi
+
+          if printf '%s\n' "$apigen_files" \
+            | grep -Ev '(_test\.go$|^$)' \
+            | grep -Eq '^apigen/.+\.go$|^apigen/go\.(mod|sum)$'; then
+            apigen_base_changed=true
+          fi
+
+          if printf '%s\n' "$client_files" \
+            | grep -Ev '(_test\.go$|^$)' \
+            | grep -Eq '^client/.+\.go$|^client/go\.(mod|sum)$'; then
+            client_base_changed=true
+          fi
+
+          root_existing=$(git tag --points-at "$HEAD_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          apigen_existing=$(git tag --points-at "$HEAD_SHA" | grep -E '^apigen/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          client_existing=$(git tag --points-at "$HEAD_SHA" | grep -E '^client/v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+
+          if [[ -n "$apigen_existing" ]]; then
+            apigen_tag="$apigen_existing"
+          elif [[ "$apigen_base_changed" == true ]]; then
+            apigen_tag="apigen/$(bump_patch "$apigen_latest")"
+          else
+            apigen_tag=""
+          fi
+
+          if [[ -n "$client_existing" ]]; then
+            client_tag="$client_existing"
+          elif [[ "$client_base_changed" == true || -n "$apigen_tag" ]]; then
+            client_tag="client/$(bump_patch "$client_latest")"
+          else
+            client_tag=""
+          fi
+
+          if [[ -n "$root_existing" ]]; then
+            root_tag="$root_existing"
+          elif [[ "$root_base_changed" == true || -n "$client_tag" || -n "$apigen_tag" ]]; then
+            root_tag="$(bump_patch "$root_latest")"
+          else
+            root_tag=""
+          fi
+
+          if [[ -z "$root_tag" ]]; then
+            {
+              echo "root_tag="
+              echo "apigen_tag=$apigen_tag"
+              echo "client_tag=$client_tag"
+              echo "sha=$HEAD_SHA"
+            } >> "$GITHUB_OUTPUT"
+            echo "No release needed."
+            exit 0
+          fi
+
+          release_sha="$HEAD_SHA"
+
+          for tag in "$apigen_tag" "$client_tag" "$root_tag"; do
+            if [[ -z "$tag" ]]; then
+              continue
+            fi
+
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "Tag already exists: $tag"
+              continue
+            fi
+
+            git tag "$tag" "$release_sha"
+            git push origin "$tag"
+            echo "Tagged $tag at $release_sha"
+          done
+
+          {
+            echo "root_tag=$root_tag"
+            echo "apigen_tag=$apigen_tag"
+            echo "client_tag=$client_tag"
+            echo "sha=$release_sha"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'Root release tag: %s\n' "$root_tag"
+          printf 'Apigen release tag: %s\n' "$apigen_tag"
+          printf 'Client release tag: %s\n' "$client_tag"
+          printf 'Release SHA: %s\n' "$release_sha"
 
   build:
     name: Build (${{ matrix.os }}/${{ matrix.arch }})
@@ -102,7 +256,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.root_tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -123,7 +277,8 @@ jobs:
           GIT_BRANCH: ${{ github.ref_name }}
           GIT_UPSTREAM: ${{ github.server_url }}/${{ github.repository }}
         run: |
-          CGO_ENABLED=1 make build BUILD_OUTPUT=syfon-${{ matrix.os }}-${{ matrix.arch }}
+          CGO_ENABLED=1 make build
+          mv syfon syfon-${{ matrix.os }}-${{ matrix.arch }}
 
       - name: Upload artifact
         if: github.actor != 'nektos/act'
@@ -151,7 +306,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.root_tag }}
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Fetch tags
         run: git fetch --tags --force

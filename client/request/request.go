@@ -47,6 +47,8 @@ func (e *ResponseError) Error() string {
 
 type RequestOption func(*RequestBuilder)
 
+
+
 func WithQueryValues(v url.Values) RequestOption {
 	return func(rb *RequestBuilder) {
 		rb.WithQueryValues(v)
@@ -64,6 +66,8 @@ func WithTimeout(d time.Duration) RequestOption {
 		rb.WithTimeout(d)
 	}
 }
+
+
 
 func WithSkipAuth(skip bool) RequestOption {
 	return func(rb *RequestBuilder) {
@@ -155,26 +159,18 @@ func newRequestor(
 	}
 	if baseHTTPClient != nil {
 		retryClient.HTTPClient.Timeout = baseHTTPClient.Timeout
-		retryClient.HTTPClient.Jar = baseHTTPClient.Jar
-		retryClient.HTTPClient.CheckRedirect = baseHTTPClient.CheckRedirect
 	}
 
 	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
 		shouldRetry, retryErr :=
 			retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 
-		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+		if resp != nil &&
+			(resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadGateway) {
 			if authTransport.Mode != AuthModeBearer || authTransport.Cred == nil || strings.TrimSpace(authTransport.Cred.APIEndpoint) == "" || strings.TrimSpace(authTransport.Cred.APIKey) == "" {
 				return shouldRetry, retryErr
 			}
-			if resp.Request == nil {
-				return shouldRetry, retryErr
-			}
-			if authState, ok := resp.Request.Context().Value(authRequestContextKey{}).(authRequestContext); ok && (authState.skipAuth || authState.explicitAuth) {
-				return shouldRetry, retryErr
-			}
-			rejectedToken := bearerToken(resp.Request.Header.Get("Authorization"))
-			err := authTransport.refreshIfCurrent(ctx, rejectedToken)
+			err := authTransport.refreshOnce(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -193,8 +189,6 @@ func newRequestor(
 	return r
 }
 
-// Do executes a request and decodes its response. Only bodyless GET, HEAD, and
-// OPTIONS requests are retried; WithNoRetry disables those retries.
 func (r *Request) Do(ctx context.Context, method, path string, body, out any, opts ...RequestOption) error {
 	rb := r.newBuilder(method, path)
 	if body != nil {
@@ -237,15 +231,22 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 		httpReq.Header.Set("X-Skip-Auth", "true")
 	}
 
-	if !rb.SkipAuth && rb.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+rb.Token)
+	// Apply auth via the shared transport so direct request calls and generated
+	// API clients behave the same way.
+	if rb.SkipAuth {
+		// Leave auth handling to the transport so X-Skip-Auth can suppress both
+		// manual and transport-level auth injection for presigned URLs.
+	} else if token := rb.Token; token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	} else if r.Auth != nil {
+		r.Auth.apply(httpReq)
 	}
 
 	if rb.PartSize != 0 {
 		httpReq.ContentLength = rb.PartSize
 	}
 
-	if rb.NoRetry || !requestCanRetry(httpReq) {
+	if rb.NoRetry {
 		resp, err := r.RetryClient.HTTPClient.Do(httpReq)
 		if err != nil {
 			if resp != nil {
@@ -270,23 +271,6 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 	}
 
 	return r.handleResponse(method, resp, out)
-}
-
-func requestCanRetry(req *http.Request) bool {
-	switch req.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-	default:
-		return false
-	}
-	return req.Body == nil || req.Body == http.NoBody
-}
-
-func bearerToken(header string) string {
-	parts := strings.Fields(header)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
 }
 
 func (r *Request) handleResponse(method string, resp *http.Response, out any) error {

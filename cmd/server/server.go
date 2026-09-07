@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,165 +10,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
+	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/crypto"
+	"github.com/calypr/syfon/internal/db"
+	"github.com/calypr/syfon/internal/db/postgres"
+	"github.com/calypr/syfon/internal/db/sqlite"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
-	"github.com/calypr/syfon/internal/persistence/postgres"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
-	projectstorage "github.com/calypr/syfon/internal/projects/storage"
-	"github.com/calypr/syfon/internal/storage"
-	"github.com/calypr/syfon/internal/transfers"
-	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
-	"github.com/calypr/syfon/internal/usage"
+	"github.com/calypr/syfon/internal/models"
+	"github.com/calypr/syfon/internal/signer/azure"
+	"github.com/calypr/syfon/internal/signer/file"
+	"github.com/calypr/syfon/internal/signer/gcs"
+	"github.com/calypr/syfon/internal/signer/s3"
+	"github.com/calypr/syfon/internal/urlmanager"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/spf13/cobra"
 )
 
 var configFile string
-
-func serviceInfoForBackend(sqlite bool) drs.Service {
-	description := "Calypr-backed DRS server"
-	if sqlite {
-		description += " (SQLite)"
-	}
-	createdAt := time.Now()
-	updatedAt := time.Now()
-	environment := "prod"
-	return drs.Service{
-		Id:          "drs-service-calypr",
-		Name:        "Calypr DRS Server",
-		Type:        drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.2.0"},
-		Description: &description,
-		CreatedAt:   &createdAt,
-		UpdatedAt:   &updatedAt,
-		Environment: &environment,
-		Version:     "1.0.0",
-	}
-}
-
-type serverBackend struct {
-	objectDependencies objectrecords.Dependencies
-	bucketDependencies buckets.Dependencies
-	pending            transferlfs.PendingStore
-	usageIngest        usage.Ingestor
-	usageReports       usage.ReportStore
-}
-
-var (
-	errBucketVisibilityScopeQuery   = errors.New("bucket visibility fallback requires an object scope query")
-	errBucketVisibilityRecordReader = errors.New("bucket visibility fallback requires an object record reader")
-)
-
-func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectrecords.RecordReader) buckets.VisibilityFallback {
-	return func(ctx context.Context) ([]buckets.VisibilityRow, error) {
-		if scope == nil {
-			return nil, errBucketVisibilityScopeQuery
-		}
-		if reader == nil {
-			return nil, errBucketVisibilityRecordReader
-		}
-
-		ids, err := scope.ListObjectIDsByScope(ctx, "", "")
-		if err != nil {
-			return nil, err
-		}
-		if len(ids) == 0 {
-			return []buckets.VisibilityRow{}, nil
-		}
-
-		records, err := reader.GetBulkObjects(ctx, ids)
-		if err != nil {
-			return nil, err
-		}
-		rows := make([]buckets.VisibilityRow, 0)
-		for i := range records {
-			obj := &records[i]
-			if !serverBucketVisibilityObjectReadable(ctx, obj) {
-				continue
-			}
-			resources := objects.AccessResources(obj)
-			if len(resources) == 0 || obj.AccessMethods == nil {
-				continue
-			}
-			for _, method := range *obj.AccessMethods {
-				if method.AccessUrl == nil {
-					continue
-				}
-				accessURL := strings.TrimSpace(method.AccessUrl.Url)
-				if accessURL == "" {
-					continue
-				}
-				for _, resource := range resources {
-					resource = strings.TrimSpace(resource)
-					if resource == "" {
-						continue
-					}
-					rows = append(rows, buckets.VisibilityRow{
-						AccessURL:  accessURL,
-						AccessType: strings.TrimSpace(method.Type),
-						Resource:   resource,
-					})
-				}
-			}
-		}
-		return rows, nil
-	}
-}
-
-func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Record) bool {
-	if !access.IsAuthzEnforced(ctx) ||
-		access.HasMethodAccess(ctx, "read", []string{"/programs"}) ||
-		access.HasMethodAccess(ctx, "read", []string{"/data_file"}) {
-		return true
-	}
-	if obj != nil && obj.PublicRead {
-		return true
-	}
-	resources := objects.AccessResources(obj)
-	if obj != nil && obj.PublicReadPolicyKnown && len(resources) == 0 {
-		return false
-	}
-	return access.HasObjectMethodAccess(ctx, "read", resources)
-}
-
-func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
-	return serverBackend{
-		objectDependencies: objectrecords.Dependencies{
-			Reader: database, Writer: database, AccessMethods: database, AccessPolicy: database,
-			Aliases: database, Content: database, ChecksumScope: database, Scope: database,
-			Resources: database, Pages: database, URLPages: database, Authorized: database,
-		},
-		bucketDependencies: buckets.Dependencies{
-			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
-		},
-		pending:      database,
-		usageIngest:  database,
-		usageReports: database,
-	}
-}
-
-func postgresServerBackend(database *postgres.PostgresDB) serverBackend {
-	return serverBackend{
-		objectDependencies: objectrecords.Dependencies{
-			Reader: database, Writer: database, AccessMethods: database, AccessPolicy: database,
-			Aliases: database, Content: database, ChecksumScope: database, Scope: database,
-			Resources: database, Pages: database, URLPages: database, Authorized: database,
-		},
-		bucketDependencies: buckets.Dependencies{
-			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
-		},
-		pending:      database,
-		usageIngest:  database,
-		usageReports: database,
-	}
-}
 
 var Cmd = &cobra.Command{
 	Use:     "serve",
@@ -193,7 +54,7 @@ var Cmd = &cobra.Command{
 		}
 
 		// Init DB
-		var backend serverBackend
+		var database db.DatabaseInterface
 		var errDb error
 
 		if cfg.Database.Sqlite != nil {
@@ -203,11 +64,7 @@ var Cmd = &cobra.Command{
 				cfg.Database.Sqlite.File = dbPath
 			}
 			logger.Info("initializing sqlite database", "file", dbPath)
-			var database *sqlite.SqliteDB
 			database, errDb = sqlite.NewSqliteDB(dbPath)
-			if errDb == nil {
-				backend = sqliteServerBackend(database)
-			}
 		} else if cfg.Database.Postgres != nil {
 			dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 				cfg.Database.Postgres.User,
@@ -218,11 +75,7 @@ var Cmd = &cobra.Command{
 				cfg.Database.Postgres.SSLMode,
 			)
 			logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
-			var database *postgres.PostgresDB
 			database, errDb = postgres.NewPostgresDB(dsn)
-			if errDb == nil {
-				backend = postgresServerBackend(database)
-			}
 		} else {
 			fatal("no database configuration provided")
 		}
@@ -233,44 +86,20 @@ var Cmd = &cobra.Command{
 
 		applyCredentialEncryptionConfig(cfg)
 
-		needsStorage := cfg.Routes.Ga4gh || cfg.Routes.Internal || cfg.Routes.LFS
-		var invalidator *storageInvalidator
-		var storageManager *storage.Manager
-		if needsStorage {
-			invalidator = &storageInvalidator{}
-		}
-		bucketDependencies := backend.bucketDependencies
-		bucketDependencies.Fallback = newBucketVisibilityFallback(
-			backend.objectDependencies.Scope,
-			backend.objectDependencies.Reader,
-		)
-		bucketService, err := buckets.NewService(bucketDependencies, invalidator)
-		if err != nil {
-			fatal("failed to initialize bucket service", "err", err)
-		}
-		if needsStorage {
-			var storageErr error
-			storageManager, storageErr = newStorageManager(bucketService, "/", logger)
-			if storageErr != nil {
-				fatal("failed to initialize storage manager", "err", storageErr)
-			}
-			invalidator.manager = storageManager
-		}
-
 		// Load configured bucket credentials if present.
 		if len(cfg.Buckets) > 0 {
-			encryptionEnabled, encErr := credentialcipher.CredentialEncryptionEnabled()
+			encryptionEnabled, encErr := crypto.CredentialEncryptionEnabled()
 			if encErr != nil {
-				fatal("invalid credential encryption configuration", "env", credentialcipher.CredentialMasterKeyEnv, "err", encErr)
+				fatal("invalid credential encryption configuration", "env", crypto.CredentialMasterKeyEnv, "err", encErr)
 			}
 			if !encryptionEnabled {
-				fatal("s3 credential encryption key is required", "env", credentialcipher.CredentialMasterKeyEnv)
+				fatal("s3 credential encryption key is required", "env", crypto.CredentialMasterKeyEnv)
 			}
 
 			logger.Info("loading configured bucket credentials", "count", len(cfg.Buckets))
 			// Bucket credentials are encrypted before persistence and audited on read/write/delete/list.
 			for _, c := range cfg.Buckets {
-				cred := &buckets.Credential{
+				cred := &models.S3Credential{
 					CredentialID: c.CredentialID,
 					Bucket:       c.Bucket,
 					Provider:     c.Provider,
@@ -279,41 +108,33 @@ var Cmd = &cobra.Command{
 					SecretKey:    c.SecretKey,
 					Endpoint:     c.Endpoint,
 				}
-				if err := bucketService.SaveS3Credential(cmd.Context(), cred); err != nil {
+				if err := database.SaveS3Credential(cmd.Context(), cred); err != nil {
 					logger.Error("failed to save s3 credential", "bucket", c.Bucket, "err", err)
 				}
 			}
 		}
-		if err := loadConfiguredBucketScopes(cmd.Context(), bucketService, bucketService, cfg.BucketScopes, logger); err != nil {
+		if err := loadConfiguredBucketScopes(cmd.Context(), database, cfg.BucketScopes, logger); err != nil {
 			fatal("failed to load configured bucket scopes", "err", err)
 		}
 
-		objectService := objectrecords.NewService(backend.objectDependencies)
-		usageService := usage.NewService(usage.Dependencies{
-			Reports: backend.usageReports,
-			Objects: objectService,
-		})
-		transferService := transfers.NewService(transfers.Dependencies{
-			Access:      storageManager,
-			Multipart:   storageManager,
-			Scopes:      bucketService,
-			Credentials: bucketService,
-			Events:      backend.usageIngest,
-		})
-		projectStorageService := projectstorage.NewService(
-			projectstorage.Dependencies{
-				Scopes:         bucketService,
-				Credentials:    bucketService,
-				Visibility:     bucketService,
-				Inventory:      storageManager,
-				Probe:          storageManager,
-				Delete:         storageManager,
-				Physical:       objectService,
-				CleanupObjects: objectService,
-				CleanupScopes:  bucketService,
-			},
-		)
-		scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
+		// Init unified URL manager.
+		needsUrlManager := cfg.Routes.Ga4gh || cfg.Routes.Internal || cfg.Routes.LFS
+		var uM *urlmanager.Manager
+		if needsUrlManager {
+			uM = urlmanager.NewManager(database, cfg.Signing)
+			uM.RegisterSigner(common.S3Provider, s3.NewS3Signer(database))
+			uM.RegisterSigner(common.GCSProvider, gcs.NewGCSSigner(database))
+			uM.RegisterSigner(common.AzureProvider, azure.NewAzureSigner(database))
+			fSigner, fErr := file.NewFileSigner("/")
+			if fErr == nil {
+				uM.RegisterSigner(common.FileProvider, fSigner)
+			} else {
+				logger.Warn("failed to initialize file signer", "err", fErr)
+			}
+		}
+
+		// Init unified Object Manager.
+		om := core.NewObjectManager(database, uM)
 
 		// Build Fiber runtime and middleware pipeline.
 		app := fiber.New(fiber.Config{
@@ -343,20 +164,13 @@ var Cmd = &cobra.Command{
 		rt := &serverRuntime{
 			app:                 app,
 			cfg:                 cfg,
-			serviceInfo:         serviceInfoForBackend(cfg.Database.Sqlite != nil),
-			objectService:       objectService,
-			transferService:     transferService,
-			lfsPending:          backend.pending,
-			usageService:        usageService,
-			usageIngest:         backend.usageIngest,
-			projectInspector:    projectStorageService.Inspector,
-			projectCleanup:      projectStorageService.ProjectCleanup,
-			scopeRepairService:  scopeRepairService,
-			bucketService:       bucketService,
+			database:            database,
+			om:                  om,
+			uM:                  uM,
 			authzMiddleware:     authzMiddleware,
 			requestIDMiddleware: requestIDMiddleware,
 		}
-		registerServerRoutes(rt)
+		applyServerOptions(rt, buildServerOptions(cfg)...)
 
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		logger.Info("server starting", "addr", addr)
@@ -390,11 +204,7 @@ var Cmd = &cobra.Command{
 	},
 }
 
-type bucketScopeCreator interface {
-	CreateBucketScope(context.Context, *buckets.Scope) error
-}
-
-func loadConfiguredBucketScopes(ctx context.Context, credentials buckets.CredentialReader, scopeStore bucketScopeCreator, scopes []config.BucketScopeConfig, logger *slog.Logger) error {
+func loadConfiguredBucketScopes(ctx context.Context, database db.DatabaseInterface, scopes []config.BucketScopeConfig, logger *slog.Logger) error {
 	if len(scopes) == 0 {
 		return nil
 	}
@@ -404,21 +214,17 @@ func loadConfiguredBucketScopes(ctx context.Context, credentials buckets.Credent
 		if credentialID == "" {
 			credentialID = strings.TrimSpace(scope.Bucket)
 		}
-		cred, err := credentials.GetS3Credential(ctx, credentialID)
+		cred, err := database.GetS3Credential(ctx, credentialID)
 		if err != nil {
 			return fmt.Errorf("bucket_scopes[%d] bucket=%s credential lookup failed: %w", i, scope.Bucket, err)
 		}
 		if cred == nil {
 			return fmt.Errorf("bucket_scopes[%d] bucket=%s credential not found", i, scope.Bucket)
 		}
-		resolvedCredentialID := strings.TrimSpace(cred.CredentialID)
-		if resolvedCredentialID == "" {
-			resolvedCredentialID = strings.TrimSpace(cred.Bucket)
-		}
-		if err := scopeStore.CreateBucketScope(ctx, &buckets.Scope{
+		if err := database.CreateBucketScope(ctx, &models.BucketScope{
 			Organization: scope.Organization,
 			ProjectID:    scope.ProjectID,
-			CredentialID: resolvedCredentialID,
+			CredentialID: credentialID,
 			Bucket:       cred.Bucket,
 			PathPrefix:   scope.PathPrefix,
 		}); err != nil {
@@ -432,19 +238,19 @@ func applyCredentialEncryptionConfig(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	if strings.TrimSpace(os.Getenv(credentialcipher.CredentialMasterKeyEnv)) == "" {
+	if strings.TrimSpace(os.Getenv(crypto.CredentialMasterKeyEnv)) == "" {
 		if masterKey := strings.TrimSpace(cfg.CredentialEncryption.MasterKey); masterKey != "" {
-			os.Setenv(credentialcipher.CredentialMasterKeyEnv, masterKey)
+			os.Setenv(crypto.CredentialMasterKeyEnv, masterKey)
 		}
 	}
-	if strings.TrimSpace(os.Getenv(credentialcipher.CredentialLocalKeyFileEnv)) == "" {
+	if strings.TrimSpace(os.Getenv(crypto.CredentialLocalKeyFileEnv)) == "" {
 		if localKeyFile := strings.TrimSpace(cfg.CredentialEncryption.LocalKeyFile); localKeyFile != "" {
-			os.Setenv(credentialcipher.CredentialLocalKeyFileEnv, localKeyFile)
+			os.Setenv(crypto.CredentialLocalKeyFileEnv, localKeyFile)
 		}
 	}
-	if strings.TrimSpace(os.Getenv(credentialcipher.DatabaseSQLiteFileEnv)) == "" && cfg.Database.Sqlite != nil {
+	if strings.TrimSpace(os.Getenv(crypto.DatabaseSQLiteFileEnv)) == "" && cfg.Database.Sqlite != nil {
 		if sqliteFile := strings.TrimSpace(cfg.Database.Sqlite.File); sqliteFile != "" {
-			os.Setenv(credentialcipher.DatabaseSQLiteFileEnv, sqliteFile)
+			os.Setenv(crypto.DatabaseSQLiteFileEnv, sqliteFile)
 		}
 	}
 }

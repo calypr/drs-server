@@ -14,8 +14,7 @@ import (
 	transferdownload "github.com/calypr/syfon/client/transfer/download"
 	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/transferprogress"
-
-	clientaccess "github.com/calypr/syfon/client/access"
+	syfoncommon "github.com/calypr/syfon/common"
 	"github.com/spf13/cobra"
 )
 
@@ -122,7 +121,7 @@ func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetCli
 	}
 
 	authzOrg, authzProject := pathScope(dstResource)
-	authzMap := clientaccess.AuthzMapFromScope(authzOrg, authzProject)
+	authzMap := syfoncommon.AuthzMapFromScope(authzOrg, authzProject)
 	if err := targetClient.Index().Upsert(ctx, did, targetObjectURL, fileName, size, checksum, authzMap); err != nil {
 		return fmt.Errorf("failed to sync index record for DID %s: %w", did, err)
 	}

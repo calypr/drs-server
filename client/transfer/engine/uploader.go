@@ -275,10 +275,7 @@ func (u *GenericUploader) matches(s *uploaderResumeState, req transfer.TransferR
 	if s == nil {
 		return false
 	}
-	return s.UploadID != "" &&
-		s.Bucket == req.Bucket &&
-		s.FileModUnixNano == info.ModTime().UnixNano() &&
-		s.SourcePath == req.SourcePath &&
+	return s.SourcePath == req.SourcePath &&
 		s.GUID == req.GUID &&
 		s.ObjectKey == effectiveObjectKey(req) &&
 		s.FileSize == info.Size() &&

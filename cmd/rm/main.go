@@ -5,8 +5,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/cmd/cliauth"
-
-	clientaccess "github.com/calypr/syfon/client/access"
+	syfoncommon "github.com/calypr/syfon/common"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ var Cmd = &cobra.Command{
 			return err
 		}
 
-		controlled := clientaccess.NormalizeAccessResources(derefStringSlice(rec.ControlledAccess))
+		controlled := syfoncommon.NormalizeAccessResources(derefStringSlice(rec.ControlledAccess))
 		if len(controlled) <= 1 {
 			if err := c.DRS().DeleteObject(cmd.Context(), did, true); err != nil {
 				return err
@@ -43,7 +42,7 @@ var Cmd = &cobra.Command{
 			return nil
 		}
 
-		resource, err := clientaccess.ResourcePath(strings.TrimSpace(rmOrganization), strings.TrimSpace(rmProject))
+		resource, err := syfoncommon.ResourcePath(strings.TrimSpace(rmOrganization), strings.TrimSpace(rmProject))
 		if err != nil {
 			return err
 		}

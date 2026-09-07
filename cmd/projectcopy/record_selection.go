@@ -7,8 +7,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/client/services"
-
-	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/common"
 	"github.com/spf13/cobra"
 )
 
@@ -57,11 +56,11 @@ func RecordsToCopy(ctx context.Context, cmd *cobra.Command, index *services.Inde
 }
 
 func recordMatchesScope(controlledAccess *[]string, srcScope Scope) bool {
-	resource, err := clientaccess.ResourcePath(srcScope.Organization, srcScope.Project)
+	resource, err := common.ResourcePath(srcScope.Organization, srcScope.Project)
 	if err != nil {
 		return false
 	}
-	for _, candidate := range clientaccess.NormalizeAccessResources(derefStringSlice(controlledAccess)) {
+	for _, candidate := range common.NormalizeAccessResources(derefStringSlice(controlledAccess)) {
 		if candidate == resource {
 			return true
 		}

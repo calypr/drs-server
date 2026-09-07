@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"path"
+	"strings"
 
 	"github.com/calypr/syfon/client/common"
 	"gopkg.in/ini.v1"
@@ -66,7 +67,13 @@ func (man *Manager) configPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	configPath := filepath.Join(homeDir, ".gen3", "gen3_client_config.ini")
+	configPath := path.Join(
+		homeDir +
+			common.PathSeparator +
+			".gen3" +
+			common.PathSeparator +
+			"gen3_client_config.ini",
+	)
 	return configPath, nil
 }
 
@@ -100,12 +107,13 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 			An instance of Credential
 	*/
 
-	configPath, err := man.configPath()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		errs := fmt.Errorf("Error occurred when getting home directory: %s", err.Error())
 		man.Logger.Error(errs.Error())
 		return nil, errs
 	}
+	configPath := path.Join(homeDir + common.PathSeparator + ".gen3" + common.PathSeparator + "gen3_client_config.ini")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w Run configure command (with a profile if desired) to set up account credentials \n"+
@@ -204,27 +212,33 @@ func (man *Manager) Save(profileConfig *Credential) error {
 }
 
 func (man *Manager) EnsureExists() error {
+	/*
+		Make sure the config exists on start up
+	*/
 	configPath, err := man.configPath()
 	if err != nil {
 		return err
 	}
-	return ensureConfigFile(configPath)
-}
 
-func ensureConfigFile(configPath string) error {
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		return err
+	if _, err := os.Stat(path.Dir(configPath)); os.IsNotExist(err) {
+		// SECURITY FIX MED-3: Create directory with 0700 (owner-only) instead of 0777
+		osErr := os.Mkdir(path.Join(path.Dir(configPath)), os.FileMode(0700))
+		if osErr != nil {
+			return err
+		}
+		_, osErr = os.Create(configPath)
+		if osErr != nil {
+			return err
+		}
 	}
-	f, err := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil && !errors.Is(err, os.ErrExist) {
-		return err
-	}
-	if err == nil {
-		if err := f.Close(); err != nil {
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		_, osErr := os.Create(configPath)
+		if osErr != nil {
 			return err
 		}
 	}
 	_, err = ini.Load(configPath)
+
 	return err
 }
 
@@ -248,15 +262,12 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 			return nil, err
 		}
 
-		var wire struct {
-			*Credential
-			KeyID  credentialString `json:"key_id"`
-			APIKey credentialString `json:"api_key"`
-		}
-		wire.Credential = &cred
-		wire.KeyID.value = &cred.KeyID
-		wire.APIKey.value = &cred.APIKey
-		if err := json.Unmarshal(content, &wire); err != nil {
+		jsonStr := strings.ReplaceAll(string(content), "\n", "")
+		// Normalize keys from snake_case to CamelCase for unmarshaling
+		jsonStr = strings.ReplaceAll(jsonStr, "key_id", "KeyID")
+		jsonStr = strings.ReplaceAll(jsonStr, "api_key", "APIKey")
+
+		if err := json.Unmarshal([]byte(jsonStr), &cred); err != nil {
 			errMsg := fmt.Errorf("cannot parse JSON credential file: %w", err)
 			man.Logger.Error(errMsg.Error())
 			return nil, errMsg
@@ -268,11 +279,4 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 	}
 
 	return &cred, nil
-}
-
-// Both key spellings write the same field, preserving JSON input precedence.
-type credentialString struct{ value *string }
-
-func (s *credentialString) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, s.value)
 }
