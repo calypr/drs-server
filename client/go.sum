@@ -92,8 +92,8 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.41.10/go.mod h1:60dv0eZJfeVXfbT1tFJi
 github.com/aws/smithy-go v1.24.3 h1:XgOAaUgx+HhVBoP4v8n6HCQoTRDhoMghKqw4LNHsDNg=
 github.com/aws/smithy-go v1.24.3/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
-github.com/calypr/syfon/apigen v0.3.0 h1:2ZqQJqsfVI4hLJ6JfbK+OJPZRJVFVpbHzyxIpl66OXI=
-github.com/calypr/syfon/apigen v0.3.0/go.mod h1:g8ceMQRY/KG5+D+NeWyajXmLAHMIX2t7AZXDO+eBKKE=
+github.com/calypr/syfon/apigen v0.3.1 h1:AVCT1Ak2cMUnc5rzlgJ710RjCHE3zyMfqbo77jyjeLA=
+github.com/calypr/syfon/apigen v0.3.1/go.mod h1:ZStSoj40FBRN18rm/KyFtd+g8o5Nga9TXqaEGqVL4s0=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 h1:aBangftG7EVZoUb69Os8IaYg++6uMOdKK83QtkkvJik=
