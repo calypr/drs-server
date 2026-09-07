@@ -352,9 +352,9 @@ func (db *PostgresDB) ListObjectIDsByScope(ctx context.Context, organization, pr
 		err  error
 	)
 	if project != "" {
-		resource, err := clientaccess.ResourcePath(organization, project)
-		if err != nil {
-			return nil, err
+		resource, resourceErr := clientaccess.ResourcePath(organization, project)
+		if resourceErr != nil {
+			return nil, resourceErr
 		}
 		rows, err = db.db.QueryContext(ctx, `
 			SELECT DISTINCT ca.object_id

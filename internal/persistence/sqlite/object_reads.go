@@ -232,9 +232,9 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 		err  error
 	)
 	if project != "" {
-		resource, err := clientaccess.ResourcePath(organization, project)
-		if err != nil {
-			return nil, err
+		resource, resourceErr := clientaccess.ResourcePath(organization, project)
+		if resourceErr != nil {
+			return nil, resourceErr
 		}
 		rows, err = db.db.QueryContext(ctx, `
 			SELECT DISTINCT ca.object_id
@@ -243,16 +243,16 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 			WHERE ca.resource = ?
 			ORDER BY ca.object_id`, resource)
 	} else {
-		resource, err := clientaccess.ResourcePath(organization, "")
-		if err != nil {
-			return nil, err
+		condition, scopeArgs, scopeErr := sqliteScopeResourceCondition("ca.resource", organization, "")
+		if scopeErr != nil {
+			return nil, scopeErr
 		}
 		rows, err = db.db.QueryContext(ctx, `
 			SELECT DISTINCT ca.object_id
 			FROM drs_object_controlled_access ca
 			INNER JOIN drs_object o ON o.id = ca.object_id
-			WHERE ca.resource = ?
-			ORDER BY ca.object_id`, resource)
+			WHERE `+condition+`
+			ORDER BY ca.object_id`, scopeArgs...)
 	}
 	if err != nil {
 		return nil, err
@@ -266,6 +266,9 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 			return nil, err
 		}
 		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return ids, nil
 }
@@ -340,18 +343,18 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	objectIDExpr := "id"
 
 	if organization != "" {
-		resource, err := clientaccess.ResourcePath(organization, project)
+		condition, scopeArgs, err := sqliteScopeResourceCondition("ca.resource", organization, project)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, resource)
+		args = append(args, scopeArgs...)
 		baseQuery = `
 			SELECT DISTINCT ca.object_id AS id
 			FROM drs_object_controlled_access ca
 			INNER JOIN drs_object o ON o.id = ca.object_id
 		`
 		objectIDExpr = "ca.object_id"
-		conditions = append(conditions, "ca.resource = ?")
+		conditions = append(conditions, condition)
 		orderBy = ` ORDER BY ca.object_id`
 	}
 	if startAfter != "" {
@@ -438,19 +441,19 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 		return db.ListObjectIDsByResources(ctx, resources, false)
 	}
 
-	scopeResource, err := clientaccess.ResourcePath(organization, project)
+	scopeCondition, scopeArgs, err := sqliteScopeResourceCondition("ca_scope.resource", organization, project)
 	if err != nil {
 		return nil, err
 	}
 	args := make([]any, 0, len(resources)+1)
-	args = append(args, scopeResource)
+	args = append(args, scopeArgs...)
 	query := `
 		SELECT DISTINCT o.id
 		FROM drs_object o
 		WHERE EXISTS (
 			SELECT 1
 			FROM drs_object_controlled_access ca_scope
-			WHERE ca_scope.object_id = o.id AND ca_scope.resource = ?
+		WHERE ca_scope.object_id = o.id AND ` + scopeCondition + `
 		)`
 	if restrictToResources {
 		resources = clientaccess.NormalizeAccessResources(resources)
@@ -565,15 +568,15 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 	args := []any{objectURL}
 	conditions := []string{"am.url = ?"}
 	if organization != "" {
-		resource, err := clientaccess.ResourcePath(organization, project)
+		scopeCondition, scopeArgs, err := sqliteScopeResourceCondition("ca_scope.resource", organization, project)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, resource)
+		args = append(args, scopeArgs...)
 		conditions = append(conditions, `EXISTS (
 			SELECT 1
 			FROM drs_object_controlled_access ca_scope
-			WHERE ca_scope.object_id = o.id AND ca_scope.resource = ?
+			WHERE ca_scope.object_id = o.id AND `+scopeCondition+`
 		)`)
 	}
 	if restrictToResources {
@@ -641,6 +644,22 @@ func (db *SqliteDB) GetObjectsByChecksum(ctx context.Context, checksum string) (
 		out = append(out, *obj)
 	}
 	return uniqueObjectsByID(out), nil
+}
+
+func sqliteScopeResourceCondition(column, organization, project string) (string, []any, error) {
+	resource, err := clientaccess.ResourcePath(organization, project)
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.TrimSpace(project) != "" {
+		return column + " = ?", []any{resource}, nil
+	}
+	return "(" + column + " = ? OR " + column + " LIKE ? ESCAPE '\\')", []any{resource, sqliteLikeEscape(resource+"/project/") + "%"}, nil
+}
+
+func sqliteLikeEscape(value string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(value)
 }
 
 func scanObjectIDs(rows *sql.Rows) ([]string, error) {

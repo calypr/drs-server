@@ -362,6 +362,24 @@ func TestListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 	}
 }
 
+func TestListObjectIDsByScopeReturnsQueryError(t *testing.T) {
+	pg, mock, rawDB := newMockPostgresDB(t)
+	defer rawDB.Close()
+
+	queryErr := errors.New("query failed")
+	mock.ExpectQuery("ca\\.resource = \\$1").
+		WithArgs("/organization/calypr/project/project").
+		WillReturnError(queryErr)
+
+	_, err := pg.ListObjectIDsByScope(context.Background(), "calypr", "project")
+	if !errors.Is(err, queryErr) {
+		t.Fatalf("expected query error %v, got %v", queryErr, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestPostgresScopeResourceCondition(t *testing.T) {
 	condition, args, err := postgresScopeResourceCondition("ca.resource", "org", "")
 	if err != nil {

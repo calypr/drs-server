@@ -35,7 +35,7 @@ func (db *SqliteDB) GetS3Credential(ctx context.Context, credentialID string) (*
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
 		return nil, wrapped
 	}
-	parsed, err := credentialcipher.ParseS3CredentialFromStorage(&c)
+	parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &c)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to decrypt credential: %w", err)
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
@@ -69,7 +69,7 @@ func (db *SqliteDB) getS3CredentialByPhysicalBucket(ctx context.Context, bucket 
 	case 0:
 		return nil, fmt.Errorf("credential not found")
 	case 1:
-		parsed, err := credentialcipher.ParseS3CredentialFromStorage(&matches[0])
+		parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &matches[0])
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt credential: %w", err)
 		}
@@ -87,7 +87,7 @@ func (db *SqliteDB) SaveS3Credential(ctx context.Context, cred *buckets.Credenti
 			cred.CredentialID = buckets.DeriveCredentialID(cred.Bucket, cred.Provider, cred.Region, cred.Endpoint, cred.AccessKey)
 		}
 	}
-	stored, err := credentialcipher.PrepareS3CredentialForStorage(cred)
+	stored, err := credentialcipher.PrepareS3CredentialForStorage(ctx, cred)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to prepare credential for storage: %w", err)
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
@@ -206,7 +206,7 @@ func (db *SqliteDB) ListS3Credentials(ctx context.Context) ([]buckets.Credential
 			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", err)
 			return nil, err
 		}
-		parsed, err := credentialcipher.ParseS3CredentialFromStorage(&c)
+		parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &c)
 		if err != nil {
 			wrapped := fmt.Errorf("failed to decrypt credential for bucket %s: %w", c.Bucket, err)
 			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", c.Bucket, wrapped)

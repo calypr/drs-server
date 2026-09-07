@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -56,11 +56,11 @@ func TestGetS3Credential(t *testing.T) {
 
 func TestGetS3Credential_DecryptsEncryptedSecrets(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-	encAK, err := credentialcipher.EncryptCredentialField("ak")
+	encAK, err := credentialcipher.EncryptCredentialField(context.Background(), "ak")
 	if err != nil {
 		t.Fatalf("encrypt access key: %v", err)
 	}
-	encSK, err := credentialcipher.EncryptCredentialField("sk")
+	encSK, err := credentialcipher.EncryptCredentialField(context.Background(), "sk")
 	if err != nil {
 		t.Fatalf("encrypt secret key: %v", err)
 	}
