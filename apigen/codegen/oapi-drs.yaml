@@ -9,6 +9,7 @@ import-mapping:
 output-options:
   skip-prune: false
   user-templates:
+    client-with-responses.tmpl: apigen/templates/client-with-responses.tmpl
     imports.tmpl: apigen/templates/imports.tmpl
     fiber/fiber-handler.tmpl: apigen/templates/fiber/fiber-handler.tmpl
     fiber/fiber-interface.tmpl: apigen/templates/fiber/fiber-interface.tmpl

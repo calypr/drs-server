@@ -1733,45 +1733,52 @@ func ParseListMetricsFilesResponse(rsp *http.Response) (*ListMetricsFilesRespons
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest MetricsListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*ListMetricsFilesResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest MetricsListResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseBulkMetricsFilesResponse parses an HTTP response from a BulkMetricsFilesWithResponse call
@@ -1787,45 +1794,52 @@ func ParseBulkMetricsFilesResponse(rsp *http.Response) (*BulkMetricsFilesRespons
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest MetricsListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*BulkMetricsFilesResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest MetricsListResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseGetMetricsFileResponse parses an HTTP response from a GetMetricsFileWithResponse call
@@ -1841,52 +1855,59 @@ func ParseGetMetricsFileResponse(rsp *http.Response) (*GetMetricsFileResponse, e
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest FileUsage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*GetMetricsFileResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest FileUsage
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON404 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseRecordProviderTransferEventsResponse parses an HTTP response from a RecordProviderTransferEventsWithResponse call
@@ -1902,45 +1923,52 @@ func ParseRecordProviderTransferEventsResponse(rsp *http.Response) (*RecordProvi
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest TransferEventsRecordedResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
+	decoded, decodeErr := func() (*RecordProviderTransferEventsResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+			var dest TransferEventsRecordedResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseGetMetricsSummaryResponse parses an HTTP response from a GetMetricsSummaryWithResponse call
@@ -1956,45 +1984,52 @@ func ParseGetMetricsSummaryResponse(rsp *http.Response) (*GetMetricsSummaryRespo
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest FileUsageSummary
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*GetMetricsSummaryResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest FileUsageSummary
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseGetTransferBreakdownResponse parses an HTTP response from a GetTransferBreakdownWithResponse call
@@ -2010,45 +2045,52 @@ func ParseGetTransferBreakdownResponse(rsp *http.Response) (*GetTransferBreakdow
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest TransferBreakdownResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*GetTransferBreakdownResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest TransferBreakdownResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseGetTransferSummaryResponse parses an HTTP response from a GetTransferSummaryWithResponse call
@@ -2064,45 +2106,52 @@ func ParseGetTransferSummaryResponse(rsp *http.Response) (*GetTransferSummaryRes
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest TransferAttributionSummary
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*GetTransferSummaryResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest TransferAttributionSummary
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest APIError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ServerInterface represents all server handlers.
@@ -3089,10 +3138,10 @@ func (sh *strictHandler) ListMetricsFiles(ctx fiber.Ctx, params ListMetricsFiles
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(ListMetricsFilesResponseObject); ok {
 		if err := validResponse.VisitListMetricsFilesResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3122,10 +3171,10 @@ func (sh *strictHandler) BulkMetricsFiles(ctx fiber.Ctx, params BulkMetricsFiles
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(BulkMetricsFilesResponseObject); ok {
 		if err := validResponse.VisitBulkMetricsFilesResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3150,10 +3199,10 @@ func (sh *strictHandler) GetMetricsFile(ctx fiber.Ctx, objectId string, params G
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetMetricsFileResponseObject); ok {
 		if err := validResponse.VisitGetMetricsFileResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3183,10 +3232,10 @@ func (sh *strictHandler) RecordProviderTransferEvents(ctx fiber.Ctx, params Reco
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(RecordProviderTransferEventsResponseObject); ok {
 		if err := validResponse.VisitRecordProviderTransferEventsResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3210,10 +3259,10 @@ func (sh *strictHandler) GetMetricsSummary(ctx fiber.Ctx, params GetMetricsSumma
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetMetricsSummaryResponseObject); ok {
 		if err := validResponse.VisitGetMetricsSummaryResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3237,10 +3286,10 @@ func (sh *strictHandler) GetTransferBreakdown(ctx fiber.Ctx, params GetTransferB
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetTransferBreakdownResponseObject); ok {
 		if err := validResponse.VisitGetTransferBreakdownResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -3264,10 +3313,10 @@ func (sh *strictHandler) GetTransferSummary(ctx fiber.Ctx, params GetTransferSum
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetTransferSummaryResponseObject); ok {
 		if err := validResponse.VisitGetTransferSummaryResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)

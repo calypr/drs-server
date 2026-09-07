@@ -771,108 +771,115 @@ func ParseLfsBatchResponse(rsp *http.Response) (*LfsBatchResponse, error) {
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest BatchResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON200 = &dest
+	decoded, decodeErr := func() (*LfsBatchResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest BatchResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON404 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON404 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 406:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON406 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 406:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON406 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON413 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON413 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON422 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON422 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON429 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON429 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON500 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON502 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON502 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON503 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON503 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON504 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON504 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 507:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON507 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 507:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON507 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 509:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON509 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 509:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON509 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseLfsStageMetadataResponse parses an HTTP response from a LfsStageMetadataWithResponse call
@@ -888,52 +895,59 @@ func ParseLfsStageMetadataResponse(rsp *http.Response) (*LfsStageMetadataRespons
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case rsp.Header.Get("Content-Type") == "application/json" && rsp.StatusCode == 200:
-		var dest MetadataSubmitResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
+	decoded, decodeErr := func() (*LfsStageMetadataResponse, error) {
+		switch {
+		case rsp.Header.Get("Content-Type") == "application/json" && rsp.StatusCode == 200:
+			var dest MetadataSubmitResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
-	case rsp.Header.Get("Content-Type") == "application/vnd.git-lfs+json" && rsp.StatusCode == 200:
-		var dest MetadataSubmitResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON200 = &dest
+		case rsp.Header.Get("Content-Type") == "application/vnd.git-lfs+json" && rsp.StatusCode == 200:
+			var dest MetadataSubmitResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ParseLfsUploadProxyResponse parses an HTTP response from a LfsUploadProxyWithResponse call
@@ -949,7 +963,15 @@ func ParseLfsUploadProxyResponse(rsp *http.Response) (*LfsUploadProxyResponse, e
 		HTTPResponse: rsp,
 	}
 
-	return response, nil
+	decoded, decodeErr := func() (*LfsUploadProxyResponse, error) {
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
 }
 
 // ParseLfsVerifyResponse parses an HTTP response from a LfsVerifyWithResponse call
@@ -965,45 +987,52 @@ func ParseLfsVerifyResponse(rsp *http.Response) (*LfsVerifyResponse, error) {
 		HTTPResponse: rsp,
 	}
 
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON400 = &dest
+	decoded, decodeErr := func() (*LfsVerifyResponse, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON400 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON401 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON401 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON403 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON403 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON404 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON404 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest LFSErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationvndGitLfsJSON500 = &dest
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest LFSErrorResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.ApplicationvndGitLfsJSON500 = &dest
 
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
 	}
-
-	return response, nil
+	return decoded, decodeErr
 }
 
 // ServerInterface represents all server handlers.
@@ -1501,10 +1530,10 @@ func (sh *strictHandler) LfsBatch(ctx fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(LfsBatchResponseObject); ok {
 		if err := validResponse.VisitLfsBatchResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1545,10 +1574,10 @@ func (sh *strictHandler) LfsStageMetadata(ctx fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(LfsStageMetadataResponseObject); ok {
 		if err := validResponse.VisitLfsStageMetadataResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1574,10 +1603,10 @@ func (sh *strictHandler) LfsUploadProxy(ctx fiber.Ctx, oid string) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(LfsUploadProxyResponseObject); ok {
 		if err := validResponse.VisitLfsUploadProxyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1605,10 +1634,10 @@ func (sh *strictHandler) LfsVerify(ctx fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(LfsVerifyResponseObject); ok {
 		if err := validResponse.VisitLfsVerifyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
