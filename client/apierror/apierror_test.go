@@ -166,3 +166,44 @@ func TestUnknownServerStatusPreservesBodyHint(t *testing.T) {
 		t.Fatalf("server detail was not preserved: %+v", err)
 	}
 }
+
+func TestAPIErrorBoundaryFallbacks(t *testing.T) {
+	var nilError *APIError
+	if nilError.Error() != "<nil>" || nilError.ErrorCode() != "" || nilError.ErrorCategory() != "" || !nilError.Is(nil) {
+		t.Fatal("nil API error did not return zero-value classifications")
+	}
+
+	empty := FromResponse(nil, nil)
+	if empty.Status != 0 || empty.Code != errorapi.ErrorCodeRequestFailed || empty.Message != "request failed" {
+		t.Fatalf("unexpected nil response fallback: %+v", empty)
+	}
+	if got := (&APIError{Status: 599}).Error(); !strings.Contains(got, http.StatusText(http.StatusInternalServerError)) {
+		t.Fatalf("unknown server status did not use the internal fallback: %q", got)
+	}
+}
+
+func TestFromResponseDecodesNestedLegacyErrors(t *testing.T) {
+	err := FromResponse(
+		&http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header)},
+		[]byte(`{"error":{"error_code":"invalid_input","msg":"bad input","requestId":"request-legacy"}}`),
+	)
+	if err.Code != errorapi.ErrorCodeInvalidInput || err.Message != "bad input" || err.RequestID != "request-legacy" {
+		t.Fatalf("unexpected nested error: %+v", err)
+	}
+
+	err = FromResponse(
+		&http.Response{StatusCode: http.StatusInternalServerError, Header: make(http.Header)},
+		[]byte(`{"error":"backend hint"}`),
+	)
+	if err.Message != "backend hint" {
+		t.Fatalf("nested string error was not preserved: %+v", err)
+	}
+
+	err = FromResponse(
+		&http.Response{StatusCode: http.StatusTeapot, Header: make(http.Header)},
+		[]byte(`{"code":123,"message":"legacy numeric code"}`),
+	)
+	if err.Code != errorapi.ErrorCode("123") {
+		t.Fatalf("numeric legacy code was not preserved: %+v", err)
+	}
+}
