@@ -397,14 +397,6 @@ func dataTestAuthContext(base context.Context, mode string, authHeader bool, pri
 	return access.WithSession(base, session)
 }
 
-func policyTestContext(mode string, authHeader bool, privileges map[string]map[string]bool) context.Context {
-	session := access.NewSession(mode)
-	session.AuthHeaderPresent = authHeader
-	session.AuthzEnforced = mode == "gen3" || mode == "local"
-	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
-	return access.WithSession(context.Background(), session)
-}
-
 func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture) *httptest.ResponseRecorder {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {

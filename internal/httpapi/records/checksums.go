@@ -60,7 +60,7 @@ func normalizeMissingSHA256(values []string) ([]string, error) {
 		out = append(out, value)
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("Invalid request body: sha256 values are required")
+		return nil, fmt.Errorf("invalid request body: sha256 values are required")
 	}
 	return out, nil
 }

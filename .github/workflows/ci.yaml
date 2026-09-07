@@ -248,7 +248,7 @@ jobs:
             client/coverage/coverage.out
 
   static-checks:
-    name: Vet, vuln, and plugins
+    name: Vet, Staticcheck, vuln, and plugins
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: verify-generated
@@ -269,8 +269,14 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
+      - name: Install Staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+
       - name: Run go vet
         run: go vet ./... ./client/... ./apigen/...
+
+      - name: Run Staticcheck
+        run: $(go env GOPATH)/bin/staticcheck ./... ./client/...
 
       - name: Check for Go CVEs - Root module
         run: $(go env GOPATH)/bin/govulncheck ./...

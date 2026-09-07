@@ -72,9 +72,7 @@ func isPublicDRSMetadataRequest(c fiber.Ctx) bool {
 	method := strings.ToUpper(strings.TrimSpace(c.Method()))
 	path := strings.TrimSuffix(strings.TrimSpace(c.Path()), "/")
 	const drsPrefix = "/ga4gh/drs/v1"
-	if strings.HasPrefix(path, drsPrefix) {
-		path = strings.TrimPrefix(path, drsPrefix)
-	}
+	path = strings.TrimPrefix(path, drsPrefix)
 	if !strings.HasPrefix(path, "/objects") {
 		return false
 	}

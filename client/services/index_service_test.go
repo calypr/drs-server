@@ -57,10 +57,7 @@ func TestIndexServiceOperationsAndUpsert(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&lastBulkCreate); err != nil {
 				t.Fatalf("Decode bulk create body returned error: %v", err)
 			}
-			records := make([]internalapi.InternalRecord, 0, len(lastBulkCreate.Records))
-			for _, rec := range lastBulkCreate.Records {
-				records = append(records, rec)
-			}
+			records := append([]internalapi.InternalRecord(nil), lastBulkCreate.Records...)
 			writeJSON(t, w, http.StatusCreated, internalapi.ListRecordsResponse{Records: &records})
 		case r.Method == http.MethodPost && r.URL.Path == "/index/bulk/hashes":
 			if err := json.NewDecoder(r.Body).Decode(&lastBulkHashes); err != nil {

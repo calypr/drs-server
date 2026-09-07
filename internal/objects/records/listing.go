@@ -499,20 +499,6 @@ func (m *queryService) listReadableObjectIDs(ctx context.Context) ([]string, boo
 	return ids, true, err
 }
 
-func (m *queryService) listReadableObjectIDsPage(ctx context.Context, startAfter string, limit, offset int) ([]string, bool, error) {
-	pager := m.pages
-	if pager == nil || !access.IsAuthzEnforced(ctx) {
-		return nil, false, nil
-	}
-	if access.IsGen3Mode(ctx) && !access.HasAuthHeader(ctx) {
-		return []string{}, true, nil
-	}
-
-	resources := readableResources(ctx)
-	ids, err := pager.ListObjectIDsPageByResources(ctx, resources, true, startAfter, limit, offset)
-	return ids, true, err
-}
-
 func (m *queryService) canPageScopeRead(ctx context.Context, organization, project string) bool {
 	if !access.IsAuthzEnforced(ctx) {
 		return true
@@ -570,19 +556,6 @@ func authorizedResources(ctx context.Context, method string) []string {
 		}
 	}
 	return clientaccess.NormalizeAccessResources(resources)
-}
-
-func (m *queryService) authorizedChecksumIDs(ctx context.Context, checksum, requiredMethod string) ([]string, bool, error) {
-	lister := m.authorizedQuery
-	if lister == nil {
-		return nil, false, nil
-	}
-	resources, includeUnscoped, restrictToResources := objectMethodResourceFilter(ctx, requiredMethod)
-	byChecksum, err := lister.ListObjectIDsByChecksumsAndResources(ctx, []string{checksum}, resources, includeUnscoped, restrictToResources)
-	if err != nil {
-		return nil, false, err
-	}
-	return byChecksum[checksum], true, nil
 }
 
 func searchAfterID(ids []string, startAfter string) int {

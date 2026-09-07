@@ -137,7 +137,7 @@ func TestManagerLoadErrors(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 		_, err := testManager().Load("missing")
-		if err == nil || !strings.Contains(err.Error(), "Run configure command") {
+		if err == nil || !strings.Contains(err.Error(), "run configure command") {
 			t.Fatalf("expected helpful missing config error, got %v", err)
 		}
 	})
@@ -155,7 +155,7 @@ func TestManagerLoadErrors(t *testing.T) {
 		}
 
 		_, err := testManager().Load("missing")
-		if err == nil || !strings.Contains(err.Error(), "Need to run") {
+		if err == nil || !strings.Contains(err.Error(), "need to run") {
 			t.Fatalf("expected missing profile error, got %v", err)
 		}
 	})

@@ -10,7 +10,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -594,103 +593,4 @@ func projectRecordAuditItemFromProjectStorage(record projectstorage.ProjectRecor
 		item.UpdatedTime = record.UpdatedTime.Format(time.RFC3339Nano)
 	}
 	return item
-}
-
-func projectRecordAuditItemFromObject(obj objects.Record, organization, project string) (internalInspectProjectRecordItem, bool) {
-	checksum := primarySHA256Checksum(obj.Checksums)
-	if checksum == "" {
-		return internalInspectProjectRecordItem{}, false
-	}
-	accessURLs := make([]string, 0)
-	accessMethods := make([]internalProjectAccessMethod, 0)
-	if obj.AccessMethods != nil {
-		for _, method := range *obj.AccessMethods {
-			row := internalProjectAccessMethod{
-				Type:    strings.TrimSpace(string(method.Type)),
-				Headers: []string{},
-			}
-			if method.AccessId != nil {
-				row.AccessID = strings.TrimSpace(*method.AccessId)
-			}
-			if method.AccessUrl != nil {
-				row.URL = strings.TrimSpace(method.AccessUrl.Url)
-				if row.URL != "" {
-					accessURLs = append(accessURLs, row.URL)
-				}
-				if method.AccessUrl.Headers != nil {
-					row.Headers = append([]string(nil), (*method.AccessUrl.Headers)...)
-				}
-			}
-			accessMethods = append(accessMethods, row)
-		}
-	}
-	item := internalInspectProjectRecordItem{
-		ObjectID:      strings.TrimSpace(string(obj.Id)),
-		Checksum:      checksum,
-		Organization:  organization,
-		Project:       project,
-		Size:          obj.Size,
-		AccessURLs:    accessURLs,
-		AccessMethods: accessMethods,
-	}
-	if obj.Name != nil {
-		item.Name = strings.TrimSpace(*obj.Name)
-	}
-	if !obj.CreatedTime.IsZero() {
-		item.CreatedTime = obj.CreatedTime.Format(time.RFC3339Nano)
-	}
-	if obj.UpdatedTime != nil && !obj.UpdatedTime.IsZero() {
-		item.UpdatedTime = obj.UpdatedTime.Format(time.RFC3339Nano)
-	}
-	return item, true
-}
-
-func projectRecordMatchesAnyPathPrefix(record internalInspectProjectRecordItem, pathPrefixes ...string) bool {
-	for _, prefix := range pathPrefixes {
-		if projectRecordMatchesPathPrefix(record, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func projectRecordMatchesPathPrefix(record internalInspectProjectRecordItem, pathPrefix string) bool {
-	normalizedPrefix := strings.Trim(strings.TrimSpace(pathPrefix), "/")
-	if normalizedPrefix == "" {
-		return true
-	}
-	prefixWithSlash := normalizedPrefix + "/"
-	for _, raw := range record.AccessURLs {
-		parsedBucket, parsedKey, ok := address.ParseS3URL(strings.TrimSpace(raw))
-		if !ok || strings.TrimSpace(parsedBucket) == "" {
-			continue
-		}
-		key := strings.Trim(strings.TrimSpace(parsedKey), "/")
-		if key == normalizedPrefix || strings.HasPrefix(key, prefixWithSlash) {
-			return true
-		}
-	}
-	for _, method := range record.AccessMethods {
-		parsedBucket, parsedKey, ok := address.ParseS3URL(strings.TrimSpace(method.URL))
-		if !ok || strings.TrimSpace(parsedBucket) == "" {
-			continue
-		}
-		key := strings.Trim(strings.TrimSpace(parsedKey), "/")
-		if key == normalizedPrefix || strings.HasPrefix(key, prefixWithSlash) {
-			return true
-		}
-	}
-	return false
-}
-
-func primarySHA256Checksum(checksums []objects.Checksum) string {
-	for _, checksum := range checksums {
-		if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
-			value := strings.TrimSpace(strings.TrimPrefix(checksum.Checksum, "sha256:"))
-			if value != "" {
-				return value
-			}
-		}
-	}
-	return ""
 }

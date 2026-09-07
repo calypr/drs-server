@@ -196,23 +196,6 @@ func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
 	return ids
 }
 
-func uniqueNonEmptyStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		normalized := strings.TrimSpace(value)
-		if normalized == "" {
-			continue
-		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-	return out
-}
-
 func objectAccessResources(obj *objects.Record) []string {
 	if obj == nil {
 		return nil

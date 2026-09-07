@@ -1,6 +1,7 @@
 package credentialcipher
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"os"
@@ -90,7 +91,7 @@ func TestLocalKeyManager_KeyIDLength(t *testing.T) {
 
 	// Wrap a data key
 	dataKey := []byte("0123456789abcdef0123456789abcdef")
-	wrapped, err := manager.WrapDataKey(nil, dataKey)
+	wrapped, err := manager.WrapDataKey(context.TODO(), dataKey)
 	if err != nil {
 		t.Fatalf("WrapDataKey() error = %v", err)
 	}

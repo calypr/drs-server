@@ -102,25 +102,25 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 
 	configPath, err := man.configPath()
 	if err != nil {
-		errs := fmt.Errorf("Error occurred when getting home directory: %s", err.Error())
+		errs := fmt.Errorf("error occurred when getting home directory: %s", err.Error())
 		man.Logger.Error(errs.Error())
 		return nil, errs
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%w Run configure command (with a profile if desired) to set up account credentials \n"+
+		return nil, fmt.Errorf("%w run configure command (with a profile if desired) to set up account credentials\n"+
 			"Example: ./data-client configure --profile=<profile-name> --cred=<path-to-credential/cred.json> --apiendpoint=https://data.mycommons.org", ErrProfileNotFound)
 	}
 
 	// If profile not in config file, prompt user to set up config first
 	cfg, err := ini.Load(configPath)
 	if err != nil {
-		errs := fmt.Errorf("Error occurred when reading config file: %s", err.Error())
+		errs := fmt.Errorf("error occurred when reading config file: %s", err.Error())
 		return nil, errs
 	}
 	sec, err := cfg.GetSection(profile)
 	if err != nil {
-		return nil, fmt.Errorf("%w: Need to run \"data-client configure --profile="+profile+" --cred=<path-to-credential/cred.json> --apiendpoint=<api_endpoint_url>\" first", ErrProfileNotFound)
+		return nil, fmt.Errorf("%w: need to run \"data-client configure --profile="+profile+" --cred=<path-to-credential/cred.json> --apiendpoint=<api_endpoint_url>\" first", ErrProfileNotFound)
 	}
 
 	profileConfig := &Credential{
@@ -136,11 +136,11 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 	}
 
 	if profileConfig.KeyID == "" && profileConfig.APIKey == "" && profileConfig.AccessToken == "" {
-		errs := fmt.Errorf("key_id, api_key and access_token not found in profile.")
+		errs := fmt.Errorf("key_id, api_key and access_token not found in profile")
 		return nil, errs
 	}
 	if profileConfig.APIEndpoint == "" {
-		errs := fmt.Errorf("api_endpoint not found in profile.")
+		errs := fmt.Errorf("api_endpoint not found in profile")
 		return nil, errs
 	}
 

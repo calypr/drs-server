@@ -197,10 +197,6 @@ func (m *mutationService) DeleteObjectsByChecksums(ctx context.Context, hashes [
 	}
 	return len(toDelete), nil
 }
-func (m *mutationService) deletableObjectIDs(ctx context.Context, ids []string) ([]string, error) {
-	return m.deletableObjectIDsForMethod(ctx, ids, true)
-}
-
 func (m *mutationService) deletableObjectIDsForMethod(ctx context.Context, ids []string, requireAll bool) ([]string, error) {
 	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
 	if err != nil {

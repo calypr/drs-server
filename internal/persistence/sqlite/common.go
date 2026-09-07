@@ -97,35 +97,6 @@ func safeSliceCapacity(parts ...int) (int, error) {
 	return int(total), nil
 }
 
-func execSQLiteBulkInsert(tx *sql.Tx, prefix string, rowPlaceholder string, rowArity int, args []interface{}, suffix string) error {
-	if len(args) == 0 {
-		return nil
-	}
-	rows := len(args) / rowArity
-	maxRowsPerStmt := sqliteMaxParams / rowArity
-	if maxRowsPerStmt < 1 {
-		maxRowsPerStmt = 1
-	}
-
-	for rowStart := 0; rowStart < rows; rowStart += maxRowsPerStmt {
-		rowEnd := rowStart + maxRowsPerStmt
-		if rowEnd > rows {
-			rowEnd = rows
-		}
-		stmtRows := rowEnd - rowStart
-		stmtArgs := args[rowStart*rowArity : rowEnd*rowArity]
-		values := make([]string, stmtRows)
-		for i := 0; i < stmtRows; i++ {
-			values[i] = rowPlaceholder
-		}
-		query := prefix + strings.Join(values, ",") + suffix
-		if _, err := tx.Exec(query, stmtArgs...); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func latestTime(ts ...*time.Time) *time.Time {
 	var latest *time.Time
 	for _, t := range ts {

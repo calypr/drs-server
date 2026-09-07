@@ -216,12 +216,6 @@ func (r *recordingInvalidator) snapshot() []string {
 	return append([]string(nil), r.aliases...)
 }
 
-func (r *recordingInvalidator) reset() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.aliases = nil
-}
-
 type manualClock struct {
 	mu       sync.Mutex
 	nowValue int64
