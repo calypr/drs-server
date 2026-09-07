@@ -1,9 +1,11 @@
 package: bucketapi
 generate:
+  client: true
   models: true
   fiber-server: true
   strict-server: true
 output-options:
+  response-type-suffix: Resp
   skip-prune: false
   user-templates:
     imports.tmpl: apigen/templates/imports.tmpl

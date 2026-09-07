@@ -1,10 +1,11 @@
 package: internalapi
 generate:
+  client: true
   models: true
   fiber-server: true
   strict-server: true
 import-mapping:
-  ./openapi.yaml: github.com/calypr/syfon/apigen/server/drs
+  ./openapi.yaml: github.com/calypr/syfon/apigen/drs
 output-options:
   skip-prune: false
   user-templates:

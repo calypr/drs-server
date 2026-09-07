@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/calypr/syfon/apigen/client/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 )
 
 type LFSService struct {

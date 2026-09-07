@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/gofiber/fiber/v3"
 )
 

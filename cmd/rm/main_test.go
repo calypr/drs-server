@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
 )

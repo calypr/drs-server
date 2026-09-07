@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 )
 
 // ChecksumType represents the digest method used to create the checksum

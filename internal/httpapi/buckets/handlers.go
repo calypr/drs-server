@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/server/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"

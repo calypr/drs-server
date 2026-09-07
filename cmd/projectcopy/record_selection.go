@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/services"
 
 	clientaccess "github.com/calypr/syfon/client/access"

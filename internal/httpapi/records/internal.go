@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	generated "github.com/calypr/syfon/apigen/server/internalapi"
+	generated "github.com/calypr/syfon/apigen/internalapi"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"

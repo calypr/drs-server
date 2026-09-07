@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"

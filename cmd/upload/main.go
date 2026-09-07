@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	"github.com/calypr/syfon/apigen/bucketapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 	syfonclient "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/cliauth"

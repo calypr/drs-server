@@ -4,7 +4,7 @@ package lfs
 import (
 	"strings"
 
-	generated "github.com/calypr/syfon/apigen/server/lfsapi"
+	generated "github.com/calypr/syfon/apigen/lfsapi"
 
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/objects"

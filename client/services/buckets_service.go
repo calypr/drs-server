@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 )
 
 type BucketsService struct {

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	bucketapi "github.com/calypr/syfon/apigen/client/bucketapi"
-	lfsapi "github.com/calypr/syfon/apigen/client/lfsapi"
-	metricsapi "github.com/calypr/syfon/apigen/client/metricsapi"
+	bucketapi "github.com/calypr/syfon/apigen/bucketapi"
+	lfsapi "github.com/calypr/syfon/apigen/lfsapi"
+	metricsapi "github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/client/request"
 )
 

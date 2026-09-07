@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/faults"

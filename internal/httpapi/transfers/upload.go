@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/faults"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"

@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/drs"
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"

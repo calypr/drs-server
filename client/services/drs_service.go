@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/transfer"
 

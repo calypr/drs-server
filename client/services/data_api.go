@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 )

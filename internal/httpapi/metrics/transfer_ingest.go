@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/metricsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"

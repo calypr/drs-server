@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"

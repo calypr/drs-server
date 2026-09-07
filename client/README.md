@@ -34,7 +34,7 @@ import (
   "log"
 
   syclient "github.com/calypr/syfon/client"
-  "github.com/calypr/syfon/apigen/client/bucketapi"
+  "github.com/calypr/syfon/apigen/bucketapi"
 )
 
 func main() {

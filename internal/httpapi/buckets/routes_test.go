@@ -12,7 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/calypr/syfon/apigen/server/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 )

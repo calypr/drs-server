@@ -1,7 +1,7 @@
 package records
 
 import (
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 )
 

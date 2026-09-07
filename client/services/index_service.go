@@ -9,8 +9,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/request"
 

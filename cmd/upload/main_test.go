@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	"github.com/calypr/syfon/apigen/bucketapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 	syfonclient "github.com/calypr/syfon/client/services"
 )
 

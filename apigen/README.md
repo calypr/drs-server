@@ -7,6 +7,10 @@ Syfon uses `oapi-codegen` with Fiber v3 templates, not the stock Gin runtime.
 The generated packages under `apigen/*` are committed to the repository so the
 runtime boundary is visible in code review.
 
+Each API has one generated package containing its models, client bindings, and
+Fiber v3 server bindings. The generated packages are `drs`, `lfsapi`,
+`bucketapi`, `metricsapi`, and `internalapi`.
+
 The generator configs live in `apigen/codegen/`:
 
 - `oapi-drs.yaml`

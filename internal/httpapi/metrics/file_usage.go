@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/metricsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/usage"
 )

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 )
 
 func TestAccessMethodsRoundTripPreservesGeneratedWireShape(t *testing.T) {

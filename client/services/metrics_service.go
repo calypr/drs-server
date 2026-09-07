@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/calypr/syfon/apigen/client/metricsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 )
 
 type MetricsService struct {

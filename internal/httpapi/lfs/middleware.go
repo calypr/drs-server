@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )

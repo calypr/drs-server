@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"

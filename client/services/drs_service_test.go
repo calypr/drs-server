@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
 )
 

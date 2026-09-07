@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/drs"
+	"github.com/calypr/syfon/apigen/drs"
 	clientservices "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"

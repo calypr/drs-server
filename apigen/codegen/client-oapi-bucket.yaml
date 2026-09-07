@@ -1,6 +1,0 @@
-package: bucketapi
-generate:
-  client: true
-  models: true
-output-options:
-  response-type-suffix: Resp

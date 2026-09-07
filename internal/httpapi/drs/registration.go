@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"

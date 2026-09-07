@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 

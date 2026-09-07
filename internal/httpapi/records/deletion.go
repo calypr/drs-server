@@ -1,7 +1,7 @@
 package records
 
 import (
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"

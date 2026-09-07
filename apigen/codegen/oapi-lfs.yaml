@@ -1,5 +1,6 @@
 package: lfsapi
 generate:
+  client: true
   models: true
   fiber-server: true
   strict-server: true

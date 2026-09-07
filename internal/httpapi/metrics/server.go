@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/server/metricsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
