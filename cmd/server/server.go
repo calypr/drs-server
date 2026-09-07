@@ -175,21 +175,17 @@ var Cmd = &cobra.Command{
 	Use:     "serve",
 	Aliases: []string{"run"},
 	Short:   "Starts the DRS Object API server",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		slog.SetDefault(logger)
-		fatal := func(msg string, args ...any) {
-			logger.Error(msg, args...)
-			os.Exit(1)
-		}
 
 		// Load Config
 		cfg, err := config.LoadConfig(configFile)
 		if err != nil {
-			fatal("failed to load config", "err", err)
+			return fmt.Errorf("failed to load config: %w", err)
 		}
 		if cfg.Auth.Mode == config.AuthModeGen3 && cfg.Database.Postgres == nil && !isMockAuthEnabled() {
-			fatal("auth.mode=gen3 requires postgres database")
+			return errors.New("auth.mode=gen3 requires postgres database")
 		}
 
 		// Init DB
@@ -224,11 +220,11 @@ var Cmd = &cobra.Command{
 				backend = postgresServerBackend(database)
 			}
 		} else {
-			fatal("no database configuration provided")
+			return errors.New("no database configuration provided")
 		}
 
 		if errDb != nil {
-			fatal("failed to initialize database", "err", errDb)
+			return fmt.Errorf("failed to initialize database: %w", errDb)
 		}
 
 		applyCredentialEncryptionConfig(cfg)
@@ -246,13 +242,13 @@ var Cmd = &cobra.Command{
 		)
 		bucketService, err := buckets.NewService(bucketDependencies, invalidator)
 		if err != nil {
-			fatal("failed to initialize bucket service", "err", err)
+			return fmt.Errorf("failed to initialize bucket service: %w", err)
 		}
 		if needsStorage {
 			var storageErr error
 			storageManager, storageErr = newStorageManager(bucketService, "/", logger)
 			if storageErr != nil {
-				fatal("failed to initialize storage manager", "err", storageErr)
+				return fmt.Errorf("failed to initialize storage manager: %w", storageErr)
 			}
 			invalidator.manager = storageManager
 		}
@@ -261,10 +257,10 @@ var Cmd = &cobra.Command{
 		if len(cfg.Buckets) > 0 {
 			encryptionEnabled, encErr := credentialcipher.CredentialEncryptionEnabled()
 			if encErr != nil {
-				fatal("invalid credential encryption configuration", "env", credentialcipher.CredentialMasterKeyEnv, "err", encErr)
+				return fmt.Errorf("invalid credential encryption configuration for %s: %w", credentialcipher.CredentialMasterKeyEnv, encErr)
 			}
 			if !encryptionEnabled {
-				fatal("s3 credential encryption key is required", "env", credentialcipher.CredentialMasterKeyEnv)
+				return fmt.Errorf("s3 credential encryption key is required: %s", credentialcipher.CredentialMasterKeyEnv)
 			}
 
 			logger.Info("loading configured bucket credentials", "count", len(cfg.Buckets))
@@ -285,7 +281,7 @@ var Cmd = &cobra.Command{
 			}
 		}
 		if err := loadConfiguredBucketScopes(cmd.Context(), bucketService, bucketService, cfg.BucketScopes, logger); err != nil {
-			fatal("failed to load configured bucket scopes", "err", err)
+			return fmt.Errorf("failed to load configured bucket scopes: %w", err)
 		}
 
 		objectService := objectrecords.NewService(backend.objectDependencies)
@@ -374,7 +370,7 @@ var Cmd = &cobra.Command{
 
 		select {
 		case err := <-errCh:
-			fatal("server listen failed", "err", err)
+			return fmt.Errorf("server listen failed: %w", err)
 		case sig := <-sigCh:
 			logger.Info("shutdown signal received", "signal", sig.String())
 		case <-cmd.Context().Done():
@@ -384,9 +380,10 @@ var Cmd = &cobra.Command{
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
-			fatal("server shutdown failed", "err", err)
+			return fmt.Errorf("server shutdown failed: %w", err)
 		}
 		logger.Info("server shutdown complete")
+		return nil
 	},
 }
 
