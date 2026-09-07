@@ -8,7 +8,7 @@ import (
 
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/internal/requestmeta"
+	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -52,7 +52,7 @@ func (m *AuthzMiddleware) FiberMiddleware() fiber.Handler {
 		}
 		result := m.evaluator.Evaluate(authentication.EvaluationRequest{
 			Context:    ctx,
-			RequestID:  requestmeta.GetRequestID(ctx),
+			RequestID:  requestid.GetRequestID(ctx),
 			Mode:       m.mode,
 			AuthHeader: authHeader,
 			Method:     c.Method(),

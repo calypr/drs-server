@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-
-
 func TestHashInfoUnmarshalJSON(t *testing.T) {
 	t.Parallel()
 
@@ -64,5 +62,3 @@ func TestHashConversions(t *testing.T) {
 		t.Fatalf("unexpected checksum hash info: %+v", got)
 	}
 }
-
-

@@ -29,7 +29,7 @@ case "${SCOPE}" in
     PKGS="$(cd "${ROOT_DIR}" && go list ./...)"
     ;;
   meaningful)
-    PKGS="$(cd "${ROOT_DIR}" && go list ./... | grep -Ev '^github.com/calypr/syfon$|/apigen/|/tests/endpoints$|/testutils$|/cmd$|/cmd/openapi-remove-examples$')"
+    PKGS="$(cd "${ROOT_DIR}" && go list ./... | grep -Ev '/tests/|/internal/testsupport/|/cmd/openapi-remove-examples$')"
     ;;
   client)
     PKGS="./..."

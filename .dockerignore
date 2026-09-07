@@ -18,9 +18,7 @@ coverage.out
 .DS_Store
 .env
 .syfon-credential-kek
-DATE123456
-DATETEST
-date
-drs
-syfon
-fix_project_access_urls
+/syfon
+/.local
+/bin
+/data-repository-service-schemas

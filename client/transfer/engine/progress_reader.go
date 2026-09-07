@@ -89,8 +89,6 @@ func (pr *progressReader) advance(delta int64) int64 {
 	return pr.localBytes
 }
 
-
-
 func (pr *progressReader) currentRaw() int64 {
 	if pr.globalBytes != nil {
 		return atomic.LoadInt64(pr.globalBytes)

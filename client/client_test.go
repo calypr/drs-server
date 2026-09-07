@@ -6,9 +6,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/client/request"
 	syfonclient "github.com/calypr/syfon/client/services"
 )
 
@@ -93,6 +95,68 @@ func TestGeneratedClientUsesBasicAuthTransport(t *testing.T) {
 	}
 	if _, err := c.InternalAPI().InternalListWithResponse(context.Background(), &internalapi.InternalListParams{}); err != nil {
 		t.Fatalf("generated client list failed: %v", err)
+	}
+}
+
+func TestGeneratedClientUsesUserAgentAndRetriesSafeGET(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	calls := 0
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		calls++
+		attempt := calls
+		mu.Unlock()
+		if got := r.Header.Get("User-Agent"); got != "generated-test-client" {
+			t.Fatalf("unexpected generated user agent: %q", got)
+		}
+		if attempt == 1 {
+			return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Bad Gateway", Body: io.NopCloser(strings.NewReader("retry")), Header: make(http.Header), Request: r}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"records":[]}`)), Header: http.Header{"Content-Type": []string{"application/json"}}, Request: r}, nil
+	})}
+	c, err := NewClient(&Config{Address: "http://example.test", UserAgent: "generated-test-client", HTTPClient: httpClient})
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+	r, ok := c.requestor.(*request.Request)
+	if !ok {
+		t.Fatalf("requestor type = %T, want *request.Request", c.requestor)
+	}
+	r.RetryClient.RetryWaitMin = 0
+	r.RetryClient.RetryWaitMax = 0
+	if _, err := c.InternalAPI().InternalListWithResponse(context.Background(), &internalapi.InternalListParams{}); err != nil {
+		t.Fatalf("generated GET returned error: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("expected one retry for generated GET, got %d calls", calls)
+	}
+}
+
+func TestGeneratedClientDoesNotRetryMutation(t *testing.T) {
+	t.Parallel()
+
+	var calls int
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Bad Gateway", Body: io.NopCloser(strings.NewReader("no retry")), Header: make(http.Header), Request: r}, nil
+	})}
+	c, err := NewClient(&Config{Address: "http://example.test", HTTPClient: httpClient})
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+	_, err = c.data.UploadBlank(context.Background(), internalapi.InternalUploadBlankRequest{Guid: ptr("abc")})
+	if err == nil {
+		t.Fatal("expected generated mutation error")
+	}
+	if calls != 1 {
+		t.Fatalf("expected mutation to execute once, got %d calls", calls)
 	}
 }
 

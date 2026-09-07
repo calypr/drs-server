@@ -5,7 +5,8 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/cmd/cliauth"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ var Cmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		authzMap := syfoncommon.AuthzMapFromScope(org, strings.TrimSpace(addURLProject))
+		authzMap := clientaccess.AuthzMapFromScope(org, strings.TrimSpace(addURLProject))
 		if err := c.Index().Upsert(ctx, addURLDid, addURL, addURLName, addURLSize, addURLSHA256, authzMap); err != nil {
 			return err
 		}

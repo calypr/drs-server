@@ -5,7 +5,8 @@ import (
 	"os"
 
 	"github.com/calypr/syfon/cmd/projectcopy"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/spf13/cobra"
 )
 
@@ -100,7 +101,7 @@ The destination bucket is resolved on the destination Syfon instance when it alr
 			return fmt.Errorf("failed to create temp directory: %w", err)
 		}
 
-		dstResource, err := syfoncommon.ResourcePath(dstScope.Organization, dstScope.Project)
+		dstResource, err := clientaccess.ResourcePath(dstScope.Organization, dstScope.Project)
 		if err != nil {
 			return fmt.Errorf("failed to resolve target resource path: %w", err)
 		}

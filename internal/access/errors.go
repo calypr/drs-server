@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 )
 
@@ -64,7 +64,7 @@ func (e *AuthorizationError) PublicMessage() string {
 func formatResourceScopes(resources []string) []string {
 	out := make([]string, 0, len(resources))
 	for _, resource := range resources {
-		org, project, ok := sycommon.ResourceScope(resource)
+		org, project, ok := clientaccess.ResourceScope(resource)
 		switch {
 		case ok && org != "" && project != "":
 			out = append(out, org+"/"+project)

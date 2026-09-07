@@ -49,7 +49,7 @@ Why this shape works:
 ## Run From Source
 
 ```bash
-go run . serve --config config.local.yaml
+bin/syfon serve --config config.local.yaml
 ```
 
 ## Run With Docker
@@ -62,7 +62,7 @@ docker run \
   quay.io/ohsu-comp-bio/syfon:development serve --config /config.yaml
 ```
 
-Use the published development image from Quay rather than building locally. Image tags are published at [Quay](https://quay.io/repository/ohsu-comp-bio/funnel?tab=tags).
+Use the published image from [Quay](https://quay.io/repository/ohsu-comp-bio/syfon?tab=tags) when you do not want to build locally.
 
 ## Smoke Test
 
@@ -72,7 +72,7 @@ curl -u drs-user:drs-pass http://localhost:8080/healthz
 
 ## Local Auth
 
-For now, the documented local path is `auth.basic.username` plus `auth.basic.password`.
+The documented local path is `auth.basic.username` plus `auth.basic.password`. Set `auth.allow_unauthenticated: true` only for development or tests that need to omit credentials.
 
 ## Notes
 

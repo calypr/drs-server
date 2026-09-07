@@ -9,14 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/models"
-	"github.com/calypr/syfon/internal/testutils"
+	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/transfers"
+	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -26,6 +26,8 @@ type endpointCase struct {
 }
 
 var pathVarPattern = regexp.MustCompile(`:([A-Za-z0-9_]+)`)
+
+func endpointPtr[T any](value T) *T { return &value }
 
 func TestAllRegisteredEndpoints_WithMocks(t *testing.T) {
 	app := buildMockServerRouterWithRoutes(config.RoutesConfig{
@@ -157,41 +159,32 @@ func TestHealthOnlyServerExposesNoOptionalRoutes(t *testing.T) {
 }
 
 func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
-	database := &testutils.MockDatabase{
-		Objects: map[string]*drs.DrsObject{
-			"sha-1": {
-				Id:          "sha-1",
-				Name:        common.Ptr("mock-object"),
-				Size:        1,
-				Version:     common.Ptr("1"),
-				Description: common.Ptr("mock"),
-				Checksums:   []drs.Checksum{{Type: "sha256", Checksum: "sha-1"}},
-				AccessMethods: &[]drs.AccessMethod{
-					{
-						Type:     drs.AccessMethodTypeS3,
-						AccessId: common.Ptr("s3"),
-						AccessUrl: &struct {
-							Headers *[]string `json:"headers,omitempty"`
-							Url     string    `json:"url"`
-						}{Url: "s3://test-bucket-1/sha-1"},
-					},
+	objectStore := newServerObjectStore(map[string]*objects.Record{
+		"sha-1": {
+			Id:          "sha-1",
+			Name:        endpointPtr("mock-object"),
+			Size:        1,
+			Version:     endpointPtr("1"),
+			Description: endpointPtr("mock"),
+			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "sha-1"}},
+			AccessMethods: &[]objects.AccessMethod{
+				{
+					Type:      "s3",
+					AccessId:  endpointPtr("s3"),
+					AccessUrl: &objects.AccessURL{Url: "s3://test-bucket-1/sha-1"},
 				},
-				ControlledAccess: &[]string{"/programs/data_file"},
 			},
+			ControlledAccess: &[]string{"/programs/data_file"},
 		},
-		ObjectAuthz: map[string]map[string][]string{
-			"sha-1": {"data_file": {}},
+	})
+	bucketStore := &serverBucketStore{credentials: map[string]buckets.Credential{
+		"test-bucket-1": {
+			Bucket:    "test-bucket-1",
+			Region:    "us-east-1",
+			AccessKey: "mock-key",
+			SecretKey: "mock-secret",
 		},
-		Credentials: map[string]models.S3Credential{
-			"test-bucket-1": {
-				Bucket:    "test-bucket-1",
-				Region:    "us-east-1",
-				AccessKey: "mock-key",
-				SecretKey: "mock-secret",
-			},
-		},
-	}
-	uM := &testutils.MockUrlManager{}
+	}}
 	app := fiber.New()
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
@@ -199,16 +192,27 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	authzMiddleware := middleware.NewAuthzMiddleware(logger, middleware.Options{Mode: "local", Evaluator: authRuntime})
 	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
 	cfg := &config.Config{Routes: routes}
+	dependencies := mockServerDependencies(objectStore, bucketStore)
+	objectService := objectrecords.NewService(dependencies.objects)
+	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
+	transferService := transfers.NewService(transfers.Dependencies{
+		Scopes: dependencies.bucketService, Credentials: dependencies.bucketService,
+		Events: dependencies.usageIngest,
+	})
 	rt := &serverRuntime{
 		app:                 app,
 		cfg:                 cfg,
-		database:            database,
-		om:                  core.NewObjectManager(database, uM),
-		uM:                  uM,
+		serviceInfo:         serviceInfoForBackend(true),
+		objectService:       objectService,
+		transferService:     transferService,
+		lfsPending:          dependencies.pending,
+		usageService:        usageService,
+		usageIngest:         dependencies.usageIngest,
+		bucketService:       dependencies.bucketService,
 		authzMiddleware:     authzMiddleware,
 		requestIDMiddleware: requestIDMiddleware,
 	}
-	applyServerOptions(rt, buildServerOptions(cfg)...)
+	registerServerRoutes(rt)
 	return app
 }
 

@@ -1,197 +1,108 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Debugging output
-# set -x
+fail() { printf 'syfon install: %s\n' "$*" >&2; exit 1; }
 
 show_help() {
-	echo "Syfon Installation Script"
-	echo
-	echo "Usage:"
-	echo "  $0 [version] [install_path]  # Install Syfon (default: latest version to \$HOME/.local/bin)"
-	echo "  $0 --list                    # List available versions"
-	echo "  $0 --help                    # Show this help"
-	echo "  $0 --version <version>       # Specify version to install"
-	echo "  $0 --dest <install_path>     # Specify installation path (default: \$HOME/.local/bin)"
+  cat <<EOF
+Usage: $0 [version] [install_path]
+       $0 --version <version> --dest <install_path>
+       $0 --list | --help
+
+Install the latest release into \$HOME/.local/bin by default.
+EOF
 }
 
-list_tags() {
-	RELEASES_URL="https://api.github.com/repos/calypr/syfon/releases"
-
-	# Get all releases and extract tag names
-	RELEASES_JSON=$(curl -s "$RELEASES_URL")
-
-	echo "$RELEASES_JSON" | grep '"tag_name":' | cut -d '"' -f 4 | head -20 | while read -r tag; do
-		echo "$tag"
-	done
+api_get() {
+  local headers=(-H 'Accept: application/vnd.github+json')
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    headers+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  fi
+  curl --fail --silent --show-error --location --retry 3 "${headers[@]}" \
+    "https://api.github.com/repos/calypr/syfon/releases$1"
 }
 
-# Global variables
-# TODO: Move to respective functions?
-VERSION=""
-RELEASE_URL=""
-ASSETS=""
-OS=""
-ARCH=""
-TAR_FILE=""
-CHECKSUM_FILE=""
-DEST=""
+release_tags() {
+  sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
 
-# Arguments
-while [[ $# -gt 0 ]]; do
-	case $1 in
-	--list | -l)
-		list_tags
-		exit 0
-		;;
-	--help | -h)
-		show_help
-		exit 0
-		;;
-	--version | -v)
-		VERSION="$2"
-		shift
-		shift
-		;;
-	--dest | -d)
-		# Set installation destination path
-		DEST="$2"
-		shift
-		shift
-		;;
-	-*)
-        echo "Unknown option: $1"
-        show_help
-        exit 1
-        ;;
+version=""
+dest="${HOME}/.local/bin"
+dest_set=false
+while (($#)); do
+  case "$1" in
+    --help|-h) show_help; exit 0 ;;
+    --list|-l) api_get '?per_page=20' | release_tags; exit 0 ;;
+    --version|-v)
+      [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || fail "$1 requires a version"
+      version="$2"
+      shift 2
+      ;;
+    --dest|-d)
+      [[ $# -ge 2 && -n "$2" && "$2" != -* ]] || fail "$1 requires a directory"
+      dest="$2"
+      dest_set=true
+      shift 2
+      ;;
+    -*) fail "unknown option: $1" ;;
     *)
-        # Handle positional arguments
-        if [ -z "$VERSION" ]; then
-            VERSION="$1"
-        elif [ -z "$DEST" ]; then
-            DEST="$1"
-        else
-            echo "Too many arguments: $1"
-            show_help
-            exit 1
-        fi
-        shift
-        ;;
-	esac
+      if [[ -z "$version" ]]; then
+        version="$1"
+      elif [[ "$dest_set" == false ]]; then
+        dest="$1"
+        dest_set=true
+      else
+        fail "too many arguments"
+      fi
+      shift
+      ;;
+  esac
 done
 
-get_release_url() {
-	if [ -z "$VERSION" ]; then
-		echo "No version specified. Fetching the latest release..."
-		RELEASE_URL="https://api.github.com/repos/calypr/syfon/releases/latest"
-		VERSION=$(curl -s $RELEASE_URL | grep '"tag_name":' | cut -d '"' -f 4)
-	else
-		echo "Fetching release for version $VERSION..."
-		RELEASE_URL="https://api.github.com/repos/calypr/syfon/releases/tags/$VERSION"
-	fi
-}
+case "$(uname -s)" in
+  Linux) os=linux ;;
+  Darwin) os=darwin ;;
+  *) fail 'supported operating systems are Linux and macOS' ;;
+esac
+case "$(uname -m)" in
+  x86_64) arch=amd64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) fail 'supported architectures are amd64 and arm64' ;;
+esac
 
-get_os_arch() {
-	# OS/Arch
-	OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-	ARCH=$(uname -m)
+if [[ -z "$version" ]]; then
+  version="$(api_get /latest | release_tags)"
+fi
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail "invalid release version: $version"
 
-	if [ "$ARCH" == "x86_64" ]; then
-		ARCH="amd64"
-	elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-		ARCH="arm64"
-	else
-		echo "Unsupported architecture: $ARCH"
-		exit 1
-	fi
-}
+archive="syfon-${os}-${arch}-${version}.tar.gz"
+checksums="syfon-${version}-checksums.txt"
+release_url="https://github.com/calypr/syfon/releases/download/${version}"
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/syfon-install.XXXXXX")"
+candidate=""
+trap 'rm -rf "$work_dir"; if [[ -n "$candidate" ]]; then rm -f "$candidate"; fi' EXIT
 
-get_assets() {
-	# Fetch the release assets URLs
-	RELEASE_JSON=$(curl -s $RELEASE_URL)
+printf 'Downloading Syfon %s for %s/%s...\n' "$version" "$os" "$arch"
+curl --fail --silent --show-error --location --retry 3 \
+  "$release_url/$archive" -o "$work_dir/$archive"
+curl --fail --silent --show-error --location --retry 3 \
+  "$release_url/$checksums" -o "$work_dir/$checksums"
 
-	if echo "$RELEASE_JSON" | grep -q '"status": "404"'; then
-		echo "Release $VERSION not found."
-		echo
-		echo "Available versions:"
-		list_tags
-		exit 1
-	fi
+expected="$(awk -v name="$archive" '$2 == name {print $1}' "$work_dir/$checksums")"
+[[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] || fail "missing or invalid checksum for $archive"
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "$work_dir/$archive")"
+else
+  actual="$(shasum -a 256 "$work_dir/$archive")"
+fi
+[[ "${actual%% *}" == "$expected" ]] || fail "checksum verification failed for $archive"
 
-	ASSETS=$(echo "$RELEASE_JSON" | grep "browser_download_url" | cut -d '"' -f 4)
-
-	if [ -z "$ASSETS" ]; then
-		echo "No assets found for release $VERSION. Exiting..."
-		exit 1
-	fi
-}
-
-download() {
-	TAR_FILE="syfon-${OS}-${ARCH}"
-
-	# Download the tar.gz file and checksums.txt for the detected OS and Arch
-	echo "Downloading Syfon $VERSION for $OS $ARCH..."
-	for asset in $ASSETS; do
-		asset_name=$(basename "$asset")
-
-		# Binary (tar.gz)
-		if [[ "$asset" == *"${TAR_FILE}"* && "$asset" == *.tar.gz ]]; then
-			TAR_URL="$asset"
-			TAR_NAME="$asset_name"
-			echo " ➜ $TAR_NAME"
-			curl -L --progress-bar -o "$TAR_NAME" "$TAR_URL"
-
-		# Checksums
-		elif [[ "$asset_name" == *checksums* ]]; then
-			CHECKSUM_FILE="$asset_name"
-			echo " ➜ $CHECKSUM_FILE"
-			curl -L --progress-bar -o "$CHECKSUM_FILE" "$asset"
-		fi
-	done
-}
-
-verify() {
-	# Verify checksum
-	echo "Verifying checksum..."
-	CHECKSUM_EXPECTED=$(grep $TAR_NAME $CHECKSUM_FILE | awk '{print $1}')
-	CHECKSUM_ACTUAL=$(shasum -a 256 $TAR_NAME | awk '{print $1}')
-
-	if [ "$CHECKSUM_EXPECTED" != "$CHECKSUM_ACTUAL" ]; then
-		echo "Checksum verification failed for $TAR_NAME. Exiting..."
-		exit 1
-	fi
-}
-
-install() {
-	# Extract and install the package
-	echo "Extracting the package..."
-	tar -xzf $TAR_NAME
-
-	# Determine where to install the Syfon binary
-	if [ -z "$DEST" ]; then
-		DEST=$HOME/.local/bin
-	fi
-	echo "Installing Syfon to $DEST..."
-	mkdir -p $DEST
-	mv syfon $DEST
-	chmod +x $DEST/syfon
-
-	# Clean up
-	rm $TAR_NAME $CHECKSUM_FILE
-
-	echo "Installation successful: $DEST/syfon"
-	echo
-	$DEST/syfon version
-	echo "Run '$DEST/syfon --help' for more info"
-}
-
-main() {
-	get_release_url
-	get_os_arch
-	get_assets
-	download
-	verify
-	install
-}
-
-main
+tar -xzf "$work_dir/$archive" -C "$work_dir" syfon
+[[ -f "$work_dir/syfon" && ! -L "$work_dir/syfon" ]] || fail 'archive does not contain a regular syfon binary'
+mkdir -p "$dest"
+[[ ! -d "$dest/syfon" ]] || fail "$dest/syfon is a directory"
+candidate="$(mktemp "$dest/.syfon-install.XXXXXX")"
+command install -m 755 "$work_dir/syfon" "$candidate"
+version_output="$("$candidate" version)"
+mv -f "$candidate" "$dest/syfon"
+printf 'Installed %s/syfon\n%s\n' "$dest" "$version_output"

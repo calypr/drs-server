@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -92,7 +92,7 @@ func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 		resource := localAuthzCell(record, resourceCol)
 		if resource == "" {
 			var pathErr error
-			resource, pathErr = syfoncommon.ResourcePath(localAuthzCell(record, orgCol), localAuthzCell(record, projectCol))
+			resource, pathErr = clientaccess.ResourcePath(localAuthzCell(record, orgCol), localAuthzCell(record, projectCol))
 			if pathErr != nil {
 				return nil, fmt.Errorf("local authz csv line %d: %w", line, pathErr)
 			}
@@ -100,7 +100,7 @@ func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 		if resource == "" {
 			return nil, fmt.Errorf("local authz csv line %d: resource is required", line)
 		}
-		resource = syfoncommon.NormalizeAccessResource(resource)
+		resource = clientaccess.NormalizeAccessResource(resource)
 		methods := expandLocalAuthzMethods(localAuthzCell(record, methodsCol))
 		if len(methods) == 0 {
 			return nil, fmt.Errorf("local authz csv line %d: methods are required", line)

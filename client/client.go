@@ -16,6 +16,7 @@ import (
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 	syfonclient "github.com/calypr/syfon/client/services"
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 const (
@@ -58,8 +59,6 @@ type Client struct {
 }
 
 type Option func(*Config)
-
-
 
 func WithBasicAuth(user, pass string) Option {
 	return func(c *Config) {
@@ -168,22 +167,22 @@ func (c *Client) initServices() error {
 
 	server := c.baseURL
 	drsServer := strings.TrimRight(server+"/ga4gh/drs/v1", "/")
-	httpClient := c.HTTPClient()
+	httpDoer := c.generatedHTTPDoer()
 
 	var err error
-	if c.drsGen, err = drs.NewClientWithResponses(drsServer, drs.WithHTTPClient(httpClient)); err != nil {
+	if c.drsGen, err = drs.NewClientWithResponses(drsServer, drs.WithHTTPClient(httpDoer)); err != nil {
 		return fmt.Errorf("initialize drs client: %w", err)
 	}
-	if c.lfsGen, err = lfsapi.NewClientWithResponses(server, lfsapi.WithHTTPClient(httpClient)); err != nil {
+	if c.lfsGen, err = lfsapi.NewClientWithResponses(server, lfsapi.WithHTTPClient(httpDoer)); err != nil {
 		return fmt.Errorf("initialize lfs client: %w", err)
 	}
-	if c.internalGen, err = internalapi.NewClientWithResponses(server, internalapi.WithHTTPClient(httpClient)); err != nil {
+	if c.internalGen, err = internalapi.NewClientWithResponses(server, internalapi.WithHTTPClient(httpDoer)); err != nil {
 		return fmt.Errorf("initialize internal client: %w", err)
 	}
-	if c.bucketGen, err = bucketapi.NewClientWithResponses(server, bucketapi.WithHTTPClient(httpClient)); err != nil {
+	if c.bucketGen, err = bucketapi.NewClientWithResponses(server, bucketapi.WithHTTPClient(httpDoer)); err != nil {
 		return fmt.Errorf("initialize bucket client: %w", err)
 	}
-	if c.metricsGen, err = metricsapi.NewClientWithResponses(server, metricsapi.WithHTTPClient(httpClient)); err != nil {
+	if c.metricsGen, err = metricsapi.NewClientWithResponses(server, metricsapi.WithHTTPClient(httpDoer)); err != nil {
 		return fmt.Errorf("initialize metrics client: %w", err)
 	}
 
@@ -195,6 +194,45 @@ func (c *Client) initServices() error {
 	c.buckets = syfonclient.NewBucketsService(c.bucketGen)
 	c.metrics = syfonclient.NewMetricsService(c.metricsGen)
 	return nil
+}
+
+func (c *Client) generatedHTTPDoer() interface {
+	Do(*http.Request) (*http.Response, error)
+} {
+	r, ok := c.requestor.(*request.Request)
+	if !ok || r.RetryClient == nil || r.RetryClient.HTTPClient == nil {
+		return c.HTTPClient()
+	}
+	return &generatedHTTPDoer{request: r}
+}
+
+type generatedHTTPDoer struct {
+	request *request.Request
+}
+
+func (t *generatedHTTPDoer) Do(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	if userAgent := strings.TrimSpace(t.request.UserAgent); userAgent != "" && clone.Header.Get("User-Agent") == "" {
+		clone.Header.Set("User-Agent", userAgent)
+	}
+
+	if !generatedRequestCanRetry(clone) {
+		return t.request.RetryClient.HTTPClient.Do(clone)
+	}
+	retryReq, err := retryablehttp.FromRequest(clone)
+	if err != nil {
+		return nil, err
+	}
+	return t.request.RetryClient.Do(retryReq)
+}
+
+func generatedRequestCanRetry(req *http.Request) bool {
+	switch req.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+	default:
+		return false
+	}
+	return req.Body == nil || req.Body == http.NoBody
 }
 
 func (c *Client) HTTPClient() *http.Client {

@@ -387,13 +387,29 @@ run_scenario() {
 }
 
 restart_syfon() {
-  old_pod=$(kubectl --namespace "$namespace" get pod \
-    -l app.kubernetes.io/name=syfon -o jsonpath='{.items[0].metadata.name}')
+  old_pods=$(kubectl --namespace "$namespace" get pods \
+    -l app.kubernetes.io/name=syfon -o json)
+  old_pod=$(jq -er 'first(.items[] | .metadata.name) // error("Syfon pod was not found before restart")' <<<"$old_pods")
+  old_uid=$(jq -er 'first(.items[] | .metadata.uid) // error("Syfon pod UID was not found before restart")' <<<"$old_pods")
   kubectl --namespace "$namespace" delete pod "$old_pod" --wait=false
+  # Deleting a Pod from the current ReplicaSet does not create a Deployment
+  # revision, so rollout status alone can observe the old Pod as available.
+  kubectl --namespace "$namespace" wait \
+    --for=delete "pod/$old_pod" --timeout=180s
   kubectl --namespace "$namespace" rollout status deployment/syfon --timeout=180s
-  new_pod=$(kubectl --namespace "$namespace" get pod \
-    -l app.kubernetes.io/name=syfon -o jsonpath='{.items[0].metadata.name}')
-  test "$old_pod" != "$new_pod" || fail 'Syfon pod was not replaced'
+  new_pods=$(kubectl --namespace "$namespace" get pods \
+    -l app.kubernetes.io/name=syfon -o json)
+  new_pod=$(jq -er --arg old_uid "$old_uid" '
+    [.items[] | select(.metadata.uid != $old_uid) | .metadata.name]
+    | if length > 0 then .[0]
+      else error("Syfon deployment has no replacement pod")
+      end
+  ' <<<"$new_pods")
+  kubectl --namespace "$namespace" wait \
+    --for=condition=Ready "pod/$new_pod" --timeout=180s
+  new_uid=$(kubectl --namespace "$namespace" get pod "$new_pod" \
+    -o jsonpath='{.metadata.uid}')
+  test "$old_uid" != "$new_uid" || fail 'Syfon pod was not replaced'
 }
 
 validate_results() {

@@ -2,9 +2,11 @@ package request
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"testing"
@@ -62,6 +64,35 @@ func TestRequest_NewBuilder(t *testing.T) {
 	builder = req.newBuilder("GET", "https://other.com/api/test")
 	if builder.Url != "https://other.com/api/test" {
 		t.Errorf("Expected URL 'https://other.com/api/test', got '%s'", builder.Url)
+	}
+}
+
+func TestNewRequestorPreservesHTTPClientSettings(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New returned error: %v", err)
+	}
+	redirectCalled := false
+	redirect := func(_ *http.Request, _ []*http.Request) error {
+		redirectCalled = true
+		return http.ErrUseLastResponse
+	}
+	baseClient := &http.Client{
+		Transport:     roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("stop") }),
+		Jar:           jar,
+		CheckRedirect: redirect,
+		Timeout:       17 * time.Second,
+	}
+	req := NewBasicAuthRequestor(nil, nil, nil, "https://example.test", "ua", baseClient).(*Request)
+	got := req.RetryClient.HTTPClient
+	if got.Jar != jar || got.Timeout != baseClient.Timeout {
+		t.Fatalf("requestor did not preserve HTTP client fields: jar=%v timeout=%v", got.Jar == jar, got.Timeout)
+	}
+	if got.CheckRedirect == nil {
+		t.Fatal("requestor lost CheckRedirect")
+	}
+	if err := got.CheckRedirect(nil, nil); !errors.Is(err, http.ErrUseLastResponse) || !redirectCalled {
+		t.Fatalf("requestor did not preserve CheckRedirect behavior: err=%v called=%v", err, redirectCalled)
 	}
 }
 

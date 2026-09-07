@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,7 +12,8 @@ import (
 	"github.com/calypr/syfon/apigen/client/drs"
 	"github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/client/request"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 type IndexService struct {
@@ -29,7 +31,7 @@ func (s *IndexService) Get(ctx context.Context, did string) (internalapi.Interna
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, fmt.Errorf("unexpected response: %d", resp.StatusCode())
+		return internalapi.InternalRecordResponse{}, &responseStatusError{status: resp.StatusCode()}
 	}
 	return *resp.JSON200, nil
 }
@@ -255,7 +257,7 @@ func (s *IndexService) Upsert(ctx context.Context, did, objectURL, recordPath st
 			if len(authorizations) == 0 {
 				return fmt.Errorf("authorizations are required to upsert record %s", did)
 			}
-			controlled := syfoncommon.AuthzMapToControlledAccess(authorizations)
+			controlled := clientaccess.AuthzMapToControlledAccess(authorizations)
 			req.ControlledAccess = &controlled
 		}
 		if recordName != "" {
@@ -278,13 +280,18 @@ func (s *IndexService) Upsert(ctx context.Context, did, objectURL, recordPath st
 		return err
 	}
 
+	var statusErr *responseStatusError
+	if !errors.As(err, &statusErr) || statusErr.status != http.StatusNotFound {
+		return err
+	}
+
 	payload := internalapi.InternalRecord{
 		Did: did,
 	}
 	if len(authorizations) == 0 {
 		return fmt.Errorf("authorizations are required to create record %s", did)
 	}
-	controlled := syfoncommon.AuthzMapToControlledAccess(authorizations)
+	controlled := clientaccess.AuthzMapToControlledAccess(authorizations)
 	payload.ControlledAccess = &controlled
 	appendAccessMethod(&payload, objectURL)
 	if size > 0 {
@@ -335,5 +342,3 @@ func methodTypeForURL(rawURL string) string {
 	}
 	return "https"
 }
-
-// --- IndexService ---

@@ -7,21 +7,12 @@ import (
 	"net/http"
 	"strings"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
 
-// --- transfer.WriteBackend interface support ---
-
+// GetWriter returns an unsupported-operation error without creating an upload.
 func (d *DataService) GetWriter(ctx context.Context, guid string) (io.WriteCloser, error) {
-	req := internalapi.InternalUploadBlankRequest{
-		Guid: &guid,
-	}
-	_, err := d.UploadBlank(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 	return nil, fmt.Errorf("GetWriter not yet fully implemented for DataService")
 }
 
@@ -39,7 +30,7 @@ func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMe
 			return md, nil
 		}
 	}
-	signedURL, err := d.ResolveDownloadURL(ctx, guid, "")
+	_, err := d.ResolveDownloadURL(ctx, guid, "")
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +39,6 @@ func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMe
 		AcceptRanges: true,
 		Size:         0,
 		Checksums:    nil,
-		MD5:          signedURL,
 	}, nil
 }
 
@@ -85,8 +75,6 @@ func (d *DataService) GetRangeReader(ctx context.Context, guid string, offset, l
 	return resp.Body, nil
 }
 
-// --- transfer.Downloader interface support ---
-
 func (d *DataService) ResolveDownloadURL(ctx context.Context, guid string, accessID string) (string, error) {
 	resp, err := d.DownloadURL(ctx, guid, 0, false)
 	if err != nil {
@@ -101,8 +89,6 @@ func (d *DataService) ResolveDownloadURL(ctx context.Context, guid string, acces
 func (d *DataService) Download(ctx context.Context, signedURL string, rangeStart, rangeEnd *int64) (*http.Response, error) {
 	return transfer.GenericDownload(ctx, d.requestor, signedURL, rangeStart, rangeEnd)
 }
-
-// --- transfer.Uploader interface support ---
 
 func (d *DataService) ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error) {
 	organization, project := uploadScopeFromMetadata(metadata)
@@ -153,8 +139,6 @@ func (d *DataService) UploadPart(ctx context.Context, url string, body io.Reader
 	defer cancel()
 	return transfer.DoUpload(ctx, d.requestor, url, body, size)
 }
-
-// --- transfer.Service interface support ---
 
 func (d *DataService) Name() string { return "syfon-data-service" }
 
