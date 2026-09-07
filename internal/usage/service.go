@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -11,9 +12,9 @@ import (
 )
 
 var (
-	ErrReportsUnavailable = errors.New("usage report store is unavailable")
-	ErrObjectsUnavailable = errors.New("usage object reader is unavailable")
-	ErrInvalidGroupBy     = errors.New("invalid transfer breakdown group_by")
+	ErrReportsUnavailable = fmt.Errorf("usage report store is unavailable")
+	ErrObjectsUnavailable = fmt.Errorf("usage object reader is unavailable")
+	ErrInvalidGroupBy     = fmt.Errorf("invalid transfer breakdown group_by")
 )
 
 // Scope identifies one organization/project authorization scope.

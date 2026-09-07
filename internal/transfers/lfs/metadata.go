@@ -2,7 +2,6 @@ package lfs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -171,7 +170,7 @@ func (w *MetadataWorkflow) Verify(ctx context.Context, oid string) error {
 
 func (w *MetadataWorkflow) recordUpload(ctx context.Context, objectID string) error {
 	if w.accounting == nil {
-		return errors.New("file counters are not configured")
+		return fmt.Errorf("file counters are not configured")
 	}
 	return w.accounting.RecordFileUpload(ctx, objectID)
 }

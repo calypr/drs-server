@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -96,7 +95,7 @@ func decryptCredentialFieldV2(ctx context.Context, value string) (string, error)
 		return "", fmt.Errorf("envelope parse failed: %w", err)
 	}
 	if strings.TrimSpace(envelope.Manager) == "" {
-		return "", errors.New("envelope manager is required")
+		return "", fmt.Errorf("envelope manager is required")
 	}
 
 	manager, err := resolveCredentialKeyManager(envelope.Manager)
@@ -134,7 +133,7 @@ func decryptCredentialFieldV1(value string) (string, error) {
 		return "", err
 	}
 	if len(key) == 0 {
-		return "", errors.New("encrypted credential found but master key is not configured")
+		return "", fmt.Errorf("encrypted credential found but master key is not configured")
 	}
 
 	payloadB64 := strings.TrimPrefix(value, credentialCipherPrefixV1)
@@ -193,7 +192,7 @@ func decryptPackedAESGCM(key, payload []byte) ([]byte, error) {
 	}
 	nonceSize := gcm.NonceSize()
 	if len(payload) < nonceSize {
-		return nil, errors.New("ciphertext payload too short")
+		return nil, fmt.Errorf("ciphertext payload too short")
 	}
 	nonce := payload[:nonceSize]
 	ciphertext := payload[nonceSize:]

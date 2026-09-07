@@ -2,7 +2,6 @@ package lfs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -107,7 +106,7 @@ func (w *PreparationWorkflow) PrepareDownload(ctx context.Context, oid string) (
 		return DownloadPreparation{}, err
 	}
 	if w.downloads == nil {
-		return DownloadPreparation{}, errors.New("file counters are not configured")
+		return DownloadPreparation{}, fmt.Errorf("file counters are not configured")
 	}
 	if err := w.downloads.RecordFileDownload(ctx, oid); err != nil {
 		return DownloadPreparation{}, err
@@ -169,7 +168,7 @@ func (w *PreparationWorkflow) ResolveUploadTarget(ctx context.Context, oid strin
 
 func (w *PreparationWorkflow) getPendingMetadata(ctx context.Context, oid string) (*PendingMetadata, error) {
 	if w.pending == nil {
-		return nil, errors.New("pending LFS metadata store is not configured")
+		return nil, fmt.Errorf("pending LFS metadata store is not configured")
 	}
 	return w.pending.GetPendingMetadata(ctx, oid)
 }

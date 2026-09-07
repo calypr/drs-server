@@ -2,14 +2,14 @@ package credentialcipher
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/calypr/syfon/internal/buckets"
 )
 
 func PrepareS3CredentialForStorage(ctx context.Context, cred *buckets.Credential) (*buckets.Credential, error) {
 	if cred == nil {
-		return nil, errors.New("credential is required")
+		return nil, fmt.Errorf("credential is required")
 	}
 	out := *cred
 	var err error
@@ -26,7 +26,7 @@ func PrepareS3CredentialForStorage(ctx context.Context, cred *buckets.Credential
 
 func ParseS3CredentialFromStorage(ctx context.Context, cred *buckets.Credential) (*buckets.Credential, error) {
 	if cred == nil {
-		return nil, errors.New("credential is required")
+		return nil, fmt.Errorf("credential is required")
 	}
 	out := *cred
 	var err error

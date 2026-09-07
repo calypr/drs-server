@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/hash"
 )
+
+var ErrRangeIgnored = fmt.Errorf("server ignored range request and returned full body")
 
 // TransferLogger is the minimal logging surface used by the transfer engines.
 type TransferLogger interface {

@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -256,7 +257,7 @@ func parseInactiveSince(inactiveDays *int) (*time.Time, error) {
 	}
 	days := *inactiveDays
 	if days < 0 {
-		return nil, errors.New("inactive_days must be a non-negative integer")
+		return nil, fmt.Errorf("inactive_days must be a non-negative integer")
 	}
 	t := time.Now().UTC().AddDate(0, 0, -days)
 	return &t, nil

@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -173,7 +173,7 @@ func parseScopeQuery(ctx context.Context) (string, string, bool, error) {
 	}
 	project := strings.TrimSpace(params.project)
 	if project != "" && org == "" {
-		return "", "", false, errors.New("organization is required when project is set")
+		return "", "", false, fmt.Errorf("organization is required when project is set")
 	}
 	if org != "" {
 		return org, project, true, nil

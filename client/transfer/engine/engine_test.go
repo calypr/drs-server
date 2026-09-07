@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/client/common"
-	"github.com/calypr/syfon/client/sdkerror"
 	"github.com/calypr/syfon/client/transfer"
 )
 
@@ -84,7 +83,7 @@ func (f *fakeBackend) GetRangeReader(ctx context.Context, guid string, offset, l
 	f.mu.Unlock()
 	if f.rangeIgnoredOnce {
 		f.rangeIgnoredOnce = false
-		return nil, sdkerror.ErrRangeIgnored
+		return nil, transfer.ErrRangeIgnored
 	}
 	if f.rangeErr != nil {
 		return nil, f.rangeErr

@@ -17,7 +17,6 @@ import (
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/logs"
-	"github.com/calypr/syfon/client/sdkerror"
 	"github.com/calypr/syfon/client/transfer"
 )
 
@@ -69,7 +68,7 @@ func (f *fakeBackend) GetRangeReader(ctx context.Context, guid string, offset, l
 	}
 	if offset > 0 && resp.StatusCode == http.StatusOK {
 		resp.Body.Close()
-		return nil, sdkerror.ErrRangeIgnored
+		return nil, transfer.ErrRangeIgnored
 	}
 	return resp.Body, nil
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
-	"github.com/calypr/syfon/client/sdkerror"
 )
 
 func TestDRSServiceResolveAndList(t *testing.T) {
@@ -325,8 +324,10 @@ func TestDRSServiceDeleteRecordsByHash(t *testing.T) {
 	emptyService := NewDRSService(mustDRSClientWithHTTPClient(emptyHTTPClient), emptyIndex)
 	if err := emptyService.DeleteRecordsByHash(ctx, "sha256:abc"); err == nil {
 		t.Fatal("expected no-records error from DeleteRecordsByHash")
-	} else if !errors.Is(err, sdkerror.ErrNoRecordsForHash) {
+	} else if !errors.Is(err, ErrNoRecordsForHash) {
 		t.Fatalf("expected ErrNoRecordsForHash, got %v", err)
+	} else if errors.Is(err, errorapi.ErrObjectNotFound) {
+		t.Fatalf("no-records error must not match errorapi.ErrObjectNotFound: %v", err)
 	}
 }
 

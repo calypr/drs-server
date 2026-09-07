@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -105,25 +105,25 @@ func providerTransferPayloadToUsage(item providerTransferPayload) (usage.Provide
 	switch direction {
 	case usage.ProviderTransferDirectionDownload, usage.ProviderTransferDirectionUpload:
 	default:
-		return usage.ProviderEvent{}, errors.New("invalid direction")
+		return usage.ProviderEvent{}, fmt.Errorf("invalid direction")
 	}
 	if strings.TrimSpace(item.ProviderEventID) == "" || strings.TrimSpace(item.Provider) == "" || strings.TrimSpace(item.Bucket) == "" {
-		return usage.ProviderEvent{}, errors.New("provider_event_id, provider, and bucket are required")
+		return usage.ProviderEvent{}, fmt.Errorf("provider_event_id, provider, and bucket are required")
 	}
 	if item.BytesTransferred < 0 {
-		return usage.ProviderEvent{}, errors.New("bytes_transferred cannot be negative")
+		return usage.ProviderEvent{}, fmt.Errorf("bytes_transferred cannot be negative")
 	}
 	status := strings.TrimSpace(item.ReconciliationStatus)
 	switch status {
 	case "", usage.ProviderTransferMatched, usage.ProviderTransferAmbiguous, usage.ProviderTransferUnmatched:
 	default:
-		return usage.ProviderEvent{}, errors.New("invalid reconciliation_status")
+		return usage.ProviderEvent{}, fmt.Errorf("invalid reconciliation_status")
 	}
 	when := time.Now().UTC()
 	if strings.TrimSpace(item.EventTime) != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(item.EventTime))
 		if err != nil {
-			return usage.ProviderEvent{}, errors.New("invalid event_time")
+			return usage.ProviderEvent{}, fmt.Errorf("invalid event_time")
 		}
 		when = parsed.UTC()
 	}

@@ -1,7 +1,7 @@
 package transfers
 
 import (
-	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -72,7 +72,7 @@ func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Servi
 	}
 
 	if fileCounters == nil {
-		return apimiddleware.HandleError(c, errors.New("file usage recorder is not configured"))
+		return apimiddleware.HandleError(c, fmt.Errorf("file usage recorder is not configured"))
 	}
 	if err := fileCounters.RecordFileDownload(c.Context(), string(obj.Id)); err != nil {
 		return apimiddleware.HandleError(c, err)

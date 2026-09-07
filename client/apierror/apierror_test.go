@@ -203,7 +203,23 @@ func TestFromResponseDecodesNestedLegacyErrors(t *testing.T) {
 		&http.Response{StatusCode: http.StatusTeapot, Header: make(http.Header)},
 		[]byte(`{"code":123,"message":"legacy numeric code"}`),
 	)
-	if err.Code != errorapi.ErrorCode("123") {
-		t.Fatalf("numeric legacy code was not preserved: %+v", err)
+	if err.Code != errorapi.ErrorCodeRequestFailed || err.Category != errorapi.ErrorCategoryInvalidInput {
+		t.Fatalf("numeric legacy code was not classified through its status: %+v", err)
+	}
+
+	err = FromResponse(
+		&http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header)},
+		[]byte(`{"code":404,"error_code":"object_not_found","message":"missing"}`),
+	)
+	if err.Code != errorapi.ErrorCodeObjectNotFound {
+		t.Fatalf("exact same-object error_code did not beat numeric code: %+v", err)
+	}
+
+	err = FromResponse(
+		&http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header)},
+		[]byte(`{"code":404,"error":{"error_code":"object_not_found","message":"missing"}}`),
+	)
+	if err.Code != errorapi.ErrorCodeObjectNotFound {
+		t.Fatalf("nested exact error_code did not beat outer numeric code: %+v", err)
 	}
 }

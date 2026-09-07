@@ -122,14 +122,14 @@ func (m *localKeyManager) WrapDataKey(_ context.Context, dataKey []byte) (*Wrapp
 
 func (m *localKeyManager) UnwrapDataKey(_ context.Context, wrapped *WrappedDataKey) ([]byte, error) {
 	if wrapped == nil {
-		return nil, errors.New("wrapped data key is required")
+		return nil, fmt.Errorf("wrapped data key is required")
 	}
 	kek, err := credentialMasterKey()
 	if err != nil {
 		return nil, err
 	}
 	if len(kek) == 0 {
-		return nil, errors.New("encrypted credential found but master key is not configured")
+		return nil, fmt.Errorf("encrypted credential found but master key is not configured")
 	}
 	payload, err := base64.RawStdEncoding.DecodeString(wrapped.Ciphertext)
 	if err != nil {

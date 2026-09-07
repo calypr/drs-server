@@ -15,7 +15,6 @@ import (
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
-	"github.com/calypr/syfon/client/sdkerror"
 	"github.com/calypr/syfon/client/transfer"
 )
 
@@ -268,7 +267,7 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	}
 
 	transferRequester.response = &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ignored"))}
-	if _, err := transferService.GetRangeReader(ctx, "https://download.example/file-3", 5, 3); !errors.Is(err, sdkerror.ErrRangeIgnored) {
+	if _, err := transferService.GetRangeReader(ctx, "https://download.example/file-3", 5, 3); !errors.Is(err, transfer.ErrRangeIgnored) {
 		t.Fatalf("expected ErrRangeIgnored, got %v", err)
 	}
 

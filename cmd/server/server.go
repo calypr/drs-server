@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -63,8 +62,8 @@ type serverBackend struct {
 }
 
 var (
-	errBucketVisibilityScopeQuery   = errors.New("bucket visibility fallback requires an object scope query")
-	errBucketVisibilityRecordReader = errors.New("bucket visibility fallback requires an object record reader")
+	errBucketVisibilityScopeQuery   = fmt.Errorf("bucket visibility fallback requires an object scope query")
+	errBucketVisibilityRecordReader = fmt.Errorf("bucket visibility fallback requires an object record reader")
 )
 
 func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectrecords.RecordReader) buckets.VisibilityFallback {
@@ -185,7 +184,7 @@ var Cmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 		if cfg.Auth.Mode == config.AuthModeGen3 && cfg.Database.Postgres == nil && !isMockAuthEnabled() {
-			return errors.New("auth.mode=gen3 requires postgres database")
+			return fmt.Errorf("auth.mode=gen3 requires postgres database")
 		}
 
 		// Init DB
@@ -220,7 +219,7 @@ var Cmd = &cobra.Command{
 				backend = postgresServerBackend(database)
 			}
 		} else {
-			return errors.New("no database configuration provided")
+			return fmt.Errorf("no database configuration provided")
 		}
 
 		if errDb != nil {

@@ -118,6 +118,7 @@ func decodePayload(err *APIError, body []byte) {
 	if json.Unmarshal(body, &payload) != nil {
 		return
 	}
+	err.Code = firstErrorCode(payload)
 	decodeObject(err, payload)
 }
 
@@ -125,7 +126,6 @@ func decodeObject(err *APIError, payload map[string]any) {
 	if payload == nil {
 		return
 	}
-	err.Code = errorapi.ErrorCode(firstNonEmpty(string(err.Code), valueString(payload["code"]), valueString(payload["error_code"]), valueString(payload["type"])))
 	err.Category = errorapi.ErrorCategory(firstNonEmpty(string(err.Category), valueString(payload["category"]), valueString(payload["error_category"])))
 	err.Message = firstNonEmpty(err.Message, valueString(payload["message"]), valueString(payload["msg"]))
 	err.RequestID = firstNonEmpty(err.RequestID, valueString(payload["request_id"]), valueString(payload["requestId"]))
@@ -134,6 +134,46 @@ func decodeObject(err *APIError, payload map[string]any) {
 	} else if nested := valueString(payload["error"]); nested != "" {
 		err.Message = firstNonEmpty(err.Message, nested)
 	}
+}
+
+func firstErrorCode(payload map[string]any) errorapi.ErrorCode {
+	applicationCode, numericCode := scanErrorCodes(payload)
+	if applicationCode != "" {
+		return applicationCode
+	}
+	return numericCode
+}
+
+func scanErrorCodes(payload map[string]any) (errorapi.ErrorCode, errorapi.ErrorCode) {
+	if payload == nil {
+		return "", ""
+	}
+
+	var numericCode errorapi.ErrorCode
+	for _, key := range []string{"error_code", "code", "type"} {
+		raw := valueString(payload[key])
+		if raw == "" {
+			continue
+		}
+		if status, err := strconv.Atoi(raw); err == nil {
+			if numericCode == "" {
+				numericCode = errorapi.CodeForStatus(status)
+			}
+			continue
+		}
+		return errorapi.ErrorCode(raw), numericCode
+	}
+
+	if nested, ok := payload["error"].(map[string]any); ok {
+		nestedApplicationCode, nestedNumericCode := scanErrorCodes(nested)
+		if nestedApplicationCode != "" {
+			return nestedApplicationCode, numericCode
+		}
+		if numericCode == "" {
+			numericCode = nestedNumericCode
+		}
+	}
+	return "", numericCode
 }
 
 func valueString(value any) string {

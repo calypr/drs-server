@@ -1,8 +1,10 @@
 package apidocs
 
 import (
+	"fmt"
 	"log"
 
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -104,7 +106,5 @@ func handleErrorOpenAPISpec(c fiber.Ctx) error {
 }
 
 func sendInternalServerError(c fiber.Ctx, message string) error {
-	c.Set("Content-Type", "text/plain; charset=utf-8")
-	c.Set("X-Content-Type-Options", "nosniff")
-	return c.Status(fiber.StatusInternalServerError).SendString(message + "\n")
+	return middleware.HandleError(c, fmt.Errorf("%s", message))
 }
