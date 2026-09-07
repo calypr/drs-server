@@ -1,7 +1,7 @@
 package transfers
 
 import (
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
@@ -18,7 +18,7 @@ const (
 	RouteMultipartComplete = "/data/multipart/complete"
 )
 
-func RegisterObjectRoutes(router fiber.Router, objectService *objects.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
+func RegisterObjectRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
 	router.Get(RouteDownload, func(c fiber.Ctx) error {
 		return handleInternalDownloadFiber(c, objectService, transferService, fileCounters)
 	})
@@ -29,7 +29,7 @@ func RegisterObjectRoutes(router fiber.Router, objectService *objects.Service, t
 	router.Get(RouteUploadURL, handleInternalUploadURLFiber(objectService, transferService))
 }
 
-func RegisterBulkAndMultipartRoutes(router fiber.Router, objectService *objects.Service, transferService *domaintransfers.Service) {
+func RegisterBulkAndMultipartRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service) {
 	multipartLifecycle := domaintransfers.NewMultipartLifecycle(transferService)
 	router.Post(RouteUploadBulk, handleInternalUploadBulkFiber(objectService, transferService))
 	router.Post(RouteMultipartInit, handleInternalMultipartInitFiber(objectService, transferService, multipartLifecycle))

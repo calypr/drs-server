@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/maintenance/projectstorage"
-	"github.com/calypr/syfon/internal/maintenance/scoperepair"
+	"github.com/calypr/syfon/internal/objects/scoperepair"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
 )
 

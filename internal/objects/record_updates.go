@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 // EnforceCanonicalProjectScope adds the exact project resource to a record's
@@ -22,14 +22,14 @@ func EnforceCanonicalProjectScope(obj Record, organization, project string) (Rec
 		return obj, nil
 	}
 
-	resource, err := syfoncommon.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return Record{}, err
 	}
 	controlled := append(AccessResources(&obj), resource)
-	controlled = syfoncommon.NormalizeAccessResources(controlled)
+	controlled = clientaccess.NormalizeAccessResources(controlled)
 	obj.ControlledAccess = &controlled
-	obj.Authorizations = syfoncommon.ControlledAccessToAuthzMap(controlled)
+	obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	return obj, nil
 }
 
@@ -73,7 +73,7 @@ func MergeRecordUpdate(existing Record, update Record, id string, now time.Time)
 	}
 	if update.ControlledAccess != nil {
 		merged.ControlledAccess = update.ControlledAccess
-		merged.Authorizations = syfoncommon.ControlledAccessToAuthzMap(*update.ControlledAccess)
+		merged.Authorizations = clientaccess.ControlledAccessToAuthzMap(*update.ControlledAccess)
 	}
 	if update.AccessMethods != nil {
 		merged.AccessMethods = update.AccessMethods

@@ -5,7 +5,7 @@ import (
 
 	"github.com/lib/pq"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 )
 
@@ -17,7 +17,7 @@ func (db *PostgresDB) ListBucketVisibilityRows(ctx context.Context, resources []
 		INNER JOIN drs_object_access_method am ON am.object_id = o.id
 		LEFT JOIN drs_object_controlled_access ca ON ca.object_id = o.id`
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return []buckets.VisibilityRow{}, nil
 		}

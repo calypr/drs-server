@@ -2,12 +2,12 @@ package drs
 
 import (
 	generated "github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 )
 
-func RegisterDRSRoutes(router fiber.Router, objectService *objects.Service, accessService *transfers.Service, serviceInfo generated.Service) {
+func RegisterDRSRoutes(router fiber.Router, objectService *objectrecords.Service, accessService *transfers.Service, serviceInfo generated.Service) {
 	router.Post("/objects/register", handleRegisterObjectsFiber(objectService))
 	router.Post("/objects/access", handleGetBulkAccessURLFiber(objectService, accessService))
 	router.Post("/objects/delete", handleBulkDeleteObjectsFiber(objectService))

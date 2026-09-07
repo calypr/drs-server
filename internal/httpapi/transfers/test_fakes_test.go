@@ -9,6 +9,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -18,7 +19,6 @@ type transferHTTPFixture struct {
 	ObjectAuthz         map[string]map[string][]string
 	Credentials         map[string]buckets.Credential
 	BucketScopes        map[string]buckets.Scope
-	PendingMeta         map[string]domaintransfers.PendingMetadata
 	Usage               map[string]usage.FileUsage
 	TransferEvents      []usage.Event
 	NoDefaultCreds      bool
@@ -30,10 +30,10 @@ type transferObjectStoreFake struct {
 }
 
 var (
-	_ objects.RecordReader       = (*transferObjectStoreFake)(nil)
-	_ objects.ContentReader      = (*transferObjectStoreFake)(nil)
-	_ objects.ChecksumScopeQuery = (*transferObjectStoreFake)(nil)
-	_ objects.ScopeQuery         = (*transferObjectStoreFake)(nil)
+	_ objectrecords.RecordReader       = (*transferObjectStoreFake)(nil)
+	_ objectrecords.ContentReader      = (*transferObjectStoreFake)(nil)
+	_ objectrecords.ChecksumScopeQuery = (*transferObjectStoreFake)(nil)
+	_ objectrecords.ScopeQuery         = (*transferObjectStoreFake)(nil)
 )
 
 func (f *transferObjectStoreFake) GetObject(_ context.Context, id string) (*objects.Record, error) {
@@ -58,7 +58,7 @@ type transferAliasStoreFake struct {
 	fixture *transferHTTPFixture
 }
 
-var _ objects.AliasStore = (*transferAliasStoreFake)(nil)
+var _ objectrecords.AliasStore = (*transferAliasStoreFake)(nil)
 
 func (f *transferAliasStoreFake) DeleteObjectAlias(_ context.Context, aliasID string) error {
 	delete(f.fixture.Objects, aliasID)
@@ -245,39 +245,6 @@ func (f *transferBucketStoreFake) ListBucketScopes(_ context.Context) ([]buckets
 		out = append(out, scope)
 	}
 	return out, nil
-}
-
-type transferPendingStoreFake struct {
-	fixture *transferHTTPFixture
-}
-
-var _ domaintransfers.PendingStore = (*transferPendingStoreFake)(nil)
-
-func (f *transferPendingStoreFake) SavePendingLFSMeta(_ context.Context, entries []domaintransfers.PendingMetadata) error {
-	if f.fixture.PendingMeta == nil {
-		f.fixture.PendingMeta = map[string]domaintransfers.PendingMetadata{}
-	}
-	for _, entry := range entries {
-		f.fixture.PendingMeta[entry.OID] = entry
-	}
-	return nil
-}
-
-func (f *transferPendingStoreFake) GetPendingLFSMeta(_ context.Context, oid string) (*domaintransfers.PendingMetadata, error) {
-	entry, ok := f.fixture.PendingMeta[oid]
-	if !ok {
-		return nil, faults.ErrNotFound
-	}
-	return &entry, nil
-}
-
-func (f *transferPendingStoreFake) PopPendingLFSMeta(ctx context.Context, oid string) (*domaintransfers.PendingMetadata, error) {
-	entry, err := f.GetPendingLFSMeta(ctx, oid)
-	if err != nil {
-		return nil, err
-	}
-	delete(f.fixture.PendingMeta, oid)
-	return entry, nil
 }
 
 type transferEventStoreFake struct {

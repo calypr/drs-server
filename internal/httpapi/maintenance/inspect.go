@@ -10,8 +10,8 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/maintenance/projectstorage"
 	"github.com/calypr/syfon/internal/objects"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -404,7 +404,7 @@ func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fib
 			if scopeProject != "" && !strings.EqualFold(scopeProject, project) {
 				continue
 			}
-			if !bucketScopeAllowed(c.Context(), scope, "read") {
+			if !buckets.ScopeAllowed(c.Context(), scope, "read") {
 				continue
 			}
 			row := internalInspectProjectScopeItem{

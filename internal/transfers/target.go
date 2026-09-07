@@ -7,12 +7,10 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -33,70 +31,6 @@ type CanonicalStorageTarget struct {
 	Bucket string
 	Key    string
 	URL    string
-}
-
-type Service struct {
-	access      AccessPort
-	multipart   MultipartPort
-	scopes      ScopeReader
-	credentials CredentialReader
-	pending     PendingStore
-	events      EventRecorder
-	now         func() time.Time
-}
-
-func NewService(deps Dependencies) *Service {
-	return &Service{
-		access:      deps.Access,
-		multipart:   deps.Multipart,
-		scopes:      deps.Scopes,
-		credentials: deps.Credentials,
-		pending:     deps.Pending,
-		events:      deps.Events,
-		now:         time.Now,
-	}
-}
-
-// SignURL signs an already-resolved storage URL. S3 bucket names are passed
-// as the storage access ID; arbitrary provider URLs retain an empty access ID.
-func (s *Service) SignURL(ctx context.Context, accessURL string, options storage.AccessOptions) (string, error) {
-	if s == nil || s.access == nil {
-		return "", fmt.Errorf("storage access is not configured")
-	}
-	access, err := s.access.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{
-			AccessID: resolveSigningBucket(accessURL),
-			Location: accessURL,
-		},
-		Options: options,
-	})
-	if err != nil {
-		return "", err
-	}
-	return access.Location, nil
-}
-
-// SignObjectURL resolves an object URL before signing. PUT requests use the
-// canonical target path; reads retain legacy S3 and checksum-only URL repair.
-func (s *Service) SignObjectURL(ctx context.Context, obj *objects.Record, accessURL string, options storage.AccessOptions) (string, error) {
-	targetURL := strings.TrimSpace(accessURL)
-	if strings.EqualFold(strings.TrimSpace(options.Method), "PUT") {
-		target, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{
-			Object:    obj,
-			AccessURL: targetURL,
-		})
-		if err != nil {
-			return "", err
-		}
-		targetURL = target.URL
-	} else {
-		var err error
-		targetURL, err = s.resolveObjectDownloadURL(ctx, obj, targetURL)
-		if err != nil {
-			return "", err
-		}
-	}
-	return s.SignURL(ctx, targetURL, options)
 }
 
 // ResolveCanonicalStorageTarget selects the physical target for an object.
@@ -203,100 +137,6 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 	return newCanonicalStorageTarget(bucket, key), nil
 }
 
-// SignDownloadPart signs an inclusive byte range against an already-resolved
-// URL. Range validation remains at the HTTP boundary.
-func (s *Service) SignDownloadPart(ctx context.Context, bucket, accessURL string, start, end int64, options storage.AccessOptions) (string, error) {
-	if s == nil || s.access == nil {
-		return "", fmt.Errorf("storage access is not configured")
-	}
-	access, err := s.access.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{AccessID: bucket, Location: accessURL},
-		Options: options,
-		Range:   &storage.ByteRange{Start: start, End: end},
-	})
-	if err != nil {
-		return "", err
-	}
-	return access.Location, nil
-}
-
-// SignObjectDownloadPart repairs an object URL before signing its inclusive
-// byte range. A parsed S3 bucket overrides the caller's legacy bucket value.
-func (s *Service) SignObjectDownloadPart(ctx context.Context, obj *objects.Record, bucket, accessURL string, start, end int64, options storage.AccessOptions) (string, error) {
-	resolved, err := s.resolveObjectDownloadURL(ctx, obj, accessURL)
-	if err != nil {
-		return "", err
-	}
-	if parsedBucket, _, ok := address.ParseS3URL(resolved); ok {
-		bucket = parsedBucket
-	}
-	return s.SignDownloadPart(ctx, bucket, resolved, start, end, options)
-}
-
-func (s *Service) resolveObjectDownloadURL(ctx context.Context, obj *objects.Record, accessURL string) (string, error) {
-	accessURL = strings.TrimSpace(accessURL)
-	legacyURL, err := s.resolveLegacyS3DownloadURL(ctx, obj, accessURL)
-	if err != nil {
-		return "", err
-	}
-	if legacyURL != accessURL || !isUnscopedCanonicalSHA256(obj, accessURL) {
-		return legacyURL, nil
-	}
-	target, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, AccessURL: accessURL})
-	if err != nil {
-		return "", err
-	}
-	return target.URL, nil
-}
-
-func (s *Service) resolveLegacyS3DownloadURL(ctx context.Context, obj *objects.Record, accessURL string) (string, error) {
-	accessURL = strings.TrimSpace(accessURL)
-	bucket, key, ok := parseS3Location(accessURL)
-	if !ok || strings.TrimSpace(bucket) == "" || strings.TrimSpace(key) == "" {
-		return accessURL, nil
-	}
-
-	scopes, err := s.bucketScopesForObject(ctx, obj)
-	if err != nil {
-		return "", err
-	}
-	mappedURLs := make([]string, 0, 1)
-	for _, scope := range scopes {
-		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-		if prefix == "" || bucket != prefix {
-			continue
-		}
-		targetBucket := strings.TrimSpace(scope.Bucket)
-		if targetBucket == "" {
-			continue
-		}
-		mappedKey := prefix + "/" + strings.TrimLeft(key, "/")
-		candidate := address.BucketToURL(targetBucket, mappedKey)
-		if len(mappedURLs) == 0 || mappedURLs[len(mappedURLs)-1] != candidate {
-			mappedURLs = append(mappedURLs, candidate)
-		}
-	}
-	if len(mappedURLs) == 0 {
-		return accessURL, nil
-	}
-
-	if s.credentials != nil {
-		credentials, err := s.credentials.ListS3Credentials(ctx)
-		if err != nil {
-			return "", err
-		}
-		for _, credential := range credentials {
-			if strings.TrimSpace(credential.Bucket) == bucket {
-				return accessURL, nil
-			}
-		}
-	}
-	if len(mappedURLs) > 1 {
-		return "", fmt.Errorf("%w: legacy S3 URL %q maps to conflicting physical locations %q and %q", faults.ErrConflict, accessURL, mappedURLs[0], mappedURLs[1])
-	}
-	return mappedURLs[0], nil
-}
-
 func (s *Service) bucketScopesForObject(ctx context.Context, obj *objects.Record) ([]buckets.Scope, error) {
 	if obj == nil || s.scopes == nil {
 		return nil, nil
@@ -394,13 +234,6 @@ func firstSupportedAccessURL(obj *objects.Record) string {
 	return ""
 }
 
-func resolveSigningBucket(accessURL string) string {
-	if bucket, _, ok := address.ParseS3URL(accessURL); ok {
-		return bucket
-	}
-	return ""
-}
-
 func parseS3Location(accessURL string) (bucket, key string, ok bool) {
 	if bucket, key, ok := address.ParseS3URL(accessURL); ok {
 		return bucket, key, true
@@ -469,18 +302,6 @@ func trimLeadingStoragePrefix(key, prefix string) string {
 		return strings.TrimPrefix(key, prefix+"/")
 	}
 	return key
-}
-
-func isUnscopedCanonicalSHA256(obj *objects.Record, accessURL string) bool {
-	if obj == nil {
-		return false
-	}
-	_, key, ok := parseS3Location(accessURL)
-	if !ok || strings.Contains(strings.Trim(key, "/"), "/") {
-		return false
-	}
-	sha, ok := objects.CanonicalSHA256(obj.Checksums)
-	return ok && strings.EqualFold(strings.Trim(key, "/"), strings.TrimSpace(sha))
 }
 
 func parseResourceScope(resource string) (organization, project string, ok bool) {

@@ -5,10 +5,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/maintenance/projectstorage"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 )
 
 type projectCleanupResponse struct {
@@ -30,7 +31,7 @@ func handleInternalDeleteProjectFiber(c fiber.Ctx, service *projectstorage.Proje
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return response.HandleError(c, faults.ErrUnauthorized)
 	}
-	if err := authorizeBucketScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
+	if err := buckets.AuthorizeScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
 		return response.HandleError(c, err)
 	}
 

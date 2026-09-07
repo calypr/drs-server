@@ -408,13 +408,17 @@ func TestGenericUploaderMultipartAndState(t *testing.T) {
 		t.Fatalf("expected checkpoint to be removed, stat err=%v", err)
 	}
 
-	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, FileModUnixNano: info.ModTime().UnixNano(), UploadID: "upload-123", ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
 	uploader.saveState(checkpointPath, state)
 	loaded, ok := uploader.loadState(checkpointPath)
 	if !ok || !reflect.DeepEqual(loaded, state) {
 		t.Fatalf("unexpected loaded state: ok=%v got=%+v want=%+v", ok, loaded, state)
 	}
-	info, err := os.Stat(file)
+	info, err = os.Stat(file)
 	if err != nil {
 		t.Fatalf("Stat returned error: %v", err)
 	}
@@ -761,7 +765,6 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 		t.Fatalf("expected final progress to reach %d, got %+v", len(content), lastEvent)
 	}
 
-
 	backend2 := &fakeBackend{data: []byte("single"), meta: &transfer.ObjectMetadata{Size: 6, AcceptRanges: true}}
 	d2 := &GenericDownloader{Source: backend2}
 	dst2 := filepath.Join(t.TempDir(), "single.bin")
@@ -830,5 +833,50 @@ func TestGenericDownloaderSingleDownloadStreamsProgress(t *testing.T) {
 	last := events[len(events)-1]
 	if last.BytesSoFar != int64(len(content)) || last.Oid != "single-download-oid" {
 		t.Fatalf("unexpected final progress event: %+v", last)
+	}
+}
+
+func TestMultipartUploadRejectsStaleCheckpoint(t *testing.T) {
+	for _, mismatch := range []string{"bucket", "source modification", "missing upload ID", "matching"} {
+		t.Run(mismatch, func(t *testing.T) {
+			source := filepath.Join(t.TempDir(), "source")
+			if err := os.WriteFile(source, []byte("new bytes"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Stat(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := transfer.TransferRequest{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", ForceMultipart: true}
+			state := &uploaderResumeState{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", FileSize: info.Size(), FileModUnixNano: info.ModTime().UnixNano(), ChunkSize: OptimalChunkSize(info.Size()), UploadID: "old-session", Completed: map[int]string{1: "old-etag"}}
+			switch mismatch {
+			case "bucket":
+				state.Bucket = "another-bucket"
+			case "source modification":
+				state.FileModUnixNano = info.ModTime().Add(-time.Second).UnixNano()
+			case "missing upload ID":
+				state.UploadID = ""
+			}
+			backend := &fakeBackend{multipartInitID: "new-session"}
+			uploader := &GenericUploader{Backend: backend}
+			checkpoint, err := CheckpointPath(source, "id")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Remove(checkpoint) })
+			if err := uploader.saveState(checkpoint, state); err != nil {
+				t.Fatal(err)
+			}
+			if err := uploader.Upload(context.Background(), req, false); err != nil {
+				t.Fatal(err)
+			}
+			if mismatch == "matching" {
+				if backend.multipartInitCalls != 0 || backend.completedUploadID != "old-session" || len(backend.partUploads) != 0 {
+					t.Fatalf("matching checkpoint was not resumed: %+v", backend)
+				}
+			} else if backend.multipartInitCalls != 1 || backend.completedUploadID != "new-session" || string(backend.partUploads[1]) != "new bytes" {
+				t.Fatalf("stale checkpoint reused: %+v", backend)
+			}
+		})
 	}
 }

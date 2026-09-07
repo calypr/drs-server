@@ -55,8 +55,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Verify repository tooling
+        run: |
+          scripts/check_internal_import_policy.sh
+          scripts/check_internal_import_policy.sh --self-test
+          make test-install test-release
+
       - name: Run unit tests
         run: make test-unit
+
+      - name: Compile the client README example
+        run: scripts/check-client-readme.sh
 
       - name: Run server endpoint router tests
         run: |
@@ -261,7 +270,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run go vet
-        run: go vet ./...
+        run: go vet ./... ./client/... ./apigen/...
 
       - name: Check for Go CVEs - Root module
         run: $(go env GOPATH)/bin/govulncheck ./...

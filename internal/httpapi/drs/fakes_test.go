@@ -7,18 +7,19 @@ import (
 
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 type testDRSServicesFixture struct {
-	objectService   *objects.Service
+	objectService   *objectrecords.Service
 	transferService *transfers.Service
 }
 
 func testDRSServices(store *drsObjectFixture, storageAccess transfers.AccessPort) *testDRSServicesFixture {
 	return &testDRSServicesFixture{
-		objectService: objects.NewService(objects.Dependencies{
+		objectService: objectrecords.NewService(objectrecords.Dependencies{
 			Reader:        store.reader,
 			Writer:        store.writer,
 			AccessMethods: store.accessMethods,
@@ -203,10 +204,10 @@ func (testTransferEvents) RecordTransferAttributionEvents(context.Context, []usa
 }
 
 var (
-	_ objects.RecordReader       = (*drsObjectReader)(nil)
-	_ objects.RecordWriter       = (*drsObjectWriter)(nil)
-	_ objects.AccessMethodWriter = (*drsObjectAccessMethods)(nil)
-	_ objects.AliasStore         = (*drsObjectAliases)(nil)
-	_ objects.ContentReader      = (*drsObjectContent)(nil)
-	_ transfers.EventRecorder    = testTransferEvents{}
+	_ objectrecords.RecordReader       = (*drsObjectReader)(nil)
+	_ objectrecords.RecordWriter       = (*drsObjectWriter)(nil)
+	_ objectrecords.AccessMethodWriter = (*drsObjectAccessMethods)(nil)
+	_ objectrecords.AliasStore         = (*drsObjectAliases)(nil)
+	_ objectrecords.ContentReader      = (*drsObjectContent)(nil)
+	_ transfers.EventRecorder          = testTransferEvents{}
 )

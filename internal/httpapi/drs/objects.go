@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 
 	generated "github.com/calypr/syfon/apigen/server/drs"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -63,7 +64,7 @@ func ToGenerated(record objects.Record) generated.DrsObject {
 		out.Checksums = make([]generated.Checksum, 0, len(record.Checksums))
 	}
 	if out.ControlledAccess == nil && len(record.Authorizations) > 0 {
-		controlled := syfoncommon.AuthzMapToControlledAccess(record.Authorizations)
+		controlled := clientaccess.AuthzMapToControlledAccess(record.Authorizations)
 		out.ControlledAccess = &controlled
 	}
 	for _, checksum := range record.Checksums {

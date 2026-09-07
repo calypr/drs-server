@@ -14,6 +14,7 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -79,7 +80,7 @@ func TestLFSMetadataVerifyPreservesPendingPopBeforeRegister(t *testing.T) {
 		t.Fatalf("metadata status = %d body=%s", response.Code, response.Body.String())
 	}
 	entry, ok := ports.pending.entries[oid]
-	if !ok || entry.CreatedAt.IsZero() || entry.ExpiresAt.Sub(entry.CreatedAt) != transfers.PendingMetadataTTL {
+	if !ok || entry.CreatedAt.IsZero() || entry.ExpiresAt.Sub(entry.CreatedAt) != transferlfs.PendingMetadataTTL {
 		t.Fatalf("pending metadata timestamps = %+v", entry)
 	}
 	verify, _ := json.Marshal(map[string]any{"oid": oid, "size": 12})
@@ -146,7 +147,6 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			Multipart:   storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
 			Credentials: ports.credentials,
-			Pending:     ports.pending,
 			Events:      ports.events,
 		})
 	}
@@ -173,7 +173,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
 				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
-				ports.pending.entries[oid] = transfers.PendingMetadata{
+				ports.pending.entries[oid] = transferlfs.PendingMetadata{
 					OID: oid,
 					Candidate: objects.Candidate{
 						Checksums:        &[]objects.Checksum{{Type: "sha256", Checksum: oid}},

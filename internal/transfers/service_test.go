@@ -2,14 +2,11 @@ package transfers
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
@@ -68,25 +65,6 @@ type credentialFake struct {
 
 func (f credentialFake) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
 	return f.credentials, nil
-}
-
-type pendingFake struct {
-	saved []PendingMetadata
-	got   *PendingMetadata
-	pop   *PendingMetadata
-}
-
-func (f *pendingFake) SavePendingLFSMeta(_ context.Context, entries []PendingMetadata) error {
-	f.saved = append([]PendingMetadata(nil), entries...)
-	return nil
-}
-
-func (f *pendingFake) GetPendingLFSMeta(context.Context, string) (*PendingMetadata, error) {
-	return f.got, nil
-}
-
-func (f *pendingFake) PopPendingLFSMeta(context.Context, string) (*PendingMetadata, error) {
-	return f.pop, nil
 }
 
 type eventFake struct {
@@ -175,25 +153,6 @@ func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 	}
 }
 
-func TestStagePendingMetadataDefaultsCanonicalOIDAndTwentyMinuteTTL(t *testing.T) {
-	pending := &pendingFake{}
-	service := NewService(Dependencies{Pending: pending})
-	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.FixedZone("PDT", -7*60*60))
-	service.now = func() time.Time { return now }
-	sha := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	candidate := objects.Candidate{Checksums: &[]objects.Checksum{{Type: "sha256", Checksum: sha}}}
-	if err := service.StagePendingMetadata(context.Background(), PendingMetadata{Candidate: candidate}); err != nil {
-		t.Fatalf("StagePendingMetadata() error = %v", err)
-	}
-	if len(pending.saved) != 1 {
-		t.Fatalf("saved %d entries, want 1", len(pending.saved))
-	}
-	got := pending.saved[0]
-	if got.OID != sha || !got.CreatedAt.Equal(now.UTC()) || !got.ExpiresAt.Equal(now.UTC().Add(PendingMetadataTTL)) {
-		t.Fatalf("unexpected staged metadata: %+v", got)
-	}
-}
-
 func TestEventFromObjectPreservesContextAndRangeProjection(t *testing.T) {
 	service := NewService(Dependencies{Events: &eventFake{}})
 	ctx := requestid.WithRequestID(context.Background(), "request-1")
@@ -228,8 +187,5 @@ func TestUnconfiguredWorkflowsReturnConfigurationErrors(t *testing.T) {
 	}
 	if _, err := service.InitMultipartUpload(context.Background(), "bucket", "key"); err == nil {
 		t.Fatal("InitMultipartUpload() unexpectedly succeeded without multipart port")
-	}
-	if err := service.StagePendingMetadata(context.Background(), PendingMetadata{}); !errors.Is(err, faults.ErrInvalidInput) {
-		t.Fatalf("StagePendingMetadata() error = %v, want invalid input", err)
 	}
 }

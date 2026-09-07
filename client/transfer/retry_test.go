@@ -33,8 +33,6 @@ func (l *captureLogger) Error(msg string, args ...any) {
 	}
 }
 
-
-
 func TestExponentialBackoffAndDefaultBackoff(t *testing.T) {
 	t.Parallel()
 

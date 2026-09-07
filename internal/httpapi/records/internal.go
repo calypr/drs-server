@@ -7,7 +7,9 @@ import (
 	"time"
 
 	generated "github.com/calypr/syfon/apigen/server/internalapi"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -36,7 +38,7 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 		record.Checksums = make([]objects.Checksum, 0, len(*value.Hashes))
 		for typ, checksum := range *value.Hashes {
 			if objects.NormalizeChecksumType(typ) == "sha256" {
-				if normalized := syfoncommon.NormalizeOid(checksum); normalized != "" {
+				if normalized := clienthash.NormalizeOid(checksum); normalized != "" {
 					typ, checksum = "sha256", normalized
 				}
 			}
@@ -44,9 +46,9 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 		}
 	}
 	if value.ControlledAccess != nil {
-		controlled := syfoncommon.NormalizeAccessResources(*value.ControlledAccess)
+		controlled := clientaccess.NormalizeAccessResources(*value.ControlledAccess)
 		record.ControlledAccess = &controlled
-		record.Authorizations = syfoncommon.ControlledAccessToAuthzMap(controlled)
+		record.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	if value.AccessMethods != nil {
 		methods := fromGeneratedAccessMethods(*value.AccessMethods)
@@ -72,7 +74,7 @@ func ToInternalRecord(record objects.Record) generated.InternalRecord {
 	if controlled := record.ControlledAccess; controlled != nil {
 		values := append([]string(nil), (*controlled)...)
 		result.ControlledAccess = &values
-	} else if resources := syfoncommon.AuthzMapToControlledAccess(record.Authorizations); len(resources) > 0 {
+	} else if resources := clientaccess.AuthzMapToControlledAccess(record.Authorizations); len(resources) > 0 {
 		result.ControlledAccess = &resources
 	}
 	if record.UpdatedTime != nil {

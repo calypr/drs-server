@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
 
@@ -432,7 +432,7 @@ func (db *PostgresDB) UpdateObjectAccessMethods(ctx context.Context, objectID st
 }
 
 func (db *PostgresDB) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) error {
-	normalized := sycommon.NormalizeAccessResources([]string{resource})
+	normalized := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(normalized) == 0 {
 		return fmt.Errorf("resource is required")
 	}
@@ -488,7 +488,7 @@ func (db *PostgresDB) RemoveObjectControlledAccessBulk(ctx context.Context, obje
 	if len(objectIDs) == 0 {
 		return 0, nil
 	}
-	normalized := sycommon.NormalizeAccessResources([]string{resource})
+	normalized := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(normalized) == 0 {
 		return 0, fmt.Errorf("resource is required")
 	}
@@ -600,7 +600,7 @@ func (db *PostgresDB) BulkUpdateAccessMethods(ctx context.Context, updates map[s
 }
 
 func insertControlledAccessTx(ctx context.Context, tx *sql.Tx, objectID string, resources []string) error {
-	for _, resource := range sycommon.NormalizeAccessResources(resources) {
+	for _, resource := range clientaccess.NormalizeAccessResources(resources) {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO drs_object_controlled_access (object_id, resource) VALUES ($1, $2)`, objectID, resource); err != nil {
 			return fmt.Errorf("failed to insert controlled access: %w", err)
 		}

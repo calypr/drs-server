@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/usage"
 
 	"github.com/lib/pq"
@@ -178,7 +178,7 @@ func transferAttributionWhereByResources(filter usage.Filter, resources []string
 }
 
 func postgresTransferResourceClause(resources []string, startIndex int) (string, []any) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 {
 		return "", nil
 	}
@@ -188,7 +188,7 @@ func postgresTransferResourceClause(resources []string, startIndex int) (string,
 	projectClauses := make([]string, 0)
 	args := make([]any, 0, len(resources)*2)
 	for _, resource := range resources {
-		org, project, ok := sycommon.ResourceScope(resource)
+		org, project, ok := clientaccess.ResourceScope(resource)
 		if !ok {
 			continue
 		}

@@ -21,11 +21,6 @@ const (
 	ChecksumTypeTrunc512 ChecksumType = "trunc512"
 )
 
-
-
-// String returns the string representation of the checksum type
-
-
 var SupportedChecksums = map[string]bool{
 	string(ChecksumTypeSHA1):     true,
 	string(ChecksumTypeSHA256):   true,
@@ -95,8 +90,6 @@ func ConvertStringMapToHashInfo(inputHashes map[string]string) HashInfo {
 	return hashInfo
 }
 
-
-
 func ConvertChecksumsToMap(checksums []Checksum) map[string]string {
 	result := make(map[string]string, len(checksums))
 	for _, c := range checksums {
@@ -109,9 +102,3 @@ func ConvertChecksumsToHashInfo(checksums []Checksum) HashInfo {
 	checksumMap := ConvertChecksumsToMap(checksums)
 	return ConvertStringMapToHashInfo(checksumMap)
 }
-
-
-
-
-
-

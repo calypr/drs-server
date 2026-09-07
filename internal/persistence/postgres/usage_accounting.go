@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/usage"
 
@@ -141,7 +141,7 @@ func (db *PostgresDB) ListFileUsage(ctx context.Context, limit, offset int, inac
 }
 
 func (db *PostgresDB) ListFileUsagePageByScope(ctx context.Context, organization, project string, limit, offset int, inactiveSince *time.Time) ([]usage.FileUsage, error) {
-	resource, err := sycommon.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
+	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (db *PostgresDB) ListFileUsagePageByResources(ctx context.Context, resource
 }
 
 func (db *PostgresDB) GetFileUsageSummaryByScope(ctx context.Context, organization, project string, inactiveSince *time.Time) (usage.FileUsageSummary, error) {
-	resource, err := sycommon.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
+	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
 		return usage.FileUsageSummary{}, err
 	}
@@ -165,7 +165,7 @@ func (db *PostgresDB) GetFileUsageSummaryByResources(ctx context.Context, resour
 }
 
 func (db *PostgresDB) GetProjectRecordSummaryByScope(ctx context.Context, organization, project string) (usage.FileUsageSummary, error) {
-	resource, err := sycommon.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
+	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
 		return usage.FileUsageSummary{}, err
 	}
@@ -229,7 +229,7 @@ func (db *PostgresDB) listScopedFileUsagePage(ctx context.Context, resources []s
 	if offset < 0 {
 		offset = 0
 	}
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
 		return []usage.FileUsage{}, nil
 	}
@@ -249,7 +249,7 @@ func (db *PostgresDB) getScopedFileUsageSummary(ctx context.Context, resources [
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return usage.FileUsageSummary{}, err
 	}
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
 		return usage.FileUsageSummary{}, nil
 	}

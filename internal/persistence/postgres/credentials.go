@@ -11,7 +11,7 @@ import (
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/requestid"
 
-	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 )
 
 func (db *PostgresDB) GetS3Credential(ctx context.Context, credentialID string) (*buckets.Credential, error) {

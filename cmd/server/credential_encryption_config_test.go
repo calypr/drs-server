@@ -9,7 +9,7 @@ import (
 
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 )
 
 func TestApplyCredentialEncryptionConfig(t *testing.T) {

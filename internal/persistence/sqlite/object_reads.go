@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
@@ -115,7 +115,7 @@ func (db *SqliteDB) ListScopedObjectIDsByChecksums(ctx context.Context, organiza
 	if organization == "" || project == "" || len(checksums) == 0 {
 		return map[string][]string{}, nil
 	}
-	resource, err := sycommon.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 		err  error
 	)
 	if project != "" {
-		resource, err := sycommon.ResourcePath(organization, project)
+		resource, err := clientaccess.ResourcePath(organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +243,7 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 			WHERE ca.resource = ?
 			ORDER BY ca.object_id`, resource)
 	} else {
-		resource, err := sycommon.ResourcePath(organization, "")
+		resource, err := clientaccess.ResourcePath(organization, "")
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +271,7 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 }
 
 func (db *SqliteDB) ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
 		return []string{}, nil
 	}
@@ -340,7 +340,7 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	objectIDExpr := "id"
 
 	if organization != "" {
-		resource, err := sycommon.ResourcePath(organization, project)
+		resource, err := clientaccess.ResourcePath(organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -373,7 +373,7 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 }
 
 func (db *SqliteDB) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	startAfter = strings.TrimSpace(startAfter)
 	if limit <= 0 || (len(resources) == 0 && !includeUnscoped) {
 		return []string{}, nil
@@ -438,7 +438,7 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 		return db.ListObjectIDsByResources(ctx, resources, false)
 	}
 
-	scopeResource, err := sycommon.ResourcePath(organization, project)
+	scopeResource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 			WHERE ca_scope.object_id = o.id AND ca_scope.resource = ?
 		)`
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 {
 			return []string{}, nil
 		}
@@ -515,7 +515,7 @@ func (db *SqliteDB) ListObjectIDsByChecksumsAndResources(ctx context.Context, ch
 		FROM matched m
 		INNER JOIN drs_object o ON o.id = m.object_id`
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return map[string][]string{}, nil
 		}
@@ -565,7 +565,7 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 	args := []any{objectURL}
 	conditions := []string{"am.url = ?"}
 	if organization != "" {
-		resource, err := sycommon.ResourcePath(organization, project)
+		resource, err := clientaccess.ResourcePath(organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -577,7 +577,7 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 		)`)
 	}
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return []string{}, nil
 		}

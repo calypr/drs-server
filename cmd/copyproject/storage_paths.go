@@ -8,7 +8,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/bucketapi"
 	"github.com/calypr/syfon/cmd/projectcopy"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -144,7 +145,7 @@ func scopedObjectURL(projectPath, bucket, key string) string {
 }
 
 func pathScope(resource string) (string, string) {
-	org, project, ok := syfoncommon.ResourceScope(resource)
+	org, project, ok := clientaccess.ResourceScope(resource)
 	if !ok {
 		return "", ""
 	}

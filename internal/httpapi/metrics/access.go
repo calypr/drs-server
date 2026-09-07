@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/usage"
@@ -33,7 +33,7 @@ func (s *MetricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool
 	}
 
 	if resolved.isScoped() {
-		scope, err := sycommon.ResourcePath(resolved.organization, resolved.project)
+		scope, err := clientaccess.ResourcePath(resolved.organization, resolved.project)
 		if err != nil {
 			return resolved, http.StatusBadRequest, false
 		}
@@ -146,7 +146,7 @@ func metricsResources(scopes []metricsScope) []string {
 	resources := make([]string, 0, len(scopes))
 	seen := map[string]bool{}
 	for _, scope := range scopes {
-		resource, err := sycommon.ResourcePath(scope.organization, scope.project)
+		resource, err := clientaccess.ResourcePath(scope.organization, scope.project)
 		if err != nil || resource == "" || seen[resource] {
 			continue
 		}
@@ -158,7 +158,7 @@ func metricsResources(scopes []metricsScope) []string {
 }
 
 func metricsScopeFromResource(resource string) (metricsScope, bool) {
-	org, project, ok := sycommon.ResourceScope(resource)
+	org, project, ok := clientaccess.ResourceScope(resource)
 	if !ok {
 		return metricsScope{}, false
 	}

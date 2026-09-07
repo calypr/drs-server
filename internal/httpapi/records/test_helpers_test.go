@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 	"github.com/gofiber/fiber/v3"
 )
@@ -27,15 +28,15 @@ type internalRecordStore struct {
 }
 
 var (
-	_ objects.RecordReader          = (*internalRecordStore)(nil)
-	_ objects.RecordWriter          = (*internalRecordStore)(nil)
-	_ objects.AccessMethodWriter    = (*internalRecordStore)(nil)
-	_ objects.AccessPolicyWriter    = (*internalRecordStore)(nil)
-	_ objects.AliasStore            = (*internalRecordStore)(nil)
-	_ objects.ContentReader         = (*internalRecordStore)(nil)
-	_ objects.ChecksumScopeQuery    = (*internalRecordStore)(nil)
-	_ objects.ScopeQuery            = (*internalRecordStore)(nil)
-	_ objects.OptionalResourceQuery = (*internalRecordStore)(nil)
+	_ objectrecords.RecordReader          = (*internalRecordStore)(nil)
+	_ objectrecords.RecordWriter          = (*internalRecordStore)(nil)
+	_ objectrecords.AccessMethodWriter    = (*internalRecordStore)(nil)
+	_ objectrecords.AccessPolicyWriter    = (*internalRecordStore)(nil)
+	_ objectrecords.AliasStore            = (*internalRecordStore)(nil)
+	_ objectrecords.ContentReader         = (*internalRecordStore)(nil)
+	_ objectrecords.ChecksumScopeQuery    = (*internalRecordStore)(nil)
+	_ objectrecords.ScopeQuery            = (*internalRecordStore)(nil)
+	_ objectrecords.OptionalResourceQuery = (*internalRecordStore)(nil)
 )
 
 func (m *internalRecordStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
@@ -200,7 +201,7 @@ func (m *internalRecordStore) ListObjectIDsByScope(_ context.Context, organizati
 
 func (m *internalRecordStore) ListObjectIDsByResources(_ context.Context, resources []string, includeUnscoped bool) ([]string, error) {
 	allowed := make(map[string]struct{}, len(resources))
-	for _, resource := range syfoncommon.NormalizeAccessResources(resources) {
+	for _, resource := range clientaccess.NormalizeAccessResources(resources) {
 		allowed[resource] = struct{}{}
 	}
 	ids := make([]string, 0, len(m.Objects))
@@ -227,7 +228,7 @@ func (m *internalRecordStore) RemoveObjectControlledAccess(_ context.Context, ob
 	if !ok {
 		return faults.ErrNotFound
 	}
-	targets := syfoncommon.NormalizeAccessResources([]string{resource})
+	targets := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(targets) == 0 {
 		return faults.ErrNotFound
 	}
@@ -254,14 +255,14 @@ func (m *internalRecordStore) RemoveObjectControlledAccess(_ context.Context, ob
 		if m.ObjectAuthz == nil {
 			m.ObjectAuthz = make(map[string]map[string][]string)
 		}
-		m.ObjectAuthz[objectID] = syfoncommon.ControlledAccessToAuthzMap(filtered)
+		m.ObjectAuthz[objectID] = clientaccess.ControlledAccessToAuthzMap(filtered)
 	}
 	m.Objects[objectID] = &copyObj
 	return nil
 }
 
 func (m *internalRecordStore) RemoveObjectControlledAccessBulk(ctx context.Context, objectIDs []string, resource string) (int, error) {
-	targets := syfoncommon.NormalizeAccessResources([]string{resource})
+	targets := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(targets) == 0 {
 		return 0, faults.ErrNotFound
 	}
@@ -296,12 +297,12 @@ func (m *internalRecordStore) cloneObject(id string, obj *objects.Record) *objec
 
 func (m *internalRecordStore) objectResources(id string, obj *objects.Record) []string {
 	if authz, ok := m.ObjectAuthz[id]; ok {
-		return syfoncommon.AuthzMapToControlledAccess(authz)
+		return clientaccess.AuthzMapToControlledAccess(authz)
 	}
 	if obj.ControlledAccess != nil {
-		return syfoncommon.NormalizeAccessResources(*obj.ControlledAccess)
+		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return syfoncommon.AuthzMapToControlledAccess(obj.Authorizations)
+	return clientaccess.AuthzMapToControlledAccess(obj.Authorizations)
 }
 
 func (m *internalRecordStore) objectMatchesScope(obj *objects.Record, organization, project string) bool {
@@ -311,7 +312,7 @@ func (m *internalRecordStore) objectMatchesScope(obj *objects.Record, organizati
 		return true
 	}
 	for _, resource := range m.objectResources(string(obj.Id), obj) {
-		org, candidateProject, ok := syfoncommon.ResourceScope(resource)
+		org, candidateProject, ok := clientaccess.ResourceScope(resource)
 		if ok && org == organization && (project == "" || candidateProject == project) {
 			return true
 		}

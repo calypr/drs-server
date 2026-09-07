@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 // CandidateToRecord converts an HTTP-neutral registration candidate into a
@@ -20,7 +20,7 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	if c.AccessMethods == nil || len(*c.AccessMethods) == 0 {
 		return Record{}, ErrAccessMethodsRequired
 	}
-	authzList := syfoncommon.ControlledAccessToAuthzMap(objectStringSliceValue(c.ControlledAccess))
+	authzList := clientaccess.ControlledAccessToAuthzMap(objectStringSliceValue(c.ControlledAccess))
 
 	id := ""
 	if c.Aliases != nil {
@@ -32,7 +32,7 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		}
 	}
 	if id == "" {
-		mintedID, err := MintRecordIDFromChecksum(oid, syfoncommon.AuthzMapToList(authzList))
+		mintedID, err := MintRecordIDFromChecksum(oid, clientaccess.AuthzMapToList(authzList))
 		if err != nil {
 			return Record{}, err
 		}
@@ -51,7 +51,7 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		Checksums:   []Checksum{{Type: "sha256", Checksum: oid}},
 	}
 	if c.ControlledAccess != nil {
-		controlled := syfoncommon.NormalizeAccessResources(*c.ControlledAccess)
+		controlled := clientaccess.NormalizeAccessResources(*c.ControlledAccess)
 		obj.ControlledAccess = &controlled
 	}
 	if c.Name != nil {

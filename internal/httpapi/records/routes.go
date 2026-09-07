@@ -1,7 +1,7 @@
 package records
 
 import (
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -18,7 +18,7 @@ const (
 	RouteBulkOverwrite               = "/index/bulk/overwrite"
 )
 
-func RegisterRoutes(router fiber.Router, objectService *objects.Service) {
+func RegisterRoutes(router fiber.Router, objectService *objectrecords.Service) {
 	router.Get("/", handleInternalListFiber(objectService))
 	router.Get(RouteIndex, handleInternalListFiber(objectService))
 	router.Get(RouteIndexDetail, handleInternalGetFiber(objectService))

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
 func TestPendingMetaLegacyJSON(t *testing.T) {
@@ -23,7 +23,7 @@ func TestPendingMetaLegacyJSON(t *testing.T) {
 		t.Fatalf("insert legacy pending row: %v", err)
 	}
 
-	got, err := db.GetPendingLFSMeta(context.Background(), oid)
+	got, err := db.GetPendingMetadata(context.Background(), oid)
 	if err != nil {
 		t.Fatalf("GetPendingLFSMeta failed: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestPendingMetaCandidateJSONPreservesLegacyLFSShape(t *testing.T) {
 		}},
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := db.SavePendingLFSMeta(context.Background(), []transfers.PendingMetadata{{OID: oid, Candidate: candidate, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}}); err != nil {
+	if err := db.SavePendingMetadata(context.Background(), []transferlfs.PendingMetadata{{OID: oid, Candidate: candidate, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}}); err != nil {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestPendingMetaCandidateJSONPreservesExplicitZeroSize(t *testing.T) {
 	size := int64(0)
 	candidate := objects.Candidate{Size: &size}
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := db.SavePendingLFSMeta(context.Background(), []transfers.PendingMetadata{{OID: oid, Candidate: candidate, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}}); err != nil {
+	if err := db.SavePendingMetadata(context.Background(), []transferlfs.PendingMetadata{{OID: oid, Candidate: candidate, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}}); err != nil {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 

@@ -7,10 +7,11 @@ import (
 	generated "github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
 
-func handleRegisterObjectsFiber(service *objects.Service) fiber.Handler {
+func handleRegisterObjectsFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var body registerObjectsRequest
 		if err := json.Unmarshal(c.Body(), &body); err != nil || len(body.Candidates) == 0 {

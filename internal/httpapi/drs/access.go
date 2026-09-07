@@ -5,12 +5,12 @@ import (
 
 	generated "github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 )
 
-func handleGetAccessURLFiber(objectService *objects.Service, transferService *transfers.Service) fiber.Handler {
+func handleGetAccessURLFiber(objectService *objectrecords.Service, transferService *transfers.Service) fiber.Handler {
 	workflow := transfers.NewAccessWorkflow(objectService, transferService)
 	return func(c fiber.Ctx) error {
 		id := c.Params("object_id")
@@ -27,7 +27,7 @@ func handleGetAccessURLFiber(objectService *objects.Service, transferService *tr
 	}
 }
 
-func handleGetBulkAccessURLFiber(objectService *objects.Service, transferService *transfers.Service) fiber.Handler {
+func handleGetBulkAccessURLFiber(objectService *objectrecords.Service, transferService *transfers.Service) fiber.Handler {
 	workflow := transfers.NewAccessWorkflow(objectService, transferService)
 	return func(c fiber.Ctx) error {
 		var body generated.BulkObjectAccessId

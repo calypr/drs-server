@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
 
@@ -238,7 +238,7 @@ func postgresReplaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, obj *
 		}
 		for _, checksum := range obj.Checksums {
 			typ, value := strings.TrimSpace(checksum.Type), strings.TrimSpace(checksum.Checksum)
-			if typ == "" || value == "" || (objects.NormalizeChecksumType(typ) == "sha256" && sycommon.NormalizeOid(value) != "") {
+			if typ == "" || value == "" || (objects.NormalizeChecksumType(typ) == "sha256" && clienthash.NormalizeOid(value) != "") {
 				continue
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO drs_object_checksum (object_id, type, checksum) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, id, typ, value); err != nil {

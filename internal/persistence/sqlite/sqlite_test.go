@@ -13,9 +13,9 @@ import (
 
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/faults"
-	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 
 	"github.com/calypr/syfon/internal/objects"
@@ -1180,7 +1180,7 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		},
 	}
 
-	if err := db.SavePendingLFSMeta(ctx, []transfers.PendingMetadata{
+	if err := db.SavePendingMetadata(ctx, []transferlfs.PendingMetadata{
 		{
 			OID:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Candidate: candidate,
@@ -1191,7 +1191,7 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	entry, err := db.PopPendingLFSMeta(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	entry, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("PopPendingLFSMeta failed: %v", err)
 	}
@@ -1199,7 +1199,7 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		t.Fatalf("unexpected candidate payload: %+v", entry.Candidate)
 	}
 
-	if _, err := db.PopPendingLFSMeta(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+	if _, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
 		t.Fatalf("expected not found after pop")
 	}
 }
@@ -1219,7 +1219,7 @@ func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 		},
 	}
 
-	if err := db.SavePendingLFSMeta(ctx, []transfers.PendingMetadata{
+	if err := db.SavePendingMetadata(ctx, []transferlfs.PendingMetadata{
 		{
 			OID:       oid,
 			Candidate: candidate,
@@ -1230,7 +1230,7 @@ func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	if _, err := db.PopPendingLFSMeta(ctx, oid); err == nil {
+	if _, err := db.PopPendingMetadata(ctx, oid); err == nil {
 		t.Fatalf("expected not found for expired metadata")
 	}
 }
@@ -1990,7 +1990,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 		},
 	}
 
-	if err := db.SavePendingLFSMeta(ctx, []transfers.PendingMetadata{
+	if err := db.SavePendingMetadata(ctx, []transferlfs.PendingMetadata{
 		{
 			OID:       oid,
 			Candidate: candidate,
@@ -2001,7 +2001,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	got, err := db.GetPendingLFSMeta(ctx, oid)
+	got, err := db.GetPendingMetadata(ctx, oid)
 	if err != nil {
 		t.Fatalf("GetPendingLFSMeta failed: %v", err)
 	}
@@ -2009,7 +2009,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 		t.Fatalf("unexpected pending metadata: %+v", got)
 	}
 
-	_, err = db.GetPendingLFSMeta(ctx, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+	_, err = db.GetPendingMetadata(ctx, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
 	if !errors.Is(err, faults.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing pending metadata, got: %v", err)
 	}

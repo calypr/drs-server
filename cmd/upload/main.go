@@ -17,7 +17,8 @@ import (
 	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/calypr/syfon/cmd/transferprogress"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	intobjects "github.com/calypr/syfon/internal/objects"
 	"github.com/spf13/cobra"
 )
@@ -83,13 +84,13 @@ var Cmd = &cobra.Command{
 			return err
 		}
 		name := filepath.Base(srcPath)
-		authzMap := syfoncommon.AuthzMapFromScope(org, project)
+		authzMap := clientaccess.AuthzMapFromScope(org, project)
 		did := strings.TrimSpace(uploadDID)
 		if did == "" {
 			if project == "" {
 				return fmt.Errorf("--project is required when --did is omitted")
 			}
-			minted, mintErr := intobjects.MintRecordIDFromChecksum(checksum, syfoncommon.AuthzMapToControlledAccess(authzMap))
+			minted, mintErr := intobjects.MintRecordIDFromChecksum(checksum, clientaccess.AuthzMapToControlledAccess(authzMap))
 			if mintErr != nil {
 				return mintErr
 			}
@@ -107,7 +108,7 @@ var Cmd = &cobra.Command{
 			AccessMethods: &[]drsapi.AccessMethod{am},
 		}
 		if authzMap != nil {
-			controlled := syfoncommon.AuthzMapToControlledAccess(authzMap)
+			controlled := clientaccess.AuthzMapToControlledAccess(authzMap)
 			drsObj.ControlledAccess = &controlled
 		}
 		overwriteWarning, err := ensureWritableDID(ctx, c.DRS(), did, uploadOverwrite)
@@ -193,11 +194,11 @@ func ensureWritableDID(ctx context.Context, drs didReplacer, did string, overwri
 func resolveUploadBucketForScope(buckets bucketapi.BucketsResponse, org, project string) (string, error) {
 	org = strings.TrimSpace(org)
 	project = strings.TrimSpace(project)
-	scope, err := syfoncommon.ResourcePath(org, project)
+	scope, err := clientaccess.ResourcePath(org, project)
 	if err != nil {
 		return "", err
 	}
-	orgScope, err := syfoncommon.ResourcePath(org, "")
+	orgScope, err := clientaccess.ResourcePath(org, "")
 	if err != nil {
 		return "", err
 	}
@@ -248,7 +249,7 @@ func normalizedBucketPrograms(meta bucketapi.BucketMetadata) []string {
 	if meta.Programs == nil {
 		return nil
 	}
-	return syfoncommon.NormalizeAccessResources(*meta.Programs)
+	return clientaccess.NormalizeAccessResources(*meta.Programs)
 }
 
 func uniqueStrings(values []string) []string {

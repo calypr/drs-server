@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
-	postgresdb "github.com/calypr/syfon/internal/persistence/postgres"
-
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	postgresdb "github.com/calypr/syfon/internal/persistence/postgres"
 )
 
 func TestPostgresBulkOverwriteObjects(t *testing.T) {
@@ -22,7 +22,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 		t.Fatalf("open postgres test database: %v", err)
 	}
 
-	resource, err := sycommon.ResourcePath("ci-overwrite", "project")
+	resource, err := clientaccess.ResourcePath("ci-overwrite", "project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	}
 
 	newName := "new"
-	service := objects.NewService(objects.Dependencies{
+	service := objectrecords.NewService(objectrecords.Dependencies{
 		Reader:        db,
 		Writer:        db,
 		AccessMethods: db,

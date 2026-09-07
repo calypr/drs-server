@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
@@ -218,9 +218,9 @@ func objectAccessResources(obj *objects.Record) []string {
 		return nil
 	}
 	if obj.ControlledAccess != nil {
-		return sycommon.NormalizeAccessResources(*obj.ControlledAccess)
+		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return sycommon.AuthzMapToList(obj.Authorizations)
+	return clientaccess.AuthzMapToList(obj.Authorizations)
 }
 
 func normalizeObjectNameAliases(obj *objects.Record) []string {
@@ -247,7 +247,7 @@ func (db *PostgresDB) controlledAccessForObject(ctx context.Context, objectID st
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return sycommon.NormalizeAccessResources(resources), nil
+	return clientaccess.NormalizeAccessResources(resources), nil
 }
 
 func (db *PostgresDB) nameAliasesForObject(ctx context.Context, objectID string) ([]string, error) {
@@ -307,12 +307,12 @@ func (db *PostgresDB) attachControlledAccess(ctx context.Context, objectsByID ma
 		if !ok {
 			continue
 		}
-		controlled := sycommon.NormalizeAccessResources(resources)
+		controlled := clientaccess.NormalizeAccessResources(resources)
 		if len(controlled) == 0 {
 			continue
 		}
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = sycommon.ControlledAccessToAuthzMap(controlled)
+		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	return nil
 }

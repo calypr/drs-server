@@ -2,10 +2,8 @@ package transfers
 
 import (
 	"context"
-	"time"
 
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -30,20 +28,6 @@ type CredentialReader interface {
 	ListS3Credentials(context.Context) ([]buckets.Credential, error)
 }
 
-type PendingMetadata struct {
-	OID       string
-	Candidate objects.Candidate
-	CreatedAt time.Time
-	ExpiresAt time.Time
-}
-
-// PendingStore persists staged LFS metadata and provides atomic consumption.
-type PendingStore interface {
-	SavePendingLFSMeta(ctx context.Context, entries []PendingMetadata) error
-	GetPendingLFSMeta(ctx context.Context, oid string) (*PendingMetadata, error)
-	PopPendingLFSMeta(ctx context.Context, oid string) (*PendingMetadata, error)
-}
-
 type EventRecorder interface {
 	RecordTransferAttributionEvents(ctx context.Context, events []usage.Event) error
 }
@@ -56,6 +40,5 @@ type Dependencies struct {
 	Multipart   MultipartPort
 	Scopes      ScopeReader
 	Credentials CredentialReader
-	Pending     PendingStore
 	Events      EventRecorder
 }

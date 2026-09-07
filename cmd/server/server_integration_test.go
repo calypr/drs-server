@@ -13,17 +13,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v3"
-
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/credentialcipher"
 	"github.com/calypr/syfon/internal/httpapi"
-	"github.com/calypr/syfon/internal/maintenance/projectstorage"
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
+	"github.com/gofiber/fiber/v3"
 )
 
 var (
@@ -140,15 +139,16 @@ s3_credentials:
 	}
 	invalidator.manager = storageManager
 	app := fiber.New()
-	objectService := objects.NewService(backend.objectDependencies)
+	objectService := objectrecords.NewService(backend.objectDependencies)
 	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Access: storageManager, Multipart: storageManager, Scopes: bucketService, Credentials: bucketService,
-		Pending: backend.pending, Events: backend.usageIngest,
+		Events: backend.usageIngest,
 	})
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{Scopes: bucketService, Credentials: bucketService, Visibility: bucketService, Inventory: storageManager, Probe: storageManager, Delete: storageManager, Physical: objectService, CleanupObjects: objectService, CleanupScopes: bucketService})
 	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
+		LFSPending:       backend.pending,
 		Objects:          objectService,
 		Transfers:        transferService,
 		UsageIngest:      backend.usageIngest,

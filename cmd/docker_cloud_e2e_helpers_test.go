@@ -16,7 +16,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/drs"
 	syclient "github.com/calypr/syfon/client"
-	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 )
 
 type providerServerConfig struct {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/google/uuid"
 )
@@ -28,13 +28,13 @@ func normalizeSHA256Checksum(raw string) string {
 }
 
 func canonicalProjectScope(authz []string) (string, error) {
-	normalized := syfoncommon.NormalizeAccessResources(authz)
+	normalized := clientaccess.NormalizeAccessResources(authz)
 	if len(normalized) == 0 {
 		return "", fmt.Errorf("%w: project scope is required when object id is not provided", faults.ErrInvalidInput)
 	}
 	projectScopes := make([]string, 0, len(normalized))
 	for _, resource := range normalized {
-		org, project, ok := syfoncommon.ResourceScope(resource)
+		org, project, ok := clientaccess.ResourceScope(resource)
 		if !ok || strings.TrimSpace(org) == "" || strings.TrimSpace(project) == "" {
 			continue
 		}

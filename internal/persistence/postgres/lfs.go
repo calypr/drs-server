@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
-func (db *PostgresDB) SavePendingLFSMeta(ctx context.Context, entries []transfers.PendingMetadata) error {
+func (db *PostgresDB) SavePendingMetadata(ctx context.Context, entries []transferlfs.PendingMetadata) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -46,7 +46,7 @@ func (db *PostgresDB) SavePendingLFSMeta(ctx context.Context, entries []transfer
 	return tx.Commit()
 }
 
-func (db *PostgresDB) GetPendingLFSMeta(ctx context.Context, oid string) (*transfers.PendingMetadata, error) {
+func (db *PostgresDB) GetPendingMetadata(ctx context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	// Housekeeping (optional here but good for safety)
 	if _, err := db.db.ExecContext(ctx, "DELETE FROM lfs_pending_metadata WHERE expires_time <= $1", time.Now().UTC()); err != nil {
 		return nil, fmt.Errorf("failed to prune expired pending metadata: %w", err)
@@ -72,7 +72,7 @@ func (db *PostgresDB) GetPendingLFSMeta(ctx context.Context, oid string) (*trans
 		return nil, fmt.Errorf("failed to unmarshal candidate: %w", err)
 	}
 
-	return &transfers.PendingMetadata{
+	return &transferlfs.PendingMetadata{
 		OID:       oid,
 		Candidate: candidate,
 		CreatedAt: createdAt,
@@ -80,7 +80,7 @@ func (db *PostgresDB) GetPendingLFSMeta(ctx context.Context, oid string) (*trans
 	}, nil
 }
 
-func (db *PostgresDB) PopPendingLFSMeta(ctx context.Context, oid string) (*transfers.PendingMetadata, error) {
+func (db *PostgresDB) PopPendingMetadata(ctx context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func (db *PostgresDB) PopPendingLFSMeta(ctx context.Context, oid string) (*trans
 		return nil, fmt.Errorf("failed to unmarshal candidate: %w", err)
 	}
 
-	return &transfers.PendingMetadata{
+	return &transferlfs.PendingMetadata{
 		OID:       oid,
 		Candidate: candidate,
 		CreatedAt: createdAt,

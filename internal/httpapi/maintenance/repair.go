@@ -4,12 +4,12 @@ import (
 	"context"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/maintenance/scoperepair"
+	"github.com/calypr/syfon/internal/objects/scoperepair"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -17,7 +17,7 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 	if !access.IsAuthzEnforced(ctx) {
 		return nil
 	}
-	resource, err := sycommon.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return err
 	}

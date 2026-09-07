@@ -7,6 +7,7 @@ import (
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -42,7 +43,7 @@ func handleUploadRequestFiber() fiber.Handler {
 	}
 }
 
-func handleDeleteObjectFiber(service *objects.Service) fiber.Handler {
+func handleDeleteObjectFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		id := c.Params("object_id")
 		var body generated.DeleteRequest
@@ -51,7 +52,7 @@ func handleDeleteObjectFiber(service *objects.Service) fiber.Handler {
 				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
 			}
 		}
-		opts := objects.DeleteOptions{
+		opts := objectrecords.DeleteOptions{
 			DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 		}
 		if err := service.DeleteObjectWithOptions(c.Context(), id, opts); err != nil {
@@ -61,7 +62,7 @@ func handleDeleteObjectFiber(service *objects.Service) fiber.Handler {
 	}
 }
 
-func handleUpdateAccessMethodsFiber(service *objects.Service) fiber.Handler {
+func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		objectID := strings.TrimSpace(c.Params("object_id"))
 		if objectID != "" {
@@ -113,7 +114,7 @@ func handleUpdateAccessMethodsFiber(service *objects.Service) fiber.Handler {
 	}
 }
 
-func handleBulkDeleteObjectsFiber(service *objects.Service) fiber.Handler {
+func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var body generated.BulkDeleteRequest
 		if err := c.Bind().JSON(&body); err != nil {
@@ -137,7 +138,7 @@ func handleBulkDeleteObjectsFiber(service *objects.Service) fiber.Handler {
 			ids = append(ids, id)
 		}
 
-		opts := objects.DeleteOptions{
+		opts := objectrecords.DeleteOptions{
 			DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 		}
 		if err := service.BulkDeleteObjectsWithOptions(c.Context(), ids, opts); err != nil {

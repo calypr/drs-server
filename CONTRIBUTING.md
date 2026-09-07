@@ -1,148 +1,75 @@
-# Contributing to `syfon`
+# Contributing to Syfon
 
-Thank you for your interest in contributing to `syfon`, a lightweight reference implementation of a GA4GH Data Repository Service (DRS) server in Go.
+Syfon is a Go DRS server with a separate client module and generated OpenAPI modules. Keep changes small, testable, and aligned with the [current documentation](docs/index.md).
 
-This document outlines how to set up your environment, make changes, and submit them.
+## Set up a checkout
 
-## Project overview
-
-`syfon`:
-
-* Implements a GA4GH DRS\-compatible HTTP API in Go.
-* Uses the official GA4GH DRS OpenAPI spec via a Git submodule at `ga4gh/data-repository-service-schemas`.
-* Generates server stubs into `apigen` from that OpenAPI spec.
-
-## Getting started
-
-### Fork and clone
-
-1. Fork the repository on GitHub.
-2. Clone your fork:
-
-   ```bash
-   git clone git@github.com:<you>/syfon.git
-   cd syfon
-   ```
-
-3. Initialize submodules:
-
-   ```bash
-   git submodule update --init --recursive
-   ```
-
-### Branching
-
-Create a feature branch off `main`:
+Install the Go version declared in `go.mod`, then clone the repository and initialize its schema submodule:
 
 ```bash
-git checkout -b feature/<short-description>
+git clone https://github.com/calypr/syfon.git
+cd syfon
+git submodule update --init --recursive
 ```
 
-Use short, descriptive names, e.g. `feature/add-service-info`, `fix/healthz-handler`.
-
-## Development workflow
-
-See QUICKSTART.md for details on common tasks.
-
-### Updating the OpenAPI spec
-
-If your change requires a newer DRS spec:
+Create a branch from the repository's default branch:
 
 ```bash
-cd ga4gh/data-repository-service-schemas
-git fetch origin
-git checkout <tag-or-branch>
-cd -
-git add ga4gh/data-repository-service-schemas
-git commit -m "Update DRS schemas to <tag-or-branch>"
+git switch -c fix/short-description
 ```
 
-Then regenerate:
+## Build and test
+
+Run the focused checks while you work:
+
+```bash
+make build
+make test-unit
+```
+
+Build output goes to `bin/syfon`. Use `bin/syfon serve --config <file>` to run the server from the checkout. `make test` runs the ungated Go package tests across the root, client, and `apigen` modules. Docker-backed CLI tests skip unless `SYFON_E2E_DOCKER=1`; run them with the command in [`tests/README.md`](tests/README.md). The Calypr kind tests and installer tests use the separate commands listed there.
+
+Build the bundled authentication examples when you need to exercise plugin startup:
+
+```bash
+make build-plugins
+```
+
+See [Plugin integration](docs/plugins.md) for the contract and the limits of the example Gen3 plugin.
+
+## Change API schemas
+
+The canonical GA4GH schema is the `data-repository-service-schemas` submodule. Local contracts live under `apigen/openapi/`. Run code generation after changing either source:
 
 ```bash
 make gen
 ```
 
-Commit both the submodule update and any generated code.
+Commit the input changes and the generated output together. Do not edit files under `apigen/client` or `apigen/server` by hand. Read the [OpenAPI code-generation guide](docs/operator-guide-code-generation.md) for the generated package layout and runtime serving path.
 
-## Coding guidelines
+## Migrate root-module imports
 
-### Go style
+The root package `github.com/calypr/syfon/common` was removed intentionally. Move access-resource helpers to `github.com/calypr/syfon/client/access` and move `NormalizeOid` and `NormalizeChecksum` to `github.com/calypr/syfon/client/hash`. Exported names and signatures remain unchanged, and the existing client API remains unchanged. Update old root imports before upgrading. Because the root module is pre-1.0, treat this import removal as a breaking minor release.
 
-* Follow standard Go conventions (`gofmt`, idiomatic naming).
-* Keep handlers and business logic small and testable.
-* Prefer composition over inheritance\-like patterns.
+## Write code and docs
 
-Before committing, run:
+Format Go code with `gofmt`. Keep HTTP adapters, authorization, storage, and persistence concerns in their owning packages. Add tests with the package that owns the behavior.
 
-```bash
-gofmt -w ./cmd ./internal
-go test ./...
-```
+Update `docs/` or the root README when a public command, configuration field, endpoint, or deployment workflow changes. Keep examples executable and use `bin/syfon` for commands built from a checkout.
 
-### Generated code
-
-* Do not manually edit files under `apigen`.
-* Regenerate using `make gen` when the OpenAPI spec changes.
-* Commit the regenerated files along with the spec or handler changes.
-
-#### Generated code policy (`apigen/`)
-
-This repository keeps generated sources in version control.
-
-* Generated files in `apigen/` **must be committed** with the PR that changes generation inputs.
-* Regenerate `apigen/` when any of the following change:
-  * OpenAPI documents under `apigen/openapi/`
-  * Generator config/templates used by `make gen`
-  * GA4GH schema submodule updates that affect generated output
-* PRs that change generation inputs should include:
-  * the input change
-  * regenerated `apigen/` output
-  * a short note in the PR description that codegen was run
-* Generated files should include a `// GENERATED` header (or equivalent generator banner) so they are clearly machine-generated.
-
-Regeneration command:
+Build the documentation before opening a pull request:
 
 ```bash
-make gen
+make docs
 ```
 
-## Testing
+## Open a pull request
 
-* Add or update tests alongside your changes.
-* Ensure `make test` passes before opening a pull request.
-* For new endpoints or behaviors, include tests that cover both success and error paths.
+Before you open a pull request:
 
-## Documentation
+1. Run the focused tests for changed packages.
+2. Run `make test` when the change crosses package or route boundaries.
+3. Run `make docs` when you change documentation or navigation.
+4. Describe behavior changes, migration steps, and any checks you could not run.
 
-> 🧪🧪🧪🧪 Update the docs/
-
-* Update `README.md` or docs (served via `make mkdocs`) when public behavior or endpoints change.
-* Keep examples minimal, accurate, and aligned with the DRS spec.
-
-## Submitting changes
-
-1. Ensure your branch is up to date with `main`.
-2. Run:
-
-   ```bash
-   make test
-   ```
-
-3. Push your branch:
-
-   ```bash
-   git push -u origin feature/<short-description>
-   ```
-
-4. Open a pull request against the upstream `main` branch.
-5. In the PR description, explain:
-    * What changed.
-    * Why it is needed.
-    * Any implications for API, configuration, or deployment.
-
-Address review feedback with additional commits; avoid force\-pushing unless requested.
-
-## License and contribution terms
-
-By contributing to this repository, you agree that your contributions will be licensed under the terms of the project license described in `LICENSE`.
+Do not include credentials, generated local databases, build output, or secrets in a pull request.

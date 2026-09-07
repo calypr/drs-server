@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/server/metricsapi"
-	sycommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/usage"
@@ -92,7 +93,7 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 }
 
 func providerTransferResource(organization, project string) (string, bool) {
-	resource, err := sycommon.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
+	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil || strings.TrimSpace(resource) == "" {
 		return "", false
 	}

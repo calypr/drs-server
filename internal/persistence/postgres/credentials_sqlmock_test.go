@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/DATA-DOG/go-sqlmock"

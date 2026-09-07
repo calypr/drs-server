@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
@@ -126,7 +126,7 @@ retryLookup:
 	}
 	if len(controlled) > 0 {
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = sycommon.ControlledAccessToAuthzMap(controlled)
+		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	obj.PublicRead, obj.PublicReadPolicyKnown, err = db.publicReadForObject(ctx, lookupID, len(controlled) == 0)
 	if err != nil {
@@ -261,7 +261,7 @@ func (db *PostgresDB) ListScopedObjectIDsByChecksums(ctx context.Context, organi
 	if organization == "" || project == "" || len(checksums) == 0 {
 		return map[string][]string{}, nil
 	}
-	resource, err := sycommon.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +352,7 @@ func (db *PostgresDB) ListObjectIDsByScope(ctx context.Context, organization, pr
 		err  error
 	)
 	if project != "" {
-		resource, err := sycommon.ResourcePath(organization, project)
+		resource, err := clientaccess.ResourcePath(organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -445,7 +445,7 @@ func (db *PostgresDB) ListObjectIDsPageByScope(ctx context.Context, organization
 }
 
 func (db *PostgresDB) ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
 		return []string{}, nil
 	}
@@ -488,7 +488,7 @@ func (db *PostgresDB) ListObjectIDsByResources(ctx context.Context, resources []
 }
 
 func (db *PostgresDB) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	startAfter = strings.TrimSpace(startAfter)
 	if limit <= 0 || (len(resources) == 0 && !includeUnscoped) {
 		return []string{}, nil
@@ -561,7 +561,7 @@ func (db *PostgresDB) ListObjectIDsByScopeAndResources(ctx context.Context, orga
 			WHERE ca_scope.object_id = o.id AND ` + postgresRebindQuestionPlaceholders(scopeCondition, 1) + `
 		)`
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 {
 			return []string{}, nil
 		}
@@ -610,7 +610,7 @@ func (db *PostgresDB) ListObjectIDsByChecksumsAndResources(ctx context.Context, 
 		FROM matched m
 		INNER JOIN drs_object o ON o.id = m.object_id`
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return map[string][]string{}, nil
 		}
@@ -668,7 +668,7 @@ func (db *PostgresDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, org
 		)`)
 	}
 	if restrictToResources {
-		resources = sycommon.NormalizeAccessResources(resources)
+		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return []string{}, nil
 		}
@@ -715,7 +715,7 @@ func (db *PostgresDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, org
 }
 
 func postgresScopeResourceCondition(column, organization, project string) (string, []any, error) {
-	resource, err := sycommon.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return "", nil, err
 	}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -112,7 +112,7 @@ retryLookup:
 	}
 	if len(controlled) > 0 {
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = sycommon.ControlledAccessToAuthzMap(controlled)
+		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	obj.PublicRead, obj.PublicReadPolicyKnown, err = db.publicReadForObject(ctx, lookupID, len(controlled) == 0)
 	if err != nil {
@@ -355,9 +355,9 @@ func objectAccessResources(obj *objects.Record) []string {
 		return nil
 	}
 	if obj.ControlledAccess != nil {
-		return sycommon.NormalizeAccessResources(*obj.ControlledAccess)
+		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return sycommon.AuthzMapToList(obj.Authorizations)
+	return clientaccess.AuthzMapToList(obj.Authorizations)
 }
 
 func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
@@ -386,7 +386,7 @@ func (db *SqliteDB) controlledAccessForObject(ctx context.Context, objectID stri
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return sycommon.NormalizeAccessResources(resources), nil
+	return clientaccess.NormalizeAccessResources(resources), nil
 }
 
 func (db *SqliteDB) nameAliasesForObject(ctx context.Context, objectID string) ([]string, error) {
@@ -447,12 +447,12 @@ func (db *SqliteDB) attachControlledAccess(ctx context.Context, objectsByID map[
 		if !ok {
 			continue
 		}
-		controlled := sycommon.NormalizeAccessResources(resources)
+		controlled := clientaccess.NormalizeAccessResources(resources)
 		if len(controlled) == 0 {
 			continue
 		}
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = sycommon.ControlledAccessToAuthzMap(controlled)
+		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	return nil
 }

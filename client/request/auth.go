@@ -25,26 +25,41 @@ type accessTokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
+type authRequestContextKey struct{}
+
+type authRequestContext struct {
+	skipAuth     bool
+	explicitAuth bool
+}
+
 func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 	if t.Mode != AuthModeBearer {
 		return nil
 	}
-	if t.Cred == nil || t.Cred.APIKey == "" {
+	t.mu.RLock()
+	cred := t.Cred
+	apiKey := ""
+	apiEndpoint := ""
+	if cred != nil {
+		apiKey = cred.APIKey
+		apiEndpoint = strings.TrimSpace(cred.APIEndpoint)
+	}
+	t.mu.RUnlock()
+	if cred == nil || apiKey == "" {
 		return errors.New("APIKey is required to refresh access token")
 	}
-	if strings.TrimSpace(t.Cred.APIEndpoint) == "" {
+	if apiEndpoint == "" {
 		return errors.New("APIEndpoint is required to refresh access token")
 	}
 
 	refreshClient := &http.Client{Transport: t.Base}
-	// ... (rest of NewAccessToken implementation)
-	payload := map[string]string{"api_key": t.Cred.APIKey}
+	payload := map[string]string{"api_key": apiKey}
 	reader, err := common.ToJSONReader(payload)
 	if err != nil {
 		return err
 	}
 
-	refreshUrl := t.Cred.APIEndpoint + common.DataAccessTokenEndpoint
+	refreshUrl := strings.TrimRight(apiEndpoint, "/") + common.DataAccessTokenEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refreshUrl, reader)
 	if err != nil {
 		return err
@@ -73,11 +88,19 @@ func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return err
 	}
+	if strings.TrimSpace(result.AccessToken) == "" {
+		return errors.New("refresh response missing access_token")
+	}
 
 	t.mu.Lock()
-	t.Cred.AccessToken = result.AccessToken
+	previousToken := t.Cred.AccessToken
+	t.Cred.AccessToken = strings.TrimSpace(result.AccessToken)
 	if t.Manager != nil {
-		t.Manager.Save(t.Cred)
+		if err := t.Manager.Save(t.Cred); err != nil {
+			t.Cred.AccessToken = previousToken
+			t.mu.Unlock()
+			return fmt.Errorf("save refreshed access token: %w", err)
+		}
 	}
 	t.mu.Unlock()
 	return nil
@@ -93,7 +116,8 @@ type AuthTransport struct {
 }
 
 func (t *AuthTransport) apply(req *http.Request) {
-	if req.Header.Get("X-Skip-Auth") == "true" {
+	skipAuth := req.Header.Get("X-Skip-Auth") == "true"
+	if skipAuth {
 		req.Header.Del("X-Skip-Auth")
 		return
 	}
@@ -120,29 +144,36 @@ func (t *AuthTransport) apply(req *http.Request) {
 }
 
 func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	t.apply(req)
-	return t.Base.RoundTrip(req)
+	if req == nil {
+		return nil, errors.New("nil request")
+	}
+	clone := req.Clone(req.Context())
+	clone = clone.WithContext(context.WithValue(clone.Context(), authRequestContextKey{}, authRequestContext{
+		skipAuth:     req.Header.Get("X-Skip-Auth") == "true",
+		explicitAuth: req.Header.Get("Authorization") != "",
+	}))
+	t.apply(clone)
+	return t.Base.RoundTrip(clone)
 }
 
-func (t *AuthTransport) refreshOnce(ctx context.Context) error {
+func (t *AuthTransport) refreshIfCurrent(ctx context.Context, rejectedToken string) error {
 	if t.Mode != AuthModeBearer {
-		return nil
-	}
-	if t.Cred == nil {
-		return nil
-	}
-	if strings.TrimSpace(t.Cred.APIEndpoint) == "" {
 		return nil
 	}
 	t.refreshMu.Lock()
 	defer t.refreshMu.Unlock()
 
 	t.mu.RLock()
-	if t.Cred.AccessToken != "" {
+	if t.Cred == nil {
 		t.mu.RUnlock()
 		return nil
 	}
+	currentToken := strings.TrimSpace(t.Cred.AccessToken)
+	apiEndpoint := strings.TrimSpace(t.Cred.APIEndpoint)
 	t.mu.RUnlock()
+	if apiEndpoint == "" || currentToken != rejectedToken {
+		return nil
+	}
 
 	return t.NewAccessToken(ctx)
 }

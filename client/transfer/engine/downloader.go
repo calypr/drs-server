@@ -272,7 +272,3 @@ func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, d
 
 	return nil
 }
-
-
-
-

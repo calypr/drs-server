@@ -3,13 +3,13 @@ package access
 import (
 	"context"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 // ResourcePath returns the canonical resource path for an organization and
 // optional project scope.
 func ResourcePath(organization, project string) (string, error) {
-	return sycommon.ResourcePath(organization, project)
+	return clientaccess.ResourcePath(organization, project)
 }
 
 // AuthorizedResources returns resources for which the current session has the
@@ -18,7 +18,7 @@ func ResourcePath(organization, project string) (string, error) {
 func AuthorizedResources(ctx context.Context, method string) []string {
 	privileges := GetUserPrivileges(ctx)
 	if len(privileges) == 0 {
-		return sycommon.NormalizeAccessResources(GetUserAuthz(ctx))
+		return clientaccess.NormalizeAccessResources(GetUserAuthz(ctx))
 	}
 	resources := make([]string, 0, len(privileges))
 	for resource, methods := range privileges {
@@ -26,5 +26,5 @@ func AuthorizedResources(ctx context.Context, method string) []string {
 			resources = append(resources, resource)
 		}
 	}
-	return sycommon.NormalizeAccessResources(resources)
+	return clientaccess.NormalizeAccessResources(resources)
 }

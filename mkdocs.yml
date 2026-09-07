@@ -45,14 +45,11 @@ nav:
   - Kubernetes Deployment: kubernetes-deployment.md
   - Configuration: configuration.md
   - Encryption: encryption.md
-  - Deployment: deployment.md
   - Troubleshooting: troubleshooting.md
-  - Code Generation: operator-guide-code-generation.md
+  - Operations:
+    - Transfer Metrics: access-grants-transfer-metrics.md
+    - Plugin Integration: plugins.md
+    - Code Generation: operator-guide-code-generation.md
   - Advanced:
-    - Multi-Cloud Multipart Downloads: multi-cloud-multipart.md
+    - Ranged Downloads: multi-cloud-multipart.md
     - apigen Module Release: apigen-module-release.md
-  - Architecture Decisions:
-    - Internal vs GA4GH DRS API: adr-internal-vs-ga4gh-drs.md
-    - One-Time Bootstrap Claim: adr-one-time-program-bootstrap-claim.md
-    - OpenAPI Generation vs Middleware Boundaries: adr-openapi-generation-and-middleware-boundaries.md
-    - Oapi + Gin Big-Bang Migration: adr-oapi-gin-bigbang-migration.md

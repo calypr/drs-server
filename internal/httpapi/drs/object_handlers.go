@@ -3,11 +3,11 @@ package drs
 import (
 	generated "github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/internal/httpapi/response"
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
 
-func handleGetObjectFiber(service *objects.Service) fiber.Handler {
+func handleGetObjectFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		id := c.Params("object_id")
 		obj, err := service.GetObject(c.Context(), id, "")
@@ -18,7 +18,7 @@ func handleGetObjectFiber(service *objects.Service) fiber.Handler {
 	}
 }
 
-func handleGetBulkObjectsFiber(service *objects.Service) fiber.Handler {
+func handleGetBulkObjectsFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var body struct {
 			BulkObjectIds []string `json:"bulk_object_ids"`
@@ -47,7 +47,7 @@ func handleGetBulkObjectsFiber(service *objects.Service) fiber.Handler {
 	}
 }
 
-func handleGetObjectsByChecksumFiber(service *objects.Service) fiber.Handler {
+func handleGetObjectsByChecksumFiber(service *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		checksum := c.Params("checksum")
 		fetched, err := service.GetObjectsByChecksum(c.Context(), checksum, "")

@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -18,9 +19,9 @@ import (
 
 // Test CRIT-1 fix: Issuer allowlist validation
 func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
-	oldTransport := http.DefaultTransport
-	http.DefaultTransport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	defer func() { http.DefaultTransport = oldTransport }()
+	verifier := newTokenVerifierWithHTTPClient(&http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+	})
 
 	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -129,7 +130,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 				"iss": tt.issuerClaim,
 				"exp": tt.expUnix,
 			})
-			endpoint, exp, parseErr := parseToken(tokenString)
+			endpoint, exp, parseErr := verifier.parseToken(context.Background(), tokenString)
 
 			if tt.wantErr {
 				if parseErr == nil {
@@ -169,7 +170,7 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 			"exp": int64(1893456000),
 		})
 
-		endpoint, exp, parseErr := parseToken(tokenString)
+		endpoint, exp, parseErr := verifier.parseToken(context.Background(), tokenString)
 		if parseErr == nil {
 			t.Fatalf("expected error for malformed iss, got nil")
 		}

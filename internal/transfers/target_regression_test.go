@@ -8,6 +8,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 )
 
@@ -216,7 +217,7 @@ func TestMergedContentPreservesReplicaLocation(t *testing.T) {
 	if err != nil || single != "signed:"+original {
 		t.Fatalf("single project changed replica: %q (%v)", single, err)
 	}
-	objectService := objects.NewService(objects.Dependencies{Content: staticContentReader{records: objs}})
+	objectService := objectrecords.NewService(objectrecords.Dependencies{Content: staticContentReader{records: objs}})
 	view, err := objectService.GetCanonicalContent(context.Background(), objs[0].Checksums[0].Checksum, "")
 	if err != nil {
 		t.Fatal(err)

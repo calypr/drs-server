@@ -1,182 +1,73 @@
 <div align="center">
-  <img src="docs/images/syfon-logo.png" alt="syfon logo" width="520" />
+  <img src="docs/images/syfon-logo.png" alt="Syfon" width="520" />
   <br><br>
-  <a href="https://pkg.go.dev/github.com/calypr/syfon"><img src="https://pkg.go.dev/badge/github.com/calypr/syfon.svg" alt="Go Reference"></a>
-  <a href="https://goreportcard.com/report/github.com/calypr/syfon"><img src="https://goreportcard.com/badge/github.com/calypr/syfon" alt="Go Report Card"></a>
-  <a href="https://github.com/calypr/syfon/actions/workflows/ci.yaml"><img src="https://github.com/calypr/syfon/actions/workflows/ci.yaml/badge.svg" alt="CI"></a>
+  <a href="https://pkg.go.dev/github.com/calypr/syfon/client"><img src="https://pkg.go.dev/badge/github.com/calypr/syfon/client.svg" alt="Go Client Reference"></a>
+  <a href="https://calypr.org/syfon/"><img src="https://img.shields.io/badge/docs-online-blue" alt="Documentation"></a>
+  <a href="https://github.com/calypr/syfon/actions/workflows/ci.yaml"><img src="https://github.com/calypr/syfon/actions/workflows/ci.yaml/badge.svg?branch=development" alt="CI"></a>
   <a href="https://app.codecov.io/gh/calypr/syfon/tree/development"><img src="https://codecov.io/gh/calypr/syfon/branch/development/graph/badge.svg?flag=root" alt="Server Coverage"></a>
   <a href="https://app.codecov.io/gh/calypr/syfon/tree/development"><img src="https://codecov.io/gh/calypr/syfon/branch/development/graph/badge.svg?flag=client" alt="Client Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
   <a href="https://github.com/calypr/syfon/releases"><img src="https://img.shields.io/github/v/release/calypr/syfon" alt="Latest Release"></a>
-  <br><br>
-  <p align="center">A lightweight, production-grade implementation of a GA4GH Data Repository Service (DRS) server in Go.</p>
 </div>
 
-# Quickstart
+# Syfon
 
-## 1. Install Syfon
+Syfon is a [GA4GH Data Repository Service (DRS)](https://ga4gh.github.io/data-repository-service-schemas/) in Go for indexing, authorizing access to, and transferring data across object stores, with a CLI and Go client SDK.
+
+**[Quick Start](docs/quickstart.md) · [Documentation](https://calypr.org/syfon/) · [Go Client SDK](https://pkg.go.dev/github.com/calypr/syfon/client) · [Releases](https://github.com/calypr/syfon/releases)**
+
+| Capability | Support |
+| --- | --- |
+| Metadata and discovery | GA4GH DRS object records and access methods, plus scoped indexing and listing |
+| Storage | S3 and S3-compatible services, Google Cloud Storage, Azure Blob Storage, and local files |
+| Transfers | Short-lived cloud access URLs, multipart uploads, and ranged downloads |
+| Authentication | Local Basic Auth or Gen3 bearer tokens with scoped authorization |
+| Metadata database | SQLite for local deployments; PostgreSQL for Gen3 deployments |
+| Clients | Command-line tools and a [Go SDK](client) for uploads, downloads, and metadata operations |
+
+## Architecture
+
+Syfon checks access, manages object metadata, and coordinates storage operations. For cloud transfers, it returns short-lived signed URLs so the client can upload or download directly from the storage provider.
+
+```mermaid
+flowchart LR
+    client["CLI / Go client SDK"]
+    syfon["Syfon<br/>DRS and transfer APIs"]
+    auth["Authentication and authorization<br/>Local Basic Auth or Gen3 / Fence"]
+    database[("Metadata database<br/>SQLite or PostgreSQL")]
+    storage["Cloud storage providers<br/>S3 / Google Cloud Storage / Azure Blob"]
+
+    client -->|Authenticated API requests| syfon
+    syfon -->|Metadata and access URLs| client
+    syfon <-->|Identity and permissions| auth
+    syfon <-->|Object metadata| database
+    syfon -->|Storage operations| storage
+    client <-->|Signed HTTPS uploads and downloads| storage
+```
+
+Cloud credentials stay on the server. The local file provider returns filesystem paths and requires the client to have access to the same files.
+
+## Install
+
+Install the published command with:
 
 ```bash
 curl -sSL https://calypr.org/syfon/install.sh | bash
 ```
 
-## 2. Start S3 (e.g. MinIO)
-
-```sh
-docker run --name minio --rm -p 9000:9000 \
-  -e MINIO_ROOT_USER=example-user \
-  -e MINIO_ROOT_PASSWORD=example-pass \
-  quay.io/minio/minio server /tmp
-```
-
-## 3. Start Syfon Server
-
-<details><summary><code>local.yaml</code></summary>
-
-```yaml
-port: 8080
-auth:
-  mode: local
-  basic:
-    username: "drs-user"
-    password: "drs-pass"
-database:
-  sqlite:
-    file: "drs_local.db"
-s3_credentials:
-  - bucket: "local-bucket"
-    region: "us-east-1"
-    access_key: "example-user"
-    secret_key: "example-pass"
-    endpoint: "http://localhost:9000"
-```
-
-</details>
+To build from a checkout:
 
 ```bash
-syfon serve --config local.yaml
+make build
+bin/syfon version
 ```
 
-Smoke test:
+The build writes `bin/syfon`. An installed binary is named `syfon`.
 
-```bash
-curl -s http://localhost:8080/healthz
-```
+## Run locally
 
-Notes:
-- `auth.mode` is required and must be `local` or `gen3`.
-- Local development should run `auth.mode: local` with SQLite only.
-- In `local` mode, set `auth.basic.username/password` (or env `DRS_BASIC_AUTH_USER` / `DRS_BASIC_AUTH_PASSWORD`) to enforce HTTP basic auth. Unauthenticated local mode now requires the explicit development-only opt-in `auth.allow_unauthenticated: true`.
-- `gen3` mode is for deployed environments and requires PostgreSQL.
-- API route groups are enabled by default. Set `routes.*: false` or the matching `DRS_ENABLE_*` env var only when you intentionally want a reduced surface.
-
-Record scope note:
-- Syfon supports both scoped records (with `authz`, such as `/programs/<org>/projects/<project>`) and unscoped records (empty `authz`).
-- Unscoped `ls` (`GET /index` without `organization/project/authz` filters) returns all records, including unscoped ones.
-- RBAC checks still apply for scoped records in `gen3` mode.
-- Recommended production policy: require project/authz at write time so unscoped records are not created unintentionally.
-
-### Local Gen3 Mock Auth (no redeploy loop)
-
-For local integration testing of Gen3 authorization behavior without Fence/Arborist and without PostgreSQL, run with mock auth:
-
-```bash
-DRS_AUTH_MODE=gen3 \
-DRS_AUTH_MOCK_ENABLED=true \
-DRS_AUTH_MOCK_RESOURCES="/data_file,/programs/cbds/projects/end_to_end_test" \
-DRS_AUTH_MOCK_METHODS="read,file_upload,create,update,delete" \
-go run . serve --config local.yaml
-```
-
-Optional:
-- `DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER=true` requires an `Authorization` header before mock privileges are injected.
-- If `DRS_AUTH_MOCK_RESOURCES` is omitted, default is `"/data_file"`.
-- If `DRS_AUTH_MOCK_METHODS` is omitted, default is `"*"` (full method access).
-
-## Purpose
-
-The `syfon` provides a robust implementation of the [GA4GH DRS API](https://ga4gh.github.io/data-repository-service-schemas/). It is designed to manage metadata for data objects and provide secure access via signed URLs.
-
-### Key Features
-- **GA4GH DRS Compliance**: Implements the standard DRS API for describing and accessing data objects.
-- **Database Flexibility**: Supports both **SQLite** and **PostgreSQL** backends with a modular driver architecture.
-- **S3 Integration**: Native support for Amazon S3 (and compatible storage like MinIO) with signed URL generation for downloads and multipart uploads.
-
-## Configuration
-
-The server is configured via a YAML or JSON file. Use the following structure to set up your environment:
-
-```yaml
-port: 8080
-auth:
-  mode: "local" # required: "local" or "gen3"
-  basic:
-    username: "user"
-    password: "pass"
-
-database:
-  sqlite:
-    file: "drs.db"
-  # Or use PostgreSQL:
-  # postgres:
-  #   host: "localhost"
-  #   port: 5432
-  #   user: "user"
-  #   password: "password"
-  #   database: "drs"
-  #   sslmode: "disable"
-
-s3_credentials:
-  - bucket: "my-test-bucket"
-    region: "us-east-1"
-    access_key: "AKIAXXXXXXXXXXXXXXXX"
-    secret_key: "SECRETKEY"
-    endpoint: "s3.amazonaws.com" # Optional: set for MinIO or custom backends
-```
-
-In `gen3` mode, PostgreSQL is required unless `DRS_AUTH_MOCK_ENABLED=true` is set for local mock-auth testing.
-In `local` mode, Basic Auth or local CSV auth is required unless `auth.allow_unauthenticated: true` is explicitly set for development/testing.
-
-Detailed configuration reference (including env overrides): [docs/configuration.md](docs/configuration.md)
-
-## Gen3/PostgreSQL Schema Initialization
-
-The Postgres backend bootstraps its object tables and required foreign keys on startup.
-The Helm chart still ships an init job for deployments that want pre-provisioned schema, but it is no longer required for local startup.
-
-## Local Development Workflow
-
-```bash
-go test ./... -count=1
-./internal/persistence/sqlite/scripts/init_sqlite_db.sh drs_local.db
-go run . serve --config local.yaml
-```
-
-## Minio Starter Kit
-
-Start up a docker container with MinIO for testing:
-
-```bash
-docker run -p 9000:9000 -p 9001:9001 \
-  -e "MINIO_ROOT_USER=minio-user" \
-  -e "MINIO_ROOT_PASSWORD=minio-pass" \
-  -v ./data:/data \
-  minio/minio server /data --console-address ":9001"
-```
-
-The `minio/minio server` command starts with no buckets, so create the
-bucket referenced in `local.yaml`. Run this once after the server is up
-(the `-p` flag makes it idempotent):
-
-```bash
-docker run --rm --network host --entrypoint sh minio/mc -c '
-  mc alias set local http://localhost:9000 minio-user minio-pass &&
-  mc mb -p local/local-bucket
-'
-```
-
-Create a config file called `local.yaml`
+Create `local.yaml` with a SQLite database, local Basic Auth, and one S3-compatible bucket:
 
 ```yaml
 port: 8080
@@ -184,160 +75,72 @@ port: 8080
 auth:
   mode: local
   basic:
-    username: "drs-user"
-    password: "drs-pass"
+    username: drs-user
+    password: drs-pass
 
 database:
   sqlite:
-    file: "drs_local.db"
+    file: ./data/drs.db
 
-s3_credentials:
-  - bucket: "local-bucket"
-    region: "us-east-1"
-    access_key: "minio-user"
-    secret_key: "minio-pass"
-    endpoint: "http://localhost:9000"
-    # Map an org/project scope to this bucket so uploads can resolve a target.
-    # Omit `projects:` to match every project under the organization.
-    resources:
-      - organization: "example"
-        projects:
-          - project: "example"
+credential_encryption:
+  local_key_file: ./data/.syfon-credential-kek
+
+buckets:
+  - bucket: local-bucket
+    provider: s3
+    region: us-east-1
+    endpoint: http://localhost:9000
+    access_key: minio-user
+    secret_key: minio-pass
 ```
 
-Start the syfon server
-```
-syfon serve --config local.yaml
-```
-
-Upload a file. Because `local.yaml` enables basic auth, the CLI needs
-matching credentials — pass them via `--username/--password` or the
-`SYFON_USERNAME`/`SYFON_PASSWORD` environment variables:
+Start the server after starting an S3-compatible endpoint such as MinIO:
 
 ```bash
-export SYFON_USERNAME=drs-user
-export SYFON_PASSWORD=drs-pass
-syfon upload --file README.md --org example --project example
+bin/syfon serve --config local.yaml
 ```
 
-When `--did` is omitted, Syfon deterministically mints the object ID from the
-file's SHA256 plus the canonical project scope
-(`/organization/<org>/project/<project>`). Because of that, `--project` is
-required whenever `--did` is omitted. The same file uploaded into the same
-project gets the same DID across Syfon/Gen3 instances; the same file in a
-different project gets a different DID.
+For a complete MinIO startup and bucket-creation sequence, follow the [Quick Start](docs/quickstart.md).
 
-List records
-```
-syfon ls
+Check that it is ready:
+
+```bash
+curl -u drs-user:drs-pass http://localhost:8080/healthz
 ```
 
-Download a record by DID (use a DID from `syfon ls`):
-```
+Use `auth.mode: local` with SQLite for local work. Use `auth.mode: gen3` with PostgreSQL for a Gen3 deployment. The [configuration reference](docs/configuration.md) lists every field, default, and environment override.
+
+## Use the CLI
+
+The CLI talks to `http://127.0.0.1:8080` by default. Set `SYFON_SERVER_URL` or pass `--server` to choose another server. Set `SYFON_USERNAME` and `SYFON_PASSWORD` for local Basic Auth, or set `SYFON_TOKEN` or `SYFON_PROFILE` for a Gen3 server.
+
+```bash
+syfon ping
+syfon upload --file ./README.md --org example --project example
+syfon ls --organization example --project example
 syfon download --did <did> --out /tmp/README.md
 ```
 
-# Architecture
+The CLI also includes bucket, record, project-copy, validation, and transfer-metrics operations. Run `syfon --help` or `syfon <command> --help` for the current flags.
 
-The server composes focused domain and adapter packages:
+## HTTP API
 
-- `internal/objects` owns catalog records, checksum identity, and canonical content. Query and mutation components keep their persistence dependencies separate.
-- `internal/buckets` owns credentials, scopes, visibility, and cache policy.
-- `internal/storage` owns provider-neutral storage operations and the S3, GCS, Azure, and file adapters.
-- `internal/transfers` owns access issuance, upload workflows, multipart sessions, and pending metadata. HTTP adapters translate protocol requests and results.
-- `internal/usage` defines the event writer contract and owns scoped accounting reports.
-- `internal/maintenance/projectstorage` separates storage inspection from project cleanup. `internal/maintenance/scoperepair` audits and repairs catalog references.
-- `internal/requestid` carries a request ID through context for logs and audit events. `internal/faults` defines shared error classifications.
-- `internal/httpapi` owns route registration, handlers, middleware, and protocol adapters.
-- `internal/persistence` owns the SQLite and PostgreSQL adapters.
-- `internal/access` owns authorization policy and authentication integrations.
-- `internal/credentialcipher` owns credential encryption.
-- `cmd/server` composes these packages into the server runtime.
+With the docs route enabled, Syfon serves Swagger UI at `/index/swagger` and the bundled OpenAPI document at `/index/openapi.yaml`. The GA4GH DRS routes are under `/ga4gh/drs/v1/`. Internal upload, indexing, bucket, and multipart routes are under `/data` and `/index`.
 
-See persistence table details and relationships in [internal/persistence/README.md](internal/persistence/README.md).
+## Develop
 
-## Go Client SDK (Multi-Module)
-
-This repository now includes a separate Go client module at `./client`:
-
-- Module path: `github.com/calypr/syfon/client`
-- Purpose: reusable HTTP client for Syfon APIs (used by the Syfon CLI and external tools)
-
-Example import:
-
-```go
-import syclient "github.com/calypr/syfon/client"
-```
-
-The root module (`github.com/calypr/syfon`) uses a local `replace` during development:
-
-```go
-replace github.com/calypr/syfon/client => ./client
-```
-
-# Development
-
-The project uses a Makefile for common tasks:
-- `make gen`: Generates the DRS server stubs from the official GA4GH OpenAPI spec (Git submodule) and refreshes the shared `apigen/*` OpenAPI outputs.
-- `make test`: Runs all unit and integration tests.
-- `make test-unit`: Runs unit tests only (excludes integration packages).
-- `make coverage`: Runs coverage for core production packages (persistence/service/middleware/url signing) and writes `coverage/coverage.out`, `coverage/coverage.txt`, and `coverage/coverage.html`.
-- `make coverage-full`: Runs broader compatibility-layer coverage (includes internal compatibility and LFS packages).
-- `make serve ARGS="--config /path/to/config.yaml"`: Starts the DRS server.
-
-## OpenAPI Codegen
-
-Syfon currently uses `oapi-codegen` for both server-side and client-facing API artifacts:
-
-- `make gen` bundles the GA4GH DRS spec into `apigen/openapi/openapi.yaml` and refreshes all generated packages under `apigen/client/*` and `apigen/server/*`.
-- The runtime HTTP wiring, middleware, and compatibility behavior live in handwritten code under `cmd/server` and `internal/httpapi/*`.
-- The client module itself is handwritten, but its request and response shapes come from the same generated OpenAPI contracts, so client and server stay aligned.
-
-This split is intentional: generated code keeps the schema surface in sync, while handwritten runtime code preserves control over routing, auth, and compatibility behavior.
-
-### Quick rules of thumb
-
-- If you change the upstream GA4GH DRS schema or the Syfon overlay, run `make gen`.
-- If you change `apigen/openapi/lfs.openapi.yaml`, `apigen/openapi/bucket.openapi.yaml`, `apigen/openapi/metrics.openapi.yaml`, or `apigen/openapi/internal.openapi.yaml`, run `make gen`.
-- If you only change runtime wiring, auth, handlers, or business logic, you usually do not need codegen.
-- If a PR touches OpenAPI files, include the regenerated `apigen/*` output in the same commit.
-
-### What to expect after regeneration
-
-- `apigen/server/drs` is overwritten with generated server code and generated DRS models.
-- The relevant `apigen/client/*` and `apigen/server/*` packages are overwritten with generated Go types and helper files.
-- `apigen/openapi/*.yaml` files are the bundled spec inputs that the runtime docs endpoint serves.
-- `go test ./...` or the affected package tests should still pass after the regen.
-
-## Running Integration Tests
-
-You can run integration tests using your own config file:
+Initialize the GA4GH schema submodule and run the main checks with:
 
 ```bash
-go test ./cmd/server -v -count=1 -testConfig=example.yaml
+git submodule update --init --recursive
+make test
+make docs
 ```
 
-Docker-backed MinIO upload and download coverage is available behind an opt-in flag:
+The schema checkout lives at `data-repository-service-schemas`. Run `make gen` after changing that schema, a local OpenAPI input, or a code-generation config. Do not edit generated files under `apigen` by hand.
 
-```bash
-SYFON_E2E_DOCKER=1 go test ./cmd -run TestSyfonDockerMinIOE2E -v -count=1
-```
+Read the [Quick Start](docs/quickstart.md), [local deployment guide](docs/local-deployment.md), [configuration reference](docs/configuration.md), [plugin guide](docs/plugins.md), and [contributor guide](CONTRIBUTING.md) for the supported workflows.
 
-Docker-backed cloud emulator E2E suites are also available behind the same opt-in flag:
+## License
 
-```bash
-SYFON_E2E_DOCKER=1 go test ./cmd -run '^TestSyfonDockerFakeGCSE2E$' -v -count=1
-SYFON_E2E_DOCKER=1 go test ./cmd -run '^TestSyfonDockerAzuriteE2E$' -v -count=1
-```
-
-To run all Docker-backed CLI E2E suites together (MinIO + fake-gcs-server + Azurite):
-
-```bash
-SYFON_E2E_DOCKER=1 go test ./cmd -run '^TestSyfonDocker(MinIOE2E|MultipartUpload|FakeGCSE2E|AzuriteE2E)$' -v -count=1
-```
-
-These suites are executed in CI with Docker; locally they will skip unless `SYFON_E2E_DOCKER=1` is set.
-
-# License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+Syfon is licensed under the MIT License. See [LICENSE](LICENSE).

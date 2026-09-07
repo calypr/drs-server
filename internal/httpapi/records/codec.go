@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -85,7 +85,7 @@ func Decode(data []byte) (objects.Record, error) {
 		Properties:       raw,
 	}
 	if record.ControlledAccess != nil {
-		record.Authorizations = syfoncommon.ControlledAccessToAuthzMap(*record.ControlledAccess)
+		record.Authorizations = clientaccess.ControlledAccessToAuthzMap(*record.ControlledAccess)
 	}
 	return record, nil
 }

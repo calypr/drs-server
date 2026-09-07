@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -174,7 +174,7 @@ func transferAttributionWhereByResources(filter usage.Filter, resources []string
 }
 
 func sqliteTransferResourceClause(resources []string) (string, []any) {
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 {
 		return "", nil
 	}
@@ -184,7 +184,7 @@ func sqliteTransferResourceClause(resources []string) (string, []any) {
 	projectClauses := make([]string, 0)
 	args := make([]any, 0, len(resources)*2)
 	for _, resource := range resources {
-		org, project, ok := sycommon.ResourceScope(resource)
+		org, project, ok := clientaccess.ResourceScope(resource)
 		if !ok {
 			continue
 		}

@@ -5,7 +5,8 @@ import (
 	"strings"
 
 	generated "github.com/calypr/syfon/apigen/server/lfsapi"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -18,7 +19,7 @@ func FromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidat
 	if explicitID == "" {
 		for _, checksum := range checksumValues(value.Checksums) {
 			if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
-				explicitID = syfoncommon.NormalizeOid(checksum.Checksum)
+				explicitID = clienthash.NormalizeOid(checksum.Checksum)
 				break
 			}
 		}

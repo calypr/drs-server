@@ -11,6 +11,7 @@ import (
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
 
 type bucketTestStore struct {
@@ -227,15 +228,15 @@ func (*internalDRSStorageFake) InvalidateBucket(string) {}
 var _ domainbuckets.CredentialReader = (*bucketTestStore)(nil)
 var _ domainbuckets.CredentialAdmin = (*bucketTestStore)(nil)
 var _ domainbuckets.ScopeStore = (*bucketTestStore)(nil)
-var _ objects.RecordReader = (*bucketTestStore)(nil)
-var _ objects.ScopeQuery = (*bucketTestStore)(nil)
+var _ objectrecords.RecordReader = (*bucketTestStore)(nil)
+var _ objectrecords.ScopeQuery = (*bucketTestStore)(nil)
 
 var (
 	errBucketVisibilityScopeQuery   = errors.New("bucket visibility fallback requires an object scope query")
 	errBucketVisibilityRecordReader = errors.New("bucket visibility fallback requires an object record reader")
 )
 
-func newBucketVisibilityFallback(scope objects.ScopeQuery, reader objects.RecordReader) domainbuckets.VisibilityFallback {
+func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectrecords.RecordReader) domainbuckets.VisibilityFallback {
 	return func(ctx context.Context) ([]domainbuckets.VisibilityRow, error) {
 		if scope == nil {
 			return nil, errBucketVisibilityScopeQuery

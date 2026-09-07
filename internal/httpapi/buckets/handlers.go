@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -77,7 +78,10 @@ func handleInternalPutBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Serv
 	if req.Organization == "" && req.ProjectId != "" {
 		return response.Reject(c, fiber.StatusBadRequest, "organization is required when project_id is set")
 	}
-	if err := authorizeBucketScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return response.HandleError(c, faults.ErrUnauthorized)
+	}
+	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
 		return response.HandleError(c, err)
 	}
 
@@ -168,6 +172,20 @@ func isCredentialNotFoundError(err error) bool {
 	return err != nil && strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
 }
 
+func authorizeBucketDelete(ctx context.Context, bucketService *domainbuckets.Service, bucket string) error {
+	if apimiddleware.MissingGen3AuthHeader(ctx) {
+		return faults.ErrUnauthorized
+	}
+	scopes, err := bucketService.ListBucketScopes(ctx)
+	if err != nil {
+		return err
+	}
+	if !domainbuckets.BucketsAllowedByNames(ctx, scopes, bucket, "delete", "update") {
+		return faults.ErrUnauthorized
+	}
+	return nil
+}
+
 func handleInternalDeleteBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
 	credentialID := strings.TrimSpace(c.Params("bucket"))
 	if credentialID == "" {
@@ -201,7 +219,10 @@ func handleInternalCreateBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 	if req.Organization == "" {
 		return response.Reject(c, fiber.StatusBadRequest, "organization is required")
 	}
-	if err := authorizeBucketScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return response.HandleError(c, faults.ErrUnauthorized)
+	}
+	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
 		return response.HandleError(c, err)
 	}
 
@@ -233,7 +254,10 @@ func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 	if organization == "" || !hasPathQuery {
 		return response.Reject(c, fiber.StatusBadRequest, "organization and path are required")
 	}
-	if err := authorizeBucketScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return response.HandleError(c, faults.ErrUnauthorized)
+	}
+	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
 		return response.HandleError(c, err)
 	}
 	pathPrefix := ""
@@ -296,7 +320,7 @@ func handleInternalListBucketScopesFiber(c fiber.Ctx, bucketService *domainbucke
 	result := []bucketapi.BucketScopeResponse{}
 	for _, scope := range scopes {
 		if strings.EqualFold(scope.Bucket, routeCredentialID) || strings.EqualFold(scope.CredentialID, routeCredentialID) {
-			if !bucketScopeAllowed(c.Context(), scope, "read") {
+			if !domainbuckets.ScopeAllowed(c.Context(), scope, "read") {
 				continue
 			}
 			scheme := "s3"

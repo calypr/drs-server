@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	syfoncommon "github.com/calypr/syfon/common"
+	clienthash "github.com/calypr/syfon/client/hash"
 )
 
 var ErrNoValidSHA256 = errors.New("no valid sha256 values provided")
@@ -96,7 +96,7 @@ func SHA256Values(checksums []Checksum) []string {
 		if NormalizeChecksumType(cs.Type) != "sha256" {
 			continue
 		}
-		normalized := syfoncommon.NormalizeOid(cs.Checksum)
+		normalized := clienthash.NormalizeOid(cs.Checksum)
 		if normalized == "" {
 			continue
 		}
@@ -121,7 +121,7 @@ func ValidateCanonicalSHA256(checksums []Checksum) (string, bool, error) {
 }
 
 func NormalizeSHA256Query(value string) (string, bool) {
-	normalized := syfoncommon.NormalizeOid(value)
+	normalized := clienthash.NormalizeOid(value)
 	if normalized == "" {
 		return "", false
 	}

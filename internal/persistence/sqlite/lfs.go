@@ -10,10 +10,10 @@ import (
 
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
-func (db *SqliteDB) SavePendingLFSMeta(ctx context.Context, entries []transfers.PendingMetadata) error {
+func (db *SqliteDB) SavePendingMetadata(ctx context.Context, entries []transferlfs.PendingMetadata) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -46,7 +46,7 @@ func (db *SqliteDB) SavePendingLFSMeta(ctx context.Context, entries []transfers.
 	return tx.Commit()
 }
 
-func (db *SqliteDB) GetPendingLFSMeta(ctx context.Context, oid string) (*transfers.PendingMetadata, error) {
+func (db *SqliteDB) GetPendingMetadata(ctx context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	if _, err := db.db.ExecContext(ctx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
 		return nil, fmt.Errorf("failed to prune expired pending metadata: %w", err)
 	}
@@ -72,7 +72,7 @@ func (db *SqliteDB) GetPendingLFSMeta(ctx context.Context, oid string) (*transfe
 		return nil, fmt.Errorf("failed to parse pending metadata candidate for oid %s: %w", oid, err)
 	}
 
-	return &transfers.PendingMetadata{
+	return &transferlfs.PendingMetadata{
 		OID:       oid,
 		Candidate: c,
 		CreatedAt: createdAt,
@@ -80,7 +80,7 @@ func (db *SqliteDB) GetPendingLFSMeta(ctx context.Context, oid string) (*transfe
 	}, nil
 }
 
-func (db *SqliteDB) PopPendingLFSMeta(ctx context.Context, oid string) (*transfers.PendingMetadata, error) {
+func (db *SqliteDB) PopPendingMetadata(ctx context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (db *SqliteDB) PopPendingLFSMeta(ctx context.Context, oid string) (*transfe
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &transfers.PendingMetadata{
+	return &transferlfs.PendingMetadata{
 		OID:       oid,
 		Candidate: c,
 		CreatedAt: createdAt,

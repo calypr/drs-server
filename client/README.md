@@ -33,22 +33,31 @@ import (
   "log"
 
   syclient "github.com/calypr/syfon/client"
+  "github.com/calypr/syfon/apigen/client/bucketapi"
 )
 
 func main() {
-  c := syclient.New(
+  c, err := syclient.New(
     "http://127.0.0.1:8080",
     syclient.WithBasicAuth("user", "pass"),
   )
+  if err != nil {
+    log.Fatal(err)
+  }
 
-  err := c.Buckets().Put(context.Background(), syclient.PutBucketRequest{
+  provider := "s3"
+  region := "us-east-1"
+  accessKey := "..."
+  secretKey := "..."
+
+  err = c.Buckets().Put(context.Background(), bucketapi.PutBucketRequest{
     Bucket:       "cbds",
-    Provider:     "s3",
-    Region:       "us-east-1",
-    AccessKey:    "...",
-    SecretKey:    "...",
+    Provider:     &provider,
+    Region:       &region,
+    AccessKey:    &accessKey,
+    SecretKey:    &secretKey,
     Organization: "syfon",
-    ProjectID:    "e2e",
+    ProjectId:    "e2e",
   })
   if err != nil {
     log.Fatal(err)

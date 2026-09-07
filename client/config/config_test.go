@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -243,8 +244,6 @@ func TestManagerImport(t *testing.T) {
 	})
 }
 
-
-
 func TestManagerTokenAndCredentialValidation(t *testing.T) {
 
 	man := testManager()
@@ -335,4 +334,79 @@ func TestManagerTokenAndCredentialValidation(t *testing.T) {
 			t.Fatalf("expected IsValid success, got ok=%v err=%v", ok, err)
 		}
 	})
+}
+
+func TestImportPreservesCredentialValues(t *testing.T) {
+	for _, content := range []string{
+		`{"key_id":"contains_key_id","api_key":"contains_api_key","AccessToken":"literal_key_id_api_key"}`,
+		`{"KeyID":"contains_key_id","APIKey":"contains_api_key","AccessToken":"literal_key_id_api_key"}`,
+	} {
+		p := filepath.Join(t.TempDir(), "credential.json")
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := testManager().Import(p, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.KeyID != "contains_key_id" || got.APIKey != "contains_api_key" || got.AccessToken != "literal_key_id_api_key" {
+			t.Fatalf("credential values changed: %+v", got)
+		}
+	}
+}
+
+func TestEnsureConfigFilePreservesExistingContent(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "nested", "config.ini")
+	if err := ensureConfigFile(p); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("[profile]\napi_key=keep-me\n")
+	if err := os.WriteFile(p, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureConfigFile(p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("config was changed: %q", got)
+	}
+}
+
+func TestEnsureConfigFileReturnsCreationError(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(parent, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := ensureConfigFile(filepath.Join(parent, "config.ini"))
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("expected filesystem error, got %v", err)
+	}
+	if pathErr.Op != "mkdir" {
+		t.Fatalf("expected actual mkdir error, got %v", err)
+	}
+}
+
+func TestImportCredentialKeyPrecedence(t *testing.T) {
+	for _, content := range []string{
+		`{"key_id":"old","KeyID":"new","api_key":"old","APIKey":"new"}`,
+		`{"KeyID":"old","key_id":"new","APIKey":"old","api_key":"new"}`,
+		`{"KeyID":"new","key_id":null,"APIKey":"new","api_key":null}`,
+	} {
+		p := filepath.Join(t.TempDir(), "credential.json")
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := testManager().Import(p, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.KeyID != "new" || got.APIKey != "new" {
+			t.Fatalf("key precedence changed for %s: %+v", content, got)
+		}
+	}
 }

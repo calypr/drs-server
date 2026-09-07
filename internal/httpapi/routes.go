@@ -12,10 +12,11 @@ import (
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/records"
 	httptransfers "github.com/calypr/syfon/internal/httpapi/transfers"
-	"github.com/calypr/syfon/internal/maintenance/projectstorage"
-	"github.com/calypr/syfon/internal/maintenance/scoperepair"
-	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects/scoperepair"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -24,8 +25,9 @@ const RouteHealthz = "/healthz"
 
 type Dependencies struct {
 	ServiceInfo      generated.Service
-	Objects          *objects.Service
+	Objects          *objectrecords.Service
 	Transfers        *transfers.Service
+	LFSPending       transferlfs.PendingStore
 	UsageIngest      usage.Ingestor
 	UsageReports     usage.Reporter
 	Buckets          *buckets.Service
@@ -88,6 +90,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
 			ObjectService:   deps.Objects,
 			TransferService: deps.Transfers,
+			PendingStore:    deps.LFSPending,
 			FileCounters:    deps.UsageIngest,
 			Credentials:     deps.Buckets,
 		}, options.LFSProtocol)
