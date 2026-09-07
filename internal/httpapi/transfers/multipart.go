@@ -19,7 +19,7 @@ func handleInternalMultipartInitFiber(objectService *objectrecords.Service, tran
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartInitRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		key := ""
@@ -29,7 +29,7 @@ func handleInternalMultipartInitFiber(objectService *objectrecords.Service, tran
 			key = strings.TrimSpace(*req.Key)
 		}
 		if key == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("key/guid is required")
+			return response.Reject(c, fiber.StatusBadRequest, "key/guid is required")
 		}
 
 		if strings.Contains(key, "/") {
@@ -66,10 +66,10 @@ func handleInternalMultipartInitFiber(objectService *objectrecords.Service, tran
 				}
 				bucket, multipartKey = target.Bucket, target.Key
 				if bucket == "" || multipartKey == "" {
-					return c.Status(fiber.StatusBadRequest).SendString("existing object storage location is not an s3 url")
+					return response.Reject(c, fiber.StatusBadRequest, "existing object storage location is not an s3 url")
 				}
 			} else {
-				return c.Status(fiber.StatusBadRequest).SendString("checksum-only multipart init requires an explicit guid or a project-scoped object id")
+				return response.Reject(c, fiber.StatusBadRequest, "checksum-only multipart init requires an explicit guid or a project-scoped object id")
 			}
 		} else if _, err := uuid.Parse(key); err != nil {
 			internalID = uuid.NewString()
@@ -100,15 +100,15 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartUploadRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if req.UploadId == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("uploadId is required")
+			return response.Reject(c, fiber.StatusBadRequest, "uploadId is required")
 		}
 
 		urlStr, err := lifecycle.SignPart(c.Context(), req.UploadId, req.PartNumber)
 		if errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return c.Status(fiber.StatusNotFound).SendString("Upload ID not found")
+			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
 		}
 		if err != nil {
 			return response.HandleError(c, err)
@@ -121,10 +121,10 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartCompleteRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if req.UploadId == "" {
-			return c.Status(fiber.StatusBadRequest).SendString("uploadId is required")
+			return response.Reject(c, fiber.StatusBadRequest, "uploadId is required")
 		}
 
 		parts := make([]storage.CompletedPart, len(req.Parts))
@@ -132,7 +132,7 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 			parts[i] = storage.CompletedPart{ETag: p.ETag, PartNumber: p.PartNumber}
 		}
 		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return c.Status(fiber.StatusNotFound).SendString("Upload ID not found")
+			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
 		} else if err != nil {
 			return response.HandleError(c, err)
 		}

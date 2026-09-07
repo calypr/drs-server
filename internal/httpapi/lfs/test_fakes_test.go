@@ -41,11 +41,15 @@ func newLFSTestPorts(records map[string]*objects.Record, credentials map[string]
 
 type lfsObjectReaderFake struct {
 	records map[string]*objects.Record
+	getErr  error
 }
 
 var _ objectrecords.RecordReader = (*lfsObjectReaderFake)(nil)
 
 func (f *lfsObjectReaderFake) GetObject(_ context.Context, id string) (*objects.Record, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
 	record, ok := f.records[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)

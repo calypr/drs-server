@@ -16,18 +16,18 @@ func handleInternalBulkMissingSHA256Fiber(objectService *objectrecords.Service) 
 	return func(c fiber.Ctx) error {
 		var req internalapi.BulkMissingSHA256Request
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if strings.TrimSpace(req.Organization) == "" || strings.TrimSpace(req.Project) == "" || len(req.Sha256) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: organization, project, and sha256 values are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and sha256 values are required")
 		}
 
 		normalized, err := normalizeMissingSHA256(req.Sha256)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			return response.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		if len(normalized) > maxInternalBulkMissingSHA256 {
-			return c.Status(fiber.StatusRequestEntityTooLarge).SendString(fmt.Sprintf("too many sha256 values: maximum is %d", maxInternalBulkMissingSHA256))
+			return response.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many sha256 values: maximum is %d", maxInternalBulkMissingSHA256))
 		}
 
 		missing, err := objectService.ListMissingScopedSHA256(c.Context(), req.Organization, req.Project, normalized)
@@ -69,7 +69,7 @@ func handleInternalBulkHashesFiber(objectService *objectrecords.Service) fiber.H
 	return func(c fiber.Ctx) error {
 		var req internalapi.BulkHashesRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		normalized := normalizeBulkHashes(req.Hashes)
@@ -111,10 +111,10 @@ func handleInternalBulkSHA256ValidityFiber(objectService *objectrecords.Service)
 	return func(c fiber.Ctx) error {
 		var req internalapi.BulkSHA256ValidityRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if req.Sha256 == nil || len(*req.Sha256) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: sha256 values are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
 		}
 
 		hashes := make([]string, 0, len(*req.Sha256))
@@ -128,7 +128,7 @@ func handleInternalBulkSHA256ValidityFiber(objectService *objectrecords.Service)
 			out[hash] = false
 		}
 		if len(hashes) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: sha256 values are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
 		}
 
 		records, err := objectService.GetObjectsByChecksums(c.Context(), hashes, "read")

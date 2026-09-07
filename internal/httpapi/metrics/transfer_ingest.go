@@ -50,21 +50,21 @@ type providerTransferPayload struct {
 func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, request metricsapi.RecordProviderTransferEventsRequestObject) (metricsapi.RecordProviderTransferEventsResponseObject, error) {
 	statusCode, ok := checkProviderMetricsIngestAuth(ctx, request.Body)
 	if !ok {
-		return recordProviderTransferEventsAuthResponse(statusCode), nil
+		return recordProviderTransferEventsAuthResponse(ctx, statusCode), nil
 	}
 	if request.Body == nil || len(request.Body.Events) == 0 {
-		return metricsapi.RecordProviderTransferEvents400Response{}, nil
+		return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 	events := make([]usage.ProviderEvent, 0, len(request.Body.Events))
 	for _, item := range request.Body.Events {
 		ev, err := providerTransferPayloadToUsage(providerTransferGeneratedEventToPayload(item))
 		if err != nil {
-			return metricsapi.RecordProviderTransferEvents400Response{}, nil
+			return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
 		events = append(events, ev)
 	}
 	if err := s.ingestor.RecordProviderTransferEvents(ctx, events); err != nil {
-		return metricsapi.RecordProviderTransferEvents500Response{}, nil
+		return metricsapi.RecordProviderTransferEvents500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 	recorded := len(events)
 	return metricsapi.RecordProviderTransferEvents201JSONResponse{Recorded: &recorded}, nil
@@ -160,14 +160,14 @@ func providerTransferPayloadToUsage(item providerTransferPayload) (usage.Provide
 	}, nil
 }
 
-func recordProviderTransferEventsAuthResponse(statusCode int) metricsapi.RecordProviderTransferEventsResponseObject {
+func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode int) metricsapi.RecordProviderTransferEventsResponseObject {
 	switch statusCode {
 	case http.StatusUnauthorized:
-		return metricsapi.RecordProviderTransferEvents401Response{}
+		return metricsapi.RecordProviderTransferEvents401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized))
 	case http.StatusForbidden:
-		return metricsapi.RecordProviderTransferEvents403Response{}
+		return metricsapi.RecordProviderTransferEvents403JSONResponse(metricsAPIError(ctx, http.StatusForbidden))
 	default:
-		return metricsapi.RecordProviderTransferEvents400Response{}
+		return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest))
 	}
 }
 

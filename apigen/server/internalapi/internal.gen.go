@@ -15,6 +15,41 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for APIErrorCode.
+const (
+	Conflict      APIErrorCode = "conflict"
+	Forbidden     APIErrorCode = "forbidden"
+	InternalError APIErrorCode = "internal_error"
+	InvalidInput  APIErrorCode = "invalid_input"
+	NotFound      APIErrorCode = "not_found"
+	RateLimited   APIErrorCode = "rate_limited"
+	RequestFailed APIErrorCode = "request_failed"
+	Unauthorized  APIErrorCode = "unauthorized"
+	Unavailable   APIErrorCode = "unavailable"
+)
+
+// APIError A stable Syfon API error.
+type APIError struct {
+	// Code Stable machine-readable error code.
+	Code APIErrorCode `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// Msg GA4GH-compatible alias for message.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Msg *string `json:"msg,omitempty"`
+
+	// RequestId Request identifier for support and log correlation.
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status HTTP response status.
+	Status int `json:"status"`
+}
+
+// APIErrorCode Stable machine-readable error code.
+type APIErrorCode string
+
 // BulkCreateRequest defines model for BulkCreateRequest.
 type BulkCreateRequest struct {
 	Records []InternalRecord `json:"records"`
@@ -1127,44 +1162,49 @@ func (response InternalDownload302Response) VisitInternalDownloadResponse(ctx fi
 	return nil
 }
 
-type InternalDownload400Response struct {
-}
+type InternalDownload400JSONResponse APIError
 
-func (response InternalDownload400Response) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+func (response InternalDownload400JSONResponse) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownload401Response struct {
-}
+type InternalDownload401JSONResponse APIError
 
-func (response InternalDownload401Response) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+func (response InternalDownload401JSONResponse) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownload403Response struct {
-}
+type InternalDownload403JSONResponse APIError
 
-func (response InternalDownload403Response) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+func (response InternalDownload403JSONResponse) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownload404Response struct {
-}
+type InternalDownload404JSONResponse APIError
 
-func (response InternalDownload404Response) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+func (response InternalDownload404JSONResponse) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownload500Response struct {
-}
+type InternalDownload500JSONResponse APIError
 
-func (response InternalDownload500Response) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+func (response InternalDownload500JSONResponse) VisitInternalDownloadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalDownloadPartRequestObject struct {
@@ -1185,44 +1225,49 @@ func (response InternalDownloadPart200JSONResponse) VisitInternalDownloadPartRes
 	return ctx.JSON(&response)
 }
 
-type InternalDownloadPart400Response struct {
-}
+type InternalDownloadPart400JSONResponse APIError
 
-func (response InternalDownloadPart400Response) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+func (response InternalDownloadPart400JSONResponse) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownloadPart401Response struct {
-}
+type InternalDownloadPart401JSONResponse APIError
 
-func (response InternalDownloadPart401Response) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+func (response InternalDownloadPart401JSONResponse) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownloadPart403Response struct {
-}
+type InternalDownloadPart403JSONResponse APIError
 
-func (response InternalDownloadPart403Response) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+func (response InternalDownloadPart403JSONResponse) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownloadPart404Response struct {
-}
+type InternalDownloadPart404JSONResponse APIError
 
-func (response InternalDownloadPart404Response) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+func (response InternalDownloadPart404JSONResponse) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDownloadPart500Response struct {
-}
+type InternalDownloadPart500JSONResponse APIError
 
-func (response InternalDownloadPart500Response) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+func (response InternalDownloadPart500JSONResponse) VisitInternalDownloadPartResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalInspectProjectBucketInventoryRequestObject struct {
@@ -1242,52 +1287,58 @@ func (response InternalInspectProjectBucketInventory200JSONResponse) VisitIntern
 	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory400Response struct {
-}
+type InternalInspectProjectBucketInventory400JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory400Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory400JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory401Response struct {
-}
+type InternalInspectProjectBucketInventory401JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory401Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory401JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory403Response struct {
-}
+type InternalInspectProjectBucketInventory403JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory403Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory403JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory404Response struct {
-}
+type InternalInspectProjectBucketInventory404JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory404Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory404JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory409Response struct {
-}
+type InternalInspectProjectBucketInventory409JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory409Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory409JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectBucketInventory500Response struct {
-}
+type InternalInspectProjectBucketInventory500JSONResponse APIError
 
-func (response InternalInspectProjectBucketInventory500Response) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectBucketInventory500JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalInspectProjectScopesRequestObject struct {
@@ -1307,36 +1358,40 @@ func (response InternalInspectProjectScopes200JSONResponse) VisitInternalInspect
 	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopes400Response struct {
-}
+type InternalInspectProjectScopes400JSONResponse APIError
 
-func (response InternalInspectProjectScopes400Response) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopes400JSONResponse) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopes401Response struct {
-}
+type InternalInspectProjectScopes401JSONResponse APIError
 
-func (response InternalInspectProjectScopes401Response) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopes401JSONResponse) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopes403Response struct {
-}
+type InternalInspectProjectScopes403JSONResponse APIError
 
-func (response InternalInspectProjectScopes403Response) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopes403JSONResponse) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopes500Response struct {
-}
+type InternalInspectProjectScopes500JSONResponse APIError
 
-func (response InternalInspectProjectScopes500Response) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopes500JSONResponse) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalInspectProjectScopesPostRequestObject struct {
@@ -1356,36 +1411,40 @@ func (response InternalInspectProjectScopesPost200JSONResponse) VisitInternalIns
 	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopesPost400Response struct {
-}
+type InternalInspectProjectScopesPost400JSONResponse APIError
 
-func (response InternalInspectProjectScopesPost400Response) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopesPost400JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopesPost401Response struct {
-}
+type InternalInspectProjectScopesPost401JSONResponse APIError
 
-func (response InternalInspectProjectScopesPost401Response) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopesPost401JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopesPost403Response struct {
-}
+type InternalInspectProjectScopesPost403JSONResponse APIError
 
-func (response InternalInspectProjectScopesPost403Response) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopesPost403JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalInspectProjectScopesPost500Response struct {
-}
+type InternalInspectProjectScopesPost500JSONResponse APIError
 
-func (response InternalInspectProjectScopesPost500Response) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+func (response InternalInspectProjectScopesPost500JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalMultipartCompleteRequestObject struct {
@@ -1404,36 +1463,40 @@ func (response InternalMultipartComplete200Response) VisitInternalMultipartCompl
 	return nil
 }
 
-type InternalMultipartComplete400Response struct {
-}
+type InternalMultipartComplete400JSONResponse APIError
 
-func (response InternalMultipartComplete400Response) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartComplete400JSONResponse) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartComplete401Response struct {
-}
+type InternalMultipartComplete401JSONResponse APIError
 
-func (response InternalMultipartComplete401Response) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartComplete401JSONResponse) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartComplete403Response struct {
-}
+type InternalMultipartComplete403JSONResponse APIError
 
-func (response InternalMultipartComplete403Response) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartComplete403JSONResponse) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartComplete500Response struct {
-}
+type InternalMultipartComplete500JSONResponse APIError
 
-func (response InternalMultipartComplete500Response) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartComplete500JSONResponse) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalMultipartInitRequestObject struct {
@@ -1453,36 +1516,40 @@ func (response InternalMultipartInit200JSONResponse) VisitInternalMultipartInitR
 	return ctx.JSON(&response)
 }
 
-type InternalMultipartInit400Response struct {
-}
+type InternalMultipartInit400JSONResponse APIError
 
-func (response InternalMultipartInit400Response) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartInit400JSONResponse) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartInit401Response struct {
-}
+type InternalMultipartInit401JSONResponse APIError
 
-func (response InternalMultipartInit401Response) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartInit401JSONResponse) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartInit403Response struct {
-}
+type InternalMultipartInit403JSONResponse APIError
 
-func (response InternalMultipartInit403Response) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartInit403JSONResponse) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartInit500Response struct {
-}
+type InternalMultipartInit500JSONResponse APIError
 
-func (response InternalMultipartInit500Response) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartInit500JSONResponse) VisitInternalMultipartInitResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalMultipartUploadRequestObject struct {
@@ -1502,36 +1569,40 @@ func (response InternalMultipartUpload200JSONResponse) VisitInternalMultipartUpl
 	return ctx.JSON(&response)
 }
 
-type InternalMultipartUpload400Response struct {
-}
+type InternalMultipartUpload400JSONResponse APIError
 
-func (response InternalMultipartUpload400Response) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartUpload400JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartUpload401Response struct {
-}
+type InternalMultipartUpload401JSONResponse APIError
 
-func (response InternalMultipartUpload401Response) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartUpload401JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartUpload403Response struct {
-}
+type InternalMultipartUpload403JSONResponse APIError
 
-func (response InternalMultipartUpload403Response) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartUpload403JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalMultipartUpload500Response struct {
-}
+type InternalMultipartUpload500JSONResponse APIError
 
-func (response InternalMultipartUpload500Response) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartUpload500JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalUploadBlankRequestObject struct {
@@ -1551,36 +1622,40 @@ func (response InternalUploadBlank201JSONResponse) VisitInternalUploadBlankRespo
 	return ctx.JSON(&response)
 }
 
-type InternalUploadBlank400Response struct {
-}
+type InternalUploadBlank400JSONResponse APIError
 
-func (response InternalUploadBlank400Response) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBlank400JSONResponse) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBlank401Response struct {
-}
+type InternalUploadBlank401JSONResponse APIError
 
-func (response InternalUploadBlank401Response) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBlank401JSONResponse) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBlank403Response struct {
-}
+type InternalUploadBlank403JSONResponse APIError
 
-func (response InternalUploadBlank403Response) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBlank403JSONResponse) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBlank500Response struct {
-}
+type InternalUploadBlank500JSONResponse APIError
 
-func (response InternalUploadBlank500Response) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBlank500JSONResponse) VisitInternalUploadBlankResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalUploadBulkRequestObject struct {
@@ -1609,44 +1684,49 @@ func (response InternalUploadBulk207JSONResponse) VisitInternalUploadBulkRespons
 	return ctx.JSON(&response)
 }
 
-type InternalUploadBulk400Response struct {
-}
+type InternalUploadBulk400JSONResponse APIError
 
-func (response InternalUploadBulk400Response) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBulk400JSONResponse) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBulk401Response struct {
-}
+type InternalUploadBulk401JSONResponse APIError
 
-func (response InternalUploadBulk401Response) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBulk401JSONResponse) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBulk403Response struct {
-}
+type InternalUploadBulk403JSONResponse APIError
 
-func (response InternalUploadBulk403Response) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBulk403JSONResponse) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBulk413Response struct {
-}
+type InternalUploadBulk413JSONResponse APIError
 
-func (response InternalUploadBulk413Response) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBulk413JSONResponse) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadBulk500Response struct {
-}
+type InternalUploadBulk500JSONResponse APIError
 
-func (response InternalUploadBulk500Response) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+func (response InternalUploadBulk500JSONResponse) VisitInternalUploadBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalUploadURLRequestObject struct {
@@ -1667,44 +1747,49 @@ func (response InternalUploadURL200JSONResponse) VisitInternalUploadURLResponse(
 	return ctx.JSON(&response)
 }
 
-type InternalUploadURL400Response struct {
-}
+type InternalUploadURL400JSONResponse APIError
 
-func (response InternalUploadURL400Response) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+func (response InternalUploadURL400JSONResponse) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadURL401Response struct {
-}
+type InternalUploadURL401JSONResponse APIError
 
-func (response InternalUploadURL401Response) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+func (response InternalUploadURL401JSONResponse) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadURL403Response struct {
-}
+type InternalUploadURL403JSONResponse APIError
 
-func (response InternalUploadURL403Response) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+func (response InternalUploadURL403JSONResponse) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadURL404Response struct {
-}
+type InternalUploadURL404JSONResponse APIError
 
-func (response InternalUploadURL404Response) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+func (response InternalUploadURL404JSONResponse) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUploadURL500Response struct {
-}
+type InternalUploadURL500JSONResponse APIError
 
-func (response InternalUploadURL500Response) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+func (response InternalUploadURL500JSONResponse) VisitInternalUploadURLResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalDeleteByQueryRequestObject struct {
@@ -1724,36 +1809,40 @@ func (response InternalDeleteByQuery200JSONResponse) VisitInternalDeleteByQueryR
 	return ctx.JSON(&response)
 }
 
-type InternalDeleteByQuery400Response struct {
-}
+type InternalDeleteByQuery400JSONResponse APIError
 
-func (response InternalDeleteByQuery400Response) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+func (response InternalDeleteByQuery400JSONResponse) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDeleteByQuery401Response struct {
-}
+type InternalDeleteByQuery401JSONResponse APIError
 
-func (response InternalDeleteByQuery401Response) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+func (response InternalDeleteByQuery401JSONResponse) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDeleteByQuery403Response struct {
-}
+type InternalDeleteByQuery403JSONResponse APIError
 
-func (response InternalDeleteByQuery403Response) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+func (response InternalDeleteByQuery403JSONResponse) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDeleteByQuery500Response struct {
-}
+type InternalDeleteByQuery500JSONResponse APIError
 
-func (response InternalDeleteByQuery500Response) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+func (response InternalDeleteByQuery500JSONResponse) VisitInternalDeleteByQueryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalListRequestObject struct {
@@ -1773,36 +1862,40 @@ func (response InternalList200JSONResponse) VisitInternalListResponse(ctx fiber.
 	return ctx.JSON(&response)
 }
 
-type InternalList400Response struct {
-}
+type InternalList400JSONResponse APIError
 
-func (response InternalList400Response) VisitInternalListResponse(ctx fiber.Ctx) error {
+func (response InternalList400JSONResponse) VisitInternalListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalList401Response struct {
-}
+type InternalList401JSONResponse APIError
 
-func (response InternalList401Response) VisitInternalListResponse(ctx fiber.Ctx) error {
+func (response InternalList401JSONResponse) VisitInternalListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalList403Response struct {
-}
+type InternalList403JSONResponse APIError
 
-func (response InternalList403Response) VisitInternalListResponse(ctx fiber.Ctx) error {
+func (response InternalList403JSONResponse) VisitInternalListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalList500Response struct {
-}
+type InternalList500JSONResponse APIError
 
-func (response InternalList500Response) VisitInternalListResponse(ctx fiber.Ctx) error {
+func (response InternalList500JSONResponse) VisitInternalListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalCreateRequestObject struct {
@@ -1822,36 +1915,40 @@ func (response InternalCreate201JSONResponse) VisitInternalCreateResponse(ctx fi
 	return ctx.JSON(&response)
 }
 
-type InternalCreate400Response struct {
-}
+type InternalCreate400JSONResponse APIError
 
-func (response InternalCreate400Response) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+func (response InternalCreate400JSONResponse) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalCreate401Response struct {
-}
+type InternalCreate401JSONResponse APIError
 
-func (response InternalCreate401Response) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+func (response InternalCreate401JSONResponse) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalCreate403Response struct {
-}
+type InternalCreate403JSONResponse APIError
 
-func (response InternalCreate403Response) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+func (response InternalCreate403JSONResponse) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalCreate500Response struct {
-}
+type InternalCreate500JSONResponse APIError
 
-func (response InternalCreate500Response) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+func (response InternalCreate500JSONResponse) VisitInternalCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkCreateRequestObject struct {
@@ -1871,44 +1968,49 @@ func (response InternalBulkCreate201JSONResponse) VisitInternalBulkCreateRespons
 	return ctx.JSON(&response)
 }
 
-type InternalBulkCreate400Response struct {
-}
+type InternalBulkCreate400JSONResponse APIError
 
-func (response InternalBulkCreate400Response) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+func (response InternalBulkCreate400JSONResponse) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkCreate401Response struct {
-}
+type InternalBulkCreate401JSONResponse APIError
 
-func (response InternalBulkCreate401Response) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+func (response InternalBulkCreate401JSONResponse) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkCreate403Response struct {
-}
+type InternalBulkCreate403JSONResponse APIError
 
-func (response InternalBulkCreate403Response) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+func (response InternalBulkCreate403JSONResponse) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkCreate413Response struct {
-}
+type InternalBulkCreate413JSONResponse APIError
 
-func (response InternalBulkCreate413Response) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+func (response InternalBulkCreate413JSONResponse) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkCreate500Response struct {
-}
+type InternalBulkCreate500JSONResponse APIError
 
-func (response InternalBulkCreate500Response) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+func (response InternalBulkCreate500JSONResponse) VisitInternalBulkCreateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkDeleteHashesRequestObject struct {
@@ -1928,44 +2030,49 @@ func (response InternalBulkDeleteHashes200JSONResponse) VisitInternalBulkDeleteH
 	return ctx.JSON(&response)
 }
 
-type InternalBulkDeleteHashes400Response struct {
-}
+type InternalBulkDeleteHashes400JSONResponse APIError
 
-func (response InternalBulkDeleteHashes400Response) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDeleteHashes400JSONResponse) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDeleteHashes401Response struct {
-}
+type InternalBulkDeleteHashes401JSONResponse APIError
 
-func (response InternalBulkDeleteHashes401Response) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDeleteHashes401JSONResponse) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDeleteHashes403Response struct {
-}
+type InternalBulkDeleteHashes403JSONResponse APIError
 
-func (response InternalBulkDeleteHashes403Response) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDeleteHashes403JSONResponse) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDeleteHashes413Response struct {
-}
+type InternalBulkDeleteHashes413JSONResponse APIError
 
-func (response InternalBulkDeleteHashes413Response) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDeleteHashes413JSONResponse) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDeleteHashes500Response struct {
-}
+type InternalBulkDeleteHashes500JSONResponse APIError
 
-func (response InternalBulkDeleteHashes500Response) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDeleteHashes500JSONResponse) VisitInternalBulkDeleteHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkDocumentsRequestObject struct {
@@ -1985,28 +2092,31 @@ func (response InternalBulkDocuments200JSONResponse) VisitInternalBulkDocumentsR
 	return ctx.JSON(&response)
 }
 
-type InternalBulkDocuments400Response struct {
-}
+type InternalBulkDocuments400JSONResponse APIError
 
-func (response InternalBulkDocuments400Response) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDocuments400JSONResponse) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDocuments413Response struct {
-}
+type InternalBulkDocuments413JSONResponse APIError
 
-func (response InternalBulkDocuments413Response) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDocuments413JSONResponse) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkDocuments500Response struct {
-}
+type InternalBulkDocuments500JSONResponse APIError
 
-func (response InternalBulkDocuments500Response) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+func (response InternalBulkDocuments500JSONResponse) VisitInternalBulkDocumentsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkHashesRequestObject struct {
@@ -2026,28 +2136,31 @@ func (response InternalBulkHashes200JSONResponse) VisitInternalBulkHashesRespons
 	return ctx.JSON(&response)
 }
 
-type InternalBulkHashes400Response struct {
-}
+type InternalBulkHashes400JSONResponse APIError
 
-func (response InternalBulkHashes400Response) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkHashes400JSONResponse) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkHashes413Response struct {
-}
+type InternalBulkHashes413JSONResponse APIError
 
-func (response InternalBulkHashes413Response) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkHashes413JSONResponse) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkHashes500Response struct {
-}
+type InternalBulkHashes500JSONResponse APIError
 
-func (response InternalBulkHashes500Response) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+func (response InternalBulkHashes500JSONResponse) VisitInternalBulkHashesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkOverwriteRequestObject struct {
@@ -2067,52 +2180,58 @@ func (response InternalBulkOverwrite200JSONResponse) VisitInternalBulkOverwriteR
 	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite400Response struct {
-}
+type InternalBulkOverwrite400JSONResponse APIError
 
-func (response InternalBulkOverwrite400Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite400JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite401Response struct {
-}
+type InternalBulkOverwrite401JSONResponse APIError
 
-func (response InternalBulkOverwrite401Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite401JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite403Response struct {
-}
+type InternalBulkOverwrite403JSONResponse APIError
 
-func (response InternalBulkOverwrite403Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite403JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite409Response struct {
-}
+type InternalBulkOverwrite409JSONResponse APIError
 
-func (response InternalBulkOverwrite409Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite409JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite413Response struct {
-}
+type InternalBulkOverwrite413JSONResponse APIError
 
-func (response InternalBulkOverwrite413Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite413JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkOverwrite500Response struct {
-}
+type InternalBulkOverwrite500JSONResponse APIError
 
-func (response InternalBulkOverwrite500Response) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+func (response InternalBulkOverwrite500JSONResponse) VisitInternalBulkOverwriteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkMissingSHA256RequestObject struct {
@@ -2132,44 +2251,49 @@ func (response InternalBulkMissingSHA256200JSONResponse) VisitInternalBulkMissin
 	return ctx.JSON(&response)
 }
 
-type InternalBulkMissingSHA256400Response struct {
-}
+type InternalBulkMissingSHA256400JSONResponse APIError
 
-func (response InternalBulkMissingSHA256400Response) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+func (response InternalBulkMissingSHA256400JSONResponse) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkMissingSHA256401Response struct {
-}
+type InternalBulkMissingSHA256401JSONResponse APIError
 
-func (response InternalBulkMissingSHA256401Response) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+func (response InternalBulkMissingSHA256401JSONResponse) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkMissingSHA256403Response struct {
-}
+type InternalBulkMissingSHA256403JSONResponse APIError
 
-func (response InternalBulkMissingSHA256403Response) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+func (response InternalBulkMissingSHA256403JSONResponse) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkMissingSHA256413Response struct {
-}
+type InternalBulkMissingSHA256413JSONResponse APIError
 
-func (response InternalBulkMissingSHA256413Response) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+func (response InternalBulkMissingSHA256413JSONResponse) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkMissingSHA256500Response struct {
-}
+type InternalBulkMissingSHA256500JSONResponse APIError
 
-func (response InternalBulkMissingSHA256500Response) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+func (response InternalBulkMissingSHA256500JSONResponse) VisitInternalBulkMissingSHA256Response(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalBulkSHA256ValidityRequestObject struct {
@@ -2189,28 +2313,31 @@ func (response InternalBulkSHA256Validity200JSONResponse) VisitInternalBulkSHA25
 	return ctx.JSON(&response)
 }
 
-type InternalBulkSHA256Validity400Response struct {
-}
+type InternalBulkSHA256Validity400JSONResponse APIError
 
-func (response InternalBulkSHA256Validity400Response) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+func (response InternalBulkSHA256Validity400JSONResponse) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkSHA256Validity413Response struct {
-}
+type InternalBulkSHA256Validity413JSONResponse APIError
 
-func (response InternalBulkSHA256Validity413Response) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+func (response InternalBulkSHA256Validity413JSONResponse) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalBulkSHA256Validity500Response struct {
-}
+type InternalBulkSHA256Validity500JSONResponse APIError
 
-func (response InternalBulkSHA256Validity500Response) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+func (response InternalBulkSHA256Validity500JSONResponse) VisitInternalBulkSHA256ValidityResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalDeleteRequestObject struct {
@@ -2229,20 +2356,22 @@ func (response InternalDelete200Response) VisitInternalDeleteResponse(ctx fiber.
 	return nil
 }
 
-type InternalDelete404Response struct {
-}
+type InternalDelete404JSONResponse APIError
 
-func (response InternalDelete404Response) VisitInternalDeleteResponse(ctx fiber.Ctx) error {
+func (response InternalDelete404JSONResponse) VisitInternalDeleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalDelete500Response struct {
-}
+type InternalDelete500JSONResponse APIError
 
-func (response InternalDelete500Response) VisitInternalDeleteResponse(ctx fiber.Ctx) error {
+func (response InternalDelete500JSONResponse) VisitInternalDeleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalGetRequestObject struct {
@@ -2262,20 +2391,22 @@ func (response InternalGet200JSONResponse) VisitInternalGetResponse(ctx fiber.Ct
 	return ctx.JSON(&response)
 }
 
-type InternalGet404Response struct {
-}
+type InternalGet404JSONResponse APIError
 
-func (response InternalGet404Response) VisitInternalGetResponse(ctx fiber.Ctx) error {
+func (response InternalGet404JSONResponse) VisitInternalGetResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalGet500Response struct {
-}
+type InternalGet500JSONResponse APIError
 
-func (response InternalGet500Response) VisitInternalGetResponse(ctx fiber.Ctx) error {
+func (response InternalGet500JSONResponse) VisitInternalGetResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalUpdateRequestObject struct {
@@ -2296,28 +2427,31 @@ func (response InternalUpdate200JSONResponse) VisitInternalUpdateResponse(ctx fi
 	return ctx.JSON(&response)
 }
 
-type InternalUpdate400Response struct {
-}
+type InternalUpdate400JSONResponse APIError
 
-func (response InternalUpdate400Response) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+func (response InternalUpdate400JSONResponse) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUpdate404Response struct {
-}
+type InternalUpdate404JSONResponse APIError
 
-func (response InternalUpdate404Response) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+func (response InternalUpdate404JSONResponse) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalUpdate500Response struct {
-}
+type InternalUpdate500JSONResponse APIError
 
-func (response InternalUpdate500Response) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+func (response InternalUpdate500JSONResponse) VisitInternalUpdateResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalRemoveControlledAccessRequestObject struct {
@@ -2338,28 +2472,31 @@ func (response InternalRemoveControlledAccess200JSONResponse) VisitInternalRemov
 	return ctx.JSON(&response)
 }
 
-type InternalRemoveControlledAccess400Response struct {
-}
+type InternalRemoveControlledAccess400JSONResponse APIError
 
-func (response InternalRemoveControlledAccess400Response) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+func (response InternalRemoveControlledAccess400JSONResponse) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalRemoveControlledAccess404Response struct {
-}
+type InternalRemoveControlledAccess404JSONResponse APIError
 
-func (response InternalRemoveControlledAccess404Response) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+func (response InternalRemoveControlledAccess404JSONResponse) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type InternalRemoveControlledAccess500Response struct {
-}
+type InternalRemoveControlledAccess500JSONResponse APIError
 
-func (response InternalRemoveControlledAccess500Response) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+func (response InternalRemoveControlledAccess500JSONResponse) VisitInternalRemoveControlledAccessResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 // StrictServerInterface represents all server handlers.

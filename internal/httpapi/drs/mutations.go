@@ -15,15 +15,15 @@ func handleUploadRequestFiber() fiber.Handler {
 	const uploadRequestRoutingError = "upload-request requires explicit upload routing; default bucket selection is disabled"
 	return func(c fiber.Ctx) error {
 		if middleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req generated.UploadRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Requests) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		for _, item := range req.Requests {
 			key := strings.TrimSpace(item.Name)
@@ -35,11 +35,11 @@ func handleUploadRequestFiber() fiber.Handler {
 				key = oid
 			}
 			if key == "" {
-				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 		}
 
-		return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr(uploadRequestRoutingError)})
+		return response.Reject(c, fiber.StatusBadRequest, uploadRequestRoutingError)
 	}
 }
 
@@ -49,7 +49,7 @@ func handleDeleteObjectFiber(service *objectrecords.Service) fiber.Handler {
 		var body generated.DeleteRequest
 		if len(c.Body()) > 0 {
 			if err := c.Bind().JSON(&body); err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 		}
 		opts := objectrecords.DeleteOptions{
@@ -68,7 +68,7 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 		if objectID != "" {
 			var body generated.AccessMethodUpdateRequest
 			if err := c.Bind().JSON(&body); err != nil || len(body.AccessMethods) == 0 {
-				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 			if err := service.UpdateObjectAccessMethods(c.Context(), objectID, FromGeneratedAccessMethods(body.AccessMethods)); err != nil {
 				return response.HandleError(c, err)
@@ -82,7 +82,7 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 
 		var body generated.BulkAccessMethodUpdateRequest
 		if err := c.Bind().JSON(&body); err != nil || len(body.Updates) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		updates := make(map[string][]generated.AccessMethod, len(body.Updates))
@@ -90,7 +90,7 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 		for _, update := range body.Updates {
 			id := strings.TrimSpace(update.ObjectId)
 			if id == "" || len(update.AccessMethods) == 0 {
-				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 			if _, exists := updates[id]; !exists {
 				orderedIDs = append(orderedIDs, id)
@@ -118,10 +118,10 @@ func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler 
 	return func(c fiber.Ctx) error {
 		var body generated.BulkDeleteRequest
 		if err := c.Bind().JSON(&body); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(body.BulkObjectIds) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("bulk_object_ids cannot be empty")})
+			return response.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
 		}
 
 		ids := make([]string, 0, len(body.BulkObjectIds))
@@ -129,7 +129,7 @@ func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler 
 		for _, rawID := range body.BulkObjectIds {
 			id := strings.TrimSpace(rawID)
 			if id == "" {
-				return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("bulk_object_ids cannot contain empty values")})
+				return response.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot contain empty values")
 			}
 			if _, ok := seen[id]; ok {
 				continue

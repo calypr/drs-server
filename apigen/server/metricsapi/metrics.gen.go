@@ -12,6 +12,19 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for APIErrorCode.
+const (
+	Conflict      APIErrorCode = "conflict"
+	Forbidden     APIErrorCode = "forbidden"
+	InternalError APIErrorCode = "internal_error"
+	InvalidInput  APIErrorCode = "invalid_input"
+	NotFound      APIErrorCode = "not_found"
+	RateLimited   APIErrorCode = "rate_limited"
+	RequestFailed APIErrorCode = "request_failed"
+	Unauthorized  APIErrorCode = "unauthorized"
+	Unavailable   APIErrorCode = "unavailable"
+)
+
 // Defines values for ProviderTransferDirection.
 const (
 	Download ProviderTransferDirection = "download"
@@ -41,6 +54,28 @@ const (
 	GetTransferBreakdownParamsGroupByScope    GetTransferBreakdownParamsGroupBy = "scope"
 	GetTransferBreakdownParamsGroupByUser     GetTransferBreakdownParamsGroupBy = "user"
 )
+
+// APIError A stable Syfon API error.
+type APIError struct {
+	// Code Stable machine-readable error code.
+	Code APIErrorCode `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// Msg GA4GH-compatible alias for message.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Msg *string `json:"msg,omitempty"`
+
+	// RequestId Request identifier for support and log correlation.
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status HTTP response status.
+	Status int `json:"status"`
+}
+
+// APIErrorCode Stable machine-readable error code.
+type APIErrorCode string
 
 // FileUsage defines model for FileUsage.
 type FileUsage struct {
@@ -880,36 +915,40 @@ func (response ListMetricsFiles200JSONResponse) VisitListMetricsFilesResponse(ct
 	return ctx.JSON(&response)
 }
 
-type ListMetricsFiles400Response struct {
-}
+type ListMetricsFiles400JSONResponse APIError
 
-func (response ListMetricsFiles400Response) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response ListMetricsFiles400JSONResponse) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListMetricsFiles401Response struct {
-}
+type ListMetricsFiles401JSONResponse APIError
 
-func (response ListMetricsFiles401Response) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response ListMetricsFiles401JSONResponse) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListMetricsFiles403Response struct {
-}
+type ListMetricsFiles403JSONResponse APIError
 
-func (response ListMetricsFiles403Response) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response ListMetricsFiles403JSONResponse) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListMetricsFiles500Response struct {
-}
+type ListMetricsFiles500JSONResponse APIError
 
-func (response ListMetricsFiles500Response) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response ListMetricsFiles500JSONResponse) VisitListMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type BulkMetricsFilesRequestObject struct {
@@ -930,36 +969,40 @@ func (response BulkMetricsFiles200JSONResponse) VisitBulkMetricsFilesResponse(ct
 	return ctx.JSON(&response)
 }
 
-type BulkMetricsFiles400Response struct {
-}
+type BulkMetricsFiles400JSONResponse APIError
 
-func (response BulkMetricsFiles400Response) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response BulkMetricsFiles400JSONResponse) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type BulkMetricsFiles401Response struct {
-}
+type BulkMetricsFiles401JSONResponse APIError
 
-func (response BulkMetricsFiles401Response) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response BulkMetricsFiles401JSONResponse) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type BulkMetricsFiles403Response struct {
-}
+type BulkMetricsFiles403JSONResponse APIError
 
-func (response BulkMetricsFiles403Response) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response BulkMetricsFiles403JSONResponse) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type BulkMetricsFiles500Response struct {
-}
+type BulkMetricsFiles500JSONResponse APIError
 
-func (response BulkMetricsFiles500Response) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+func (response BulkMetricsFiles500JSONResponse) VisitBulkMetricsFilesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type GetMetricsFileRequestObject struct {
@@ -980,44 +1023,49 @@ func (response GetMetricsFile200JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	return ctx.JSON(&response)
 }
 
-type GetMetricsFile400Response struct {
-}
+type GetMetricsFile400JSONResponse APIError
 
-func (response GetMetricsFile400Response) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+func (response GetMetricsFile400JSONResponse) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsFile401Response struct {
-}
+type GetMetricsFile401JSONResponse APIError
 
-func (response GetMetricsFile401Response) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+func (response GetMetricsFile401JSONResponse) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsFile403Response struct {
-}
+type GetMetricsFile403JSONResponse APIError
 
-func (response GetMetricsFile403Response) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+func (response GetMetricsFile403JSONResponse) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsFile404Response struct {
-}
+type GetMetricsFile404JSONResponse APIError
 
-func (response GetMetricsFile404Response) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+func (response GetMetricsFile404JSONResponse) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsFile500Response struct {
-}
+type GetMetricsFile500JSONResponse APIError
 
-func (response GetMetricsFile500Response) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+func (response GetMetricsFile500JSONResponse) VisitGetMetricsFileResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type RecordProviderTransferEventsRequestObject struct {
@@ -1038,36 +1086,40 @@ func (response RecordProviderTransferEvents201JSONResponse) VisitRecordProviderT
 	return ctx.JSON(&response)
 }
 
-type RecordProviderTransferEvents400Response struct {
-}
+type RecordProviderTransferEvents400JSONResponse APIError
 
-func (response RecordProviderTransferEvents400Response) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+func (response RecordProviderTransferEvents400JSONResponse) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type RecordProviderTransferEvents401Response struct {
-}
+type RecordProviderTransferEvents401JSONResponse APIError
 
-func (response RecordProviderTransferEvents401Response) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+func (response RecordProviderTransferEvents401JSONResponse) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type RecordProviderTransferEvents403Response struct {
-}
+type RecordProviderTransferEvents403JSONResponse APIError
 
-func (response RecordProviderTransferEvents403Response) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+func (response RecordProviderTransferEvents403JSONResponse) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type RecordProviderTransferEvents500Response struct {
-}
+type RecordProviderTransferEvents500JSONResponse APIError
 
-func (response RecordProviderTransferEvents500Response) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+func (response RecordProviderTransferEvents500JSONResponse) VisitRecordProviderTransferEventsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type GetMetricsSummaryRequestObject struct {
@@ -1087,36 +1139,40 @@ func (response GetMetricsSummary200JSONResponse) VisitGetMetricsSummaryResponse(
 	return ctx.JSON(&response)
 }
 
-type GetMetricsSummary400Response struct {
-}
+type GetMetricsSummary400JSONResponse APIError
 
-func (response GetMetricsSummary400Response) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+func (response GetMetricsSummary400JSONResponse) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsSummary401Response struct {
-}
+type GetMetricsSummary401JSONResponse APIError
 
-func (response GetMetricsSummary401Response) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+func (response GetMetricsSummary401JSONResponse) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsSummary403Response struct {
-}
+type GetMetricsSummary403JSONResponse APIError
 
-func (response GetMetricsSummary403Response) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+func (response GetMetricsSummary403JSONResponse) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetMetricsSummary500Response struct {
-}
+type GetMetricsSummary500JSONResponse APIError
 
-func (response GetMetricsSummary500Response) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+func (response GetMetricsSummary500JSONResponse) VisitGetMetricsSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type GetTransferBreakdownRequestObject struct {
@@ -1136,36 +1192,40 @@ func (response GetTransferBreakdown200JSONResponse) VisitGetTransferBreakdownRes
 	return ctx.JSON(&response)
 }
 
-type GetTransferBreakdown400Response struct {
-}
+type GetTransferBreakdown400JSONResponse APIError
 
-func (response GetTransferBreakdown400Response) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+func (response GetTransferBreakdown400JSONResponse) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferBreakdown401Response struct {
-}
+type GetTransferBreakdown401JSONResponse APIError
 
-func (response GetTransferBreakdown401Response) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+func (response GetTransferBreakdown401JSONResponse) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferBreakdown403Response struct {
-}
+type GetTransferBreakdown403JSONResponse APIError
 
-func (response GetTransferBreakdown403Response) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+func (response GetTransferBreakdown403JSONResponse) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferBreakdown500Response struct {
-}
+type GetTransferBreakdown500JSONResponse APIError
 
-func (response GetTransferBreakdown500Response) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+func (response GetTransferBreakdown500JSONResponse) VisitGetTransferBreakdownResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type GetTransferSummaryRequestObject struct {
@@ -1185,36 +1245,40 @@ func (response GetTransferSummary200JSONResponse) VisitGetTransferSummaryRespons
 	return ctx.JSON(&response)
 }
 
-type GetTransferSummary400Response struct {
-}
+type GetTransferSummary400JSONResponse APIError
 
-func (response GetTransferSummary400Response) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+func (response GetTransferSummary400JSONResponse) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferSummary401Response struct {
-}
+type GetTransferSummary401JSONResponse APIError
 
-func (response GetTransferSummary401Response) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+func (response GetTransferSummary401JSONResponse) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferSummary403Response struct {
-}
+type GetTransferSummary403JSONResponse APIError
 
-func (response GetTransferSummary403Response) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+func (response GetTransferSummary403JSONResponse) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type GetTransferSummary500Response struct {
-}
+type GetTransferSummary500JSONResponse APIError
 
-func (response GetTransferSummary500Response) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+func (response GetTransferSummary500JSONResponse) VisitGetTransferSummaryResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 // StrictServerInterface represents all server handlers.

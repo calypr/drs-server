@@ -12,6 +12,7 @@ import (
 	"github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/apigen/client/lfsapi"
 	"github.com/calypr/syfon/apigen/client/metricsapi"
+	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
@@ -36,6 +37,31 @@ type BasicAuth struct {
 	Username string
 	Password string
 }
+
+type APIError = apierror.APIError
+type ErrorCode = apierror.Code
+
+const (
+	ErrorCodeNotFound      = apierror.CodeNotFound
+	ErrorCodeUnauthorized  = apierror.CodeUnauthorized
+	ErrorCodeForbidden     = apierror.CodeForbidden
+	ErrorCodeConflict      = apierror.CodeConflict
+	ErrorCodeInvalidInput  = apierror.CodeInvalidInput
+	ErrorCodeRateLimited   = apierror.CodeRateLimited
+	ErrorCodeUnavailable   = apierror.CodeUnavailable
+	ErrorCodeInternal      = apierror.CodeInternal
+	ErrorCodeRequestFailed = apierror.CodeRequestFailed
+)
+
+var (
+	ErrNotFound     = apierror.ErrNotFound
+	ErrUnauthorized = apierror.ErrUnauthorized
+	ErrForbidden    = apierror.ErrForbidden
+	ErrConflict     = apierror.ErrConflict
+	ErrInvalidInput = apierror.ErrInvalidInput
+	ErrRateLimited  = apierror.ErrRateLimited
+	ErrUnavailable  = apierror.ErrUnavailable
+)
 
 // Client implements syfonclient.SyfonClient
 type Client struct {

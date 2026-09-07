@@ -21,7 +21,7 @@ func handleGetAccessURLFiber(objectService *objectrecords.Service, transferServi
 			return response.HandleError(c, err)
 		}
 		if !result.Found {
-			return c.Status(fiber.StatusNotFound).JSON(generated.Error{Msg: drsPtr("Access ID not found or has no URL")})
+			return response.Reject(c, fiber.StatusNotFound, "Access ID not found or has no URL")
 		}
 		return c.JSON(generated.AccessURL{Url: result.URL})
 	}
@@ -32,7 +32,7 @@ func handleGetBulkAccessURLFiber(objectService *objectrecords.Service, transferS
 	return func(c fiber.Ctx) error {
 		var body generated.BulkObjectAccessId
 		if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		requests := make([]transfers.BulkAccessLookupRequest, 0, len(*body.BulkObjectAccessIds))

@@ -24,23 +24,23 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 	}
 
 	if limit < 1 || limit > 1000 || offset < 0 {
-		return metricsapi.ListMetricsFiles400Response{}, nil
+		return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
 	inactiveSince, err := parseInactiveSince(request.Params.InactiveDays)
 	if err != nil {
-		return metricsapi.ListMetricsFiles400Response{}, nil
+		return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
-			return metricsapi.ListMetricsFiles401Response{}, nil
+			return metricsapi.ListMetricsFiles401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized)), nil
 		case http.StatusForbidden:
-			return metricsapi.ListMetricsFiles403Response{}, nil
+			return metricsapi.ListMetricsFiles403JSONResponse(metricsAPIError(ctx, http.StatusForbidden)), nil
 		default:
-			return metricsapi.ListMetricsFiles400Response{}, nil
+			return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
 	}
 
@@ -51,7 +51,7 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
-		return metricsapi.ListMetricsFiles500Response{}, nil
+		return metricsapi.ListMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 
 	items := make([]metricsapi.FileUsage, 0, len(data))
@@ -69,36 +69,36 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi.BulkMetricsFilesRequestObject) (metricsapi.BulkMetricsFilesResponseObject, error) {
 	started := time.Now()
 	if request.Body == nil {
-		return metricsapi.BulkMetricsFiles400Response{}, nil
+		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 	objectIDs := uniqueNonEmptyStrings(request.Body.ObjectIds)
 	if len(objectIDs) == 0 {
-		return metricsapi.BulkMetricsFiles400Response{}, nil
+		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 	inactiveSince, err := parseInactiveSince(request.Body.InactiveDays)
 	if err != nil {
-		return metricsapi.BulkMetricsFiles400Response{}, nil
+		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
-			return metricsapi.BulkMetricsFiles401Response{}, nil
+			return metricsapi.BulkMetricsFiles401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized)), nil
 		case http.StatusForbidden:
-			return metricsapi.BulkMetricsFiles403Response{}, nil
+			return metricsapi.BulkMetricsFiles403JSONResponse(metricsAPIError(ctx, http.StatusForbidden)), nil
 		default:
-			return metricsapi.BulkMetricsFiles400Response{}, nil
+			return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
 	}
 
 	readableObjectIDs, err := s.readableBulkObjectIDs(ctx, access, objectIDs)
 	if err != nil {
-		return metricsapi.BulkMetricsFiles500Response{}, nil
+		return metricsapi.BulkMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 	data, err := s.reporter.ListFileUsageByObjectIDs(ctx, readableObjectIDs)
 	if err != nil {
-		return metricsapi.BulkMetricsFiles500Response{}, nil
+		return metricsapi.BulkMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 	items := make([]metricsapi.FileUsage, 0, len(data))
 	for _, usage := range data {
@@ -125,37 +125,37 @@ func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.GetMetricsFileRequestObject) (metricsapi.GetMetricsFileResponseObject, error) {
 	objectID := request.ObjectId
 	if objectID == "" {
-		return metricsapi.GetMetricsFile400Response{}, nil
+		return metricsapi.GetMetricsFile400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
-			return metricsapi.GetMetricsFile401Response{}, nil
+			return metricsapi.GetMetricsFile401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized)), nil
 		case http.StatusForbidden:
-			return metricsapi.GetMetricsFile403Response{}, nil
+			return metricsapi.GetMetricsFile403JSONResponse(metricsAPIError(ctx, http.StatusForbidden)), nil
 		default:
-			return metricsapi.GetMetricsFile400Response{}, nil
+			return metricsapi.GetMetricsFile400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
 	}
 
 	if access.isScoped() || access.hasScopeAggregate() {
 		inside, err := s.objectInScope(ctx, objectID, access)
 		if err != nil {
-			return metricsapi.GetMetricsFile500Response{}, nil
+			return metricsapi.GetMetricsFile500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 		}
 		if !inside {
-			return metricsapi.GetMetricsFile404Response{}, nil
+			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
 		}
 	}
 
 	fileUsage, err := s.reporter.GetFileUsage(ctx, objectID)
 	if err != nil {
 		if errors.Is(err, faults.ErrNotFound) {
-			return metricsapi.GetMetricsFile404Response{}, nil
+			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
 		}
-		return metricsapi.GetMetricsFile500Response{}, nil
+		return metricsapi.GetMetricsFile500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 
 	return metricsapi.GetMetricsFile200JSONResponse(toMetricsFileUsage(*fileUsage)), nil
@@ -164,18 +164,18 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsapi.GetMetricsSummaryRequestObject) (metricsapi.GetMetricsSummaryResponseObject, error) {
 	inactiveSince, err := parseInactiveSince(request.Params.InactiveDays)
 	if err != nil {
-		return metricsapi.GetMetricsSummary400Response{}, nil
+		return metricsapi.GetMetricsSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
-			return metricsapi.GetMetricsSummary401Response{}, nil
+			return metricsapi.GetMetricsSummary401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized)), nil
 		case http.StatusForbidden:
-			return metricsapi.GetMetricsSummary403Response{}, nil
+			return metricsapi.GetMetricsSummary403JSONResponse(metricsAPIError(ctx, http.StatusForbidden)), nil
 		default:
-			return metricsapi.GetMetricsSummary400Response{}, nil
+			return metricsapi.GetMetricsSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
 	}
 
@@ -184,7 +184,7 @@ func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
-		return metricsapi.GetMetricsSummary500Response{}, nil
+		return metricsapi.GetMetricsSummary500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
 	}
 
 	return metricsapi.GetMetricsSummary200JSONResponse{

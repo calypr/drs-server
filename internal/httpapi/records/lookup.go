@@ -49,7 +49,7 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 			filterProject := strings.TrimSpace(c.Query("project"))
 			limit, start, offset, err := parseInternalListPaginationFiber(c)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+				return response.Reject(c, fiber.StatusBadRequest, err.Error())
 			}
 			ids, err := objectService.ListObjectIDsPageByChecksum(c.Context(), hash, hashType, filterOrg, filterProject, "read", start, limit, offset)
 			if err != nil {
@@ -68,14 +68,14 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 
 		filterOrg, filterProject, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			return response.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		if !hasScope {
 			filterOrg, filterProject = "", ""
 		}
 		limit, start, offset, err := parseInternalListPaginationFiber(c)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			return response.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 
 		requestStart := time.Now()
@@ -115,7 +115,7 @@ func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fibe
 	return func(c fiber.Ctx) error {
 		var req internalapi.BulkDocumentsRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		var ids []string
@@ -126,7 +126,7 @@ func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fibe
 			ids = append(ids, dereferenceStrings(obj.Ids)...)
 		}
 		if len(ids) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: ids are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
 		}
 
 		records, err := objectService.GetBulkObjects(c.Context(), ids, "read")

@@ -29,7 +29,7 @@ func (s *MetricsService) Summary(ctx context.Context, opts MetricsSummaryOptions
 		return metricsapi.FileUsageSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.FileUsageSummary{}, fmt.Errorf("failed to get metrics summary: %d", resp.StatusCode())
+		return metricsapi.FileUsageSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -54,7 +54,7 @@ func (s *MetricsService) Files(ctx context.Context, opts MetricsFilesOptions) ([
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("failed to list metrics files: %d", resp.StatusCode())
+		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	if resp.JSON200.Data == nil {
 		return []metricsapi.FileUsage{}, nil
@@ -68,7 +68,7 @@ func (s *MetricsService) File(ctx context.Context, objectID string) (metricsapi.
 		return metricsapi.FileUsage{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.FileUsage{}, fmt.Errorf("failed to get file metrics: %d", resp.StatusCode())
+		return metricsapi.FileUsage{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -83,7 +83,7 @@ func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetri
 		return TransferAttributionSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return TransferAttributionSummary{}, fmt.Errorf("failed to get transfer metrics summary: %d", resp.StatusCode())
+		return TransferAttributionSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return generatedTransferSummaryToDTO(*resp.JSON200), nil
 }
@@ -98,7 +98,7 @@ func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMet
 		return TransferBreakdownResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return TransferBreakdownResponse{}, fmt.Errorf("failed to get transfer metrics breakdown: %d", resp.StatusCode())
+		return TransferBreakdownResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	out := TransferBreakdownResponse{}
 	if resp.JSON200.GroupBy != nil {

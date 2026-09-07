@@ -2,6 +2,7 @@ package maintenance
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/internal/access"
+	apiresponse "github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
@@ -28,12 +30,12 @@ func TestRegisterRoutesUsesDirectFiberCleanupParams(t *testing.T) {
 	if response.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", response.StatusCode)
 	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read response: %v", err)
+	var body apiresponse.APIError
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if string(body) != "project storage service is not configured" {
-		t.Fatalf("body = %q, want existing unsupported response", body)
+	if body.Code != "internal_error" || body.Message != http.StatusText(http.StatusInternalServerError) {
+		t.Fatalf("unexpected error body: %+v", body)
 	}
 }
 
@@ -56,12 +58,12 @@ func TestInspectObjectRejectsMalformedURLWithExistingStatusAndBody(t *testing.T)
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", response.StatusCode)
 	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read response: %v", err)
+	var body apiresponse.APIError
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if string(body) != "object_url must be a valid s3://bucket/key URL" {
-		t.Fatalf("body = %q, want invalid URL message", body)
+	if body.Code != "invalid_input" || body.Message != "object_url must be a valid s3://bucket/key URL" {
+		t.Fatalf("unexpected error body: %+v", body)
 	}
 }
 

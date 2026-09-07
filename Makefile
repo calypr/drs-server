@@ -88,7 +88,7 @@ gen:
 	docker run --rm \
 	  --user "$$(id -u):$$(id -g)" \
 	  -v "$(PWD):/local" \
-	  $(YQ_IMAGE) eval '.components.parameters.Checksum."x-go-name" = "ChecksumParameter"' -i /local/$(OPENAPI_DIR)/openapi.yaml; \
+	  $(YQ_IMAGE) eval --from-file /local/$(OPENAPI_DIR)/syfon-error.yq -i /local/$(OPENAPI_DIR)/openapi.yaml; \
 	echo "Bundled canonical DRS OpenAPI spec into ./$(OPENAPI_DIR)/openapi.yaml"; \
 	$(MAKE) gen-server; \
 	$(MAKE) gen-client

@@ -11,6 +11,41 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for APIErrorCode.
+const (
+	Conflict      APIErrorCode = "conflict"
+	Forbidden     APIErrorCode = "forbidden"
+	InternalError APIErrorCode = "internal_error"
+	InvalidInput  APIErrorCode = "invalid_input"
+	NotFound      APIErrorCode = "not_found"
+	RateLimited   APIErrorCode = "rate_limited"
+	RequestFailed APIErrorCode = "request_failed"
+	Unauthorized  APIErrorCode = "unauthorized"
+	Unavailable   APIErrorCode = "unavailable"
+)
+
+// APIError A stable Syfon API error.
+type APIError struct {
+	// Code Stable machine-readable error code.
+	Code APIErrorCode `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// Msg GA4GH-compatible alias for message.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Msg *string `json:"msg,omitempty"`
+
+	// RequestId Request identifier for support and log correlation.
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status HTTP response status.
+	Status int `json:"status"`
+}
+
+// APIErrorCode Stable machine-readable error code.
+type APIErrorCode string
+
 // AddBucketScopeRequest defines model for AddBucketScopeRequest.
 type AddBucketScopeRequest struct {
 	Organization string `json:"organization"`
@@ -300,28 +335,31 @@ func (response ListBuckets200JSONResponse) VisitListBucketsResponse(ctx fiber.Ct
 	return ctx.JSON(&response)
 }
 
-type ListBuckets401Response struct {
-}
+type ListBuckets401JSONResponse APIError
 
-func (response ListBuckets401Response) VisitListBucketsResponse(ctx fiber.Ctx) error {
+func (response ListBuckets401JSONResponse) VisitListBucketsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListBuckets403Response struct {
-}
+type ListBuckets403JSONResponse APIError
 
-func (response ListBuckets403Response) VisitListBucketsResponse(ctx fiber.Ctx) error {
+func (response ListBuckets403JSONResponse) VisitListBucketsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListBuckets500Response struct {
-}
+type ListBuckets500JSONResponse APIError
 
-func (response ListBuckets500Response) VisitListBucketsResponse(ctx fiber.Ctx) error {
+func (response ListBuckets500JSONResponse) VisitListBucketsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type PutBucketRequestObject struct {
@@ -340,44 +378,49 @@ func (response PutBucket201Response) VisitPutBucketResponse(ctx fiber.Ctx) error
 	return nil
 }
 
-type PutBucket400Response struct {
-}
+type PutBucket400JSONResponse APIError
 
-func (response PutBucket400Response) VisitPutBucketResponse(ctx fiber.Ctx) error {
+func (response PutBucket400JSONResponse) VisitPutBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type PutBucket401Response struct {
-}
+type PutBucket401JSONResponse APIError
 
-func (response PutBucket401Response) VisitPutBucketResponse(ctx fiber.Ctx) error {
+func (response PutBucket401JSONResponse) VisitPutBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type PutBucket403Response struct {
-}
+type PutBucket403JSONResponse APIError
 
-func (response PutBucket403Response) VisitPutBucketResponse(ctx fiber.Ctx) error {
+func (response PutBucket403JSONResponse) VisitPutBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type PutBucket409Response struct {
-}
+type PutBucket409JSONResponse APIError
 
-func (response PutBucket409Response) VisitPutBucketResponse(ctx fiber.Ctx) error {
+func (response PutBucket409JSONResponse) VisitPutBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type PutBucket500Response struct {
-}
+type PutBucket500JSONResponse APIError
 
-func (response PutBucket500Response) VisitPutBucketResponse(ctx fiber.Ctx) error {
+func (response PutBucket500JSONResponse) VisitPutBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type DeleteBucketRequestObject struct {
@@ -396,44 +439,49 @@ func (response DeleteBucket204Response) VisitDeleteBucketResponse(ctx fiber.Ctx)
 	return nil
 }
 
-type DeleteBucket400Response struct {
-}
+type DeleteBucket400JSONResponse APIError
 
-func (response DeleteBucket400Response) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+func (response DeleteBucket400JSONResponse) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucket401Response struct {
-}
+type DeleteBucket401JSONResponse APIError
 
-func (response DeleteBucket401Response) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+func (response DeleteBucket401JSONResponse) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucket403Response struct {
-}
+type DeleteBucket403JSONResponse APIError
 
-func (response DeleteBucket403Response) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+func (response DeleteBucket403JSONResponse) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucket404Response struct {
-}
+type DeleteBucket404JSONResponse APIError
 
-func (response DeleteBucket404Response) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+func (response DeleteBucket404JSONResponse) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucket500Response struct {
-}
+type DeleteBucket500JSONResponse APIError
 
-func (response DeleteBucket500Response) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+func (response DeleteBucket500JSONResponse) VisitDeleteBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type DeleteBucketScopeRequestObject struct {
@@ -453,44 +501,49 @@ func (response DeleteBucketScope204Response) VisitDeleteBucketScopeResponse(ctx 
 	return nil
 }
 
-type DeleteBucketScope400Response struct {
-}
+type DeleteBucketScope400JSONResponse APIError
 
-func (response DeleteBucketScope400Response) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+func (response DeleteBucketScope400JSONResponse) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucketScope401Response struct {
-}
+type DeleteBucketScope401JSONResponse APIError
 
-func (response DeleteBucketScope401Response) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+func (response DeleteBucketScope401JSONResponse) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucketScope403Response struct {
-}
+type DeleteBucketScope403JSONResponse APIError
 
-func (response DeleteBucketScope403Response) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+func (response DeleteBucketScope403JSONResponse) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucketScope404Response struct {
-}
+type DeleteBucketScope404JSONResponse APIError
 
-func (response DeleteBucketScope404Response) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+func (response DeleteBucketScope404JSONResponse) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteBucketScope500Response struct {
-}
+type DeleteBucketScope500JSONResponse APIError
 
-func (response DeleteBucketScope500Response) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+func (response DeleteBucketScope500JSONResponse) VisitDeleteBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type ListBucketScopesRequestObject struct {
@@ -510,36 +563,40 @@ func (response ListBucketScopes200JSONResponse) VisitListBucketScopesResponse(ct
 	return ctx.JSON(&response)
 }
 
-type ListBucketScopes401Response struct {
-}
+type ListBucketScopes401JSONResponse APIError
 
-func (response ListBucketScopes401Response) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+func (response ListBucketScopes401JSONResponse) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListBucketScopes403Response struct {
-}
+type ListBucketScopes403JSONResponse APIError
 
-func (response ListBucketScopes403Response) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+func (response ListBucketScopes403JSONResponse) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListBucketScopes404Response struct {
-}
+type ListBucketScopes404JSONResponse APIError
 
-func (response ListBucketScopes404Response) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+func (response ListBucketScopes404JSONResponse) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type ListBucketScopes500Response struct {
-}
+type ListBucketScopes500JSONResponse APIError
 
-func (response ListBucketScopes500Response) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+func (response ListBucketScopes500JSONResponse) VisitListBucketScopesResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type AddBucketScopeRequestObject struct {
@@ -559,52 +616,58 @@ func (response AddBucketScope201Response) VisitAddBucketScopeResponse(ctx fiber.
 	return nil
 }
 
-type AddBucketScope400Response struct {
-}
+type AddBucketScope400JSONResponse APIError
 
-func (response AddBucketScope400Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope400JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type AddBucketScope401Response struct {
-}
+type AddBucketScope401JSONResponse APIError
 
-func (response AddBucketScope401Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope401JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type AddBucketScope403Response struct {
-}
+type AddBucketScope403JSONResponse APIError
 
-func (response AddBucketScope403Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope403JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type AddBucketScope404Response struct {
-}
+type AddBucketScope404JSONResponse APIError
 
-func (response AddBucketScope404Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope404JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type AddBucketScope409Response struct {
-}
+type AddBucketScope409JSONResponse APIError
 
-func (response AddBucketScope409Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope409JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type AddBucketScope500Response struct {
-}
+type AddBucketScope500JSONResponse APIError
 
-func (response AddBucketScope500Response) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+func (response AddBucketScope500JSONResponse) VisitAddBucketScopeResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type DeleteProjectDataRequestObject struct {
@@ -625,36 +688,40 @@ func (response DeleteProjectData200JSONResponse) VisitDeleteProjectDataResponse(
 	return ctx.JSON(&response)
 }
 
-type DeleteProjectData400Response struct {
-}
+type DeleteProjectData400JSONResponse APIError
 
-func (response DeleteProjectData400Response) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+func (response DeleteProjectData400JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteProjectData401Response struct {
-}
+type DeleteProjectData401JSONResponse APIError
 
-func (response DeleteProjectData401Response) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+func (response DeleteProjectData401JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteProjectData403Response struct {
-}
+type DeleteProjectData403JSONResponse APIError
 
-func (response DeleteProjectData403Response) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+func (response DeleteProjectData403JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
-type DeleteProjectData500Response struct {
-}
+type DeleteProjectData500JSONResponse APIError
 
-func (response DeleteProjectData500Response) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+func (response DeleteProjectData500JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 // StrictServerInterface represents all server handlers.

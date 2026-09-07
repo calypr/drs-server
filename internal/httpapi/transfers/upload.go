@@ -31,12 +31,12 @@ func stringValue(value *string) string {
 func handleInternalUploadBlankFiber(transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req internalapi.InternalUploadBlankRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		guid := ""
@@ -70,13 +70,13 @@ func handleInternalUploadBlankFiber(transferService *domaintransfers.Service) fi
 func handleInternalUploadURLFiber(objectService *objectrecords.Service, transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		fileID := c.Params("file_id")
 		var params internalapi.InternalUploadURLParams
 		if err := c.Bind().Query(&params); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid query parameters")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid query parameters")
 		}
 
 		obj, err := objectService.GetObject(c.Context(), fileID, "update")
@@ -186,7 +186,7 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalUploadBulkRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Requests) == 0 {
 			empty := []internalapi.InternalUploadBulkResult{}

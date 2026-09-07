@@ -30,6 +30,7 @@ package main
 
 import (
   "context"
+  "errors"
   "log"
 
   syclient "github.com/calypr/syfon/client"
@@ -64,7 +65,28 @@ func main() {
   }
 
   if err := c.Health().Ping(context.Background()); err != nil {
+	var apiErr *syclient.APIError
+	if errors.As(err, &apiErr) {
+	  log.Printf("Syfon request %s failed with %s (%d), request ID %s", apiErr.URL, apiErr.Code, apiErr.Status, apiErr.RequestID)
+	}
     log.Fatal(err)
   }
 }
 ```
+
+All Syfon API failures return `*syclient.APIError`. The error preserves the
+HTTP status, stable machine-readable code, public message, request ID, request
+method and URL, response headers, and response body. Use `errors.Is` for portable
+control flow:
+
+```go
+record, err := c.DRS().GetObject(context.Background(), "object-id")
+if errors.Is(err, syclient.ErrNotFound) {
+  // The object does not exist or is not visible to this caller.
+}
+```
+
+`APIError.Code` has the exported `syclient.ErrorCode` type. Compare it with
+constants such as `syclient.ErrorCodeConflict` when the exact wire code matters.
+The exported sentinels are `ErrNotFound`, `ErrUnauthorized`, `ErrForbidden`,
+`ErrConflict`, `ErrInvalidInput`, `ErrRateLimited`, and `ErrUnavailable`.

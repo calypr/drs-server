@@ -24,7 +24,7 @@ func handleGetBulkObjectsFiber(service *objectrecords.Service) fiber.Handler {
 			BulkObjectIds []string `json:"bulk_object_ids"`
 		}
 		if err := c.Bind().JSON(&body); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		objects, err := service.GetBulkObjects(c.Context(), body.BulkObjectIds, "")

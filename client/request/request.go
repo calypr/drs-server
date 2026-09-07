@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/hashicorp/go-retryablehttp"
@@ -33,17 +34,7 @@ type Request struct {
 	UserAgent string
 }
 
-type ResponseError struct {
-	Method  string
-	URL     string
-	Status  int
-	Body    string
-	Headers http.Header
-}
-
-func (e *ResponseError) Error() string {
-	return fmt.Sprintf("%s %s: status %d body=%s", e.Method, e.URL, e.Status, e.Body)
-}
+type ResponseError = apierror.APIError
 
 type RequestOption func(*RequestBuilder)
 
@@ -306,13 +297,14 @@ func (r *Request) handleResponse(method string, resp *http.Response, out any) er
 			return fmt.Errorf("read response body: %w", err)
 		}
 		if resp.StatusCode >= 400 {
-			return &ResponseError{
-				Method:  method,
-				URL:     resp.Request.URL.String(),
-				Status:  resp.StatusCode,
-				Body:    strings.TrimSpace(string(data)),
-				Headers: resp.Header.Clone(),
+			apiErr := apierror.FromResponse(resp, data)
+			if apiErr.Method == "" {
+				apiErr.Method = method
 			}
+			if apiErr.URL == "" && resp.Request != nil && resp.Request.URL != nil {
+				apiErr.URL = resp.Request.URL.String()
+			}
+			return apiErr
 		}
 
 		if out != nil && len(data) > 0 {

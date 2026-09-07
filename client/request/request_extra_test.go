@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 )
@@ -60,8 +61,11 @@ func TestRequestDo_ResponseAndDecodeErrors(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *ResponseError, got %T", err)
 	}
-	if respErr.Status != http.StatusForbidden || respErr.Method != http.MethodGet || respErr.Body != "denied" {
+	if respErr.Status != http.StatusForbidden || respErr.Code != "forbidden" || respErr.Method != http.MethodGet || respErr.Body != "denied" {
 		t.Fatalf("unexpected response error details: %+v", respErr)
+	}
+	if !errors.Is(respErr, apierror.ErrForbidden) {
+		t.Fatalf("expected forbidden sentinel, got %v", respErr)
 	}
 
 	err = req.Do(context.Background(), http.MethodGet, "/badjson", nil, &out)

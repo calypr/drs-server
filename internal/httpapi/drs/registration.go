@@ -32,7 +32,7 @@ func handleRegisterObjectsFiber(service *objectrecords.Service) fiber.Handler {
 					"objects": []any{ObjectPayload(*finalObj)},
 				})
 			}
-			return c.Status(fiber.StatusBadRequest).JSON(generated.Error{Msg: drsPtr("Invalid request body")})
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		toRegister := make([]objects.Record, 0, len(body.Candidates))

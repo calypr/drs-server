@@ -1423,14 +1423,42 @@ components:
               default: false
     Error:
       type: object
-      description: An object that can optionally include information about the error.
+      description: A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
+      required:
+        - code
+        - status
+        - message
       properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          enum:
+            - not_found
+            - unauthorized
+            - forbidden
+            - conflict
+            - invalid_input
+            - rate_limited
+            - unavailable
+            - internal_error
+            - request_failed
+        status:
+          type: integer
+          description: HTTP response status.
+        message:
+          type: string
+          description: Human-readable error message.
+        request_id:
+          type: string
+          description: Request identifier for support and log correlation.
         msg:
           type: string
-          description: A detailed error message.
+          deprecated: true
+          description: GA4GH-compatible alias for message.
         status_code:
           type: integer
-          description: The integer representing the HTTP status code (e.g. 200, 404).
+          deprecated: true
+          description: Legacy alias for status.
     Checksum:
       type: object
       required:

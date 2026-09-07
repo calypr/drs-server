@@ -46,7 +46,7 @@ func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Servi
 
 	objectURL := firstSupportedAccessURL(obj)
 	if objectURL == "" {
-		return c.Status(fiber.StatusNotFound).SendString("No supported cloud location found for this file")
+		return response.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
 	}
 
 	opts := storage.AccessOptions{}
@@ -95,16 +95,16 @@ func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.S
 	endStr := c.Query("end")
 
 	if startStr == "" || endStr == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("Missing 'start' or 'end' query parameter")
+		return response.Reject(c, fiber.StatusBadRequest, "Missing 'start' or 'end' query parameter")
 	}
 
 	start, err := strconv.ParseInt(startStr, 10, 64)
 	if err != nil || start < 0 {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid 'start' parameter")
+		return response.Reject(c, fiber.StatusBadRequest, "Invalid 'start' parameter")
 	}
 	end, err := strconv.ParseInt(endStr, 10, 64)
 	if err != nil || end < start {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid 'end' parameter")
+		return response.Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
 	}
 
 	obj, err := objectService.GetObject(c.Context(), fileID, "read")
@@ -114,7 +114,7 @@ func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.S
 
 	objectURL := firstSupportedAccessURL(obj)
 	if objectURL == "" {
-		return c.Status(fiber.StatusNotFound).SendString("No supported cloud location found for this file")
+		return response.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
 	}
 
 	bucketID := ""

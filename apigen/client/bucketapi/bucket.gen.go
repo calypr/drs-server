@@ -16,6 +16,41 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for APIErrorCode.
+const (
+	Conflict      APIErrorCode = "conflict"
+	Forbidden     APIErrorCode = "forbidden"
+	InternalError APIErrorCode = "internal_error"
+	InvalidInput  APIErrorCode = "invalid_input"
+	NotFound      APIErrorCode = "not_found"
+	RateLimited   APIErrorCode = "rate_limited"
+	RequestFailed APIErrorCode = "request_failed"
+	Unauthorized  APIErrorCode = "unauthorized"
+	Unavailable   APIErrorCode = "unavailable"
+)
+
+// APIError A stable Syfon API error.
+type APIError struct {
+	// Code Stable machine-readable error code.
+	Code APIErrorCode `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// Msg GA4GH-compatible alias for message.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Msg *string `json:"msg,omitempty"`
+
+	// RequestId Request identifier for support and log correlation.
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status HTTP response status.
+	Status int `json:"status"`
+}
+
+// APIErrorCode Stable machine-readable error code.
+type APIErrorCode string
+
 // AddBucketScopeRequest defines model for AddBucketScopeRequest.
 type AddBucketScopeRequest struct {
 	Organization string `json:"organization"`
@@ -669,6 +704,9 @@ type ListBucketsResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *BucketsResponse
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -690,6 +728,11 @@ func (r ListBucketsResp) StatusCode() int {
 type PutBucketResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON409      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -711,6 +754,11 @@ func (r PutBucketResp) StatusCode() int {
 type DeleteBucketResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -732,6 +780,11 @@ func (r DeleteBucketResp) StatusCode() int {
 type DeleteBucketScopeResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -754,6 +807,10 @@ type ListBucketScopesResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *[]BucketScopeResponse
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -775,6 +832,12 @@ func (r ListBucketScopesResp) StatusCode() int {
 type AddBucketScopeResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON404      *APIError
+	JSON409      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -797,6 +860,10 @@ type DeleteProjectDataResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *DeleteProjectDataResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
@@ -915,6 +982,27 @@ func ParseListBucketsResp(rsp *http.Response) (*ListBucketsResp, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
 	}
 
 	return response, nil
@@ -933,6 +1021,44 @@ func ParsePutBucketResp(rsp *http.Response) (*PutBucketResp, error) {
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -949,6 +1075,44 @@ func ParseDeleteBucketResp(rsp *http.Response) (*DeleteBucketResp, error) {
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -963,6 +1127,44 @@ func ParseDeleteBucketScopeResp(rsp *http.Response) (*DeleteBucketScopeResp, err
 	response := &DeleteBucketScopeResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
 	}
 
 	return response, nil
@@ -989,6 +1191,34 @@ func ParseListBucketScopesResp(rsp *http.Response) (*ListBucketScopesResp, error
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
 	}
 
 	return response, nil
@@ -1005,6 +1235,51 @@ func ParseAddBucketScopeResp(rsp *http.Response) (*AddBucketScopeResp, error) {
 	response := &AddBucketScopeResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
 	}
 
 	return response, nil
@@ -1030,6 +1305,34 @@ func ParseDeleteProjectDataResp(rsp *http.Response) (*DeleteProjectDataResp, err
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest APIError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
 
 	}
 

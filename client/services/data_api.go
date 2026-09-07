@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
@@ -32,7 +31,7 @@ func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalU
 		return internalapi.InternalUploadBlankOutput{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.InternalUploadBlankOutput{}, fmt.Errorf("failed to upload blank: %d", resp.StatusCode())
+		return internalapi.InternalUploadBlankOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -57,7 +56,7 @@ func (d *DataService) UploadURL(ctx context.Context, req UploadURLRequest) (inte
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, fmt.Errorf("failed to get upload URL: %d", resp.StatusCode())
+		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -68,7 +67,7 @@ func (d *DataService) UploadBulk(ctx context.Context, req internalapi.InternalUp
 		return internalapi.InternalUploadBulkOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalUploadBulkOutput{}, fmt.Errorf("failed to upload bulk: %d", resp.StatusCode())
+		return internalapi.InternalUploadBulkOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -86,7 +85,7 @@ func (d *DataService) DownloadURL(ctx context.Context, did string, expiresIn int
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, fmt.Errorf("failed to get download URL: %d", resp.StatusCode())
+		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -97,7 +96,7 @@ func (d *DataService) DeleteFile(ctx context.Context, guid string) (string, erro
 		return "", err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return "", fmt.Errorf("failed to delete file: %d", resp.StatusCode())
+		return "", apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return guid, nil
 }

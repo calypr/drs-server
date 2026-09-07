@@ -2,6 +2,7 @@ package drs
 
 import (
 	generated "github.com/calypr/syfon/apigen/server/drs"
+	"github.com/calypr/syfon/internal/httpapi/response"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
@@ -37,7 +38,7 @@ func RegisterDRSRoutes(router fiber.Router, objectService *objectrecords.Service
 
 func handleUnsupportedChecksumAdditionFiber() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		return c.Status(fiber.StatusNotFound).JSON(generated.Error{Msg: drsPtr("Checksum addition is not supported")})
+		return response.Reject(c, fiber.StatusNotFound, "Checksum addition is not supported")
 	}
 }
 

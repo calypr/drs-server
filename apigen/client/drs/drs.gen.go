@@ -75,6 +75,19 @@ const (
 	Drs DrsServiceTypeArtifact = "drs"
 )
 
+// Defines values for ErrorCode.
+const (
+	Conflict      ErrorCode = "conflict"
+	Forbidden     ErrorCode = "forbidden"
+	InternalError ErrorCode = "internal_error"
+	InvalidInput  ErrorCode = "invalid_input"
+	NotFound      ErrorCode = "not_found"
+	RateLimited   ErrorCode = "rate_limited"
+	RequestFailed ErrorCode = "request_failed"
+	Unauthorized  ErrorCode = "unauthorized"
+	Unavailable   ErrorCode = "unavailable"
+)
+
 // Defines values for UploadMethodType.
 const (
 	Ftp    UploadMethodType = "ftp"
@@ -512,14 +525,31 @@ type DrsServiceDrsSupportedUploadMethodTypes string
 // DrsServiceTypeArtifact defines model for DrsService.Type.Artifact.
 type DrsServiceTypeArtifact string
 
-// Error An object that can optionally include information about the error.
+// Error A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type Error struct {
-	// Msg A detailed error message.
+	// Code Stable machine-readable error code.
+	Code ErrorCode `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// Msg GA4GH-compatible alias for message.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	Msg *string `json:"msg,omitempty"`
 
-	// StatusCode The integer representing the HTTP status code (e.g. 200, 404).
+	// RequestId Request identifier for support and log correlation.
+	RequestId *string `json:"request_id,omitempty"`
+
+	// Status HTTP response status.
+	Status int `json:"status"`
+
+	// StatusCode Legacy alias for status.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	StatusCode *int `json:"status_code,omitempty"`
 }
+
+// ErrorCode Stable machine-readable error code.
+type ErrorCode string
 
 // Service GA4GH service
 type Service struct {
@@ -888,34 +918,34 @@ type N201ObjectsCreated struct {
 	Objects []DrsObject `json:"objects"`
 }
 
-// N400BadRequest An object that can optionally include information about the error.
+// N400BadRequest A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N400BadRequest = Error
 
-// N400BadRequestDelete An object that can optionally include information about the error.
+// N400BadRequestDelete A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N400BadRequestDelete = Error
 
-// N401Unauthorized An object that can optionally include information about the error.
+// N401Unauthorized A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N401Unauthorized = Error
 
-// N403Forbidden An object that can optionally include information about the error.
+// N403Forbidden A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N403Forbidden = Error
 
-// N403ForbiddenDelete An object that can optionally include information about the error.
+// N403ForbiddenDelete A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N403ForbiddenDelete = Error
 
-// N404NotFoundAccess An object that can optionally include information about the error.
+// N404NotFoundAccess A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N404NotFoundAccess = Error
 
-// N404NotFoundDelete An object that can optionally include information about the error.
+// N404NotFoundDelete A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N404NotFoundDelete = Error
 
-// N404NotFoundDrsObject An object that can optionally include information about the error.
+// N404NotFoundDrsObject A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N404NotFoundDrsObject = Error
 
-// N413RequestTooLarge An object that can optionally include information about the error.
+// N413RequestTooLarge A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N413RequestTooLarge = Error
 
-// N500InternalServerError An object that can optionally include information about the error.
+// N500InternalServerError A stable Syfon API error that remains compatible with the GA4GH DRS error shape.
 type N500InternalServerError = Error
 
 // AccessMethodUpdateBody defines model for AccessMethodUpdateBody.

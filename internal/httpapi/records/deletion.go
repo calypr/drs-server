@@ -21,14 +21,14 @@ func handleInternalDeleteFiber(objectService *objectrecords.Service) fiber.Handl
 func handleInternalDeleteByQueryFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		org, project, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			return response.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		if !hasScope {
-			return c.Status(fiber.StatusBadRequest).SendString("No scope specified")
+			return response.Reject(c, fiber.StatusBadRequest, "No scope specified")
 		}
 
 		count, err := objectService.DeleteBulkByScope(c.Context(), org, project)
@@ -42,20 +42,20 @@ func handleInternalDeleteByQueryFiber(objectService *objectrecords.Service) fibe
 func handleInternalBulkDeleteFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req internalapi.BulkHashesRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Hashes) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: hashes are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 		}
 
 		normalized := normalizeNonEmptyBulkHashes(req.Hashes)
 		if len(normalized) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: hashes are required")
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 		}
 
 		deleted, err := objectService.DeleteObjectsByChecksums(c.Context(), normalized)

@@ -15,6 +15,7 @@ import (
 	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
 
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 func TestIndexServiceOperationsAndUpsert(t *testing.T) {
@@ -336,7 +337,8 @@ func TestIndexServiceRemoveControlledAccessRequiresJSON200(t *testing.T) {
 
 	service := NewIndexService(mustInternalClient(t, server.URL), &fakeRequester{})
 	_, err := service.RemoveControlledAccess(context.Background(), "did-ca", "/organization/org/project/proj")
-	if err == nil || !strings.Contains(err.Error(), "failed to remove controlled access: 204") {
+	var apiErr *apierror.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNoContent {
 		t.Fatalf("expected 204 failure, got %v", err)
 	}
 }

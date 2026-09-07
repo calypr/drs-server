@@ -30,7 +30,7 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if middleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req scoperepair.Options
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -56,7 +56,7 @@ func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler
 func handleInternalScopeRepairApplyFiber(svc *scoperepair.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if middleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req scoperepair.Options
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {

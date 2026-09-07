@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,12 +30,15 @@ func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
-	responseBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
-	if string(responseBody) != "Upload ID not found" {
-		t.Errorf("expected exact not-found body, got %q", responseBody)
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != "not_found" || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
 
@@ -57,12 +59,15 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
-	responseBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
-	if string(responseBody) != "Upload ID not found" {
-		t.Errorf("expected exact not-found body, got %q", responseBody)
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != "not_found" || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
 

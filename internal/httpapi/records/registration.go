@@ -16,7 +16,7 @@ func handleInternalCreateFiber(objectService *objectrecords.Service) fiber.Handl
 	return func(c fiber.Ctx) error {
 		candidates, err := decodeInternalCreateCandidates(c, time.Now().UTC())
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: " + err.Error())
+			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		if err := objectService.RegisterObjects(c.Context(), candidates); err != nil {
 			return response.HandleError(c, err)

@@ -173,7 +173,7 @@ type internalDeleteProjectBucketObjectsItem struct {
 func handleInternalInspectObjectFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -212,7 +212,7 @@ func handleInternalInspectObjectFiber(service *projectstorage.Inspector) fiber.H
 func handleInternalInspectObjectBulkFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectsBulkRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -247,7 +247,7 @@ func handleInternalInspectObjectBulkListFiber(service *projectstorage.Inspector)
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectsBulkRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -279,7 +279,7 @@ func handleInternalInspectProjectBucketFiber(service *projectstorage.Inspector) 
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectBucketRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -314,7 +314,7 @@ func handleInternalInspectProjectBucketInventoryFiber(service *projectstorage.In
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectBucketRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -347,7 +347,7 @@ func handleInternalInspectProjectBucketInventoryFiber(service *projectstorage.In
 func handleInternalInspectProjectRecordsFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectRecordsRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
@@ -373,7 +373,7 @@ func handleInternalInspectProjectRecordsFiber(service *projectstorage.Inspector)
 func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectScopesRequest
 		switch c.Method() {
@@ -428,7 +428,7 @@ func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fib
 func handleInternalDeleteProjectBucketObjectsFiber(service *projectstorage.ProjectCleanup) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return c.SendStatus(fiber.StatusUnauthorized)
+			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalDeleteProjectBucketObjectsRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
