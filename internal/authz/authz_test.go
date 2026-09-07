@@ -200,3 +200,28 @@ func TestHasMethodAccess(t *testing.T) {
 		}
 	})
 }
+
+func TestAuthorizationAnyAllBehavior(t *testing.T) {
+	first := "/programs/a/projects/first"
+	second := "/programs/a/projects/second"
+	ctx := testSessionContext("local", false, true, nil, map[string]map[string]bool{
+		first:  {"read": true},
+		second: {"create": true},
+	})
+
+	if !HasMethodAccess(ctx, "read", []string{first}) {
+		t.Fatal("expected a method check to allow the matching resource")
+	}
+	if HasMethodAccess(ctx, "read", []string{first, second}) {
+		t.Fatal("expected HasMethodAccess to require the method on every resource")
+	}
+	if !HasAnyMethodAccess(ctx, []string{first}, "update", "read") {
+		t.Fatal("expected HasAnyMethodAccess to allow one matching method")
+	}
+	if HasAnyMethodAccess(ctx, []string{first, second}, "read", "create") {
+		t.Fatal("expected HasAnyMethodAccess to retain all-resource semantics per method")
+	}
+	if !HasObjectMethodAccess(ctx, "read", []string{first, second}) {
+		t.Fatal("expected object access to allow any matching resource")
+	}
+}
