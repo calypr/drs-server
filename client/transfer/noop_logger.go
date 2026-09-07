@@ -34,4 +34,4 @@ func (NoOpLogger) GetSucceededLogMap() map[string]string            { return map
 func (NoOpLogger) GetFailedLogMap() map[string]common.RetryObject {
 	return map[string]common.RetryObject{}
 }
-func (NoOpLogger) DeleteFromFailedLog(string)   {}
+func (NoOpLogger) DeleteFromFailedLog(string) {}

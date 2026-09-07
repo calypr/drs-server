@@ -1,3 +1,3 @@
-[submodule "ga4gh/data-repository-service-schemas"]
-	path = ga4gh/data-repository-service-schemas
-	url =  https://github.com/ga4gh/data-repository-service-schemas.git
+[submodule "data-repository-service-schemas"]
+	path = data-repository-service-schemas
+	url = https://github.com/ga4gh/data-repository-service-schemas.git

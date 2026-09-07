@@ -9,7 +9,6 @@ import (
 
 	syfonclient "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/cmd/cliauth"
-	"github.com/calypr/syfon/internal/models"
 	"github.com/spf13/cobra"
 )
 
@@ -87,12 +86,12 @@ var transfersBreakdownCmd = &cobra.Command{
 }
 
 type transferUsersReport struct {
-	Summary    models.TransferAttributionSummary `json:"summary"`
-	Users      []transferUserMetrics             `json:"users"`
-	Freshness  *models.TransferMetricsFreshness  `json:"freshness,omitempty"`
-	SortBy     string                            `json:"sort_by"`
-	SortOrder  string                            `json:"sort_order"`
-	TotalUsers int                               `json:"total_users"`
+	Summary    syfonclient.TransferAttributionSummary `json:"summary"`
+	Users      []transferUserMetrics                  `json:"users"`
+	Freshness  *syfonclient.TransferMetricsFreshness  `json:"freshness,omitempty"`
+	SortBy     string                                 `json:"sort_by"`
+	SortOrder  string                                 `json:"sort_order"`
+	TotalUsers int                                    `json:"total_users"`
 }
 
 type transferUserMetrics struct {
@@ -155,9 +154,9 @@ var transfersUsersCmd = &cobra.Command{
 }
 
 type transferBillingReport struct {
-	Summary          models.TransferAttributionSummary     `json:"summary"`
-	StorageLocations []models.TransferAttributionBreakdown `json:"storage_locations"`
-	Files            []models.TransferAttributionBreakdown `json:"files"`
+	Summary          syfonclient.TransferAttributionSummary     `json:"summary"`
+	StorageLocations []syfonclient.TransferAttributionBreakdown `json:"storage_locations"`
+	Files            []syfonclient.TransferAttributionBreakdown `json:"files"`
 }
 
 var transfersBillingCmd = &cobra.Command{
@@ -303,7 +302,7 @@ func normalizedBreakdownSort(rawSortBy, rawOrder, groupBy, direction string) (st
 	return sortBy, order, nil
 }
 
-func sortTransferBreakdowns(items []models.TransferAttributionBreakdown, sortBy, order string) {
+func sortTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, sortBy, order string) {
 	desc := order != "asc"
 	sort.SliceStable(items, func(i, j int) bool {
 		left := items[i]
@@ -322,7 +321,7 @@ func sortTransferBreakdowns(items []models.TransferAttributionBreakdown, sortBy,
 	})
 }
 
-func compareTransferBreakdown(left, right models.TransferAttributionBreakdown, sortBy string) int {
+func compareTransferBreakdown(left, right syfonclient.TransferAttributionBreakdown, sortBy string) int {
 	switch sortBy {
 	case "downloaded":
 		return compareInt64(left.BytesDownloaded, right.BytesDownloaded)
@@ -367,14 +366,14 @@ func compareTimePtr(left, right *time.Time) int {
 	}
 }
 
-func limitedTransferBreakdowns(items []models.TransferAttributionBreakdown, limit int) []models.TransferAttributionBreakdown {
+func limitedTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, limit int) []syfonclient.TransferAttributionBreakdown {
 	if limit <= 0 || len(items) <= limit {
 		return items
 	}
 	return items[:limit]
 }
 
-func transferUserLabel(item models.TransferAttributionBreakdown) string {
+func transferUserLabel(item syfonclient.TransferAttributionBreakdown) string {
 	if key := strings.TrimSpace(item.Key); key != "" {
 		return key
 	}

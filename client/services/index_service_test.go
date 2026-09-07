@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,7 +13,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/drs"
 	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
-	syfoncommon "github.com/calypr/syfon/common"
+
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 func TestIndexServiceOperationsAndUpsert(t *testing.T) {
@@ -343,7 +345,7 @@ func TestIndexServiceRemoveControlledAccessRequiresJSON200(t *testing.T) {
 }
 
 func testRecordForURL(did, rawURL string, authorizations map[string][]string) internalapi.InternalRecord {
-	controlled := syfoncommon.AuthzMapToControlledAccess(authorizations)
+	controlled := clientaccess.AuthzMapToControlledAccess(authorizations)
 	methodType := methodTypeForURL(rawURL)
 	methods := []drs.AccessMethod{{
 		Type:     drs.AccessMethodType(methodType),
@@ -357,5 +359,51 @@ func testRecordForURL(did, rawURL string, authorizations map[string][]string) in
 		Did:              did,
 		ControlledAccess: &controlled,
 		AccessMethods:    &methods,
+	}
+}
+
+func TestUpsertCreatesOnlyAfterNotFound(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			creates := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Method == http.MethodGet {
+					w.WriteHeader(status)
+					return
+				}
+				creates++
+				writeJSON(t, w, http.StatusCreated, internalapi.InternalRecordResponse{Did: "id"})
+			}))
+			defer server.Close()
+			service := NewIndexService(mustInternalClient(t, server.URL), nil)
+			err := service.Upsert(context.Background(), "id", "s3://bucket/key", "key", 1, "", map[string][]string{"org": {"project"}})
+			if status == http.StatusNotFound {
+				if err != nil || creates != 1 {
+					t.Fatalf("not-found upsert: creates=%d err=%v", creates, err)
+				}
+			} else if err == nil || creates != 0 {
+				t.Fatalf("failed lookup created a record: creates=%d err=%v", creates, err)
+			}
+		})
+	}
+}
+
+func TestUpsertReturnsLookupTransportError(t *testing.T) {
+	t.Parallel()
+	lookupErr := errors.New("lookup disconnected")
+	creates := 0
+	httpClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodGet {
+			creates++
+		}
+		return nil, lookupErr
+	})}
+	gen, err := internalapi.NewClientWithResponses("http://example.test", internalapi.WithHTTPClient(httpClient))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = NewIndexService(gen, nil).Upsert(context.Background(), "id", "s3://bucket/key", "key", 1, "", map[string][]string{"org": {"project"}})
+	if !errors.Is(err, lookupErr) || creates != 0 {
+		t.Fatalf("lookup failure lost: err=%v creates=%d", err, creates)
 	}
 }

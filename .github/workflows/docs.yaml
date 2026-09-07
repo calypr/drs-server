@@ -9,6 +9,8 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'install.sh'
+      - 'requirements-docs.txt'
+      - '.github/workflows/docs.yaml'
   workflow_dispatch:
 
 permissions:
@@ -35,10 +37,10 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install mkdocs-material
+        run: pip install -r requirements-docs.txt
 
       - name: Build site
-        run: mkdocs build --site-dir site
+        run: mkdocs build --strict --site-dir site
 
       - name: Copy install script
         run: cp install.sh ./site/install.sh

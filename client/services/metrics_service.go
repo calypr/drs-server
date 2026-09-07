@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/client/metricsapi"
-	"github.com/calypr/syfon/internal/models"
 )
 
 type MetricsService struct {
@@ -74,25 +73,19 @@ func (s *MetricsService) File(ctx context.Context, objectID string) (metricsapi.
 	return *resp.JSON200, nil
 }
 
-func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetricsOptions) (models.TransferAttributionSummary, error) {
+func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetricsOptions) (TransferAttributionSummary, error) {
 	params, err := transferSummaryParams(opts)
 	if err != nil {
-		return models.TransferAttributionSummary{}, err
+		return TransferAttributionSummary{}, err
 	}
 	resp, err := s.gen.GetTransferSummaryWithResponse(ctx, params)
 	if err != nil {
-		return models.TransferAttributionSummary{}, err
+		return TransferAttributionSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return models.TransferAttributionSummary{}, fmt.Errorf("failed to get transfer metrics summary: %d", resp.StatusCode())
+		return TransferAttributionSummary{}, fmt.Errorf("failed to get transfer metrics summary: %d", resp.StatusCode())
 	}
-	return generatedTransferSummaryToModel(*resp.JSON200), nil
-}
-
-type TransferBreakdownResponse struct {
-	GroupBy   string                                `json:"group_by"`
-	Data      []models.TransferAttributionBreakdown `json:"data"`
-	Freshness *models.TransferMetricsFreshness      `json:"freshness,omitempty"`
+	return generatedTransferSummaryToDTO(*resp.JSON200), nil
 }
 
 func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMetricsOptions) (TransferBreakdownResponse, error) {
@@ -112,12 +105,12 @@ func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMet
 		out.GroupBy = string(*resp.JSON200.GroupBy)
 	}
 	if resp.JSON200.Data != nil {
-		out.Data = make([]models.TransferAttributionBreakdown, 0, len(*resp.JSON200.Data))
+		out.Data = make([]TransferAttributionBreakdown, 0, len(*resp.JSON200.Data))
 		for _, item := range *resp.JSON200.Data {
-			out.Data = append(out.Data, generatedTransferBreakdownToModel(item))
+			out.Data = append(out.Data, generatedTransferBreakdownToDTO(item))
 		}
 	}
-	out.Freshness = generatedFreshnessToModel(resp.JSON200.Freshness)
+	out.Freshness = generatedFreshnessToDTO(resp.JSON200.Freshness)
 	return out, nil
 }
 
@@ -194,8 +187,8 @@ func boolPtr[T ~bool](raw bool) *T {
 	return &v
 }
 
-func generatedTransferSummaryToModel(v metricsapi.TransferAttributionSummary) models.TransferAttributionSummary {
-	return models.TransferAttributionSummary{
+func generatedTransferSummaryToDTO(v metricsapi.TransferAttributionSummary) TransferAttributionSummary {
+	return TransferAttributionSummary{
 		EventCount:         int64Val(v.EventCount),
 		AccessIssuedCount:  int64Val(v.AccessIssuedCount),
 		DownloadEventCount: int64Val(v.DownloadEventCount),
@@ -203,15 +196,15 @@ func generatedTransferSummaryToModel(v metricsapi.TransferAttributionSummary) mo
 		BytesRequested:     int64Val(v.BytesRequested),
 		BytesDownloaded:    int64Val(v.BytesDownloaded),
 		BytesUploaded:      int64Val(v.BytesUploaded),
-		Freshness:          generatedFreshnessToModel(v.Freshness),
+		Freshness:          generatedFreshnessToDTO(v.Freshness),
 	}
 }
 
-func generatedFreshnessToModel(v *metricsapi.TransferMetricsFreshness) *models.TransferMetricsFreshness {
+func generatedFreshnessToDTO(v *metricsapi.TransferMetricsFreshness) *TransferMetricsFreshness {
 	if v == nil {
 		return nil
 	}
-	out := &models.TransferMetricsFreshness{
+	out := &TransferMetricsFreshness{
 		IsStale:             boolVal(v.IsStale),
 		LatestCompletedSync: v.LatestCompletedSync,
 		RequiredFrom:        v.RequiredFrom,
@@ -223,8 +216,8 @@ func generatedFreshnessToModel(v *metricsapi.TransferMetricsFreshness) *models.T
 	return out
 }
 
-func generatedTransferBreakdownToModel(v metricsapi.TransferAttributionBreakdown) models.TransferAttributionBreakdown {
-	return models.TransferAttributionBreakdown{
+func generatedTransferBreakdownToDTO(v metricsapi.TransferAttributionBreakdown) TransferAttributionBreakdown {
+	return TransferAttributionBreakdown{
 		Key:              stringVal(v.Key),
 		Organization:     stringVal(v.Organization),
 		Project:          stringVal(v.Project),

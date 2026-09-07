@@ -135,7 +135,7 @@ func TestRequestDo_WithNoRetryDoesNotPrebufferBody(t *testing.T) {
 	}
 }
 
-func TestRequestDo_DefaultRetryPathPrebuffersGenericReader(t *testing.T) {
+func TestRequestDo_DefaultPathDoesNotPrebufferGenericReader(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -149,7 +149,7 @@ func TestRequestDo_DefaultRetryPathPrebuffersGenericReader(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected request failure")
 	}
-	if reader.calls == 0 {
-		t.Fatal("expected default retry path to prebuffer generic reader")
+	if reader.calls != 0 {
+		t.Fatalf("expected generic reader to remain unconsumed when retries are unsafe, got %d reads", reader.calls)
 	}
 }

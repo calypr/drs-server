@@ -15,7 +15,7 @@ config_sample.yaml
 *.cover
 *.prof
 *.log
-!internal/api/metrics/testdata/provider_logs/*.log
+!internal/httpapi/metrics/testdata/provider_logs/*.log
 apigen.out
 *.gocache
 coverage.*
@@ -54,3 +54,20 @@ site/
 # Test reports
 test_report.json
 meaningful_report.txt
+
+# Generated documentation and coverage reports
+/coverage/
+/client/coverage/
+/apigen/coverage/
+
+# Local state, experiments and archived checkout files
+/.local/
+/*.sqlite
+/*.sqlite-shm
+/*.sqlite-wal
+/*.db-shm
+/*.db-wal
+
+# Python test caches
+__pycache__/
+*.pyc

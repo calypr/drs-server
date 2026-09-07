@@ -3,11 +3,9 @@ package services
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/client/common"
@@ -20,7 +18,7 @@ func (s *DataService) multipartInitRequest(ctx context.Context, req internalapi.
 		return internalapi.InternalMultipartInitOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartInitOutput{}, internalAPIResponseError("failed to init multipart", resp.StatusCode(), resp.Body)
+		return internalapi.InternalMultipartInitOutput{}, apiResponseError("failed to init multipart", resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -31,7 +29,7 @@ func (d *DataService) multipartUploadRequest(ctx context.Context, req internalap
 		return internalapi.InternalMultipartUploadOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartUploadOutput{}, internalAPIResponseError("failed to upload part", resp.StatusCode(), resp.Body)
+		return internalapi.InternalMultipartUploadOutput{}, apiResponseError("failed to upload part", resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -42,35 +40,10 @@ func (d *DataService) multipartCompleteRequest(ctx context.Context, req internal
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return internalAPIResponseError("failed to complete multipart", resp.StatusCode(), resp.Body)
+		return apiResponseError("failed to complete multipart", resp.StatusCode(), resp.Body)
 	}
 	return nil
 }
-
-func internalAPIResponseError(prefix string, status int, body []byte) error {
-	msg := strings.TrimSpace(string(body))
-	if msg != "" {
-		var payload struct {
-			Error *struct {
-				Message string `json:"message"`
-				Type    string `json:"type"`
-			} `json:"error"`
-			Message string `json:"message"`
-		}
-		if err := json.Unmarshal(body, &payload); err == nil {
-			switch {
-			case payload.Error != nil && strings.TrimSpace(payload.Error.Message) != "":
-				msg = strings.TrimSpace(payload.Error.Message)
-			case strings.TrimSpace(payload.Message) != "":
-				msg = strings.TrimSpace(payload.Message)
-			}
-		}
-		return fmt.Errorf("%s: %d: %s", prefix, status, msg)
-	}
-	return fmt.Errorf("%s: %d", prefix, status)
-}
-
-// --- transfer.MultipartURLSigner interface support ---
 
 func (d *DataService) InitMultipartUpload(ctx context.Context, guid, filename, bucket string) (string, string, error) {
 	return d.InitMultipartUploadWithMetadata(ctx, guid, filename, bucket, common.FileMetadata{})

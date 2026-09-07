@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := build
-OPENAPI ?= ga4gh/data-repository-service-schemas/openapi/data_repository_service.openapi.yaml
+OPENAPI ?= data-repository-service-schemas/openapi/data_repository_service.openapi.yaml
 OAPI_CODEGEN ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0
 REDOCLY_IMAGE ?= redocly/cli:latest
 YQ_IMAGE ?= mikefarah/yq:latest
@@ -11,7 +11,7 @@ LFS_OPENAPI ?= $(OPENAPI_DIR)/lfs.openapi.yaml
 BUCKET_OPENAPI ?= $(OPENAPI_DIR)/bucket.openapi.yaml
 METRICS_OPENAPI ?= $(OPENAPI_DIR)/metrics.openapi.yaml
 INTERNAL_OPENAPI ?= $(OPENAPI_DIR)/internal.openapi.yaml
-SCHEMAS_SUBMODULE ?= ga4gh/data-repository-service-schemas
+SCHEMAS_SUBMODULE ?= data-repository-service-schemas
 OAPI_DRS_GIN_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-drs.yaml
 OAPI_LFS_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-lfs.yaml
 OAPI_BUCKET_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-bucket.yaml
@@ -25,6 +25,7 @@ CLIENT_OAPI_INTERNAL_CONFIG ?= $(CODEGEN_CONFIG_DIR)/client-oapi-internal.yaml
 
 AUTO_INIT_SUBMODULE ?= 0
 GOCACHE ?= $(PWD)/.gocache
+BUILD_OUTPUT ?= bin/syfon
 REMOTE ?= origin
 VERSION ?=
 DRY_RUN ?= 0
@@ -49,11 +50,12 @@ LDFLAGS     := -X github.com/calypr/syfon/internal/version.Version=$(GIT_VERSION
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go build -ldflags "$(LDFLAGS)" -o syfon .
+	@mkdir -p "$(dir $(BUILD_OUTPUT))"
+	CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go build -ldflags "$(LDFLAGS)" -o "$(BUILD_OUTPUT)" .
 
 .PHONY: install
 install:
-	@GOCACHE="$(GOCACHE)" go install -ldflags "$(LDFLAGS)" ./...
+	@GOCACHE="$(GOCACHE)" go install -ldflags "$(LDFLAGS)" .
 
 .PHONY: gen
 gen:
@@ -134,28 +136,23 @@ gen-client:
 
 .PHONY: test
 test:
-	GOCACHE="$(GOCACHE)" go clean -testcache
-	CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go test -v ./...
+	CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go test -count=1 ./... ./client/... ./apigen/...
 
 .PHONY: test-unit
 test-unit:
-	GOCACHE="$(GOCACHE)" go clean -testcache
-	@PKGS=$$(go list ./... | grep -Ev '/cmd/server$$|/tests/endpoints$$'); \
+	@PKGS=$$(go list ./... ./client/... ./apigen/... | grep -Ev '/cmd/server$$|/tests/endpoints$$'); \
 	  CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go test -v -count=1 $$PKGS
 
 .PHONY: coverage
 coverage:
-	chmod +x ./scripts/run_coverage.sh
 	./scripts/run_coverage.sh
 
 .PHONY: coverage-meaningful
 coverage-meaningful:
-	chmod +x ./scripts/run_coverage.sh
 	COVERAGE_SCOPE=meaningful ./scripts/run_coverage.sh
 
 .PHONY: coverage-full
 coverage-full:
-	chmod +x ./scripts/run_coverage.sh
 	COVERAGE_SCOPE=full ./scripts/run_coverage.sh
 
 .PHONY: serve
@@ -322,11 +319,26 @@ release-client: release-check-clean-client release-check-client-tag release-test
 
 .PHONY: build-local-auth-plugin
 build-local-auth-plugin:
-	cd plugins/local_auth && go build -o ../../bin/local_auth_plugin .
+	cd plugin/local_auth && go build -o ../../bin/local_auth_plugin .
 
 .PHONY: build-gen3-auth-plugin
 build-gen3-auth-plugin:
-	cd plugins/gen3_auth && go build -o ../../bin/gen3_auth_plugin .
+	cd plugin/gen3_auth && go build -o ../../bin/gen3_auth_plugin .
 
 .PHONY: build-plugins
 build-plugins: build-local-auth-plugin build-gen3-auth-plugin
+
+.PHONY: clean test-security test-install
+clean:
+	rm -rf bin coverage client/coverage apigen/coverage site build dist .tmp
+	rm -f syfon *.out meaningful_report.txt test_report.json
+
+test-security:
+	GOCACHE="$(GOCACHE)" ./scripts/run-security-tests.sh
+
+test-install:
+	python3 -m unittest discover -s tests/install -v
+
+.PHONY: test-release
+test-release:
+	GOCACHE="$(GOCACHE)" python3 -m unittest discover -s tests/release -v

@@ -285,3 +285,29 @@ func TestRegisterFileSinglePartStreamsProgress(t *testing.T) {
 		t.Fatalf("final progress bytes = %d, want %d", last.BytesSoFar, len(payload))
 	}
 }
+
+func TestRegisterFileUsesOneUploadTarget(t *testing.T) {
+	t.Parallel()
+	file := createTempFileWithData(t, "payload")
+	defer file.Close()
+	calls := 0
+	uploader := &uploaderStub{resolveFunc: func(context.Context, string, string, common.FileMetadata, string) (string, error) {
+		calls++
+		return fmt.Sprintf("https://upload.example/target-%d", calls), nil
+	}}
+	metadata := &metadataClientStub{registeredID: "id"}
+	obj := &drsapi.DrsObject{Id: "id", Size: 7}
+	got, err := RegisterFile(context.Background(), uploader, metadata, obj, file.Name(), "bucket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("resolved upload target %d times", calls)
+	}
+	if got.AccessMethods == nil || len(*got.AccessMethods) != 1 {
+		t.Fatalf("missing access method: %+v", got)
+	}
+	if target := (*got.AccessMethods)[0].AccessUrl.Url; target != uploader.lastUpload.url || target != "https://upload.example/target-1" {
+		t.Fatalf("registered %q but uploaded to %q", target, uploader.lastUpload.url)
+	}
+}

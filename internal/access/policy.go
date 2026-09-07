@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	sycommon "github.com/calypr/syfon/common"
+	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 // GetUserAuthz returns the list of resources the user is authorized to access.
@@ -18,13 +18,13 @@ func GetUserAuthz(ctx context.Context) []string {
 // 1. It has NO required resources (public).
 // 2. OR the user has at least one of the resources listed on the record.
 func CheckAccess(recordResources []string, userResources []string) bool {
-	recordResources = sycommon.NormalizeAccessResources(recordResources)
+	recordResources = clientaccess.NormalizeAccessResources(recordResources)
 	if len(recordResources) == 0 {
 		return true
 	}
 	userMap := make(map[string]bool)
 	for _, r := range userResources {
-		if normalized := sycommon.NormalizeAccessResource(r); normalized != "" {
+		if normalized := clientaccess.NormalizeAccessResource(r); normalized != "" {
 			userMap[normalized] = true
 		}
 	}
@@ -65,7 +65,7 @@ func HasMethodAccess(ctx context.Context, method string, resources []string) boo
 		return false
 	}
 	privs := normalizePolicyPrivileges(GetUserPrivileges(ctx))
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 {
 		return false
 	}
@@ -89,7 +89,7 @@ func HasObjectMethodAccess(ctx context.Context, method string, resources []strin
 	if IsGen3Mode(ctx) && !HasAuthHeader(ctx) {
 		return false
 	}
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 {
 		return strings.EqualFold(strings.TrimSpace(method), "read")
 	}
@@ -136,7 +136,7 @@ func HasServiceMethodAccess(ctx context.Context, service, method string, resourc
 	if service == "" || method == "" {
 		return false
 	}
-	resources = sycommon.NormalizeAccessResources(resources)
+	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 {
 		return false
 	}
@@ -174,7 +174,7 @@ func HasAnyServiceMethodAccess(ctx context.Context, resources []string, service 
 func normalizePolicyPrivileges(in map[string]map[string]bool) map[string]map[string]bool {
 	out := make(map[string]map[string]bool, len(in))
 	for rawResource, methods := range in {
-		resource := sycommon.NormalizeAccessResource(rawResource)
+		resource := clientaccess.NormalizeAccessResource(rawResource)
 		if resource == "" {
 			continue
 		}

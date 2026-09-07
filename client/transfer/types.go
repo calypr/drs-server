@@ -142,8 +142,6 @@ type Uploader interface {
 	CanonicalObjectURL(signedURL, bucketHint, fallbackDID string) (string, error)
 }
 
-// --- Plan & Strategy Types (moved from xfer/plan.go) ---
-
 // ResolvedObject is the outcome of the resolution layer.
 type ResolvedObject struct {
 	Id           string

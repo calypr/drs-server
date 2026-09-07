@@ -17,8 +17,8 @@ type ProgressCallback func(ProgressEvent) error
 type contextKey string
 
 const (
-	progressKey           contextKey = "progressCallback"
-	oidKey                contextKey = "activeOid"
+	progressKey contextKey = "progressCallback"
+	oidKey      contextKey = "activeOid"
 )
 
 func WithProgress(ctx context.Context, cb ProgressCallback) context.Context {

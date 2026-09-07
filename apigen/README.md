@@ -47,10 +47,12 @@ Use `make gen` from the repo root when changing:
 The generated code is then consumed by:
 
 - `cmd/server`
-- `internal/api/internaldrs`
-- `internal/api/lfs`
-- `internal/api/metrics`
-- `internal/api/routeutil`
+- `internal/httpapi/buckets`
+- `internal/httpapi/drs`
+- `internal/httpapi/lfs`
+- `internal/httpapi/metrics`
+- `internal/httpapi/records`
+- `internal/httpapi/transfers`
 
 ### Upstream reference
 

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/calypr/syfon/internal/requestmeta"
+	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -14,7 +14,7 @@ func TestRequestIDMiddleware_GeneratesAndPropagates(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if requestmeta.GetRequestID(c.Context()) == "" {
+		if requestid.GetRequestID(c.Context()) == "" {
 			t.Fatalf("expected request id in context")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -40,7 +40,7 @@ func TestRequestIDMiddleware_UsesIncomingHeader(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if got := requestmeta.GetRequestID(c.Context()); got != incoming {
+		if got := requestid.GetRequestID(c.Context()); got != incoming {
 			t.Fatalf("expected request id %q in context, got %q", incoming, got)
 		}
 		return c.SendStatus(http.StatusOK)
