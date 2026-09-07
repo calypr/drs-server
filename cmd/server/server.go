@@ -17,7 +17,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
@@ -319,7 +318,7 @@ var Cmd = &cobra.Command{
 			IdleTimeout:    120 * time.Second,
 			ReadBufferSize: 64 * 1024,
 			AppName:        "Syfon DRS Server",
-			ErrorHandler:   response.FiberErrorHandler,
+			ErrorHandler:   middleware.FiberErrorHandler,
 		})
 		app.Use(recover.New())
 

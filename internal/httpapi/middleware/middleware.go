@@ -8,7 +8,6 @@ import (
 
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
@@ -124,12 +123,12 @@ func (m *AuthzMiddleware) applyResult(c fiber.Ctx, ctx context.Context, fallback
 		if result.BasicChallenge {
 			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="syfon"`)
 		}
-		return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	case authentication.DecisionForbidden:
-		return response.Reject(c, fiber.StatusForbidden, "Forbidden")
+		return Reject(c, fiber.StatusForbidden, "Forbidden")
 	case authentication.DecisionInternalError:
-		return response.Reject(c, fiber.StatusInternalServerError, "Internal Server Error")
+		return Reject(c, fiber.StatusInternalServerError, "Internal Server Error")
 	default:
-		return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 }

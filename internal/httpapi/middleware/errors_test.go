@@ -1,4 +1,4 @@
-package response
+package middleware
 
 import (
 	"context"

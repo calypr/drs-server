@@ -3,7 +3,6 @@ package records
 import (
 	"github.com/calypr/syfon/apigen/internalapi"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
@@ -12,7 +11,7 @@ func handleInternalDeleteFiber(objectService *objectrecords.Service) fiber.Handl
 	return func(c fiber.Ctx) error {
 		id := c.Params("id")
 		if err := objectService.DeleteObject(c.Context(), id); err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
@@ -21,19 +20,19 @@ func handleInternalDeleteFiber(objectService *objectrecords.Service) fiber.Handl
 func handleInternalDeleteByQueryFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		org, project, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		if !hasScope {
-			return response.Reject(c, fiber.StatusBadRequest, "No scope specified")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "No scope specified")
 		}
 
 		count, err := objectService.DeleteBulkByScope(c.Context(), org, project)
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		return c.JSON(internalapi.DeleteByQueryResponse{Deleted: &count})
 	}
@@ -42,25 +41,25 @@ func handleInternalDeleteByQueryFiber(objectService *objectrecords.Service) fibe
 func handleInternalBulkDeleteFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req internalapi.BulkHashesRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Hashes) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 		}
 
 		normalized := normalizeNonEmptyBulkHashes(req.Hashes)
 		if len(normalized) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 		}
 
 		deleted, err := objectService.DeleteObjectsByChecksums(c.Context(), normalized)
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		return c.JSON(internalapi.DeleteByQueryResponse{Deleted: &deleted})
 	}

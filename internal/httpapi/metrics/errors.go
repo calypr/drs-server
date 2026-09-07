@@ -6,11 +6,11 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 )
 
 func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
-	return response.NewAPIError(ctx, metricsErrorCode(status), status, http.StatusText(status))
+	return middleware.NewAPIError(ctx, metricsErrorCode(status), status, http.StatusText(status))
 }
 
 func metricsErrorCode(status int) errorapi.ErrorCode {

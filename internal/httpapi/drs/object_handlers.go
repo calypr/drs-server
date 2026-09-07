@@ -2,7 +2,7 @@ package drs
 
 import (
 	generated "github.com/calypr/syfon/apigen/drs"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
 )
@@ -12,7 +12,7 @@ func handleGetObjectFiber(service *objectrecords.Service) fiber.Handler {
 		id := c.Params("object_id")
 		obj, err := service.GetObject(c.Context(), id, "")
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		return c.JSON(ObjectPayload(*obj))
 	}
@@ -24,12 +24,12 @@ func handleGetBulkObjectsFiber(service *objectrecords.Service) fiber.Handler {
 			BulkObjectIds []string `json:"bulk_object_ids"`
 		}
 		if err := c.Bind().JSON(&body); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		objects, err := service.GetBulkObjects(c.Context(), body.BulkObjectIds, "")
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		resolved := make([]any, 0, len(objects))
@@ -52,7 +52,7 @@ func handleGetObjectsByChecksumFiber(service *objectrecords.Service) fiber.Handl
 		checksum := c.Params("checksum")
 		fetched, err := service.GetObjectsByChecksum(c.Context(), checksum, "")
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		resolved := make([]any, 0)

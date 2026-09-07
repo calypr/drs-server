@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	generated "github.com/calypr/syfon/apigen/drs"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
@@ -18,10 +18,10 @@ func handleGetAccessURLFiber(objectService *objectrecords.Service, transferServi
 
 		result, err := workflow.Issue(c.Context(), id, accessID)
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		if !result.Found {
-			return response.Reject(c, fiber.StatusNotFound, "Access ID not found or has no URL")
+			return middleware.Reject(c, fiber.StatusNotFound, "Access ID not found or has no URL")
 		}
 		return c.JSON(generated.AccessURL{Url: result.URL})
 	}
@@ -32,7 +32,7 @@ func handleGetBulkAccessURLFiber(objectService *objectrecords.Service, transferS
 	return func(c fiber.Ctx) error {
 		var body generated.BulkObjectAccessId
 		if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		requests := make([]transfers.BulkAccessLookupRequest, 0, len(*body.BulkObjectAccessIds))

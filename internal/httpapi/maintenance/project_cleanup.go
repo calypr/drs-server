@@ -8,7 +8,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 )
 
@@ -21,23 +20,23 @@ type projectCleanupResponse struct {
 
 func handleInternalDeleteProjectFiber(c fiber.Ctx, service *projectstorage.ProjectCleanup) error {
 	if service == nil {
-		return response.HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
+		return apimiddleware.HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
 	}
 	organization := strings.TrimSpace(c.Params("organization"))
 	projectID := strings.TrimSpace(c.Params("project_id"))
 	if organization == "" || projectID == "" {
-		return response.Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
+		return apimiddleware.Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := buckets.AuthorizeScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	result, err := service.DeleteProjectData(c.Context(), organization, projectID)
 	if err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	return c.JSON(projectCleanupResponse{

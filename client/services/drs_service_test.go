@@ -122,7 +122,7 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 		t.Fatalf("GetObject returned obj=%+v err=%v", obj, err)
 	}
 	if _, err := service.GetObject(ctx, "missing"); !errors.Is(err, errorapi.ErrNotFound) {
-		t.Fatalf("expected ErrObjectNotFound, got %v", err)
+		t.Fatalf("expected errorapi.ErrNotFound, got %v", err)
 	}
 	if _, err := service.GetObject(ctx, "broken"); err == nil || !strings.Contains(err.Error(), "schema is stale") {
 		t.Fatalf("expected server error detail for broken object lookup, got %v", err)

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	generated "github.com/calypr/syfon/apigen/drs"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
@@ -19,40 +19,40 @@ func handleRegisterObjectsFiber(service *objectrecords.Service) fiber.Handler {
 			if err2 := json.Unmarshal(c.Body(), &single); err2 == nil && len(single.Checksums) > 0 {
 				internalObj, err := registerCandidateToRecord(single, time.Now().UTC())
 				if err != nil {
-					return response.HandleError(c, err)
+					return middleware.HandleError(c, err)
 				}
 				if err := service.RegisterObjects(c.Context(), []objects.Record{internalObj}); err != nil {
-					return response.HandleError(c, err)
+					return middleware.HandleError(c, err)
 				}
 				finalObj, err := service.GetObject(c.Context(), string(internalObj.Id), "read")
 				if err != nil {
-					return response.HandleError(c, err)
+					return middleware.HandleError(c, err)
 				}
 				return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 					"objects": []any{ObjectPayload(*finalObj)},
 				})
 			}
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		toRegister := make([]objects.Record, 0, len(body.Candidates))
 		for _, cand := range body.Candidates {
 			internalObj, err := registerCandidateToRecord(cand, time.Now().UTC())
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			toRegister = append(toRegister, internalObj)
 		}
 
 		if err := service.RegisterObjects(c.Context(), toRegister); err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		registered := make([]any, len(toRegister))
 		for i, internal := range toRegister {
 			obj, err := service.GetObject(c.Context(), string(internal.Id), "read")
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			registered[i] = ObjectPayload(*obj)
 		}

@@ -263,7 +263,7 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 	} else if fenceToken != "" {
 		cred.AccessToken = fenceToken
 	} else {
-		return nil, errors.New("either credential file or fence token must be provided")
+		return nil, fmt.Errorf("either credential file or fence token must be provided")
 	}
 
 	return &cred, nil

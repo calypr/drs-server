@@ -9,7 +9,6 @@ import (
 
 	"github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -173,11 +172,11 @@ type internalDeleteProjectBucketObjectsItem struct {
 func handleInternalInspectObjectFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		resp, err := service.ProbeObject(c.Context(), projectstorage.InspectRequest{
 			ID:                strings.TrimSpace(req.ID),
@@ -212,14 +211,14 @@ func handleInternalInspectObjectFiber(service *projectstorage.Inspector) fiber.H
 func handleInternalInspectObjectBulkFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectsBulkRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		if len(req.Items) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
 		}
 		items := make([]projectstorage.InspectRequest, 0, len(req.Items))
 		for _, item := range req.Items {
@@ -247,14 +246,14 @@ func handleInternalInspectObjectBulkListFiber(service *projectstorage.Inspector)
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectObjectsBulkRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		if len(req.Items) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
 		}
 		items := make([]projectstorage.ListValidationRequest, 0, len(req.Items))
 		for _, item := range req.Items {
@@ -279,11 +278,11 @@ func handleInternalInspectProjectBucketFiber(service *projectstorage.Inspector) 
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectBucketRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		result, err := service.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
 			Mode:        projectstorage.InspectionMode(strings.TrimSpace(req.Mode)),
@@ -314,11 +313,11 @@ func handleInternalInspectProjectBucketInventoryFiber(service *projectstorage.In
 	return func(c fiber.Ctx) error {
 		started := time.Now()
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectBucketRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		result, err := service.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
 			Mode:       projectstorage.ModeItems,
@@ -347,20 +346,20 @@ func handleInternalInspectProjectBucketInventoryFiber(service *projectstorage.In
 func handleInternalInspectProjectRecordsFiber(service *projectstorage.Inspector) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectRecordsRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		organization := strings.TrimSpace(req.Organization)
 		project := strings.TrimSpace(req.Project)
 		if organization == "" || project == "" {
-			return response.Reject(c, fiber.StatusBadRequest, "organization and project are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 		}
 		objects, err := service.AuditProjectRecords(c.Context(), organization, project, strings.Trim(strings.TrimSpace(req.PathPrefix), "/"))
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		out := internalInspectProjectRecordsResponse{Items: make([]internalInspectProjectRecordItem, 0, len(objects))}
 		for _, obj := range objects {
@@ -373,7 +372,7 @@ func handleInternalInspectProjectRecordsFiber(service *projectstorage.Inspector)
 func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalInspectProjectScopesRequest
 		switch c.Method() {
@@ -382,17 +381,17 @@ func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fib
 			req.Project = c.Query("project")
 		default:
 			if err := decodeStrictJSON(c.Body(), &req); err != nil {
-				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+				return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 			}
 		}
 		organization := strings.TrimSpace(req.Organization)
 		project := strings.TrimSpace(req.Project)
 		if organization == "" || project == "" {
-			return response.Reject(c, fiber.StatusBadRequest, "organization and project are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 		}
 		scopes, err := bucketService.ListBucketScopes(c.Context())
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		out := internalInspectProjectScopesResponse{Items: make([]internalInspectProjectScopeItem, 0)}
 		for _, scope := range scopes {
@@ -428,14 +427,14 @@ func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fib
 func handleInternalDeleteProjectBucketObjectsFiber(service *projectstorage.ProjectCleanup) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 		var req internalDeleteProjectBucketObjectsRequest
 		if err := decodeStrictJSON(c.Body(), &req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		if len(req.ObjectURLs) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: object_urls are required")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: object_urls are required")
 		}
 		results := service.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectURLs)
 		out := internalDeleteProjectBucketObjectsResponse{
@@ -453,7 +452,7 @@ func handleInternalDeleteProjectBucketObjectsFiber(service *projectstorage.Proje
 }
 
 func handleInspectStorageError(c fiber.Ctx, err error) error {
-	return response.HandleError(c, err)
+	return apimiddleware.HandleError(c, err)
 }
 
 func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) internalInspectObjectBulkItem {

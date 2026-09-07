@@ -4,7 +4,6 @@ package cloud
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -62,7 +61,7 @@ var (
 // URL workflows.
 func InspectObject(ctx context.Context, in ObjectParameters) (*ObjectInfo, error) {
 	if strings.TrimSpace(in.ObjectURL) == "" {
-		return nil, errors.New("ObjectURL is required")
+		return nil, fmt.Errorf("ObjectURL is required")
 	}
 
 	loc, err := parseObjectLocation(in.ObjectURL, in.DestinationPath, in)
@@ -125,7 +124,7 @@ func openBucketForLocation(ctx context.Context, loc *objectLocation, in ObjectPa
 	}
 	if accessKey != "" || secretKey != "" {
 		if accessKey == "" || secretKey == "" {
-			return nil, errors.New("both S3AccessKey and S3SecretKey are required when either is provided")
+			return nil, fmt.Errorf("both S3AccessKey and S3SecretKey are required when either is provided")
 		}
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")))
 	}

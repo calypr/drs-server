@@ -10,7 +10,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
@@ -31,12 +30,12 @@ func stringValue(value *string) string {
 func handleInternalUploadBlankFiber(transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req internalapi.InternalUploadBlankRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		guid := ""
@@ -51,12 +50,12 @@ func handleInternalUploadBlankFiber(transferService *domaintransfers.Service) fi
 
 		target, err := resolveUploadTarget(c.Context(), transferService, stringValue(req.Organization), stringValue(req.Project), guid)
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 
 		signedURL, err := transferService.SignURL(c.Context(), target.URL, storage.AccessOptions{Method: http.MethodPut})
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 
 		return c.Status(fiber.StatusCreated).JSON(internalapi.InternalUploadBlankOutput{
@@ -70,18 +69,18 @@ func handleInternalUploadBlankFiber(transferService *domaintransfers.Service) fi
 func handleInternalUploadURLFiber(objectService *objectrecords.Service, transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		fileID := c.Params("file_id")
 		var params internalapi.InternalUploadURLParams
 		if err := c.Bind().Query(&params); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid query parameters")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid query parameters")
 		}
 
 		obj, err := objectService.GetObject(c.Context(), fileID, "update")
 		if err != nil && !errors.Is(err, errorapi.ErrNotFound) {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 
 		var (
@@ -100,11 +99,11 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 				})
 			}
 			if err != nil {
-				return response.HandleError(c, err)
+				return apimiddleware.HandleError(c, err)
 			}
 			signedURL, err := transferService.SignURL(c.Context(), target.URL, storage.AccessOptions{Method: http.MethodPut})
 			if err != nil {
-				return response.HandleError(c, err)
+				return apimiddleware.HandleError(c, err)
 			}
 			if err := transferService.RecordAccessIssued(c.Context(), domaintransfers.AccessRequest{
 				Object:     obj,
@@ -112,7 +111,7 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 				Direction:  usage.ProviderTransferDirectionUpload,
 				StorageURL: target.URL,
 			}); err != nil {
-				return response.HandleError(c, err)
+				return apimiddleware.HandleError(c, err)
 			}
 			return c.JSON(internalapi.InternalSignedURL{Url: &signedURL})
 		} else {
@@ -121,7 +120,7 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 			}
 			target, err := resolveUploadTarget(c.Context(), transferService, stringValue(params.Organization), stringValue(params.Project), key)
 			if err != nil {
-				return response.HandleError(c, err)
+				return apimiddleware.HandleError(c, err)
 			}
 			bucket = target.Bucket
 			key = target.Key
@@ -130,7 +129,7 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 		urlStr := address.BucketToURL(bucket, key)
 		signedURL, err := transferService.SignURL(c.Context(), urlStr, storage.AccessOptions{Method: http.MethodPut})
 		if err != nil {
-			return response.HandleError(c, err)
+			return apimiddleware.HandleError(c, err)
 		}
 		if obj != nil {
 			if err := transferService.RecordAccessIssued(c.Context(), domaintransfers.AccessRequest{
@@ -138,7 +137,7 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 				Direction:  usage.ProviderTransferDirectionUpload,
 				StorageURL: urlStr,
 			}); err != nil {
-				return response.HandleError(c, err)
+				return apimiddleware.HandleError(c, err)
 			}
 		}
 
@@ -186,7 +185,7 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalUploadBulkRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Requests) == 0 {
 			empty := []internalapi.InternalUploadBulkResult{}

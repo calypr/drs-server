@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
@@ -27,11 +27,11 @@ func handleInternalGetFiber(objectService *objectrecords.Service) fiber.Handler 
 		id := c.Params("id")
 		obj, err := objectService.GetObject(c.Context(), id, "read")
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		encoded, err := Encode(*obj)
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 		return c.Send(encoded)
@@ -49,15 +49,15 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 			filterProject := strings.TrimSpace(c.Query("project"))
 			limit, start, offset, err := parseInternalListPaginationFiber(c)
 			if err != nil {
-				return response.Reject(c, fiber.StatusBadRequest, err.Error())
+				return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
 			}
 			ids, err := objectService.ListObjectIDsPageByChecksum(c.Context(), hash, hashType, filterOrg, filterProject, "read", start, limit, offset)
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			objs, err := objectService.GetPreparedScopedObjects(c.Context(), ids, filterOrg, filterProject, "read")
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			records := make([]internalapi.InternalRecord, 0, len(objs))
 			for _, o := range objs {
@@ -68,14 +68,14 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 
 		filterOrg, filterProject, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, err.Error())
+			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		if !hasScope {
 			filterOrg, filterProject = "", ""
 		}
 		limit, start, offset, err := parseInternalListPaginationFiber(c)
 		if err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, err.Error())
+			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 
 		requestStart := time.Now()
@@ -85,12 +85,12 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 			var ids []string
 			ids, err = objectService.ListObjectIDsPageByURL(c.Context(), objectURL, filterOrg, filterProject, "read", start, limit, offset)
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			prepareStart := time.Now()
 			objs, err = objectService.GetPreparedScopedObjects(c.Context(), ids, filterOrg, filterProject, "read")
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			listDuration := time.Since(listStart)
 			prepareDuration := time.Since(prepareStart)
@@ -98,7 +98,7 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 		} else {
 			objs, err = objectService.ListPreparedObjectsPageByScope(c.Context(), filterOrg, filterProject, "read", start, limit, offset)
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			listDuration := time.Since(listStart)
 			log.Printf("INFO: syfon_internal_index_list organization=%s project=%s url_filter=%t start_after=%t limit=%d offset=%d records=%d list_prepared_ms=%d duration_ms=%d", filterOrg, filterProject, false, strings.TrimSpace(start) != "", limit, offset, len(objs), listDuration.Milliseconds(), time.Since(requestStart).Milliseconds())
@@ -115,7 +115,7 @@ func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fibe
 	return func(c fiber.Ctx) error {
 		var req internalapi.BulkDocumentsRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		var ids []string
@@ -126,12 +126,12 @@ func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fibe
 			ids = append(ids, dereferenceStrings(obj.Ids)...)
 		}
 		if len(ids) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
 		}
 
 		records, err := objectService.GetBulkObjects(c.Context(), ids, "read")
 		if err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		out := make([]internalapi.InternalRecordResponse, 0, len(records))

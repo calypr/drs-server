@@ -2,7 +2,6 @@ package scoperepair
 
 import (
 	"context"
-	"errors"
 
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -43,8 +42,6 @@ type StorageInspectResult struct {
 type StorageProbe interface {
 	Inspect(context.Context, StorageInspectRequest) (StorageInspectResult, error)
 }
-
-var ErrStorageObjectNotFound = errors.New("storage object not found")
 
 type DuplicateCollapser interface {
 	Collapse(context.Context, string, string) (int, error)

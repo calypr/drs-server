@@ -1,4 +1,4 @@
-package response
+package middleware
 
 import (
 	"context"
@@ -96,7 +96,7 @@ func Reject(c fiber.Ctx, status int, msg string) error {
 	} else {
 		slog.Warn("request rejected", "request_id", requestID, "method", c.Method(), "path", c.Path(), "status", status, "msg", msg)
 	}
-	code := codeForStatus(status)
+	code := errorapi.CodeForStatus(status)
 	if status == http.StatusUnauthorized {
 		code = errorapi.ErrorCodeAuthenticationRequired
 	} else if status == http.StatusForbidden {
@@ -117,7 +117,7 @@ func FiberErrorHandler(c fiber.Ctx, err error) error {
 }
 
 func sendWithCategory(c fiber.Ctx, code errorapi.ErrorCode, category errorapi.ErrorCategory, status int, msg, requestID string) error {
-	payload := NewAPIErrorWithCategory(c.Context(), code, category, status, msg)
+	payload := newAPIError(c.Context(), code, category, status, msg)
 	if requestID != "" {
 		payload.RequestId = &requestID
 	}
@@ -127,10 +127,10 @@ func sendWithCategory(c fiber.Ctx, code errorapi.ErrorCode, category errorapi.Er
 // NewAPIError builds the shared wire payload for Fiber and generated handlers.
 func NewAPIError(ctx context.Context, code errorapi.ErrorCode, status int, msg string) errorapi.APIError {
 	category, _ := errorapi.CategoryForCode(code)
-	return NewAPIErrorWithCategory(ctx, code, category, status, msg)
+	return newAPIError(ctx, code, category, status, msg)
 }
 
-func NewAPIErrorWithCategory(ctx context.Context, code errorapi.ErrorCode, category errorapi.ErrorCategory, status int, msg string) errorapi.APIError {
+func newAPIError(ctx context.Context, code errorapi.ErrorCode, category errorapi.ErrorCategory, status int, msg string) errorapi.APIError {
 	msg = strings.TrimSpace(msg)
 	if status >= http.StatusInternalServerError {
 		msg = publicStatusText(status)
@@ -150,10 +150,6 @@ func publicStatusText(status int) string {
 		return message
 	}
 	return http.StatusText(http.StatusInternalServerError)
-}
-
-func codeForStatus(status int) errorapi.ErrorCode {
-	return errorapi.CodeForStatus(status)
 }
 
 func statusForCategory(category errorapi.ErrorCategory) int {

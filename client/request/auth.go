@@ -3,7 +3,6 @@ package request
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,10 +45,10 @@ func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 	}
 	t.mu.RUnlock()
 	if cred == nil || apiKey == "" {
-		return errors.New("APIKey is required to refresh access token")
+		return fmt.Errorf("APIKey is required to refresh access token")
 	}
 	if apiEndpoint == "" {
-		return errors.New("APIEndpoint is required to refresh access token")
+		return fmt.Errorf("APIEndpoint is required to refresh access token")
 	}
 
 	refreshClient := &http.Client{Transport: t.Base}
@@ -89,7 +88,7 @@ func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 		return err
 	}
 	if strings.TrimSpace(result.AccessToken) == "" {
-		return errors.New("refresh response missing access_token")
+		return fmt.Errorf("refresh response missing access_token")
 	}
 
 	t.mu.Lock()
@@ -145,7 +144,7 @@ func (t *AuthTransport) apply(req *http.Request) {
 
 func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req == nil {
-		return nil, errors.New("nil request")
+		return nil, fmt.Errorf("nil request")
 	}
 	clone := req.Clone(req.Context())
 	clone = clone.WithContext(context.WithValue(clone.Context(), authRequestContextKey{}, authRequestContext{

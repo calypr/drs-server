@@ -5,7 +5,6 @@ import (
 
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
@@ -15,15 +14,15 @@ func handleUploadRequestFiber() fiber.Handler {
 	const uploadRequestRoutingError = "upload-request requires explicit upload routing; default bucket selection is disabled"
 	return func(c fiber.Ctx) error {
 		if middleware.MissingGen3AuthHeader(c.Context()) {
-			return response.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+			return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
 
 		var req generated.UploadRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(req.Requests) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		for _, item := range req.Requests {
 			key := strings.TrimSpace(item.Name)
@@ -35,11 +34,11 @@ func handleUploadRequestFiber() fiber.Handler {
 				key = oid
 			}
 			if key == "" {
-				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+				return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 		}
 
-		return response.Reject(c, fiber.StatusBadRequest, uploadRequestRoutingError)
+		return middleware.Reject(c, fiber.StatusBadRequest, uploadRequestRoutingError)
 	}
 }
 
@@ -49,14 +48,14 @@ func handleDeleteObjectFiber(service *objectrecords.Service) fiber.Handler {
 		var body generated.DeleteRequest
 		if len(c.Body()) > 0 {
 			if err := c.Bind().JSON(&body); err != nil {
-				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+				return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 		}
 		opts := objectrecords.DeleteOptions{
 			DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 		}
 		if err := service.DeleteObjectWithOptions(c.Context(), id, opts); err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
@@ -68,21 +67,21 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 		if objectID != "" {
 			var body generated.AccessMethodUpdateRequest
 			if err := c.Bind().JSON(&body); err != nil || len(body.AccessMethods) == 0 {
-				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+				return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 			if err := service.UpdateObjectAccessMethods(c.Context(), objectID, FromGeneratedAccessMethods(body.AccessMethods)); err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			obj, err := service.GetObject(c.Context(), objectID, "read")
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			return c.JSON(ObjectPayload(*obj))
 		}
 
 		var body generated.BulkAccessMethodUpdateRequest
 		if err := c.Bind().JSON(&body); err != nil || len(body.Updates) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
 		updates := make(map[string][]generated.AccessMethod, len(body.Updates))
@@ -90,7 +89,7 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 		for _, update := range body.Updates {
 			id := strings.TrimSpace(update.ObjectId)
 			if id == "" || len(update.AccessMethods) == 0 {
-				return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+				return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 			}
 			if _, exists := updates[id]; !exists {
 				orderedIDs = append(orderedIDs, id)
@@ -99,14 +98,14 @@ func handleUpdateAccessMethodsFiber(service *objectrecords.Service) fiber.Handle
 		}
 
 		if err := service.BulkUpdateAccessMethods(c.Context(), FromGeneratedAccessMethodMap(updates)); err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		objects := make([]any, 0, len(orderedIDs))
 		for _, id := range orderedIDs {
 			obj, err := service.GetObject(c.Context(), id, "read")
 			if err != nil {
-				return response.HandleError(c, err)
+				return middleware.HandleError(c, err)
 			}
 			objects = append(objects, ObjectPayload(*obj))
 		}
@@ -118,10 +117,10 @@ func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler 
 	return func(c fiber.Ctx) error {
 		var body generated.BulkDeleteRequest
 		if err := c.Bind().JSON(&body); err != nil {
-			return response.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if len(body.BulkObjectIds) == 0 {
-			return response.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
+			return middleware.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
 		}
 
 		ids := make([]string, 0, len(body.BulkObjectIds))
@@ -129,7 +128,7 @@ func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler 
 		for _, rawID := range body.BulkObjectIds {
 			id := strings.TrimSpace(rawID)
 			if id == "" {
-				return response.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot contain empty values")
+				return middleware.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot contain empty values")
 			}
 			if _, ok := seen[id]; ok {
 				continue
@@ -142,7 +141,7 @@ func handleBulkDeleteObjectsFiber(service *objectrecords.Service) fiber.Handler 
 			DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 		}
 		if err := service.BulkDeleteObjectsWithOptions(c.Context(), ids, opts); err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		return c.SendStatus(fiber.StatusNoContent)
 	}
