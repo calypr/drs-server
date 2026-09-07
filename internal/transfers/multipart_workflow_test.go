@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func TestMultipartLifecycleSessionsAreInstanceLocal(t *testing.T) {
@@ -23,7 +25,7 @@ func assertMultipartLifecycleIsolated(t *testing.T, first, second *MultipartLife
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
 	}
-	if _, err := second.SignPart(context.Background(), uploadID, 1); !errors.Is(err, ErrMultipartUploadNotFound) {
+	if _, err := second.SignPart(context.Background(), uploadID, 1); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("SignPart() error = %v, want ErrMultipartUploadNotFound", err)
 	}
 }
@@ -38,7 +40,7 @@ func TestMultipartLifecycleBeginDoesNotStoreFailedProviderUpload(t *testing.T) {
 	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); !errors.Is(err, providerErr) {
 		t.Fatalf("Begin() error = %v, want provider error", err)
 	}
-	if _, err := lifecycle.SignPart(context.Background(), "opaque-upload", 1); !errors.Is(err, ErrMultipartUploadNotFound) {
+	if _, err := lifecycle.SignPart(context.Background(), "opaque-upload", 1); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("SignPart() error = %v, want ErrMultipartUploadNotFound", err)
 	}
 }
@@ -57,7 +59,7 @@ func TestMultipartLifecycleCompleteConsumesBeforeProviderCompletion(t *testing.T
 	if err := lifecycle.Complete(context.Background(), uploadID, nil); !errors.Is(err, providerErr) {
 		t.Fatalf("Complete() error = %v, want provider error", err)
 	}
-	if err := lifecycle.Complete(context.Background(), uploadID, nil); !errors.Is(err, ErrMultipartUploadNotFound) {
+	if err := lifecycle.Complete(context.Background(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("retry Complete() error = %v, want ErrMultipartUploadNotFound", err)
 	}
 }

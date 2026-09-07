@@ -10,8 +10,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/lfsapi"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clienthash "github.com/calypr/syfon/client/hash"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
@@ -109,7 +109,7 @@ func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 		if errors.As(err, &candidateErr) {
 			return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
 		}
-		if faults.IsNotFoundError(err) {
+		if errorapi.IsNotFoundError(err) {
 			return lfsapi.LfsVerify404ApplicationVndGitLfsPlusJSONResponse{Message: "Object not found"}, nil
 		}
 		return lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse{Message: lfsInternalError(ctx, "verify", http.StatusInternalServerError, err)}, nil
@@ -152,7 +152,7 @@ func (s *LFSServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUpload
 	}
 	target, err := s.preparationWorkflow.ResolveUploadTarget(ctx, oid)
 	if err != nil {
-		if errors.Is(err, transferlfs.ErrNoBucketConfigured) {
+		if errors.Is(err, errorapi.ErrBucketNotConfigured) {
 			return lfsapi.LfsUploadProxy507TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInsufficientStorage, err)), nil
 		}
 		return lfsapi.LfsUploadProxy500TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInternalServerError, err)), nil
@@ -164,16 +164,16 @@ func (s *LFSServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUpload
 }
 
 func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	if errors.Is(err, transferlfs.ErrNoObjectLocation) {
+	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
 		return &lfsapi.ObjectError{Code: 404, Message: "no object location available"}
 	}
-	if errors.Is(err, transferlfs.ErrNoBucketConfigured) {
+	if errors.Is(err, errorapi.ErrBucketNotConfigured) {
 		return &lfsapi.ObjectError{Code: http.StatusInsufficientStorage, Message: lfsInternalError(ctx, "batch", http.StatusInsufficientStorage, err)}
 	}
-	if faults.IsNotFoundError(err) {
+	if errorapi.IsNotFoundError(err) {
 		return &lfsapi.ObjectError{Code: 404, Message: "object not found"}
 	}
-	if errors.Is(err, faults.ErrAccessDenied) {
+	if errors.Is(err, errorapi.ErrAccessDenied) {
 		return &lfsapi.ObjectError{Code: http.StatusForbidden, Message: "forbidden"}
 	}
 	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}
@@ -184,7 +184,7 @@ func downloadErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError
 	if errors.As(err, &lookupErr) {
 		return dbErrToBatchError(ctx, lookupErr.Err)
 	}
-	if errors.Is(err, transferlfs.ErrNoObjectLocation) {
+	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
 		return dbErrToBatchError(ctx, err)
 	}
 	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch download", http.StatusInternalServerError, err)}

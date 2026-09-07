@@ -9,11 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientapierror "github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
-	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
@@ -27,7 +25,7 @@ func (e publicMessageError) Error() string {
 }
 
 func (e publicMessageError) Unwrap() error {
-	return faults.ErrAccessDenied
+	return errorapi.ErrAccessDenied
 }
 
 func (e publicMessageError) PublicMessage() string {
@@ -40,25 +38,25 @@ func TestHandleError(t *testing.T) {
 		err          error
 		ctx          context.Context
 		wantStatus   int
-		wantCode     faults.Code
-		wantCategory faults.Category
+		wantCode     errorapi.ErrorCode
+		wantCategory errorapi.ErrorCategory
 		wantMessage  string
 	}{
 		{name: "nil", wantStatus: http.StatusOK},
-		{name: "unknown", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, wantCode: faults.CodeInternal, wantCategory: faults.CategoryInternal, wantMessage: "Internal Server Error"},
-		{name: "not found", err: faults.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: faults.CodeNotFound, wantCategory: faults.CategoryNotFound, wantMessage: "Resource not found"},
-		{name: "legacy unauthorized", err: faults.ErrUnauthorized, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "Unauthorized"},
-		{name: "legacy unauthorized without credentials", err: faults.ErrUnauthorized, ctx: sessionContext("gen3", false), wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized, wantMessage: "Unauthorized"},
-		{name: "authentication required", err: faults.ErrAuthenticationRequired, wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized, wantMessage: "Unauthorized"},
-		{name: "access denied", err: faults.ErrAccessDenied, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "Forbidden"},
-		{name: "public access denied message", err: publicMessageError{message: "object is outside your grants"}, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "object is outside your grants"},
-		{name: "forbidden", err: faults.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: faults.CodeForbidden, wantCategory: faults.CategoryForbidden, wantMessage: "Forbidden"},
-		{name: "conflict", err: faults.ErrConflict, wantStatus: http.StatusConflict, wantCode: faults.CodeConflict, wantCategory: faults.CategoryConflict, wantMessage: "conflict"},
-		{name: "invalid input", err: faults.ErrInvalidInput, wantStatus: http.StatusBadRequest, wantCode: faults.CodeInvalidInput, wantCategory: faults.CategoryInvalidInput, wantMessage: "invalid input"},
-		{name: "rate limited", err: faults.ErrRateLimited, wantStatus: http.StatusTooManyRequests, wantCode: faults.CodeRateLimited, wantCategory: faults.CategoryRateLimited, wantMessage: "Rate limit exceeded"},
-		{name: "unavailable", err: faults.ErrUnavailable, wantStatus: http.StatusServiceUnavailable, wantCode: faults.CodeUnavailable, wantCategory: faults.CategoryUnavailable, wantMessage: "Service Unavailable"},
-		{name: "invalid checksum", err: objects.ErrNoValidSHA256, wantStatus: http.StatusBadRequest, wantCode: faults.CodeNoValidSHA256, wantCategory: faults.CategoryInvalidInput, wantMessage: "A valid SHA256 checksum is required"},
-		{name: "missing access methods", err: objects.ErrAccessMethodsRequired, wantStatus: http.StatusBadRequest, wantCode: faults.CodeAccessMethodsRequired, wantCategory: faults.CategoryInvalidInput, wantMessage: objects.ErrAccessMethodsRequired.Error()},
+		{name: "unknown", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, wantCode: errorapi.ErrorCodeInternalError, wantCategory: errorapi.ErrorCategoryInternalError, wantMessage: "Internal Server Error"},
+		{name: "not found", err: errorapi.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: errorapi.ErrorCodeNotFound, wantCategory: errorapi.ErrorCategoryNotFound, wantMessage: "Resource not found"},
+		{name: "legacy unauthorized", err: errorapi.ErrUnauthorized, wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantCategory: errorapi.ErrorCategoryForbidden, wantMessage: "Unauthorized"},
+		{name: "legacy unauthorized without credentials", err: errorapi.ErrUnauthorized, ctx: sessionContext("gen3", false), wantStatus: http.StatusUnauthorized, wantCode: errorapi.ErrorCodeAuthenticationRequired, wantCategory: errorapi.ErrorCategoryUnauthorized, wantMessage: "Unauthorized"},
+		{name: "authentication required", err: errorapi.ErrAuthenticationRequired, wantStatus: http.StatusUnauthorized, wantCode: errorapi.ErrorCodeAuthenticationRequired, wantCategory: errorapi.ErrorCategoryUnauthorized, wantMessage: "Unauthorized"},
+		{name: "access denied", err: errorapi.ErrAccessDenied, wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantCategory: errorapi.ErrorCategoryForbidden, wantMessage: "Forbidden"},
+		{name: "public access denied message", err: publicMessageError{message: "object is outside your grants"}, wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantCategory: errorapi.ErrorCategoryForbidden, wantMessage: "object is outside your grants"},
+		{name: "forbidden", err: errorapi.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeForbidden, wantCategory: errorapi.ErrorCategoryForbidden, wantMessage: "Forbidden"},
+		{name: "conflict", err: errorapi.ErrConflict, wantStatus: http.StatusConflict, wantCode: errorapi.ErrorCodeConflict, wantCategory: errorapi.ErrorCategoryConflict, wantMessage: "conflict"},
+		{name: "invalid input", err: errorapi.ErrInvalidInput, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeInvalidInput, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: "invalid input"},
+		{name: "rate limited", err: errorapi.ErrRateLimited, wantStatus: http.StatusTooManyRequests, wantCode: errorapi.ErrorCodeRateLimited, wantCategory: errorapi.ErrorCategoryRateLimited, wantMessage: "Rate limit exceeded"},
+		{name: "unavailable", err: errorapi.ErrUnavailable, wantStatus: http.StatusServiceUnavailable, wantCode: errorapi.ErrorCodeUnavailable, wantCategory: errorapi.ErrorCategoryUnavailable, wantMessage: "Service Unavailable"},
+		{name: "invalid checksum", err: errorapi.ErrNoValidSHA256, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeNoValidSha256, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: "A valid SHA256 checksum is required"},
+		{name: "missing access methods", err: errorapi.ErrAccessMethodsRequired, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeAccessMethodsRequired, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: errorapi.ErrAccessMethodsRequired.Error()},
 	}
 
 	for _, tc := range tests {
@@ -79,7 +77,7 @@ func TestHandleError(t *testing.T) {
 				t.Fatalf("expected status %d, got %d", tc.wantStatus, resp.StatusCode)
 			}
 			if tc.err != nil {
-				var body APIError
+				var body errorapi.APIError
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 					t.Fatalf("decode response body: %v", err)
 				}
@@ -94,18 +92,18 @@ func TestHandleError(t *testing.T) {
 func TestHandleErrorCarriesWrappedFaultCodeAndDetail(t *testing.T) {
 	app := fiber.New()
 	app.Get("/", func(c fiber.Ctx) error {
-		return HandleError(c, objectrecords.ErrObjectSizeImmutable)
+		return HandleError(c, errorapi.ErrObjectSizeImmutable)
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
-	var body APIError
+	var body errorapi.APIError
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if body.Code != faults.CodeObjectSizeImmutable || body.Category != faults.CategoryConflict || body.Status != http.StatusConflict || body.Message != "object size is immutable" {
+	if body.Code != errorapi.ErrorCodeObjectSizeImmutable || body.Category != errorapi.ErrorCategoryConflict || body.Status != http.StatusConflict || body.Message != "object size is immutable" {
 		t.Fatalf("unexpected error body: %+v", body)
 	}
 }
@@ -116,13 +114,13 @@ func TestReject(t *testing.T) {
 		status       int
 		message      string
 		wantStatus   int
-		wantCode     faults.Code
-		wantCategory faults.Category
+		wantCode     errorapi.ErrorCode
+		wantCategory errorapi.ErrorCategory
 	}{
-		{name: "client rejection", status: http.StatusBadRequest, message: "bucket is required", wantStatus: http.StatusBadRequest, wantCode: faults.CodeInvalidInput, wantCategory: faults.CategoryInvalidInput},
-		{name: "authentication rejection", status: http.StatusUnauthorized, message: "Unauthorized", wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized},
-		{name: "authorization rejection", status: http.StatusForbidden, message: "Forbidden", wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden},
-		{name: "server rejection", status: http.StatusInternalServerError, message: "dependency unavailable", wantStatus: http.StatusInternalServerError, wantCode: faults.CodeInternal, wantCategory: faults.CategoryInternal},
+		{name: "client rejection", status: http.StatusBadRequest, message: "bucket is required", wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeInvalidInput, wantCategory: errorapi.ErrorCategoryInvalidInput},
+		{name: "authentication rejection", status: http.StatusUnauthorized, message: "Unauthorized", wantStatus: http.StatusUnauthorized, wantCode: errorapi.ErrorCodeAuthenticationRequired, wantCategory: errorapi.ErrorCategoryUnauthorized},
+		{name: "authorization rejection", status: http.StatusForbidden, message: "Forbidden", wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantCategory: errorapi.ErrorCategoryForbidden},
+		{name: "server rejection", status: http.StatusInternalServerError, message: "dependency unavailable", wantStatus: http.StatusInternalServerError, wantCode: errorapi.ErrorCodeInternalError, wantCategory: errorapi.ErrorCategoryInternalError},
 	}
 
 	for _, tc := range tests {
@@ -139,7 +137,7 @@ func TestReject(t *testing.T) {
 			if resp.StatusCode != tc.wantStatus {
 				t.Fatalf("expected status %d, got %d", tc.wantStatus, resp.StatusCode)
 			}
-			var body APIError
+			var body errorapi.APIError
 			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 				t.Fatalf("decode response body: %v", err)
 			}
@@ -164,7 +162,7 @@ func TestRejectIncludesRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
-	var body APIError
+	var body errorapi.APIError
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
@@ -188,7 +186,7 @@ func TestErrorEnvelopeRoundTripsThroughClient(t *testing.T) {
 		t.Fatalf("read response body: %v", err)
 	}
 	apiErr := clientapierror.FromResponse(resp, body)
-	if !errors.Is(apiErr, clientapierror.ErrConflict) {
+	if !errors.Is(apiErr, errorapi.ErrConflict) {
 		t.Fatalf("expected conflict sentinel, got %v", apiErr)
 	}
 	if apiErr.Code != "conflict" || apiErr.Status != http.StatusConflict || apiErr.Message != "object already exists" || apiErr.RequestID != "request-456" {

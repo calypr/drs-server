@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -152,7 +152,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 
 	fileUsage, err := s.reporter.GetFileUsage(ctx, objectID)
 	if err != nil {
-		if errors.Is(err, faults.ErrNotFound) {
+		if errors.Is(err, errorapi.ErrNotFound) {
 			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
 		}
 		return metricsapi.GetMetricsFile500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
@@ -204,7 +204,7 @@ func (s *MetricsServer) readableBulkObjectIDs(ctx context.Context, access metric
 func (s *MetricsServer) objectInScope(ctx context.Context, objectID string, access metricsAccess) (bool, error) {
 	items, err := s.reporter.ListReadableObjectIDs(ctx, access.scopeQuery(), []string{objectID})
 	if err != nil {
-		if errors.Is(err, faults.ErrNotFound) || errors.Is(err, faults.ErrAccessDenied) {
+		if errors.Is(err, errorapi.ErrNotFound) || errors.Is(err, errorapi.ErrAccessDenied) {
 			return false, nil
 		}
 		return false, err

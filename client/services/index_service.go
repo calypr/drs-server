@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/request"
 
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -281,7 +281,7 @@ func (s *IndexService) Upsert(ctx context.Context, did, objectURL, recordPath st
 		return err
 	}
 
-	if !errors.Is(err, apierror.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		return err
 	}
 

@@ -13,7 +13,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/bucketapi"
 	drsapi "github.com/calypr/syfon/apigen/drs"
-	syfonclient "github.com/calypr/syfon/client/services"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/calypr/syfon/cmd/transferprogress"
@@ -185,7 +185,7 @@ func ensureWritableDID(ctx context.Context, drs didReplacer, did string, overwri
 		}
 		return "", fmt.Errorf("object DID %s already exists; pass --overwrite to replace it", did)
 	}
-	if errors.Is(err, syfonclient.ErrObjectNotFound) {
+	if errors.Is(err, errorapi.ErrNotFound) {
 		return "", nil
 	}
 	return "", fmt.Errorf("check existing DID %s: %w", did, err)

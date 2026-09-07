@@ -7,6 +7,7 @@ GET	/index/openapi.yaml
 GET	/index/openapi-lfs.yaml
 GET	/index/openapi-bucket.yaml
 GET	/index/openapi-internal.yaml
+GET	/index/error.openapi.yaml
 GET	/ga4gh/drs/v1/objects/checksum/:checksum
 GET	/ga4gh/drs/v1/service-info
 GET	/ga4gh/drs/v1/objects/:object_id

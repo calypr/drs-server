@@ -14,8 +14,10 @@ import (
 	"time"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
+	"github.com/calypr/syfon/client/sdkerror"
 )
 
 func TestDRSServiceResolveAndList(t *testing.T) {
@@ -119,7 +121,7 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 	if err != nil || obj.Id != "obj-1" {
 		t.Fatalf("GetObject returned obj=%+v err=%v", obj, err)
 	}
-	if _, err := service.GetObject(ctx, "missing"); !errors.Is(err, ErrObjectNotFound) {
+	if _, err := service.GetObject(ctx, "missing"); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected ErrObjectNotFound, got %v", err)
 	}
 	if _, err := service.GetObject(ctx, "broken"); err == nil || !strings.Contains(err.Error(), "schema is stale") {
@@ -198,7 +200,7 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 	if err != nil || len(hashPage.DrsObjects) != 1 || hashPage.DrsObjects[0].Id != "did-hash" {
 		t.Fatalf("BatchGetObjectsByHash returned page=%+v err=%v", hashPage, err)
 	}
-	if _, err := service.BatchGetObjectsByHash(ctx, []string{"abc", "fail"}); !errors.Is(err, apierror.ErrUnavailable) {
+	if _, err := service.BatchGetObjectsByHash(ctx, []string{"abc", "fail"}); !errors.Is(err, errorapi.ErrUnavailable) {
 		t.Fatalf("expected batch checksum lookup to fail on backend error, got %v", err)
 	}
 
@@ -323,6 +325,8 @@ func TestDRSServiceDeleteRecordsByHash(t *testing.T) {
 	emptyService := NewDRSService(mustDRSClientWithHTTPClient(emptyHTTPClient), emptyIndex)
 	if err := emptyService.DeleteRecordsByHash(ctx, "sha256:abc"); err == nil {
 		t.Fatal("expected no-records error from DeleteRecordsByHash")
+	} else if !errors.Is(err, sdkerror.ErrNoRecordsForHash) {
+		t.Fatalf("expected ErrNoRecordsForHash, got %v", err)
 	}
 }
 

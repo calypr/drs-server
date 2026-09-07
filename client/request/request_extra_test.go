@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
@@ -27,10 +28,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestResponseErrorErrorString(t *testing.T) {
+func TestAPIErrorErrorString(t *testing.T) {
 	t.Parallel()
 
-	err := (&ResponseError{Method: http.MethodGet, URL: "https://example.test/data", Status: http.StatusForbidden, Body: "denied"}).Error()
+	err := (&apierror.APIError{Method: http.MethodGet, URL: "https://example.test/data", Status: http.StatusForbidden, Body: "denied"}).Error()
 	if err != "GET https://example.test/data: status 403 body=denied" {
 		t.Fatalf("unexpected error string: %q", err)
 	}
@@ -55,16 +56,16 @@ func TestRequestDo_ResponseAndDecodeErrors(t *testing.T) {
 	var out map[string]any
 	err := req.Do(context.Background(), http.MethodGet, "/forbidden", nil, &out)
 	if err == nil {
-		t.Fatal("expected ResponseError")
+		t.Fatal("expected APIError")
 	}
-	respErr, ok := err.(*ResponseError)
+	respErr, ok := err.(*apierror.APIError)
 	if !ok {
-		t.Fatalf("expected *ResponseError, got %T", err)
+		t.Fatalf("expected *apierror.APIError, got %T", err)
 	}
 	if respErr.Status != http.StatusForbidden || respErr.Code != "forbidden" || respErr.Method != http.MethodGet || respErr.Body != "denied" {
 		t.Fatalf("unexpected response error details: %+v", respErr)
 	}
-	if !errors.Is(respErr, apierror.ErrForbidden) {
+	if !errors.Is(respErr, errorapi.ErrForbidden) {
 		t.Fatalf("expected forbidden sentinel, got %v", respErr)
 	}
 
@@ -143,8 +144,9 @@ func TestRequestDo_DefaultPathDoesNotPrebufferGenericReader(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	transportErr := errors.New("stop after request construction")
 	baseClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return nil, errors.New("stop after request construction")
+		return nil, transportErr
 	})}
 	req := NewBasicAuthRequestor(logs.NewGen3Logger(logger, "", ""), nil, &mockConfigManager{}, "https://example.test", "ua", baseClient)
 
@@ -152,6 +154,9 @@ func TestRequestDo_DefaultPathDoesNotPrebufferGenericReader(t *testing.T) {
 	err := req.Do(context.Background(), http.MethodPut, "/upload", reader, nil, WithPartSize(7))
 	if err == nil {
 		t.Fatal("expected request failure")
+	}
+	if !errors.Is(err, transportErr) {
+		t.Fatalf("transport error was not preserved: %v", err)
 	}
 	if reader.calls != 0 {
 		t.Fatalf("expected generic reader to remain unconsumed when retries are unsafe, got %d reads", reader.calls)

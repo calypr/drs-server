@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -348,7 +348,7 @@ func TestGetAndListBucketScopes(t *testing.T) {
 			WillReturnError(sql.ErrNoRows)
 
 		_, err := pg.GetBucketScope(context.Background(), "org", "proj")
-		if !errors.Is(err, faults.ErrNotFound) {
+		if !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
 	})

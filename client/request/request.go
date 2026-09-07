@@ -5,7 +5,6 @@ package request
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -33,8 +32,6 @@ type Request struct {
 	BaseURL   string
 	UserAgent string
 }
-
-type ResponseError = apierror.APIError
 
 type RequestOption func(*RequestBuilder)
 
@@ -210,7 +207,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 
 	httpReq, err := http.NewRequestWithContext(ctx, rb.Method, rb.Url, rb.Body)
 	if err != nil {
-		return errors.New("failed to create HTTP request: " + err.Error())
+		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Apply default headers
@@ -242,7 +239,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 			if resp != nil {
 				resp.Body.Close()
 			}
-			return errors.New("request failed: " + err.Error())
+			return fmt.Errorf("request failed: %w", err)
 		}
 		return r.handleResponse(method, resp, out)
 	}
@@ -257,7 +254,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 		if resp != nil {
 			resp.Body.Close()
 		}
-		return errors.New("request failed after retries: " + err.Error())
+		return fmt.Errorf("request failed after retries: %w", err)
 	}
 
 	return r.handleResponse(method, resp, out)

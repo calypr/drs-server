@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
@@ -62,7 +62,7 @@ type drsObjectReader struct{ data *drsObjectData }
 func (r *drsObjectReader) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := r.data.objects[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return cloneDRSRecord(obj), nil
 }
@@ -115,7 +115,7 @@ type drsObjectAccessMethods struct{ data *drsObjectData }
 func (w *drsObjectAccessMethods) UpdateObjectAccessMethods(_ context.Context, objectID string, methods []objects.AccessMethod) error {
 	obj, ok := w.data.objects[objectID]
 	if !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copy := append([]objects.AccessMethod(nil), methods...)
 	obj.AccessMethods = &copy
@@ -146,7 +146,7 @@ func (a *drsObjectAliases) CreateObjectAlias(_ context.Context, aliasID, canonic
 func (a *drsObjectAliases) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
 	canonicalID, ok := a.data.aliases[aliasID]
 	if !ok {
-		return "", fmt.Errorf("%w: alias not found", faults.ErrNotFound)
+		return "", fmt.Errorf("%w: alias not found", errorapi.ErrNotFound)
 	}
 	return canonicalID, nil
 }

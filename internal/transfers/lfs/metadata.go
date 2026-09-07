@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -95,7 +95,7 @@ func (w *MetadataWorkflow) StagePendingMetadata(ctx context.Context, metadata Pe
 		if oid, ok := objects.CanonicalSHA256(candidateChecksums(metadata.Candidate)); ok {
 			metadata.OID = oid
 		} else {
-			return fmt.Errorf("%w: pending LFS metadata requires an OID", faults.ErrInvalidInput)
+			return fmt.Errorf("%w: pending LFS metadata requires an OID", errorapi.ErrInvalidInput)
 		}
 	}
 	now := time.Now().UTC()
@@ -148,7 +148,7 @@ func (w *MetadataWorkflow) Verify(ctx context.Context, oid string) error {
 	if err == nil {
 		return w.recordUpload(ctx, string(object.Id))
 	}
-	if !faults.IsNotFoundError(err) {
+	if !errorapi.IsNotFoundError(err) {
 		return err
 	}
 

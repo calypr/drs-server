@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -169,7 +170,7 @@ func TestLFSBatchInternalErrorsDoNotExposeDetails(t *testing.T) {
 	if internal.Code != http.StatusInternalServerError || internal.Message != http.StatusText(http.StatusInternalServerError) || strings.Contains(internal.Message, detail) {
 		t.Fatalf("unexpected batch error: %+v", internal)
 	}
-	insufficient := dbErrToBatchError(context.Background(), transferlfs.ErrNoBucketConfigured)
+	insufficient := dbErrToBatchError(context.Background(), errorapi.ErrBucketNotConfigured)
 	if insufficient.Code != http.StatusInsufficientStorage || insufficient.Message != http.StatusText(http.StatusInsufficientStorage) {
 		t.Fatalf("unexpected no-bucket error: %+v", insufficient)
 	}

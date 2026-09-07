@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 type fakeCredentialStore struct {
@@ -161,7 +161,7 @@ func (f *fakeScopeStore) GetBucketScope(_ context.Context, organization, project
 			return &copy, nil
 		}
 	}
-	return nil, faults.ErrNotFound
+	return nil, errorapi.ErrNotFound
 }
 
 func (f *fakeScopeStore) ListBucketScopes(context.Context) ([]Scope, error) {

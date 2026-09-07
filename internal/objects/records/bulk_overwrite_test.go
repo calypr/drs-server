@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
@@ -98,8 +98,8 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected error containing %q, got %v", tc.want, err)
 			}
-			if tc.conflict != errors.Is(err, objectrecords.ErrBulkOverwriteConflict) {
-				t.Fatalf("conflict classification = %v, want %v", errors.Is(err, objectrecords.ErrBulkOverwriteConflict), tc.conflict)
+			if tc.conflict != errors.Is(err, errorapi.ErrBulkOverwriteConflict) {
+				t.Fatalf("conflict classification = %v, want %v", errors.Is(err, errorapi.ErrBulkOverwriteConflict), tc.conflict)
 			}
 		})
 	}
@@ -174,7 +174,7 @@ func TestBulkOverwriteObjects_RejectsAliasTarget(t *testing.T) {
 	}
 	om := newTestService(database)
 	_, err = om.BulkOverwriteObjects(context.Background(), "org", "project", []objects.Record{candidate})
-	if !errors.Is(err, objectrecords.ErrBulkOverwriteConflict) || !strings.Contains(err.Error(), "alias") {
+	if !errors.Is(err, errorapi.ErrBulkOverwriteConflict) || !strings.Contains(err.Error(), "alias") {
 		t.Fatalf("expected alias conflict, got %v", err)
 	}
 
@@ -211,7 +211,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []objects.Record{candidate})
-		if !errors.Is(err, faults.ErrAccessDenied) {
+		if !errors.Is(err, errorapi.ErrAccessDenied) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})
@@ -226,7 +226,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []objects.Record{candidate})
-		if !errors.Is(err, faults.ErrAccessDenied) {
+		if !errors.Is(err, errorapi.ErrAccessDenied) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})

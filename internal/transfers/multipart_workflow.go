@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/storage"
 )
-
-// ErrMultipartUploadNotFound indicates that a multipart upload is not owned by this lifecycle.
-var ErrMultipartUploadNotFound = faults.New(faults.CodeMultipartUploadNotFound, faults.CategoryNotFound, "multipart upload not found")
 
 // MultipartLifecycle owns the provider target associated with each upload ID.
 type MultipartLifecycle struct {
@@ -50,11 +47,11 @@ func (l *MultipartLifecycle) SignPart(ctx context.Context, uploadID string, part
 
 func (l *MultipartLifecycle) Complete(ctx context.Context, uploadID string, parts []storage.CompletedPart) error {
 	if l == nil {
-		return fmt.Errorf("%w: %s", ErrMultipartUploadNotFound, uploadID)
+		return fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
 	}
 	target, ok := l.sessions.LoadAndDelete(uploadID)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrMultipartUploadNotFound, uploadID)
+		return fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
 	}
 	session := target.(multipartTarget)
 	return l.service.CompleteMultipartUpload(ctx, session.bucket, session.key, uploadID, parts)
@@ -62,11 +59,11 @@ func (l *MultipartLifecycle) Complete(ctx context.Context, uploadID string, part
 
 func (l *MultipartLifecycle) target(uploadID string) (multipartTarget, error) {
 	if l == nil {
-		return multipartTarget{}, fmt.Errorf("%w: %s", ErrMultipartUploadNotFound, uploadID)
+		return multipartTarget{}, fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
 	}
 	target, ok := l.sessions.Load(uploadID)
 	if !ok {
-		return multipartTarget{}, fmt.Errorf("%w: %s", ErrMultipartUploadNotFound, uploadID)
+		return multipartTarget{}, fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
 	}
 	return target.(multipartTarget), nil
 }

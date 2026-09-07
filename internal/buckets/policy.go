@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 // ScopeAllowed reports whether the caller may use the requested methods for a
@@ -43,7 +43,7 @@ func AuthorizeScopeWrite(ctx context.Context, organization, project string, meth
 		if !access.IsAuthzEnforced(ctx) {
 			return nil
 		}
-		return faults.ErrAccessDenied
+		return errorapi.ErrAccessDenied
 	}
 	res, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
@@ -60,5 +60,5 @@ func AuthorizeScopeWrite(ctx context.Context, organization, project string, meth
 	if orgResource != "" && access.HasAnyServiceMethodAccess(ctx, []string{orgResource}, "arborist", "create-descendant", "manage-owners") {
 		return nil
 	}
-	return faults.ErrAccessDenied
+	return errorapi.ErrAccessDenied
 }

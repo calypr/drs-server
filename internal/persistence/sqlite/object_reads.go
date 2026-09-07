@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -16,12 +16,12 @@ import (
 func (db *SqliteDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", faults.ErrObjectNotFound
+		return "", errorapi.ErrObjectNotFound
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", faults.ErrObjectNotFound
+		return "", errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return "", err
@@ -49,10 +49,10 @@ func (db *SqliteDB) GetBulkObjects(ctx context.Context, ids []string) ([]objects
 					obj, resolveErr = db.GetObject(ctx, resolved)
 					ok = resolveErr == nil
 				}
-			} else if !errors.Is(resolveErr, faults.ErrNotFound) {
+			} else if !errors.Is(resolveErr, errorapi.ErrNotFound) {
 				return nil, resolveErr
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, errorapi.ErrNotFound) {
 				return nil, resolveErr
 			}
 		}

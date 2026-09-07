@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
@@ -120,7 +121,7 @@ func TestHandleInternalMultipartCompleteDeletesSessionBeforeProviderError(t *tes
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected provider failure to map to 500, got %d", resp.StatusCode)
 	}
-	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
+	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("expected consumed upload ID after provider failure, got %v", err)
 	}
 }

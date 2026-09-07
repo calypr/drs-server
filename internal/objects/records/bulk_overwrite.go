@@ -8,11 +8,9 @@ import (
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 )
-
-var ErrBulkOverwriteConflict = faults.New(faults.CodeBulkOverwriteConflict, faults.CategoryConflict, "bulk overwrite conflict")
 
 // BulkOverwriteResult summarizes a project-scoped, source-wins metadata copy.
 type BulkOverwriteResult struct {
@@ -43,7 +41,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 			return result, fmt.Errorf("record[%d]: did is required", i)
 		}
 		if _, ok := byDID[did]; ok {
-			return result, fmt.Errorf("%w: duplicate source did %q", ErrBulkOverwriteConflict, did)
+			return result, fmt.Errorf("%w: duplicate source did %q", errorapi.ErrBulkOverwriteConflict, did)
 		}
 		byDID[did] = i
 		if !containsResource(objectmodel.AccessResources(&candidates[i]), resource) {
@@ -80,16 +78,16 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 		sourceDID := string(candidate.Id)
 		canonicalID, aliasErr := m.aliases.ResolveObjectAlias(ctx, sourceDID)
 		if aliasErr == nil && canonicalID != sourceDID {
-			return result, fmt.Errorf("%w: target DID %q is an alias for %q", ErrBulkOverwriteConflict, sourceDID, canonicalID)
+			return result, fmt.Errorf("%w: target DID %q is an alias for %q", errorapi.ErrBulkOverwriteConflict, sourceDID, canonicalID)
 		}
-		if aliasErr != nil && !faults.IsNotFoundError(aliasErr) {
+		if aliasErr != nil && !errorapi.IsNotFoundError(aliasErr) {
 			return result, aliasErr
 		}
 		targetDID := sourceDID
 		matched := false
 		if current, ok := existing[sourceDID]; ok {
 			if !containsResource(objectmodel.AccessResources(&current), resource) {
-				return result, fmt.Errorf("%w: target DID %q is outside project %s", ErrBulkOverwriteConflict, sourceDID, resource)
+				return result, fmt.Errorf("%w: target DID %q is outside project %s", errorapi.ErrBulkOverwriteConflict, sourceDID, resource)
 			}
 			matched = true
 			result.DIDMatched++
@@ -102,11 +100,11 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 				matched = true
 				result.ChecksumMatched++
 			default:
-				return result, fmt.Errorf("%w: target project already has multiple records for sha256 %q: %s", ErrBulkOverwriteConflict, sha, strings.Join(matches, ", "))
+				return result, fmt.Errorf("%w: target project already has multiple records for sha256 %q: %s", errorapi.ErrBulkOverwriteConflict, sha, strings.Join(matches, ", "))
 			}
 		}
 		if prior, ok := usedTargets[targetDID]; ok {
-			return result, fmt.Errorf("%w: source records %q and %q resolve to target DID %q", ErrBulkOverwriteConflict, prior, sourceDID, targetDID)
+			return result, fmt.Errorf("%w: source records %q and %q resolve to target DID %q", errorapi.ErrBulkOverwriteConflict, prior, sourceDID, targetDID)
 		}
 		usedTargets[targetDID] = sourceDID
 		candidate.Id = objectmodel.RecordID(targetDID)
@@ -121,7 +119,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 				return result, err
 			}
 			if !hasObjectMethod(ctx, &candidate, objectMethodUpdate) {
-				return result, faults.ErrAccessDenied
+				return result, errorapi.ErrAccessDenied
 			}
 			result.Replaced++
 		} else {
@@ -129,7 +127,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 				return result, err
 			}
 			if !hasObjectMethod(ctx, &candidate, objectMethodCreate) {
-				return result, faults.ErrAccessDenied
+				return result, errorapi.ErrAccessDenied
 			}
 			result.Created++
 		}

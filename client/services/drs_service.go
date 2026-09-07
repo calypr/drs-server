@@ -2,21 +2,17 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path"
 	"strings"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/client/apierror"
+	"github.com/calypr/syfon/client/sdkerror"
 	"github.com/calypr/syfon/client/transfer"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 )
-
-var ErrNoRecordsForHash = errors.New("no records found for hash")
-var ErrObjectNotFound = apierror.ErrNotFound
 
 type DRSService struct {
 	gen   drsapi.ClientWithResponsesInterface
@@ -172,7 +168,7 @@ func (s *DRSService) DeleteRecordsByHash(ctx context.Context, hash string) error
 		return fmt.Errorf("error resolving DRS object for hash %s: %w", hash, err)
 	}
 	if len(page.DrsObjects) == 0 {
-		return fmt.Errorf("%w %s", ErrNoRecordsForHash, hash)
+		return fmt.Errorf("%w %s", sdkerror.ErrNoRecordsForHash, hash)
 	}
 
 	seen := make(map[string]struct{}, len(page.DrsObjects))

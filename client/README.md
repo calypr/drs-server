@@ -33,8 +33,10 @@ import (
   "errors"
   "log"
 
-  syclient "github.com/calypr/syfon/client"
   "github.com/calypr/syfon/apigen/bucketapi"
+  "github.com/calypr/syfon/apigen/errorapi"
+  "github.com/calypr/syfon/client/apierror"
+  syclient "github.com/calypr/syfon/client"
 )
 
 func main() {
@@ -65,42 +67,45 @@ func main() {
   }
 
   if err := c.Health().Ping(context.Background()); err != nil {
-	var apiErr *syclient.APIError
-	if errors.As(err, &apiErr) {
-	  log.Printf("Syfon request %s failed with %s (%d), request ID %s", apiErr.URL, apiErr.Code, apiErr.Status, apiErr.RequestID)
-	}
+    var apiErr *apierror.APIError
+    if errors.As(err, &apiErr) {
+      log.Printf("Syfon request %s failed with %s (%d), request ID %s", apiErr.URL, apiErr.Code, apiErr.Status, apiErr.RequestID)
+    }
+    if errors.Is(err, errorapi.ErrUnavailable) {
+      log.Printf("Syfon is temporarily unavailable")
+    }
     log.Fatal(err)
   }
 }
 ```
 
-All Syfon API failures return `*syclient.APIError`. The error preserves the
+All Syfon API failures return `*apierror.APIError`. The error preserves the
 HTTP status, exact machine-readable code, broad error category, public message,
 request ID, request method and URL, response headers, and response body. Use
 `errors.Is` with a broad sentinel for portable control flow:
 
 ```go
 record, err := c.DRS().GetObject(context.Background(), "object-id")
-if errors.Is(err, syclient.ErrNotFound) {
+if errors.Is(err, errorapi.ErrNotFound) {
   // The object does not exist or is not visible to this caller.
 }
 ```
 
-`APIError.Code` has the exported `syclient.ErrorCode` type and preserves
+`APIError.Code` has the exported `errorapi.ErrorCode` type and preserves
 unknown server-defined codes. Exact sentinels work with `errors.Is`, while the
 broad sentinel remains available for fallback handling:
 
 ```go
 switch {
-case errors.Is(err, syclient.ErrObjectChecksumImmutable):
+case errors.Is(err, errorapi.ErrObjectChecksumImmutable):
   // Do not retry this update with a different checksum.
-case errors.Is(err, syclient.ErrConflict):
+case errors.Is(err, errorapi.ErrConflict):
   // Handle another conflict reason.
 }
 ```
 
 Code comparisons such as
-`apiErr.Code == syclient.ErrorCodeObjectChecksumImmutable` are also stable.
-`APIError.Category` has the exported `syclient.ErrorCategory` type. The
+`apiErr.Code == errorapi.ErrorCodeObjectChecksumImmutable` are also stable.
+`APIError.Category` has the exported `errorapi.ErrorCategory` type. The
 exported broad sentinels are `ErrNotFound`, `ErrUnauthorized`, `ErrForbidden`,
 `ErrConflict`, `ErrInvalidInput`, `ErrRateLimited`, and `ErrUnavailable`.

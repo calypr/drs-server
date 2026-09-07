@@ -1,12 +1,11 @@
 package access
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 type AuthorizationError struct {
@@ -18,12 +17,12 @@ type AuthorizationError struct {
 	TruncatedResources int
 }
 
-func (e *AuthorizationError) ErrorCode() faults.Code {
-	return faults.CodeAccessDenied
+func (e *AuthorizationError) ErrorCode() errorapi.ErrorCode {
+	return errorapi.ErrorCodeAccessDenied
 }
 
-func (e *AuthorizationError) ErrorCategory() faults.Category {
-	return faults.CategoryForbidden
+func (e *AuthorizationError) ErrorCategory() errorapi.ErrorCategory {
+	return errorapi.ErrorCategoryForbidden
 }
 
 func (e *AuthorizationError) Error() string {
@@ -31,7 +30,7 @@ func (e *AuthorizationError) Error() string {
 }
 
 func (e *AuthorizationError) Is(target error) bool {
-	return errors.Is(faults.ErrAccessDenied, target)
+	return errorapi.ErrAccessDenied.Is(target)
 }
 
 func (e *AuthorizationError) PublicMessage() string {

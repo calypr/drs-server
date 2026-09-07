@@ -10,7 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/bucketapi"
 	drsapi "github.com/calypr/syfon/apigen/drs"
-	syfonclient "github.com/calypr/syfon/client/services"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 type didLookupStub struct {
@@ -112,7 +112,7 @@ func TestEnsureWritableDIDAllowsOverwriteForExistingObject(t *testing.T) {
 }
 
 func TestEnsureWritableDIDAllowsMissingObject(t *testing.T) {
-	warning, err := ensureWritableDID(context.Background(), &didLookupStub{err: syfonclient.ErrObjectNotFound}, "did-1", false)
+	warning, err := ensureWritableDID(context.Background(), &didLookupStub{err: errorapi.ErrNotFound}, "did-1", false)
 	if err != nil || warning != "" {
 		t.Fatalf("expected missing DID to be writable without warning, got warning=%q err=%v", warning, err)
 	}

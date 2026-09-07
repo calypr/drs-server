@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 func TestBucketPolicyHelpers(t *testing.T) {
@@ -82,7 +82,7 @@ func TestBucketPolicyHelpers(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected requestor create alone to be denied")
 		}
-		if !errors.Is(err, faults.ErrAccessDenied) {
+		if !errors.Is(err, errorapi.ErrAccessDenied) {
 			t.Fatalf("expected unauthorized error, got %v", err)
 		}
 	})

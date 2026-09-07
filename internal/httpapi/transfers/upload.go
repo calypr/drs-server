@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/internal/faults"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
@@ -80,7 +80,7 @@ func handleInternalUploadURLFiber(objectService *objectrecords.Service, transfer
 		}
 
 		obj, err := objectService.GetObject(c.Context(), fileID, "update")
-		if err != nil && !errors.Is(err, faults.ErrNotFound) {
+		if err != nil && !errors.Is(err, errorapi.ErrNotFound) {
 			return response.HandleError(c, err)
 		}
 
@@ -209,9 +209,9 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 				errMsg := err.Error()
 				res.Error = &errMsg
 				switch {
-				case errors.Is(err, faults.ErrAccessDenied):
+				case errors.Is(err, errorapi.ErrAccessDenied):
 					res.Status = http.StatusForbidden
-				case errors.Is(err, faults.ErrNotFound):
+				case errors.Is(err, errorapi.ErrNotFound):
 					res.Status = http.StatusNotFound
 				default:
 					res.Status = http.StatusInternalServerError

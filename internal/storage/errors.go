@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 type ErrorKind string
@@ -26,50 +26,50 @@ type OperationError struct {
 	Cause      error
 }
 
-func (e *OperationError) ErrorCode() faults.Code {
+func (e *OperationError) ErrorCode() errorapi.ErrorCode {
 	if e == nil {
 		return ""
 	}
 	switch e.Kind {
 	case ErrorInvalid:
-		return faults.CodeStorageInvalid
+		return errorapi.ErrorCodeStorageInvalid
 	case ErrorNotFound:
-		return faults.CodeStorageNotFound
+		return errorapi.ErrorCodeStorageNotFound
 	case ErrorForbidden:
-		return faults.CodeStorageForbidden
+		return errorapi.ErrorCodeStorageForbidden
 	case ErrorUnavailable:
-		return faults.CodeStorageUnavailable
+		return errorapi.ErrorCodeStorageUnavailable
 	case ErrorIncomplete:
-		return faults.CodeStorageIncomplete
+		return errorapi.ErrorCodeStorageIncomplete
 	case ErrorUnsupported:
-		return faults.CodeStorageUnsupported
+		return errorapi.ErrorCodeStorageUnsupported
 	case ErrorProvider:
-		return faults.CodeStorageProviderError
+		return errorapi.ErrorCodeStorageProviderError
 	default:
-		return faults.CodeStorageProviderError
+		return errorapi.ErrorCodeStorageProviderError
 	}
 }
 
-func (e *OperationError) ErrorCategory() faults.Category {
+func (e *OperationError) ErrorCategory() errorapi.ErrorCategory {
 	if e == nil {
 		return ""
 	}
 	switch e.Kind {
 	case ErrorNotFound:
-		return faults.CategoryNotFound
+		return errorapi.ErrorCategoryNotFound
 	case ErrorForbidden:
-		return faults.CategoryForbidden
+		return errorapi.ErrorCategoryForbidden
 	case ErrorInvalid, ErrorUnsupported:
-		return faults.CategoryInvalidInput
+		return errorapi.ErrorCategoryInvalidInput
 	case ErrorUnavailable, ErrorIncomplete, ErrorProvider:
-		return faults.CategoryUnavailable
+		return errorapi.ErrorCategoryUnavailable
 	default:
-		return faults.CategoryUnavailable
+		return errorapi.ErrorCategoryUnavailable
 	}
 }
 
 func (e *OperationError) Is(target error) bool {
-	definition := faults.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
+	definition := errorapi.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
 	return errors.Is(definition, target)
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
@@ -15,10 +16,10 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	checksums := append([]Checksum(nil), candidateChecksums(c.Checksums)...)
 	oid, ok := CanonicalSHA256(checksums)
 	if !ok {
-		return Record{}, ErrNoValidSHA256
+		return Record{}, errorapi.ErrNoValidSHA256
 	}
 	if c.AccessMethods == nil || len(*c.AccessMethods) == 0 {
-		return Record{}, ErrAccessMethodsRequired
+		return Record{}, errorapi.ErrAccessMethodsRequired
 	}
 	authzList := clientaccess.ControlledAccessToAuthzMap(objectStringSliceValue(c.ControlledAccess))
 
@@ -74,7 +75,7 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	}
 	obj.AccessMethods = &methods
 	if len(methods) == 0 {
-		return Record{}, ErrAccessMethodsRequired
+		return Record{}, errorapi.ErrAccessMethodsRequired
 	}
 	obj.Authorizations = authzList
 	return obj, nil

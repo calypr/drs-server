@@ -5,13 +5,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clienthash "github.com/calypr/syfon/client/hash"
-	"github.com/calypr/syfon/internal/faults"
 )
-
-var ErrNoValidSHA256 = faults.New(faults.CodeNoValidSHA256, faults.CategoryInvalidInput, "no valid sha256 values provided")
-var ErrConflictingSHA256 = faults.New(faults.CodeConflictingSHA256, faults.CategoryConflict, "conflicting sha256 values provided")
-var ErrAccessMethodsRequired = faults.New(faults.CodeAccessMethodsRequired, faults.CategoryInvalidInput, "candidate must include at least one access method with a non-empty url")
 
 var sha256Like = regexp.MustCompile(`^[A-Fa-f0-9]{64}$`)
 
@@ -112,7 +108,7 @@ func SHA256Values(checksums []Checksum) []string {
 func ValidateCanonicalSHA256(checksums []Checksum) (string, bool, error) {
 	values := SHA256Values(checksums)
 	if len(values) > 1 {
-		return "", false, fmt.Errorf("%w: %s", ErrConflictingSHA256, strings.Join(values, ", "))
+		return "", false, fmt.Errorf("%w: %s", errorapi.ErrConflictingSHA256, strings.Join(values, ", "))
 	}
 	if len(values) == 0 {
 		return "", false, nil

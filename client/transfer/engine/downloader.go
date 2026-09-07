@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/sdkerror"
 	"github.com/calypr/syfon/client/transfer"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +58,7 @@ func (d *GenericDownloader) downloadSingle(ctx context.Context, guid string, dst
 	var err error
 	if startOffset > 0 {
 		body, err = d.Source.GetRangeReader(ctx, guid, startOffset, expectedSize-startOffset)
-		if err == transfer.ErrRangeIgnored {
+		if errors.Is(err, sdkerror.ErrRangeIgnored) {
 			// Server ignored our range request, restart from zero.
 			startOffset = 0
 			body, err = d.Source.GetReader(ctx, guid)

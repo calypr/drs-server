@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/google/uuid"
 )
 
@@ -30,7 +30,7 @@ func normalizeSHA256Checksum(raw string) string {
 func canonicalProjectScope(authz []string) (string, error) {
 	normalized := clientaccess.NormalizeAccessResources(authz)
 	if len(normalized) == 0 {
-		return "", fmt.Errorf("%w: project scope is required when object id is not provided", faults.ErrInvalidInput)
+		return "", fmt.Errorf("%w: project scope is required when object id is not provided", errorapi.ErrInvalidInput)
 	}
 	projectScopes := make([]string, 0, len(normalized))
 	for _, resource := range normalized {
@@ -41,10 +41,10 @@ func canonicalProjectScope(authz []string) (string, error) {
 		projectScopes = append(projectScopes, resource)
 	}
 	if len(projectScopes) == 0 {
-		return "", fmt.Errorf("%w: project scope is required when object id is not provided", faults.ErrInvalidInput)
+		return "", fmt.Errorf("%w: project scope is required when object id is not provided", errorapi.ErrInvalidInput)
 	}
 	if len(projectScopes) > 1 {
-		return "", fmt.Errorf("%w: exactly one project scope is required when object id is not provided", faults.ErrInvalidInput)
+		return "", fmt.Errorf("%w: exactly one project scope is required when object id is not provided", errorapi.ErrInvalidInput)
 	}
 	return projectScopes[0], nil
 }
@@ -54,7 +54,7 @@ func canonicalProjectScope(authz []string) (string, error) {
 func MintRecordIDFromChecksum(checksum string, authz []string) (RecordID, error) {
 	checksum = normalizeSHA256Checksum(checksum)
 	if checksum == "" {
-		return "", fmt.Errorf("%w: sha256 checksum is required when object id is not provided", faults.ErrInvalidInput)
+		return "", fmt.Errorf("%w: sha256 checksum is required when object id is not provided", errorapi.ErrInvalidInput)
 	}
 	scope, err := canonicalProjectScope(authz)
 	if err != nil {

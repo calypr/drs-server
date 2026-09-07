@@ -509,10 +509,10 @@ type DrsServiceDrsControlledAccessClaimFormat string
 // DrsServiceDrsControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
 type DrsServiceDrsControlledAccessDefault string
 
-// DrsServiceDrsSupportedUploadMethodTypes defines model for DrsService.Drs.SupportedUploadMethodTypes.
+// DrsServiceDrsSupportedUploadMethodTypes defines model for DrsServiceDrsSupportedUploadMethodTypes.
 type DrsServiceDrsSupportedUploadMethodTypes string
 
-// DrsServiceTypeArtifact defines model for DrsService.Type.Artifact.
+// DrsServiceTypeArtifact defines model for DrsServiceTypeArtifact.
 type DrsServiceTypeArtifact string
 
 // Error A stable Syfon API error.
@@ -775,10 +775,10 @@ type N200ServiceInfo struct {
 		ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
 
 		// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-		ControlledAccessClaimFormat *N200ServiceInfoDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
+		ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
 
 		// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-		ControlledAccessDefault *N200ServiceInfoDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
+		ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
 
 		// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
 		ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
@@ -827,7 +827,7 @@ type N200ServiceInfo struct {
 
 		// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
 		// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
-		SupportedUploadMethodTypes *[]N200ServiceInfoDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
+		SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
 
 		// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
 		TotalObjectSize *int `json:"totalObjectSize,omitempty"`
@@ -866,7 +866,7 @@ type N200ServiceInfo struct {
 		Url string `json:"url"`
 	} `json:"organization"`
 	Type struct {
-		Artifact N200ServiceInfoTypeArtifact `json:"artifact"`
+		Artifact DrsServiceTypeArtifact `json:"artifact"`
 	} `json:"type"`
 
 	// UpdatedAt Timestamp describing when the service was last updated (RFC 3339 format)
@@ -2894,10 +2894,6 @@ type GetServiceInfoResponse struct {
 	JSON200      *N200ServiceInfo
 	JSON500      *N500InternalServerError
 }
-type GetServiceInfo200DrsControlledAccessClaimFormat string
-type GetServiceInfo200DrsControlledAccessDefault string
-type GetServiceInfo200DrsSupportedUploadMethodTypes string
-type GetServiceInfo200TypeArtifact string
 
 // Status returns HTTPResponse.Status
 func (r GetServiceInfoResponse) Status() string {
@@ -4695,10 +4691,10 @@ type N200ServiceInfoJSONResponse struct {
 		ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
 
 		// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-		ControlledAccessClaimFormat *N200ServiceInfoJSONResponseDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
+		ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
 
 		// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-		ControlledAccessDefault *N200ServiceInfoJSONResponseDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
+		ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
 
 		// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
 		ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
@@ -4747,7 +4743,7 @@ type N200ServiceInfoJSONResponse struct {
 
 		// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
 		// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
-		SupportedUploadMethodTypes *[]N200ServiceInfoJSONResponseDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
+		SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
 
 		// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
 		TotalObjectSize *int `json:"totalObjectSize,omitempty"`
@@ -4786,7 +4782,7 @@ type N200ServiceInfoJSONResponse struct {
 		Url string `json:"url"`
 	} `json:"organization"`
 	Type struct {
-		Artifact N200ServiceInfoJSONResponseTypeArtifact `json:"artifact"`
+		Artifact DrsServiceTypeArtifact `json:"artifact"`
 	} `json:"type"`
 
 	// UpdatedAt Timestamp describing when the service was last updated (RFC 3339 format)

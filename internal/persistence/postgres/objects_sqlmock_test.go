@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
 )
@@ -57,10 +57,10 @@ func TestDeleteObject(t *testing.T) {
 		mock.ExpectRollback()
 
 		err := pg.DeleteObject(context.Background(), "missing")
-		if !errors.Is(err, faults.ErrNotFound) {
+		if !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
-		if code, ok := faults.CodeOf(err); !ok || code != faults.CodeObjectNotFound {
+		if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeObjectNotFound {
 			t.Fatalf("expected exact object-not-found code, got %q", code)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -112,7 +112,7 @@ func TestGetObject_NotFound(t *testing.T) {
 		WillReturnError(sql.ErrNoRows)
 
 	_, err := pg.GetObject(context.Background(), "missing")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
 }

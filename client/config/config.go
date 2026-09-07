@@ -12,10 +12,9 @@ import (
 	"path/filepath"
 
 	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/sdkerror"
 	"gopkg.in/ini.v1"
 )
-
-var ErrProfileNotFound = errors.New("profile not found in config file")
 
 type Credential struct {
 	Profile            string
@@ -109,7 +108,7 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%w run configure command (with a profile if desired) to set up account credentials\n"+
-			"Example: ./data-client configure --profile=<profile-name> --cred=<path-to-credential/cred.json> --apiendpoint=https://data.mycommons.org", ErrProfileNotFound)
+			"Example: ./data-client configure --profile=<profile-name> --cred=<path-to-credential/cred.json> --apiendpoint=https://data.mycommons.org", sdkerror.ErrProfileNotFound)
 	}
 
 	// If profile not in config file, prompt user to set up config first
@@ -120,7 +119,7 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 	}
 	sec, err := cfg.GetSection(profile)
 	if err != nil {
-		return nil, fmt.Errorf("%w: need to run \"data-client configure --profile="+profile+" --cred=<path-to-credential/cred.json> --apiendpoint=<api_endpoint_url>\" first", ErrProfileNotFound)
+		return nil, fmt.Errorf("%w: need to run \"data-client configure --profile="+profile+" --cred=<path-to-credential/cred.json> --apiendpoint=<api_endpoint_url>\" first", sdkerror.ErrProfileNotFound)
 	}
 
 	profileConfig := &Credential{

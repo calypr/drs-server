@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
@@ -1346,7 +1346,7 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 	}
 	if _, err := db.GetFileUsage(ctx, oid); err == nil {
 		t.Fatalf("expected not found for missing object usage")
-	} else if code, ok := faults.CodeOf(err); !ok || code != faults.CodeFileUsageNotFound {
+	} else if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeFileUsageNotFound {
 		t.Fatalf("expected exact file-usage-not-found code, got %q", code)
 	}
 
@@ -2010,10 +2010,10 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	}
 
 	_, err = db.GetBucketScope(ctx, "calypr", "missing")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing scope, got: %v", err)
 	}
-	if code, ok := faults.CodeOf(err); !ok || code != faults.CodeBucketScopeNotFound {
+	if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeBucketScopeNotFound {
 		t.Fatalf("expected exact bucket-scope-not-found code, got %q", code)
 	}
 }
@@ -2054,7 +2054,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 	}
 
 	_, err = db.GetPendingMetadata(ctx, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing pending metadata, got: %v", err)
 	}
 }

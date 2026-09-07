@@ -30,9 +30,6 @@ const (
 	// DataAccessTokenEndpoint is the endpoint postfix for FENCE access token
 	DataAccessTokenEndpoint = "/user/credentials/api/access_token"
 
-	// DataUploadEndpoint is the endpoint postfix for upload init/presigned-url
-	DataUploadEndpoint = DataEndpoint
-
 	// DataDownloadEndpoint is the endpoint postfix for download presigned-url
 	DataDownloadEndpoint = "/data/download"
 

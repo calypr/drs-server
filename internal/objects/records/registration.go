@@ -3,7 +3,7 @@ package records
 import (
 	"context"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
@@ -36,7 +36,7 @@ func (m *mutationService) validateExistingContentRead(ctx context.Context, objs 
 			if existing[j].PublicRead || hasObjectMethod(ctx, &existing[j], objectMethodRead) {
 				continue
 			}
-			return faults.ErrAccessDenied
+			return errorapi.ErrAccessDenied
 		}
 	}
 	return nil

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -22,14 +22,14 @@ func (db *SqliteDB) DeleteObject(ctx context.Context, id string) error {
 
 	requestedID := strings.TrimSpace(id)
 	if requestedID == "" {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	canonicalID, found, err := sqliteObjectIDTx(ctx, tx, requestedID)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := sqliteEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
@@ -47,7 +47,7 @@ func (db *SqliteDB) DeleteObject(ctx context.Context, id string) error {
 		return err
 	}
 	if rows == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -67,7 +67,7 @@ func (db *SqliteDB) DeleteObjectAlias(ctx context.Context, aliasID string) error
 		return err
 	}
 	if rows == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -90,7 +90,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var exists string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = ?", canonicalObjectID).Scan(&exists)
 	if err == sql.ErrNoRows {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var physicalAlias string
 	physicalErr := tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = ?", aliasID).Scan(&physicalAlias)
 	if physicalErr == nil {
-		return fmt.Errorf("%w: alias %q is already a physical object", faults.ErrConflict, aliasID)
+		return fmt.Errorf("%w: alias %q is already a physical object", errorapi.ErrConflict, aliasID)
 	}
 	if physicalErr != sql.ErrNoRows {
 		return physicalErr
@@ -113,7 +113,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var aliasTarget string
 	aliasErr := tx.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&aliasTarget)
 	if aliasErr == nil && aliasTarget != canonicalObjectID {
-		return fmt.Errorf("%w: alias %q already points to %q", faults.ErrConflict, aliasID, aliasTarget)
+		return fmt.Errorf("%w: alias %q already points to %q", errorapi.ErrConflict, aliasID, aliasTarget)
 	}
 	if aliasErr != nil && aliasErr != sql.ErrNoRows {
 		return aliasErr
@@ -196,7 +196,7 @@ func (db *SqliteDB) UpdateObjectAccessMethods(ctx context.Context, objectID stri
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := sqliteRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 		return err
@@ -235,13 +235,13 @@ func (db *SqliteDB) RemoveObjectControlledAccess(ctx context.Context, objectID, 
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := sqliteEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
 	}
 	if !access.HasMethodAccess(ctx, "update", []string{resource}) {
-		return faults.ErrAccessDenied
+		return errorapi.ErrAccessDenied
 	}
 
 	var exists int
@@ -249,7 +249,7 @@ func (db *SqliteDB) RemoveObjectControlledAccess(ctx context.Context, objectID, 
 		return err
 	}
 	if exists == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	currentResources, err := sqliteResourcesTx(ctx, tx, canonicalID)
 	if err != nil {
@@ -285,7 +285,7 @@ func (db *SqliteDB) RemoveObjectControlledAccessBulk(ctx context.Context, object
 	defer tx.Rollback()
 	orgWide := !strings.Contains(resource, "/project/")
 	if !orgWide && !access.HasMethodAccess(ctx, "delete", []string{resource}) {
-		return 0, faults.ErrAccessDenied
+		return 0, errorapi.ErrAccessDenied
 	}
 	seen := make(map[string]struct{}, len(objectIDs))
 	removed := 0
@@ -356,7 +356,7 @@ func (db *SqliteDB) BulkUpdateAccessMethods(ctx context.Context, updates map[str
 			return resolveErr
 		}
 		if !found {
-			return faults.ErrObjectNotFound
+			return errorapi.ErrObjectNotFound
 		}
 		if err := sqliteRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 			return err

@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
@@ -86,7 +86,7 @@ func (f *bucketTestStore) DeleteBucketScope(_ context.Context, organization, pro
 	scope, ok := f.BucketScopes[key]
 	if !ok || (scope.CredentialID != credentialID && scope.Bucket != credentialID) ||
 		strings.Trim(strings.TrimSpace(scope.PathPrefix), "/") != strings.Trim(strings.TrimSpace(pathPrefix), "/") {
-		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", errorapi.ErrNotFound)
 	}
 	delete(f.BucketScopes, key)
 	return nil
@@ -95,7 +95,7 @@ func (f *bucketTestStore) DeleteBucketScope(_ context.Context, organization, pro
 func (f *bucketTestStore) GetBucketScope(_ context.Context, organization, projectID string) (*domainbuckets.Scope, error) {
 	scope, ok := f.BucketScopes[bucketTestScopeKey(organization, projectID)]
 	if !ok {
-		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: bucket scope not found", errorapi.ErrNotFound)
 	}
 	copy := scope
 	return &copy, nil
@@ -121,7 +121,7 @@ func bucketTestScopeKey(organization, project string) string {
 func (f *bucketTestStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	record, ok := f.objectCopy(id)
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return &record, nil
 }

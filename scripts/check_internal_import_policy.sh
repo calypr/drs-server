@@ -24,6 +24,10 @@ is_generated_or_http() {
 	esac
 }
 
+is_shared_error_contract() {
+	[[ "$1" == github.com/calypr/syfon/apigen/errorapi ]]
+}
+
 is_sql_dependency() {
 	case "$1" in
 		github.com/mattn/go-sqlite3|github.com/lib/pq|github.com/jackc/pgx*)
@@ -86,7 +90,7 @@ check_edge() {
 	esac
 
 	case "$pkg" in
-		github.com/calypr/syfon/internal/requestid|github.com/calypr/syfon/internal/faults)
+		github.com/calypr/syfon/internal/requestid)
 			if ! is_standard_library_dependency "$dep"; then forbidden=1; fi
 		;;
 		github.com/calypr/syfon/internal/httpapi/records)
@@ -95,7 +99,7 @@ check_edge() {
 			esac
 		;;
 		github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*) forbidden=1 ;;
 			esac
@@ -106,13 +110,13 @@ check_edge() {
 			fi
 		;;
 		github.com/calypr/syfon/internal/buckets)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*|github.com/calypr/syfon/internal/storage) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/storage)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*|github.com/calypr/syfon/internal/storage/*)
 					if [[ "$dep" != github.com/calypr/syfon/internal/storage/address ]]; then forbidden=1; fi
@@ -126,13 +130,13 @@ check_edge() {
 			# Provider children are the one place where cloud SDK imports are
 			# allowed. They still cannot depend on SQL, HTTP/generated code,
 			# core, or objects.
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/transfers|github.com/calypr/syfon/internal/transfers/*)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*) forbidden=1 ;;
 			esac
@@ -143,19 +147,19 @@ check_edge() {
 			fi
 		;;
 		github.com/calypr/syfon/internal/usage)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/transfers) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/projects/storage)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/maintenance/*) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/persistence/credentialcipher)
-			if is_generated_or_http "$dep" || is_sql_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/persistence/*|github.com/calypr/syfon/internal/httpapi*) forbidden=1 ;;
 			esac
@@ -163,7 +167,7 @@ check_edge() {
 		github.com/calypr/syfon/internal/persistence/*)
 			# Dialect adapters own their SQL driver imports. Cloud SDKs remain
 			# forbidden here.
-			if is_generated_or_http "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/persistence/credentialcipher) ;;
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/persistence/*) forbidden=1 ;;
@@ -240,9 +244,9 @@ run_self_tests() {
 	expect_forbidden github.com/calypr/syfon/internal/buckets github.com/calypr/syfon/internal/storage
 	expect_forbidden github.com/calypr/syfon/internal/usage github.com/calypr/syfon/internal/transfers
 	expect_allowed github.com/calypr/syfon/internal/requestid context
-	expect_allowed github.com/calypr/syfon/internal/faults errors
+	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/errorapi
+	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
 	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi/middleware
-	expect_forbidden github.com/calypr/syfon/internal/faults github.com/calypr/syfon/internal/objects
 	expect_forbidden github.com/calypr/syfon/internal/httpapi/records github.com/calypr/syfon/internal/httpapi/drs
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/internal/arbitrary github.com/calypr/syfon/internal/testsupport/sqlite

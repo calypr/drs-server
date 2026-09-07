@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 var (
@@ -321,7 +321,7 @@ func (s *Service) collectScopedUsage(ctx context.Context, scope Scope, inactiveS
 			}
 			obj, objErr := s.objects.GetObject(ctx, id, "read")
 			if objErr != nil {
-				if errors.Is(objErr, faults.ErrNotFound) || errors.Is(objErr, faults.ErrAccessDenied) {
+				if errors.Is(objErr, errorapi.ErrNotFound) || errors.Is(objErr, errorapi.ErrAccessDenied) {
 					continue
 				}
 				return nil, FileUsageSummary{}, objErr

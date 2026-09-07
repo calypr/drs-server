@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/httpapi/response"
 )
 
@@ -13,25 +13,25 @@ func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
 	return response.NewAPIError(ctx, metricsErrorCode(status), status, http.StatusText(status))
 }
 
-func metricsErrorCode(status int) faults.Code {
+func metricsErrorCode(status int) errorapi.ErrorCode {
 	switch status {
 	case http.StatusBadRequest, http.StatusUnprocessableEntity, http.StatusRequestEntityTooLarge:
-		return faults.CodeInvalidInput
+		return errorapi.ErrorCodeInvalidInput
 	case http.StatusUnauthorized:
-		return faults.CodeAuthenticationRequired
+		return errorapi.ErrorCodeAuthenticationRequired
 	case http.StatusForbidden:
-		return faults.CodeAccessDenied
+		return errorapi.ErrorCodeAccessDenied
 	case http.StatusNotFound:
-		return faults.CodeNotFound
+		return errorapi.ErrorCodeNotFound
 	case http.StatusConflict:
-		return faults.CodeConflict
+		return errorapi.ErrorCodeConflict
 	case http.StatusTooManyRequests:
-		return faults.CodeRateLimited
+		return errorapi.ErrorCodeRateLimited
 	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return faults.CodeUnavailable
+		return errorapi.ErrorCodeUnavailable
 	case http.StatusInternalServerError:
-		return faults.CodeInternal
+		return errorapi.ErrorCodeInternalError
 	default:
-		return faults.CodeRequestFailed
+		return errorapi.ErrorCodeRequestFailed
 	}
 }

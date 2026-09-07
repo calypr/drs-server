@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func TestAuthorizationError_UnwrapAndClassifiers(t *testing.T) {
 	err := &AuthorizationError{Method: "read", RecordID: "obj-1"}
-	if !errors.Is(err, faults.ErrAccessDenied) {
+	if !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("expected AuthorizationError to unwrap to ErrUnauthorized")
 	}
 }

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
 )
@@ -46,7 +46,7 @@ func (s *lfsPreparationCredentialsSpy) GetS3Credential(context.Context, string) 
 }
 
 func TestLFSPreparationWorkflowPreservesUploadPreflightAndSizeRules(t *testing.T) {
-	objectsPort := &lfsPreparationObjectSpy{getErr: fmt.Errorf("%w: missing", faults.ErrNotFound)}
+	objectsPort := &lfsPreparationObjectSpy{getErr: fmt.Errorf("%w: missing", errorapi.ErrNotFound)}
 	credentials := &lfsPreparationCredentialsSpy{credentials: []buckets.Credential{{Bucket: "bucket"}}}
 	workflow := NewPreparationWorkflow(transfers.NewService(transfers.Dependencies{}), objectsPort, credentials, nil, nil)
 

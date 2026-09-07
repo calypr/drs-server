@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -228,41 +228,41 @@ func (e *Error) Error() string {
 	return string(e.Kind)
 }
 
-func (e *Error) ErrorCode() faults.Code {
+func (e *Error) ErrorCode() errorapi.ErrorCode {
 	if e == nil {
-		return faults.CodeInternal
+		return errorapi.ErrorCodeInternalError
 	}
 	switch e.Kind {
 	case ErrorInvalidInput:
-		return faults.CodeInvalidInput
+		return errorapi.ErrorCodeInvalidInput
 	case ErrorScopeNotFound:
-		return faults.CodeProjectScopeNotFound
+		return errorapi.ErrorCodeProjectScopeNotFound
 	case ErrorCredentialMissing:
-		return faults.CodeStorageCredentialMissing
+		return errorapi.ErrorCodeStorageCredentialMissing
 	case ErrorPermissionDenied:
-		return faults.CodeAccessDenied
+		return errorapi.ErrorCodeAccessDenied
 	case ErrorObjectNotFound:
-		return faults.CodeObjectNotFound
+		return errorapi.ErrorCodeObjectNotFound
 	case ErrorBucketUnavailable:
-		return faults.CodeStorageBucketUnavailable
+		return errorapi.ErrorCodeStorageBucketUnavailable
 	case ErrorListingIncomplete:
-		return faults.CodeStorageListingIncomplete
+		return errorapi.ErrorCodeStorageListingIncomplete
 	case ErrorUnsupported:
-		return faults.CodeStorageUnsupported
+		return errorapi.ErrorCodeStorageUnsupported
 	default:
-		return faults.CodeInternal
+		return errorapi.ErrorCodeInternalError
 	}
 }
 
-func (e *Error) ErrorCategory() faults.Category {
-	category, ok := faults.CategoryForCode(e.ErrorCode())
+func (e *Error) ErrorCategory() errorapi.ErrorCategory {
+	category, ok := errorapi.CategoryForCode(e.ErrorCode())
 	if !ok {
-		return faults.CategoryInternal
+		return errorapi.ErrorCategoryInternalError
 	}
 	return category
 }
 
 func (e *Error) Is(target error) bool {
-	definition := faults.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
+	definition := errorapi.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
 	return errors.Is(definition, target)
 }

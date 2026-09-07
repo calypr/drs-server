@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
@@ -42,7 +42,7 @@ var (
 func (m *internalRecordStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := m.Objects[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return m.cloneObject(id, obj), nil
 }
@@ -111,7 +111,7 @@ func (m *internalRecordStore) ReplaceObjects(ctx context.Context, records []obje
 func (m *internalRecordStore) UpdateObjectAccessMethods(_ context.Context, objectID string, methods []objects.AccessMethod) error {
 	obj, ok := m.Objects[objectID]
 	if !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copyObj := cloneRecord(*obj)
 	copyObj.AccessMethods = cloneAccessMethods(methods)
@@ -135,7 +135,7 @@ func (m *internalRecordStore) DeleteObjectAlias(_ context.Context, aliasID strin
 
 func (m *internalRecordStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := m.Objects[canonicalID]; !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	if m.Aliases == nil {
 		m.Aliases = make(map[string]string)
@@ -148,7 +148,7 @@ func (m *internalRecordStore) ResolveObjectAlias(_ context.Context, aliasID stri
 	if canonicalID, ok := m.Aliases[aliasID]; ok {
 		return canonicalID, nil
 	}
-	return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+	return "", fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 }
 
 func (m *internalRecordStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
@@ -226,11 +226,11 @@ func (m *internalRecordStore) ListObjectIDsByResources(_ context.Context, resour
 func (m *internalRecordStore) RemoveObjectControlledAccess(_ context.Context, objectID, resource string) error {
 	obj, ok := m.Objects[objectID]
 	if !ok {
-		return faults.ErrNotFound
+		return errorapi.ErrNotFound
 	}
 	targets := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(targets) == 0 {
-		return faults.ErrNotFound
+		return errorapi.ErrNotFound
 	}
 	target := targets[0]
 	resources := m.objectResources(objectID, obj)
@@ -244,7 +244,7 @@ func (m *internalRecordStore) RemoveObjectControlledAccess(_ context.Context, ob
 		filtered = append(filtered, existing)
 	}
 	if !found {
-		return faults.ErrNotFound
+		return errorapi.ErrNotFound
 	}
 	copyObj := cloneRecord(*obj)
 	if len(filtered) == 0 {
@@ -264,7 +264,7 @@ func (m *internalRecordStore) RemoveObjectControlledAccess(_ context.Context, ob
 func (m *internalRecordStore) RemoveObjectControlledAccessBulk(ctx context.Context, objectIDs []string, resource string) (int, error) {
 	targets := clientaccess.NormalizeAccessResources([]string{resource})
 	if len(targets) == 0 {
-		return 0, faults.ErrNotFound
+		return 0, errorapi.ErrNotFound
 	}
 	target := targets[0]
 	orgWide := !strings.Contains(target, "/project/")
@@ -272,7 +272,7 @@ func (m *internalRecordStore) RemoveObjectControlledAccessBulk(ctx context.Conte
 	for _, objectID := range objectIDs {
 		obj, ok := m.Objects[objectID]
 		if !ok {
-			return count, faults.ErrNotFound
+			return count, errorapi.ErrNotFound
 		}
 		for _, existing := range m.objectResources(objectID, obj) {
 			if existing != target && (!orgWide || !strings.HasPrefix(existing, target+"/project/")) {

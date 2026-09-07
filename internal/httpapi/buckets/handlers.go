@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/bucketapi"
+	"github.com/calypr/syfon/apigen/errorapi"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/storage/address"
@@ -27,7 +27,7 @@ func bucketStringValue(value *string) string {
 
 func handleInternalBucketsFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, faults.ErrAuthenticationRequired)
+		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	visible, err := bucketService.ListVisibleBuckets(c.Context())
 	if err != nil {
@@ -79,7 +79,7 @@ func handleInternalPutBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Serv
 		return response.Reject(c, fiber.StatusBadRequest, "organization is required when project_id is set")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, faults.ErrAuthenticationRequired)
+		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
 		return response.HandleError(c, err)
@@ -174,14 +174,14 @@ func isCredentialNotFoundError(err error) bool {
 
 func authorizeBucketDelete(ctx context.Context, bucketService *domainbuckets.Service, bucket string) error {
 	if apimiddleware.MissingGen3AuthHeader(ctx) {
-		return faults.ErrAuthenticationRequired
+		return errorapi.ErrAuthenticationRequired
 	}
 	scopes, err := bucketService.ListBucketScopes(ctx)
 	if err != nil {
 		return err
 	}
 	if !domainbuckets.BucketsAllowedByNames(ctx, scopes, bucket, "delete", "update") {
-		return faults.ErrAccessDenied
+		return errorapi.ErrAccessDenied
 	}
 	return nil
 }
@@ -220,7 +220,7 @@ func handleInternalCreateBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 		return response.Reject(c, fiber.StatusBadRequest, "organization is required")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, faults.ErrAuthenticationRequired)
+		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
 		return response.HandleError(c, err)
@@ -255,7 +255,7 @@ func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 		return response.Reject(c, fiber.StatusBadRequest, "organization and path are required")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, faults.ErrAuthenticationRequired)
+		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
 		return response.HandleError(c, err)
@@ -292,7 +292,7 @@ func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 		matchCount++
 	}
 	if matchCount == 0 {
-		return response.HandleError(c, faults.ErrBucketScopeNotFound)
+		return response.HandleError(c, errorapi.ErrBucketScopeNotFound)
 	}
 	if matchCount > 1 {
 		return response.Reject(c, fiber.StatusConflict, "bucket scope delete matched multiple rows")
@@ -305,7 +305,7 @@ func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 
 func handleInternalListBucketScopesFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return response.HandleError(c, faults.ErrAuthenticationRequired)
+		return response.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	routeCredentialID := strings.TrimSpace(c.Params("bucket"))
 	if routeCredentialID == "" {

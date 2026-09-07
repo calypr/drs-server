@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
@@ -52,7 +52,7 @@ func (f *lfsObjectReaderFake) GetObject(_ context.Context, id string) (*objects.
 	}
 	record, ok := f.records[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copyRecord := *record
 	return &copyRecord, nil
@@ -169,7 +169,7 @@ func (f *lfsAliasStoreFake) CreateObjectAlias(_ context.Context, aliasID, canoni
 func (f *lfsAliasStoreFake) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
 	canonicalID, ok := f.aliases[aliasID]
 	if !ok {
-		return "", fmt.Errorf("%w: object alias not found", faults.ErrNotFound)
+		return "", fmt.Errorf("%w: object alias not found", errorapi.ErrNotFound)
 	}
 	return canonicalID, nil
 }
@@ -183,7 +183,7 @@ var _ buckets.CredentialReader = (*lfsCredentialReaderFake)(nil)
 func (f *lfsCredentialReaderFake) GetS3Credential(_ context.Context, bucket string) (*buckets.Credential, error) {
 	credential, ok := f.credentials[bucket]
 	if !ok {
-		return nil, fmt.Errorf("%w: credential not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: credential not found", errorapi.ErrNotFound)
 	}
 	copyCredential := credential
 	return &copyCredential, nil
@@ -218,7 +218,7 @@ func (f *lfsPendingStoreFake) SavePendingMetadata(_ context.Context, entries []t
 func (f *lfsPendingStoreFake) GetPendingMetadata(_ context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	entry, ok := f.entries[oid]
 	if !ok {
-		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 	}
 	return &entry, nil
 }
@@ -226,7 +226,7 @@ func (f *lfsPendingStoreFake) GetPendingMetadata(_ context.Context, oid string) 
 func (f *lfsPendingStoreFake) PopPendingMetadata(_ context.Context, oid string) (*transferlfs.PendingMetadata, error) {
 	entry, ok := f.entries[oid]
 	if !ok {
-		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 	}
 	delete(f.entries, oid)
 	return &entry, nil

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
@@ -26,14 +26,14 @@ func (db *PostgresDB) DeleteObject(ctx context.Context, id string) error {
 
 	requestedID := strings.TrimSpace(id)
 	if requestedID == "" {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	canonicalID, found, err := postgresObjectIDTx(ctx, tx, requestedID)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := postgresEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
@@ -51,7 +51,7 @@ func (db *PostgresDB) DeleteObject(ctx context.Context, id string) error {
 		return err
 	}
 	if rows == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -74,7 +74,7 @@ func (db *PostgresDB) DeleteObjectAlias(ctx context.Context, aliasID string) err
 		return err
 	}
 	if rows == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -99,7 +99,7 @@ func (db *PostgresDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalO
 	var exists string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = $1", canonicalObjectID).Scan(&exists)
 	if err == sql.ErrNoRows {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func (db *PostgresDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalO
 	var physicalAlias string
 	physicalErr := tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = $1", aliasID).Scan(&physicalAlias)
 	if physicalErr == nil {
-		return fmt.Errorf("%w: alias %q is already a physical object", faults.ErrConflict, aliasID)
+		return fmt.Errorf("%w: alias %q is already a physical object", errorapi.ErrConflict, aliasID)
 	}
 	if physicalErr != sql.ErrNoRows {
 		return physicalErr
@@ -121,7 +121,7 @@ func (db *PostgresDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalO
 	var aliasTarget string
 	aliasErr := tx.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = $1", aliasID).Scan(&aliasTarget)
 	if aliasErr == nil && aliasTarget != canonicalObjectID {
-		return fmt.Errorf("%w: alias %q already points to %q", faults.ErrConflict, aliasID, aliasTarget)
+		return fmt.Errorf("%w: alias %q already points to %q", errorapi.ErrConflict, aliasID, aliasTarget)
 	}
 	if aliasErr != nil && aliasErr != sql.ErrNoRows {
 		return aliasErr
@@ -197,7 +197,7 @@ func (db *PostgresDB) UpdateObjectAccessMethods(ctx context.Context, objectID st
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := postgresRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 		return err
@@ -239,13 +239,13 @@ func (db *PostgresDB) RemoveObjectControlledAccess(ctx context.Context, objectID
 		return err
 	}
 	if !found {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	if err := postgresEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
 	}
 	if !access.HasMethodAccess(ctx, "update", []string{resource}) {
-		return faults.ErrAccessDenied
+		return errorapi.ErrAccessDenied
 	}
 
 	var exists int
@@ -253,7 +253,7 @@ func (db *PostgresDB) RemoveObjectControlledAccess(ctx context.Context, objectID
 		return err
 	}
 	if exists == 0 {
-		return faults.ErrObjectNotFound
+		return errorapi.ErrObjectNotFound
 	}
 	currentResources, err := postgresResourcesTx(ctx, tx, canonicalID)
 	if err != nil {
@@ -292,7 +292,7 @@ func (db *PostgresDB) RemoveObjectControlledAccessBulk(ctx context.Context, obje
 	}
 	orgWide := !strings.Contains(resource, "/project/")
 	if !orgWide && !access.HasMethodAccess(ctx, "delete", []string{resource}) {
-		return 0, faults.ErrAccessDenied
+		return 0, errorapi.ErrAccessDenied
 	}
 	seen := make(map[string]struct{}, len(objectIDs))
 	removed := 0
@@ -366,7 +366,7 @@ func (db *PostgresDB) BulkUpdateAccessMethods(ctx context.Context, updates map[s
 			return resolveErr
 		}
 		if !found {
-			return faults.ErrObjectNotFound
+			return errorapi.ErrObjectNotFound
 		}
 		if err := postgresRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 			return err

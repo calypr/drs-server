@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
-	apiresponse "github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
@@ -30,7 +30,7 @@ func TestRegisterRoutesUsesDirectFiberCleanupParams(t *testing.T) {
 	if response.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", response.StatusCode)
 	}
-	var body apiresponse.APIError
+	var body errorapi.APIError
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestInspectObjectRejectsMalformedURLWithExistingStatusAndBody(t *testing.T)
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", response.StatusCode)
 	}
-	var body apiresponse.APIError
+	var body errorapi.APIError
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

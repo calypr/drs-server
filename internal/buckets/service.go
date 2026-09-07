@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 const defaultScopeCacheTTL = 30 * time.Second
@@ -104,5 +104,5 @@ func (s *Service) GetS3Credential(ctx context.Context, bucket string) (*Credenti
 }
 
 func isCredentialNotFoundError(err error) bool {
-	return faults.IsNotFoundError(err) || strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
+	return errorapi.IsNotFoundError(err) || strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
 }

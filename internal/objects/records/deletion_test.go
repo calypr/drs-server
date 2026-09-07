@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
@@ -51,7 +51,7 @@ func assertRecordExists(t *testing.T, db *sqlite.SqliteDB, id string, exists boo
 	if exists && err != nil {
 		t.Fatalf("%s should survive: %v", id, err)
 	}
-	if !exists && !errors.Is(err, faults.ErrNotFound) {
+	if !exists && !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("%s should be deleted, got %v", id, err)
 	}
 }
@@ -59,7 +59,7 @@ func assertRecordExists(t *testing.T, db *sqlite.SqliteDB, id string, exists boo
 func TestDeleteObjectRequiresEveryResource(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, faults.ErrAccessDenied) {
+	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("shared delete: %v", err)
 	}
 	assertRecordExists(t, db, "shared", true)
@@ -67,7 +67,7 @@ func TestDeleteObjectRequiresEveryResource(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertRecordExists(t, db, "owned", false)
-	if err := service.DeleteObject(deletionContext(), "missing"); !errors.Is(err, faults.ErrNotFound) {
+	if err := service.DeleteObject(deletionContext(), "missing"); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("missing delete: %v", err)
 	}
 }
@@ -76,10 +76,10 @@ func TestDeleteRejectsPhysicalStorageOptionWithoutMutation(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
 	opts := objectrecords.DeleteOptions{DeleteStorageData: true}
-	if err := service.DeleteObjectWithOptions(deletionContext(), "owned", opts); !errors.Is(err, faults.ErrConflict) {
+	if err := service.DeleteObjectWithOptions(deletionContext(), "owned", opts); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("single delete: %v", err)
 	}
-	if err := service.BulkDeleteObjectsWithOptions(deletionContext(), []string{"owned"}, opts); !errors.Is(err, faults.ErrConflict) {
+	if err := service.BulkDeleteObjectsWithOptions(deletionContext(), []string{"owned"}, opts); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("bulk delete: %v", err)
 	}
 	assertRecordExists(t, db, "owned", true)
@@ -105,7 +105,7 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 	if err := service.CreateObjectAlias(deletionContext(), "alias", "owned"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}); !errors.Is(err, faults.ErrConflict) {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("alias delete: %v", err)
 	}
 	assertRecordExists(t, db, "owned", true)
@@ -117,13 +117,13 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 func TestCreateObjectAliasRequiresUpdateAccess(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.CreateObjectAlias(deletionContext(), "denied", "other"); !errors.Is(err, faults.ErrAccessDenied) {
+	if err := service.CreateObjectAlias(deletionContext(), "denied", "other"); !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("unauthorized alias: %v", err)
 	}
-	if _, err := db.ResolveObjectAlias(context.Background(), "denied"); !errors.Is(err, faults.ErrNotFound) {
+	if _, err := db.ResolveObjectAlias(context.Background(), "denied"); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("unauthorized alias persisted: %v", err)
 	}
-	if err := service.CreateObjectAlias(deletionContext(), "missing", "missing"); !errors.Is(err, faults.ErrNotFound) {
+	if err := service.CreateObjectAlias(deletionContext(), "missing", "missing"); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("missing alias target: %v", err)
 	}
 }
@@ -178,7 +178,7 @@ func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
 			if err != nil || count != 0 {
 				t.Fatalf("repeat scope delete = %d, %v", count, err)
 			}
-			if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, faults.ErrAccessDenied) {
+			if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, errorapi.ErrAccessDenied) {
 				t.Fatalf("unauthorized scope delete: %v", err)
 			}
 		})

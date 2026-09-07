@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
@@ -107,8 +108,8 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 		}
 
 		urlStr, err := lifecycle.SignPart(c.Context(), req.UploadId, req.PartNumber)
-		if errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return response.HandleError(c, err)
+		if errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
 		}
 		if err != nil {
 			return response.HandleError(c, err)
@@ -131,8 +132,8 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 		for i, p := range req.Parts {
 			parts[i] = storage.CompletedPart{ETag: p.ETag, PartNumber: p.PartNumber}
 		}
-		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return response.HandleError(c, err)
+		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
 		} else if err != nil {
 			return response.HandleError(c, err)
 		}

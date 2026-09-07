@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -75,11 +75,11 @@ func (s *Service) ResolveCanonicalStorageTarget(ctx context.Context, req Canonic
 	}
 
 	if strings.TrimSpace(existingURL) == "" {
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: object storage location is unavailable", faults.ErrInvalidInput)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: object storage location is unavailable", errorapi.ErrInvalidInput)
 	}
 	if existingOK {
 		if strings.TrimSpace(existingBucket) == "" || strings.TrimSpace(existingKey) == "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("%w: object storage location is invalid", faults.ErrInvalidInput)
+			return CanonicalStorageTarget{}, fmt.Errorf("%w: object storage location is invalid", errorapi.ErrInvalidInput)
 		}
 		return newCanonicalStorageTarget(existingBucket, existingKey), nil
 	}
@@ -93,10 +93,10 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 	project = strings.TrimSpace(project)
 	key = strings.Trim(strings.TrimSpace(key), "/")
 	if organization == "" {
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: organization is required", faults.ErrInvalidInput)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: organization is required", errorapi.ErrInvalidInput)
 	}
 	if project != "" && organization == "" {
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: organization required when project is specified", faults.ErrInvalidInput)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: organization required when project is specified", errorapi.ErrInvalidInput)
 	}
 
 	scopes := make([]buckets.Scope, 0, 2)
@@ -116,9 +116,9 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 	}
 	if len(scopes) == 0 {
 		if project != "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("%w: no bucket scope configured for organization %q project %q", faults.ErrInvalidInput, organization, project)
+			return CanonicalStorageTarget{}, fmt.Errorf("%w: no bucket scope configured for organization %q project %q", errorapi.ErrInvalidInput, organization, project)
 		}
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: no bucket scope configured for organization %q", faults.ErrInvalidInput, organization)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: no bucket scope configured for organization %q", errorapi.ErrInvalidInput, organization)
 	}
 
 	bucket := ""
@@ -128,11 +128,11 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 		}
 	}
 	if bucket == "" {
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: unable to resolve scoped storage bucket for organization %q project %q", faults.ErrInvalidInput, organization, project)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: unable to resolve scoped storage bucket for organization %q project %q", errorapi.ErrInvalidInput, organization, project)
 	}
 	key = normalizeScopedStorageKey(key, scopes)
 	if key == "" {
-		return CanonicalStorageTarget{}, fmt.Errorf("%w: unable to resolve scoped storage key for organization %q project %q", faults.ErrInvalidInput, organization, project)
+		return CanonicalStorageTarget{}, fmt.Errorf("%w: unable to resolve scoped storage key for organization %q project %q", errorapi.ErrInvalidInput, organization, project)
 	}
 	return newCanonicalStorageTarget(bucket, key), nil
 }

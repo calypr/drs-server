@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 func bucketPolicyContext(mode string, header bool, privileges map[string]map[string]bool) context.Context {
@@ -84,7 +84,7 @@ func TestAuthorizeScopeWritePolicy(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("AuthorizeScopeWrite() error = %v, wantErr=%t", err, tt.wantErr)
 			}
-			if tt.wantErr && !errors.Is(err, faults.ErrAccessDenied) {
+			if tt.wantErr && !errors.Is(err, errorapi.ErrAccessDenied) {
 				t.Fatalf("AuthorizeScopeWrite() error = %v, want unauthorized", err)
 			}
 		})

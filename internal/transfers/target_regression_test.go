@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
@@ -113,7 +113,7 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 			"HTAN_INT|one": {Organization: "HTAN_INT", ProjectID: "one", Bucket: "bforepc-a", PathPrefix: "bforepc-prod"},
 			"HTAN_INT|two": {Organization: "HTAN_INT", ProjectID: "two", Bucket: "bforepc-b", PathPrefix: "bforepc-prod"},
 		}, nil)
-		if _, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/one", "/organization/HTAN_INT/project/two"), legacy, storage.AccessOptions{}); !errors.Is(err, faults.ErrConflict) {
+		if _, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/one", "/organization/HTAN_INT/project/two"), legacy, storage.AccessOptions{}); !errors.Is(err, errorapi.ErrConflict) {
 			t.Fatalf("expected conflicting legacy mapping error, got %v", err)
 		}
 	})

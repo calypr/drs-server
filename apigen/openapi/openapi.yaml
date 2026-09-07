@@ -1204,6 +1204,31 @@ components:
       bearerFormat: JWT
       description: A valid GA4GH Passport must be passed in the body of an HTTP POST request as a tokens[] array.
   schemas:
+    DrsServiceDrsControlledAccessClaimFormat:
+      type: string
+      description: Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
+      enum:
+        - ga4gh-passport-url-claim
+      example: ga4gh-passport-url-claim
+    DrsServiceDrsControlledAccessDefault:
+      type: string
+      description: Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
+      enum:
+        - open-access-read
+      example: open-access-read
+    DrsServiceDrsSupportedUploadMethodTypes:
+      type: string
+      enum:
+        - s3
+        - gs
+        - https
+        - ftp
+        - sftp
+    DrsServiceTypeArtifact:
+      type: string
+      enum:
+        - drs
+      example: drs
     ServiceType:
       description: Type of a GA4GH service
       type: object
@@ -1307,10 +1332,7 @@ components:
             - artifact
           properties:
             artifact:
-              type: string
-              enum:
-                - drs
-              example: drs
+              $ref: '#/components/schemas/DrsServiceTypeArtifact'
         drs:
           type: object
           required:
@@ -1336,13 +1358,7 @@ components:
             supportedUploadMethodTypes:
               type: array
               items:
-                type: string
-                enum:
-                  - s3
-                  - gs
-                  - https
-                  - ftp
-                  - sftp
+                $ref: '#/components/schemas/DrsServiceDrsSupportedUploadMethodTypes'
               description: |-
                 List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
                 - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
@@ -1377,17 +1393,9 @@ components:
               description: Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
               default: false
             controlledAccessClaimFormat:
-              type: string
-              description: Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-              enum:
-                - ga4gh-passport-url-claim
-              example: ga4gh-passport-url-claim
+              $ref: '#/components/schemas/DrsServiceDrsControlledAccessClaimFormat'
             controlledAccessDefault:
-              type: string
-              description: Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-              enum:
-                - open-access-read
-              example: open-access-read
+              $ref: '#/components/schemas/DrsServiceDrsControlledAccessDefault'
             deleteSupported:
               type: boolean
               description: Indicates whether this DRS server supports delete operations via the delete endpoints. If true, clients can delete DRS objects using PUT requests to `/objects/{object_id}/delete` and `/objects/delete`. If false or missing, the server does not support delete operations and will return 404 for delete endpoint requests. Like upload functionality, delete support is entirely optional and servers remain DRS compliant without it.

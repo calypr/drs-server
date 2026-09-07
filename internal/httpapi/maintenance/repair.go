@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
@@ -24,7 +24,7 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 	if access.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || access.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
 		return nil
 	}
-	return faults.ErrAccessDenied
+	return errorapi.ErrAccessDenied
 }
 
 func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler {

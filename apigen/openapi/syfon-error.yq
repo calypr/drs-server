@@ -1,4 +1,20 @@
 .components.parameters.Checksum."x-go-name" = "ChecksumParameter" |
 .components.schemas.Error = {
   "$ref": "./error.openapi.yaml#/components/schemas/APIError"
+} |
+.components.schemas.DrsServiceDrsControlledAccessClaimFormat = .components.schemas.DrsService.properties.drs.properties.controlledAccessClaimFormat |
+.components.schemas.DrsServiceDrsControlledAccessDefault = .components.schemas.DrsService.properties.drs.properties.controlledAccessDefault |
+.components.schemas.DrsServiceDrsSupportedUploadMethodTypes = .components.schemas.DrsService.properties.drs.properties.supportedUploadMethodTypes.items |
+.components.schemas.DrsServiceTypeArtifact = .components.schemas.DrsService.properties.type.properties.artifact |
+.components.schemas.DrsService.properties.type.properties.artifact = {
+  "$ref": "#/components/schemas/DrsServiceTypeArtifact"
+} |
+.components.schemas.DrsService.properties.drs.properties.supportedUploadMethodTypes.items = {
+  "$ref": "#/components/schemas/DrsServiceDrsSupportedUploadMethodTypes"
+} |
+.components.schemas.DrsService.properties.drs.properties.controlledAccessClaimFormat = {
+  "$ref": "#/components/schemas/DrsServiceDrsControlledAccessClaimFormat"
+} |
+.components.schemas.DrsService.properties.drs.properties.controlledAccessDefault = {
+  "$ref": "#/components/schemas/DrsServiceDrsControlledAccessDefault"
 }

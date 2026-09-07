@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/apierror"
 )
 
@@ -23,7 +24,7 @@ func TestAPIResponseErrorReturnsTypedContract(t *testing.T) {
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("expected *apierror.APIError, got %T", err)
 	}
-	if !errors.Is(err, apierror.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected not-found sentinel, got %v", err)
 	}
 	if apiErr.Code != "not_found" || apiErr.Status != http.StatusNotFound || apiErr.Message != "Resource not found" || apiErr.RequestID != "request-123" {
