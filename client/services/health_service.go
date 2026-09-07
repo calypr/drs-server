@@ -18,3 +18,5 @@ func NewHealthService(r request.Requester) *HealthService {
 func (h *HealthService) Ping(ctx context.Context) error {
 	return h.requestor.Do(ctx, "GET", common.HealthzEndpoint, nil, nil)
 }
+
+// --- HealthService ---

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,8 +12,7 @@ import (
 	drsapi "github.com/calypr/syfon/apigen/client/drs"
 	"github.com/calypr/syfon/apigen/client/internalapi"
 	"github.com/calypr/syfon/client/transfer"
-
-	clientaccess "github.com/calypr/syfon/client/access"
+	syfoncommon "github.com/calypr/syfon/common"
 )
 
 var ErrNoRecordsForHash = errors.New("no records found for hash")
@@ -63,7 +63,7 @@ func (s *DRSService) GetObject(ctx context.Context, objectID string) (drsapi.Drs
 		if resp.StatusCode() == http.StatusNotFound {
 			return drsapi.DrsObject{}, fmt.Errorf("%w: %s", ErrObjectNotFound, objectID)
 		}
-		return drsapi.DrsObject{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.DrsObject{}, drsResponseError(resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -78,17 +78,51 @@ func (s *DRSService) DeleteObject(ctx context.Context, objectID string, deleteSt
 		return err
 	}
 	if resp.StatusCode() != 200 && resp.StatusCode() != 204 {
-		return apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsResponseError(resp.StatusCode(), resp.Body)
 	}
 	return nil
 }
 
 func (s *DRSService) ListObjects(ctx context.Context, limit, page int) (DRSPage, error) {
-	return s.listObjects(ctx, ListRecordsOptions{Limit: limit, Page: page})
+	listResp, err := s.index.List(ctx, ListRecordsOptions{
+		Limit: limit,
+		Page:  page,
+	})
+	if err != nil {
+		return DRSPage{}, err
+	}
+	records := make([]internalapi.InternalRecord, 0)
+	if listResp.Records != nil {
+		records = *listResp.Records
+	}
+	out := DRSPage{
+		DrsObjects: make([]drsapi.DrsObject, 0, len(records)),
+	}
+	for _, rec := range records {
+		out.DrsObjects = append(out.DrsObjects, internalRecordToDRSObject(&rec))
+	}
+	return out, nil
 }
 
 func (s *DRSService) ListObjectsAfter(ctx context.Context, limit int, start string) (DRSPage, error) {
-	return s.listObjects(ctx, ListRecordsOptions{Limit: limit, Start: start})
+	listResp, err := s.index.List(ctx, ListRecordsOptions{
+		Limit: limit,
+		Start: start,
+	})
+	if err != nil {
+		return DRSPage{}, err
+	}
+	records := make([]internalapi.InternalRecord, 0)
+	if listResp.Records != nil {
+		records = *listResp.Records
+	}
+	out := DRSPage{
+		DrsObjects: make([]drsapi.DrsObject, 0, len(records)),
+	}
+	for _, rec := range records {
+		out.DrsObjects = append(out.DrsObjects, internalRecordToDRSObject(&rec))
+	}
+	return out, nil
 }
 
 func (s *DRSService) GetAccessURL(ctx context.Context, objectID, accessID string) (drsapi.AccessURL, error) {
@@ -97,7 +131,7 @@ func (s *DRSService) GetAccessURL(ctx context.Context, objectID, accessID string
 		return drsapi.AccessURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return drsapi.AccessURL{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.AccessURL{}, drsResponseError(resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -108,7 +142,7 @@ func (s *DRSService) RegisterObjects(ctx context.Context, req drsapi.RegisterObj
 		return drsapi.N201ObjectsCreated{}, err
 	}
 	if resp.JSON201 == nil {
-		return drsapi.N201ObjectsCreated{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.N201ObjectsCreated{}, drsResponseError(resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -124,17 +158,76 @@ func (s *DRSService) UpdateObjectAccessMethods(ctx context.Context, objectID str
 		if resp.StatusCode() == http.StatusNotFound {
 			return drsapi.DrsObject{}, fmt.Errorf("%w: %s", ErrObjectNotFound, objectID)
 		}
-		return drsapi.DrsObject{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.DrsObject{}, drsResponseError(resp.StatusCode(), resp.Body)
 	}
 	return *resp.JSON200, nil
 }
 
+func drsResponseError(status int, body []byte) error {
+	msg := strings.TrimSpace(string(body))
+	if msg != "" {
+		var payload struct {
+			Error *struct {
+				Message string `json:"message"`
+				Type    string `json:"type"`
+			} `json:"error"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(body, &payload); err == nil {
+			switch {
+			case payload.Error != nil && strings.TrimSpace(payload.Error.Message) != "":
+				msg = strings.TrimSpace(payload.Error.Message)
+			case strings.TrimSpace(payload.Message) != "":
+				msg = strings.TrimSpace(payload.Message)
+			}
+		}
+		return fmt.Errorf("unexpected response: %d: %s", status, msg)
+	}
+	return fmt.Errorf("unexpected response: %d", status)
+}
+
 func (s *DRSService) ListObjectsByProject(ctx context.Context, projectID string, limit, page int) (DRSPage, error) {
-	return s.listObjects(ctx, ListRecordsOptions{ProjectID: projectID, Limit: limit, Page: page})
+	listResp, err := s.index.List(ctx, ListRecordsOptions{
+		ProjectID: projectID,
+		Limit:     limit,
+		Page:      page,
+	})
+	if err != nil {
+		return DRSPage{}, err
+	}
+	records := make([]internalapi.InternalRecord, 0)
+	if listResp.Records != nil {
+		records = *listResp.Records
+	}
+	out := DRSPage{
+		DrsObjects: make([]drsapi.DrsObject, 0, len(records)),
+	}
+	for _, rec := range records {
+		out.DrsObjects = append(out.DrsObjects, internalRecordToDRSObject(&rec))
+	}
+	return out, nil
 }
 
 func (s *DRSService) ListObjectsByProjectAfter(ctx context.Context, projectID string, limit int, start string) (DRSPage, error) {
-	return s.listObjects(ctx, ListRecordsOptions{ProjectID: projectID, Limit: limit, Start: start})
+	listResp, err := s.index.List(ctx, ListRecordsOptions{
+		ProjectID: projectID,
+		Limit:     limit,
+		Start:     start,
+	})
+	if err != nil {
+		return DRSPage{}, err
+	}
+	records := make([]internalapi.InternalRecord, 0)
+	if listResp.Records != nil {
+		records = *listResp.Records
+	}
+	out := DRSPage{
+		DrsObjects: make([]drsapi.DrsObject, 0, len(records)),
+	}
+	for _, rec := range records {
+		out.DrsObjects = append(out.DrsObjects, internalRecordToDRSObject(&rec))
+	}
+	return out, nil
 }
 
 func (s *DRSService) GetProjectSample(ctx context.Context, projectID string, limit int) (DRSPage, error) {
@@ -232,7 +325,7 @@ func internalRecordToDRSObject(rec *internalapi.InternalRecord) drsapi.DrsObject
 		}
 	}
 	if rec.ControlledAccess != nil {
-		controlled := clientaccess.NormalizeAccessResources(*rec.ControlledAccess)
+		controlled := syfoncommon.NormalizeAccessResources(*rec.ControlledAccess)
 		obj.ControlledAccess = &controlled
 	}
 	if rec.AccessMethods != nil {
@@ -240,20 +333,4 @@ func internalRecordToDRSObject(rec *internalapi.InternalRecord) drsapi.DrsObject
 		obj.AccessMethods = &methods
 	}
 	return obj
-}
-
-func (s *DRSService) listObjects(ctx context.Context, opts ListRecordsOptions) (DRSPage, error) {
-	resp, err := s.index.List(ctx, opts)
-	if err != nil {
-		return DRSPage{}, err
-	}
-	records := []internalapi.InternalRecord(nil)
-	if resp.Records != nil {
-		records = *resp.Records
-	}
-	out := DRSPage{DrsObjects: make([]drsapi.DrsObject, 0, len(records))}
-	for _, rec := range records {
-		out.DrsObjects = append(out.DrsObjects, internalRecordToDRSObject(&rec))
-	}
-	return out, nil
 }

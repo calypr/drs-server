@@ -56,8 +56,8 @@ func TestNewClient_WithCustomConfig(t *testing.T) {
 		t.Fatalf("NewClient() error = %v", err)
 	}
 
-	// Timeout is configured on the request-backed HTTP client returned by
-	// Client.HTTPClient().
+	// Timeout is configured on the underlying retry client in request.NewRequestor.
+	// Client.HTTPClient() returns StandardClient(), which may not preserve this value.
 	req, ok := client.Requestor().(*request.Request)
 	if !ok {
 		t.Fatalf("Requestor() returned %T, want *request.Request", client.Requestor())
@@ -77,7 +77,8 @@ func TestNewClient_WithNilConfig(t *testing.T) {
 		t.Fatalf("NewClient(nil) error = %v", err)
 	}
 
-	// Assert against the underlying request-backed HTTP client.
+	// Assert against the underlying request retry client because timeout is set there.
+	// Client.HTTPClient() exposes a wrapped standard client and is not authoritative here.
 	req, ok := client.Requestor().(*request.Request)
 	if !ok {
 		t.Fatalf("Requestor() returned %T, want *request.Request", client.Requestor())

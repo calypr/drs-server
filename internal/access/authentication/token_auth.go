@@ -21,19 +21,18 @@ type tokenAuthResult struct {
 }
 
 type tokenAuthResolver struct {
-	logger   *slog.Logger
-	verifier *tokenVerifier
+	logger *slog.Logger
 }
 
 func newTokenAuthResolver(logger *slog.Logger) *tokenAuthResolver {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &tokenAuthResolver{logger: logger, verifier: newTokenVerifier()}
+	return &tokenAuthResolver{logger: logger}
 }
 
 func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tokenAuthResult {
-	apiEndpoint, _, err := r.verifier.parseToken(ctx, tokenString)
+	apiEndpoint, _, err := parseToken(tokenString)
 	if err != nil {
 		r.logger.Debug("failed to parse token", "error", err)
 		return tokenAuthResult{Negative: true}

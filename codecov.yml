@@ -8,41 +8,35 @@ comment:
   require_base: false
   require_head: true
 
-fixes:
-  - "github.com/calypr/syfon/::"
-
-ignore:
-  - "apigen/**"
-  - "data-repository-service-schemas/**"
-  - "tests/**"
-  - "internal/testsupport/**"
-  - "client/internal/testmocks/**"
-  - "cmd/openapi-remove-examples/**"
-
 coverage:
   precision: 2
   round: down
   range: "60...100"
+  ignore:
+    - "/apigen/"
+    - "/tests/endpoints/"
+    - "/testutils/"
+    - "/cmd/"
   status:
     project:
       default:
         target: auto
         threshold: 1%
       root:
-        flags: [root, binary-endpoint]
+        flags:
+          - root
         target: auto
         threshold: 1%
       client:
-        flags: [client]
+        flags:
+          - client
         target: auto
         threshold: 1%
 
 flags:
   root:
-    paths: ["main.go", "cmd/", "internal/", "plugin/"]
-    carryforward: false
+    carryforward: true
   client:
-    paths: ["client/"]
-    carryforward: false
+    carryforward: true
   binary-endpoint:
-    carryforward: false
+    carryforward: true

@@ -13,7 +13,6 @@ This repo uses `syfon/go.work`:
 use (
   .
   ./apigen
-  ./client
 )
 ```
 
@@ -21,10 +20,10 @@ So local builds (including Docker builds from `syfon/`) can resolve `apigen` wit
 
 ## Production / CI
 
-Production consumers should pin a published `apigen` version in `go.mod`, for example:
+Production consumers should pin a real published `apigen` version in `go.mod`, for example:
 
 ```go
-require github.com/calypr/syfon/apigen vX.Y.Z
+require github.com/calypr/syfon/apigen v0.1.0
 ```
 
 Do not rely on `replace` directives for released builds.
@@ -34,21 +33,21 @@ Do not rely on `replace` directives for released builds.
 From the `syfon` repository:
 
 1. Commit generated `apigen/*` changes.
-2. Tag the module version:
+2. Tag the submodule version:
 
 ```bash
-git tag apigen/vX.Y.Z
-git push origin apigen/vX.Y.Z
+git tag apigen/v0.1.0
+git push origin apigen/v0.1.0
 ```
 
 3. Bump dependent modules:
 
 ```bash
 # in syfon
-go get github.com/calypr/syfon/apigen@vX.Y.Z
+go get github.com/calypr/syfon/apigen@v0.1.0
 go mod tidy
 
 # in data-client / git-drs (if they import apigen transitively/directly)
-go get github.com/calypr/syfon/apigen@vX.Y.Z
+go get github.com/calypr/syfon/apigen@v0.1.0
 go mod tidy
 ```

@@ -1,57 +1,17 @@
 package authentication
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type tokenVerifier struct {
-	mu     sync.Mutex
-	caches map[string]*jwksCache
-	client *http.Client
-	now    func() time.Time
-}
-
-func newTokenVerifier() *tokenVerifier {
-	return &tokenVerifier{
-		caches: make(map[string]*jwksCache),
-		client: &http.Client{Timeout: defaultAuthenticationTimeout},
-		now:    time.Now,
-	}
-}
-
-func newTokenVerifierWithHTTPClient(client *http.Client) *tokenVerifier {
-	verifier := newTokenVerifier()
-	if client != nil {
-		verifier.client = client
-	}
-	return verifier
-}
-
-func (v *tokenVerifier) cacheForIssuer(issuer string) *jwksCache {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if cache := v.caches[issuer]; cache != nil {
-		return cache
-	}
-	cache := newIssuerJWKSCache(issuer, v.client, v.now)
-	v.caches[issuer] = cache
-	return cache
-}
-
-func (v *tokenVerifier) parseToken(ctx context.Context, tokenString string) (endpoint string, exp float64, err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func parseToken(tokenString string) (endpoint string, exp float64, err error) {
 	parser := jwt.NewParser(jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}))
 	var claims jwt.MapClaims
 
@@ -79,7 +39,20 @@ func (v *tokenVerifier) parseToken(ctx context.Context, tokenString string) (end
 			return nil, fmt.Errorf("issuer %q not in allowed list", iss)
 		}
 
-		publicKey, err := v.cacheForIssuer(origin).keyForToken(ctx, kid)
+		jwksURL, err := discoverJWKSURL(origin)
+		if err != nil {
+			return nil, fmt.Errorf("JWKS discovery failed: %w", err)
+		}
+		if !strings.HasPrefix(jwksURL, "https://") {
+			return nil, fmt.Errorf("JWKS endpoint must use HTTPS, got: %s", jwksURL)
+		}
+
+		cache := newJWKSCache(jwksURL, 15*time.Minute)
+		if err := cache.fetchKeys(); err != nil {
+			return nil, fmt.Errorf("fetch JWKS: %w", err)
+		}
+
+		publicKey, err := cache.getKey(kid)
 		if err != nil {
 			return nil, fmt.Errorf("key not found in JWKS (kid=%s): %w", kid, err)
 		}

@@ -35,9 +35,9 @@ Fix:
 - use PostgreSQL for Gen3 deployments
 - or switch the deployment to `auth.mode: local` if this is a local operator setup
 
-### `auth.mode "local" requires authentication configuration`
+### `auth.mode "local" requires auth.basic.username/password`
 
-Local mode requires a Basic Auth credential pair or `auth.local_authz_csv`, unless you explicitly set:
+The documented local path requires Basic Auth unless you explicitly set:
 
 ```yaml
 auth:

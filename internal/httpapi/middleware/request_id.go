@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/requestid"
+	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -32,7 +32,7 @@ func (m *RequestIDMiddleware) FiberMiddleware() fiber.Handler {
 			requestID = newRequestID()
 		}
 
-		ctx := requestid.WithRequestID(c.Context(), requestID)
+		ctx := requestmeta.WithRequestID(c.Context(), requestID)
 		c.SetContext(ctx)
 
 		c.Set(requestIDHeader, requestID)

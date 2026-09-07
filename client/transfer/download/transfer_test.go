@@ -188,6 +188,8 @@ func (f *fakeResolver) Logger() transfer.TransferLogger {
 	return f.backend.Logger()
 }
 
+
+
 func newDownloadJSONResponse(rawURL, body string) *http.Response {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {

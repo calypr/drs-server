@@ -1,0 +1,431 @@
+package sqlite
+
+import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/calypr/syfon/internal/models"
+)
+
+func (db *SqliteDB) RecordTransferAttributionEvents(ctx context.Context, events []models.TransferAttributionEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO transfer_attribution_event (
+			event_id, access_grant_id, event_type, direction, event_time, request_id, object_id, sha256, object_size,
+			organization, project, access_id, provider, bucket, storage_url,
+			range_start, range_end, bytes_requested, bytes_completed,
+			actor_email, actor_subject, auth_mode, client_name, client_version, transfer_session_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, ev := range events {
+		if ev.EventID == "" || ev.EventType == "" {
+			continue
+		}
+		if ev.EventType != models.TransferEventAccessIssued {
+			continue
+		}
+		when := ev.EventTime
+		if when.IsZero() {
+			when = time.Now().UTC()
+		}
+		ev.AccessGrantID = accessGrantIDFromEvent(ev)
+		ev.EventTime = when.UTC()
+		ev.Direction = normalizeTransferDirection(ev.Direction)
+		result, err := stmt.ExecContext(ctx,
+			ev.EventID, ev.AccessGrantID, ev.EventType, ev.Direction, ev.EventTime, ev.RequestID, ev.ObjectID, ev.SHA256, ev.ObjectSize,
+			ev.Organization, ev.Project, ev.AccessID, ev.Provider, ev.Bucket, ev.StorageURL,
+			nullableInt64(ev.RangeStart), nullableInt64(ev.RangeEnd), ev.BytesRequested, ev.BytesCompleted,
+			ev.ActorEmail, ev.ActorSubject, ev.AuthMode, ev.ClientName, ev.ClientVersion, ev.TransferSessionID,
+		)
+		if err != nil {
+			return err
+		}
+		if rows, err := result.RowsAffected(); err == nil && rows > 0 {
+			if err := sqliteUpsertAccessGrant(ctx, tx, ev); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+func (db *SqliteDB) RecordProviderTransferEvents(ctx context.Context, events []models.ProviderTransferEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT OR IGNORE INTO provider_transfer_event (
+			provider_event_id, access_grant_id, direction, event_time, request_id, provider_request_id,
+			object_id, sha256, object_size, organization, project, access_id, provider, bucket,
+			object_key, storage_url, range_start, range_end, bytes_transferred, http_method, http_status,
+			requester_principal, source_ip, user_agent, raw_event_ref, actor_email, actor_subject, auth_mode,
+			reconciliation_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for i := range events {
+		normalized, err := db.reconcileProviderTransferEvent(ctx, tx, events[i])
+		if err != nil {
+			return err
+		}
+		events[i] = normalized
+		if normalized.ProviderEventID == "" || normalized.Direction == "" || normalized.Provider == "" {
+			continue
+		}
+		when := normalized.EventTime
+		if when.IsZero() {
+			when = time.Now().UTC()
+		}
+		if _, err := stmt.ExecContext(ctx,
+			normalized.ProviderEventID, normalized.AccessGrantID, normalized.Direction, when.UTC(), normalized.RequestID, normalized.ProviderRequestID,
+			normalized.ObjectID, normalized.SHA256, normalized.ObjectSize, normalized.Organization, normalized.Project, normalized.AccessID, normalized.Provider, normalized.Bucket,
+			normalized.ObjectKey, normalized.StorageURL, nullableInt64(normalized.RangeStart), nullableInt64(normalized.RangeEnd), normalized.BytesTransferred, normalized.HTTPMethod, normalized.HTTPStatus,
+			normalized.RequesterPrincipal, normalized.SourceIP, normalized.UserAgent, normalized.RawEventRef, normalized.ActorEmail, normalized.ActorSubject, normalized.AuthMode,
+			normalized.ReconciliationStatus,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (db *SqliteDB) reconcileProviderTransferEvent(ctx context.Context, tx *sql.Tx, ev models.ProviderTransferEvent) (models.ProviderTransferEvent, error) {
+	ev.Direction = normalizeProviderDirection(ev.Direction, ev.HTTPMethod)
+	ev.Provider = strings.TrimSpace(ev.Provider)
+	ev.Bucket = strings.TrimSpace(ev.Bucket)
+	ev.ObjectKey = strings.TrimLeft(strings.TrimSpace(ev.ObjectKey), "/")
+	ev.StorageURL = strings.TrimSpace(ev.StorageURL)
+	ev.ReconciliationStatus = models.ProviderTransferUnmatched
+	if ev.AccessGrantID != "" {
+		if match, ok, err := sqliteAccessGrantByID(ctx, tx, ev.AccessGrantID); err != nil {
+			return ev, err
+		} else if ok {
+			mergeAccessGrantIntoProviderEvent(&ev, match)
+			ev.ReconciliationStatus = models.ProviderTransferMatched
+			return ev, nil
+		}
+	}
+	matches, err := sqliteAccessGrantCandidates(ctx, tx, ev)
+	if err != nil {
+		return ev, err
+	}
+	switch len(matches) {
+	case 0:
+		return ev, nil
+	case 1:
+		mergeAccessGrantIntoProviderEvent(&ev, matches[0])
+		ev.ReconciliationStatus = models.ProviderTransferMatched
+	default:
+		ev.ReconciliationStatus = models.ProviderTransferAmbiguous
+	}
+	return ev, nil
+}
+
+func nullableInt64(v *int64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func (db *SqliteDB) backfillAccessGrants(ctx context.Context) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT event_id, access_grant_id, event_type, direction, event_time, request_id, object_id, sha256, object_size,
+			organization, project, access_id, provider, bucket, storage_url, range_start, range_end,
+			bytes_requested, bytes_completed, actor_email, actor_subject, auth_mode, client_name, client_version,
+			transfer_session_id
+		FROM transfer_attribution_event
+		WHERE event_type = 'access_issued'
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	events := make([]models.TransferAttributionEvent, 0)
+	for rows.Next() {
+		var ev models.TransferAttributionEvent
+		if err := rows.Scan(
+			&ev.EventID, &ev.AccessGrantID, &ev.EventType, &ev.Direction, &ev.EventTime, &ev.RequestID, &ev.ObjectID, &ev.SHA256, &ev.ObjectSize,
+			&ev.Organization, &ev.Project, &ev.AccessID, &ev.Provider, &ev.Bucket, &ev.StorageURL, &ev.RangeStart, &ev.RangeEnd,
+			&ev.BytesRequested, &ev.BytesCompleted, &ev.ActorEmail, &ev.ActorSubject, &ev.AuthMode, &ev.ClientName, &ev.ClientVersion,
+			&ev.TransferSessionID,
+		); err != nil {
+			return err
+		}
+		events = append(events, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	grants := make(map[string]models.AccessGrant)
+	for _, ev := range events {
+		ev.AccessGrantID = accessGrantIDFromEvent(ev)
+		if _, err := tx.ExecContext(ctx, `UPDATE transfer_attribution_event SET access_grant_id = ? WHERE event_id = ?`, ev.AccessGrantID, ev.EventID); err != nil {
+			return err
+		}
+		grant := grants[ev.AccessGrantID]
+		when := ev.EventTime.UTC()
+		if grant.AccessGrantID == "" {
+			grant = models.AccessGrant{
+				AccessGrantID: ev.AccessGrantID,
+				FirstIssuedAt: when,
+				LastIssuedAt:  when,
+				ObjectID:      ev.ObjectID,
+				SHA256:        ev.SHA256,
+				ObjectSize:    ev.ObjectSize,
+				Organization:  ev.Organization,
+				Project:       ev.Project,
+				AccessID:      ev.AccessID,
+				Provider:      ev.Provider,
+				Bucket:        ev.Bucket,
+				StorageURL:    ev.StorageURL,
+				ActorEmail:    ev.ActorEmail,
+				ActorSubject:  ev.ActorSubject,
+				AuthMode:      ev.AuthMode,
+			}
+		}
+		if when.Before(grant.FirstIssuedAt) {
+			grant.FirstIssuedAt = when
+		}
+		if when.After(grant.LastIssuedAt) {
+			grant.LastIssuedAt = when
+		}
+		grant.IssueCount++
+		if grant.ActorEmail == "" {
+			grant.ActorEmail = ev.ActorEmail
+		}
+		if grant.ActorSubject == "" {
+			grant.ActorSubject = ev.ActorSubject
+		}
+		if grant.AuthMode == "" {
+			grant.AuthMode = ev.AuthMode
+		}
+		grants[ev.AccessGrantID] = grant
+	}
+	for _, grant := range grants {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT OR IGNORE INTO access_grant (
+				access_grant_id, first_issued_at, last_issued_at, issue_count,
+				object_id, sha256, object_size, organization, project, access_id,
+				provider, bucket, storage_url, actor_email, actor_subject, auth_mode
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, grant.AccessGrantID, grant.FirstIssuedAt, grant.LastIssuedAt, grant.IssueCount,
+			grant.ObjectID, grant.SHA256, grant.ObjectSize, grant.Organization, grant.Project, grant.AccessID,
+			grant.Provider, grant.Bucket, grant.StorageURL, grant.ActorEmail, grant.ActorSubject, grant.AuthMode); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func accessGrantIDFromEvent(ev models.TransferAttributionEvent) string {
+	parts := []string{
+		ev.ObjectID,
+		ev.SHA256,
+		ev.Organization,
+		ev.Project,
+		ev.AccessID,
+		ev.Provider,
+		ev.Bucket,
+		ev.StorageURL,
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func sqliteUpsertAccessGrant(ctx context.Context, tx *sql.Tx, ev models.TransferAttributionEvent) error {
+	if ev.AccessGrantID == "" {
+		return nil
+	}
+	when := ev.EventTime.UTC()
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO access_grant (
+			access_grant_id, first_issued_at, last_issued_at, issue_count,
+			object_id, sha256, object_size, organization, project, access_id,
+			provider, bucket, storage_url, actor_email, actor_subject, auth_mode
+		) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(access_grant_id) DO UPDATE SET
+			first_issued_at = CASE
+				WHEN excluded.first_issued_at < access_grant.first_issued_at THEN excluded.first_issued_at
+				ELSE access_grant.first_issued_at
+			END,
+			last_issued_at = CASE
+				WHEN excluded.last_issued_at > access_grant.last_issued_at THEN excluded.last_issued_at
+				ELSE access_grant.last_issued_at
+			END,
+			issue_count = access_grant.issue_count + 1,
+			object_id = COALESCE(NULLIF(access_grant.object_id, ''), excluded.object_id),
+			sha256 = COALESCE(NULLIF(access_grant.sha256, ''), excluded.sha256),
+			object_size = CASE WHEN access_grant.object_size = 0 THEN excluded.object_size ELSE access_grant.object_size END,
+			organization = COALESCE(NULLIF(access_grant.organization, ''), excluded.organization),
+			project = COALESCE(NULLIF(access_grant.project, ''), excluded.project),
+			access_id = COALESCE(NULLIF(access_grant.access_id, ''), excluded.access_id),
+			provider = COALESCE(NULLIF(access_grant.provider, ''), excluded.provider),
+			bucket = COALESCE(NULLIF(access_grant.bucket, ''), excluded.bucket),
+			storage_url = COALESCE(NULLIF(access_grant.storage_url, ''), excluded.storage_url),
+			actor_email = COALESCE(NULLIF(access_grant.actor_email, ''), excluded.actor_email),
+			actor_subject = COALESCE(NULLIF(access_grant.actor_subject, ''), excluded.actor_subject),
+			auth_mode = COALESCE(NULLIF(access_grant.auth_mode, ''), excluded.auth_mode)
+	`, ev.AccessGrantID, when, when, ev.ObjectID, ev.SHA256, ev.ObjectSize,
+		ev.Organization, ev.Project, ev.AccessID, ev.Provider, ev.Bucket, ev.StorageURL,
+		ev.ActorEmail, ev.ActorSubject, ev.AuthMode)
+	return err
+}
+
+func sqliteAccessGrantByID(ctx context.Context, tx *sql.Tx, grantID string) (models.AccessGrant, bool, error) {
+	var grant models.AccessGrant
+	err := tx.QueryRowContext(ctx, `
+		SELECT access_grant_id, first_issued_at, last_issued_at, issue_count,
+			object_id, sha256, object_size, organization, project, access_id,
+			provider, bucket, storage_url, actor_email, actor_subject, auth_mode
+		FROM access_grant
+		WHERE access_grant_id = ?
+	`, grantID).Scan(
+		&grant.AccessGrantID, &grant.FirstIssuedAt, &grant.LastIssuedAt, &grant.IssueCount,
+		&grant.ObjectID, &grant.SHA256, &grant.ObjectSize, &grant.Organization, &grant.Project, &grant.AccessID,
+		&grant.Provider, &grant.Bucket, &grant.StorageURL, &grant.ActorEmail, &grant.ActorSubject, &grant.AuthMode,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.AccessGrant{}, false, nil
+	}
+	return grant, err == nil, err
+}
+
+func sqliteAccessGrantCandidates(ctx context.Context, tx *sql.Tx, ev models.ProviderTransferEvent) ([]models.AccessGrant, error) {
+	query := `
+		SELECT access_grant_id, first_issued_at, last_issued_at, issue_count,
+			object_id, sha256, object_size, organization, project, access_id,
+			provider, bucket, storage_url, actor_email, actor_subject, auth_mode
+		FROM access_grant
+		WHERE provider = ?
+			AND bucket = ?
+			AND last_issued_at <= ?
+			AND last_issued_at >= ?
+	`
+	args := []any{ev.Provider, ev.Bucket, ev.EventTime.UTC().Add(15 * time.Minute), ev.EventTime.UTC().Add(-24 * time.Hour)}
+	if ev.StorageURL != "" {
+		query += " AND storage_url = ?"
+		args = append(args, ev.StorageURL)
+	} else if ev.ObjectKey != "" {
+		query += " AND (storage_url = ? OR storage_url LIKE ?)"
+		args = append(args, providerStorageURL(ev.Provider, ev.Bucket, ev.ObjectKey), "%/"+ev.ObjectKey)
+	}
+	if ev.Direction == models.ProviderTransferDirectionDownload {
+		query += " AND object_size >= 0"
+	}
+	query += " ORDER BY last_issued_at DESC LIMIT 2"
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.AccessGrant
+	for rows.Next() {
+		var match models.AccessGrant
+		if err := rows.Scan(
+			&match.AccessGrantID, &match.FirstIssuedAt, &match.LastIssuedAt, &match.IssueCount,
+			&match.ObjectID, &match.SHA256, &match.ObjectSize, &match.Organization, &match.Project, &match.AccessID,
+			&match.Provider, &match.Bucket, &match.StorageURL, &match.ActorEmail, &match.ActorSubject, &match.AuthMode,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, match)
+	}
+	return out, rows.Err()
+}
+
+func mergeAccessGrantIntoProviderEvent(ev *models.ProviderTransferEvent, grant models.AccessGrant) {
+	if ev.AccessGrantID == "" {
+		ev.AccessGrantID = grant.AccessGrantID
+	}
+	if ev.ObjectID == "" {
+		ev.ObjectID = grant.ObjectID
+	}
+	if ev.SHA256 == "" {
+		ev.SHA256 = grant.SHA256
+	}
+	if ev.ObjectSize == 0 {
+		ev.ObjectSize = grant.ObjectSize
+	}
+	if ev.Organization == "" {
+		ev.Organization = grant.Organization
+	}
+	if ev.Project == "" {
+		ev.Project = grant.Project
+	}
+	if ev.AccessID == "" {
+		ev.AccessID = grant.AccessID
+	}
+	if ev.StorageURL == "" {
+		ev.StorageURL = grant.StorageURL
+	}
+	hasActor := ev.ActorEmail != "" || ev.ActorSubject != ""
+	if !hasActor {
+		ev.ActorEmail = grant.ActorEmail
+	}
+	if !hasActor {
+		ev.ActorSubject = grant.ActorSubject
+	}
+	if ev.AuthMode == "" {
+		ev.AuthMode = grant.AuthMode
+	}
+}
+
+func normalizeProviderDirection(direction, method string) string {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case models.ProviderTransferDirectionDownload, "get", "read":
+		return models.ProviderTransferDirectionDownload
+	case models.ProviderTransferDirectionUpload, "put", "write":
+		return models.ProviderTransferDirectionUpload
+	}
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case "GET":
+		return models.ProviderTransferDirectionDownload
+	case "PUT", "POST":
+		return models.ProviderTransferDirectionUpload
+	default:
+		return strings.ToLower(strings.TrimSpace(direction))
+	}
+}
+
+func providerStorageURL(provider, bucket, key string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "gcs", "gs":
+		return "gs://" + bucket + "/" + strings.TrimLeft(key, "/")
+	case "azure", "az":
+		return "az://" + bucket + "/" + strings.TrimLeft(key, "/")
+	default:
+		return "s3://" + bucket + "/" + strings.TrimLeft(key, "/")
+	}
+}

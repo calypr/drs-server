@@ -8,9 +8,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/bucketapi"
 	"github.com/calypr/syfon/cmd/projectcopy"
-
-	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/storage/address"
+	syfoncommon "github.com/calypr/syfon/common"
+	internalcommon "github.com/calypr/syfon/internal/common"
 )
 
 func defaultOrgScopePath(bucket, org string) string {
@@ -91,7 +90,7 @@ func parseStorageURL(raw string) (*url.URL, []string, bool) {
 	if err != nil || strings.TrimSpace(u.Scheme) == "" || strings.TrimSpace(u.Host) == "" {
 		return nil, nil, false
 	}
-	if address.ProviderFromScheme(u.Scheme) == "" {
+	if internalcommon.ProviderFromScheme(u.Scheme) == "" {
 		return nil, nil, false
 	}
 	trimmed := strings.Trim(strings.TrimSpace(u.Path), "/")
@@ -145,7 +144,7 @@ func scopedObjectURL(projectPath, bucket, key string) string {
 }
 
 func pathScope(resource string) (string, string) {
-	org, project, ok := clientaccess.ResourceScope(resource)
+	org, project, ok := syfoncommon.ResourceScope(resource)
 	if !ok {
 		return "", ""
 	}

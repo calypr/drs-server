@@ -1,0 +1,93 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/token"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+type Package struct {
+	Path string
+	Files int
+	Tests int
+	Lines int
+	Imports []string
+	Importers []string
+}
+
+type Interface struct {
+	File string
+	Line int
+	Name string
+	Fields []string
+}
+
+func main() {
+	tracked, err := exec.Command("git", "ls-files", "*.go").Output()
+	if err != nil { panic(err) }
+	pkgs := map[string]*Package{}
+	deps := map[string]map[string]bool{}
+	var interfaces []Interface
+	fset := token.NewFileSet()
+	for _, path := range strings.Fields(string(tracked)) {
+		dir := filepath.Dir(path)
+		isTest := strings.HasSuffix(path, "_test.go")
+		f, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil { panic(err) }
+		if !isTest {
+			if deps[dir] == nil { deps[dir] = map[string]bool{} }
+			for _, imp := range f.Imports {
+				value, err := strconv.Unquote(imp.Path.Value)
+				if err != nil { panic(err) }
+				if strings.HasPrefix(value, "github.com/calypr/syfon/") {
+					deps[dir][strings.TrimPrefix(value, "github.com/calypr/syfon/")] = true
+				}
+			}
+		}
+		if !strings.HasPrefix(path, "internal/") { continue }
+		p := pkgs[dir]
+		if p == nil { p = &Package{Path: dir}; pkgs[dir] = p }
+		if isTest { p.Tests++; continue }
+		p.Files++
+		data, err := os.ReadFile(path)
+		if err != nil { panic(err) }
+		p.Lines += bytes.Count(data, []byte{'\n'})
+		ast.Inspect(f, func(n ast.Node) bool {
+			ts, ok := n.(*ast.TypeSpec)
+			if !ok { return true }
+			it, ok := ts.Type.(*ast.InterfaceType)
+			if !ok { return true }
+			record := Interface{File: path, Line: fset.Position(ts.Pos()).Line, Name: ts.Name.Name}
+			for _, field := range it.Methods.List {
+				var b bytes.Buffer
+				for _, name := range field.Names { b.WriteString(name.Name); b.WriteByte(' ') }
+				if err := printer.Fprint(&b, fset, field.Type); err != nil { panic(err) }
+				record.Fields = append(record.Fields, b.String())
+			}
+			interfaces = append(interfaces, record)
+			return true
+		})
+	}
+	var packages []*Package
+	for dir, p := range pkgs {
+		for dep := range deps[dir] { p.Imports = append(p.Imports, dep) }
+		for caller, imports := range deps { if imports[dir] { p.Importers = append(p.Importers, caller) } }
+		sort.Strings(p.Imports)
+		sort.Strings(p.Importers)
+		packages = append(packages, p)
+	}
+	sort.Slice(packages, func(i, j int) bool { return packages[i].Path < packages[j].Path })
+	out := struct { Packages []*Package; Interfaces []Interface }{packages, interfaces}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil { panic(err) }
+}
