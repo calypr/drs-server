@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/calypr/syfon/internal/common"
-	"github.com/calypr/syfon/internal/models"
 	"time"
+
+	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/internal/models"
 
 	"github.com/calypr/syfon/apigen/server/drs"
 )
@@ -62,7 +63,7 @@ func (db *SqliteDB) GetPendingLFSMeta(ctx context.Context, oid string) (*models.
 		WHERE oid = ? AND expires_time > ?
 	`, oid, time.Now().UTC()).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+			return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}
@@ -102,7 +103,7 @@ func (db *SqliteDB) PopPendingLFSMeta(ctx context.Context, oid string) (*models.
 		WHERE oid = ? AND expires_time > ?
 	`, oid, time.Now().UTC()).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+			return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}

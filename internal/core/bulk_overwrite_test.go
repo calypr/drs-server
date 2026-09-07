@@ -8,8 +8,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/db/sqlite"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 )
@@ -220,7 +220,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []models.InternalObject{candidate})
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})
@@ -240,7 +240,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []models.InternalObject{candidate})
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})

@@ -1,4 +1,4 @@
-package auth
+package access
 
 import (
 	"context"
@@ -52,4 +52,3 @@ func TestNormalizeMethodNameWriteAlias(t *testing.T) {
 		}
 	}
 }
-

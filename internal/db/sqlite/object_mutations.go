@@ -8,8 +8,9 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -22,14 +23,14 @@ func (db *SqliteDB) DeleteObject(ctx context.Context, id string) error {
 
 	requestedID := strings.TrimSpace(id)
 	if requestedID == "" {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	canonicalID, found, err := sqliteObjectIDTx(ctx, tx, requestedID)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err := sqliteEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
@@ -47,7 +48,7 @@ func (db *SqliteDB) DeleteObject(ctx context.Context, id string) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	return tx.Commit()
 }
@@ -67,7 +68,7 @@ func (db *SqliteDB) DeleteObjectAlias(ctx context.Context, aliasID string) error
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	return tx.Commit()
 }
@@ -90,7 +91,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var exists string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = ?", canonicalObjectID).Scan(&exists)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return err
@@ -104,7 +105,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var physicalAlias string
 	physicalErr := tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = ?", aliasID).Scan(&physicalAlias)
 	if physicalErr == nil {
-		return fmt.Errorf("%w: alias %q is already a physical object", common.ErrConflict, aliasID)
+		return fmt.Errorf("%w: alias %q is already a physical object", faults.ErrConflict, aliasID)
 	}
 	if physicalErr != sql.ErrNoRows {
 		return physicalErr
@@ -113,7 +114,7 @@ func (db *SqliteDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalObj
 	var aliasTarget string
 	aliasErr := tx.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&aliasTarget)
 	if aliasErr == nil && aliasTarget != canonicalObjectID {
-		return fmt.Errorf("%w: alias %q already points to %q", common.ErrConflict, aliasID, aliasTarget)
+		return fmt.Errorf("%w: alias %q already points to %q", faults.ErrConflict, aliasID, aliasTarget)
 	}
 	if aliasErr != nil && aliasErr != sql.ErrNoRows {
 		return aliasErr
@@ -402,7 +403,7 @@ func (db *SqliteDB) UpdateObjectAccessMethods(ctx context.Context, objectID stri
 		return err
 	}
 	if !found {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err := sqliteRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 		return err
@@ -441,13 +442,13 @@ func (db *SqliteDB) RemoveObjectControlledAccess(ctx context.Context, objectID, 
 		return err
 	}
 	if !found {
-		return common.ErrNotFound
+		return faults.ErrNotFound
 	}
 	if err := sqliteEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
 	}
-	if !authz.HasMethodAccess(ctx, "update", []string{resource}) {
-		return common.ErrUnauthorized
+	if !access.HasMethodAccess(ctx, "update", []string{resource}) {
+		return faults.ErrUnauthorized
 	}
 
 	var exists int
@@ -455,7 +456,7 @@ func (db *SqliteDB) RemoveObjectControlledAccess(ctx context.Context, objectID, 
 		return err
 	}
 	if exists == 0 {
-		return common.ErrNotFound
+		return faults.ErrNotFound
 	}
 	currentResources, err := sqliteResourcesTx(ctx, tx, canonicalID)
 	if err != nil {
@@ -490,8 +491,8 @@ func (db *SqliteDB) RemoveObjectControlledAccessBulk(ctx context.Context, object
 	}
 	defer tx.Rollback()
 	orgWide := !strings.Contains(resource, "/project/")
-	if !orgWide && !authz.HasMethodAccess(ctx, "delete", []string{resource}) {
-		return 0, common.ErrUnauthorized
+	if !orgWide && !access.HasMethodAccess(ctx, "delete", []string{resource}) {
+		return 0, faults.ErrUnauthorized
 	}
 	seen := make(map[string]struct{}, len(objectIDs))
 	removed := 0
@@ -519,7 +520,7 @@ func (db *SqliteDB) RemoveObjectControlledAccessBulk(ctx context.Context, object
 			if currentResource != resource && (!orgWide || !strings.HasPrefix(currentResource, resource+"/project/")) {
 				continue
 			}
-			if !authz.HasMethodAccess(ctx, "delete", []string{currentResource}) {
+			if !access.HasMethodAccess(ctx, "delete", []string{currentResource}) {
 				continue
 			}
 			if _, err := tx.ExecContext(ctx, `DELETE FROM drs_object_controlled_access WHERE object_id = ? AND resource = ?`, canonicalID, currentResource); err != nil {
@@ -562,7 +563,7 @@ func (db *SqliteDB) BulkUpdateAccessMethods(ctx context.Context, updates map[str
 			return resolveErr
 		}
 		if !found {
-			return common.ErrNotFound
+			return faults.ErrNotFound
 		}
 		if err := sqliteRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 			return err

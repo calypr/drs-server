@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	sycommon "github.com/calypr/syfon/common"
+	"github.com/calypr/syfon/internal/access"
 	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
-	"github.com/calypr/syfon/internal/authz"
-	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -35,15 +35,19 @@ func decodeStrictJSON(body []byte, dst any) error {
 }
 
 func bucketScopeAllowed(ctx context.Context, scope models.BucketScope, methods ...string) bool {
-	return authz.HasScopedBucketAccess(ctx, scope, methods...)
+	resource, err := sycommon.ResourcePath(scope.Organization, scope.ProjectID)
+	if err != nil || resource == "" {
+		return false
+	}
+	return access.HasAnyMethodAccess(ctx, []string{resource}, methods...)
 }
 
 func resourceAllowed(ctx context.Context, resource string, methods ...string) bool {
-	return authz.HasAnyMethodAccess(ctx, []string{resource}, methods...)
+	return access.HasAnyMethodAccess(ctx, []string{resource}, methods...)
 }
 
 func serviceResourceAllowed(ctx context.Context, resource, service string, methods ...string) bool {
-	return authz.HasAnyServiceMethodAccess(ctx, []string{resource}, service, methods...)
+	return access.HasAnyServiceMethodAccess(ctx, []string{resource}, service, methods...)
 }
 
 func bucketsAllowedByNames(ctx context.Context, scopes []models.BucketScope, bucket string, methods ...string) bool {
@@ -60,16 +64,16 @@ func bucketsAllowedByNames(ctx context.Context, scopes []models.BucketScope, buc
 
 func authorizeBucketScopeWrite(ctx context.Context, organization, project string, methods ...string) error {
 	if strings.TrimSpace(organization) == "" {
-		if authz.IsGen3Mode(ctx) && apimiddleware.MissingGen3AuthHeader(ctx) {
-			return common.ErrUnauthorized
+		if access.IsGen3Mode(ctx) && apimiddleware.MissingGen3AuthHeader(ctx) {
+			return faults.ErrUnauthorized
 		}
-		if !authz.IsAuthzEnforced(ctx) {
+		if !access.IsAuthzEnforced(ctx) {
 			return nil
 		}
-		return common.ErrUnauthorized
+		return faults.ErrUnauthorized
 	}
 	if apimiddleware.MissingGen3AuthHeader(ctx) {
-		return common.ErrUnauthorized
+		return faults.ErrUnauthorized
 	}
 	res, err := sycommon.ResourcePath(organization, project)
 	if err != nil {
@@ -86,19 +90,19 @@ func authorizeBucketScopeWrite(ctx context.Context, organization, project string
 	if orgResource != "" && serviceResourceAllowed(ctx, orgResource, "arborist", "create-descendant", "manage-owners") {
 		return nil
 	}
-	return common.ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func authorizeBucketDelete(ctx context.Context, om *core.ObjectManager, bucket string) error {
 	if apimiddleware.MissingGen3AuthHeader(ctx) {
-		return common.ErrUnauthorized
+		return faults.ErrUnauthorized
 	}
 	scopes, err := om.ListBucketScopes(ctx)
 	if err != nil {
 		return err
 	}
 	if !bucketsAllowedByNames(ctx, scopes, bucket, "delete", "update") {
-		return common.ErrUnauthorized
+		return faults.ErrUnauthorized
 	}
 	return nil
 }

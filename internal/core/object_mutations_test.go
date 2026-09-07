@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/db/sqlite"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 )
@@ -199,7 +199,7 @@ func TestObjectManagerBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("expected sibling physical UUID %q to remain unchanged, got %q", objectB, got)
 	}
 
-	if err := om.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, common.ErrConflict) {
+	if err := om.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, faults.ErrConflict) {
 		t.Fatalf("expected alias bulk deletion to be rejected with conflict, got %v", err)
 	}
 	if _, err := database.GetObject(ctx, objectA); err != nil {
@@ -208,7 +208,7 @@ func TestObjectManagerBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 	if got := readAccessURL(objectB); got != "s3://bucket/original-b" {
 		t.Fatalf("alias rejection must preserve sibling physical UUID %q, got %q", objectB, got)
 	}
-	if err := database.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, common.ErrConflict) {
+	if err := database.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, faults.ErrConflict) {
 		t.Fatalf("expected direct database alias bulk deletion to preserve ambiguity guard, got %v", err)
 	}
 

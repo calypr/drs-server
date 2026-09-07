@@ -12,9 +12,10 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/crypto"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -441,16 +442,16 @@ func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 	buildCtx := map[string]func([]string) context.Context{
 		"gen3": func(resources []string) context.Context {
-			session := internalauth.NewSession("gen3")
+			session := access.NewSession("gen3")
 			session.AuthHeaderPresent = true
 			session.SetAuthorizations(resources, nil, true)
-			return internalauth.WithSession(context.Background(), session)
+			return access.WithSession(context.Background(), session)
 		},
 		"local-authz": func(resources []string) context.Context {
-			session := internalauth.NewSession("local")
+			session := access.NewSession("local")
 			session.AuthzEnforced = true
 			session.SetAuthorizations(resources, nil, true)
-			return internalauth.WithSession(context.Background(), session)
+			return access.WithSession(context.Background(), session)
 		},
 	}
 
@@ -2114,7 +2115,7 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	}
 
 	_, err = db.GetBucketScope(ctx, "calypr", "missing")
-	if !errors.Is(err, common.ErrNotFound) {
+	if !errors.Is(err, faults.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing scope, got: %v", err)
 	}
 }
@@ -2155,7 +2156,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 	}
 
 	_, err = db.GetPendingLFSMeta(ctx, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-	if !errors.Is(err, common.ErrNotFound) {
+	if !errors.Is(err, faults.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing pending metadata, got: %v", err)
 	}
 }

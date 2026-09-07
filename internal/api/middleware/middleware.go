@@ -10,8 +10,8 @@ import (
 
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/request"
-	internalauth "github.com/calypr/syfon/internal/auth"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
 )
@@ -159,29 +159,29 @@ func isPublicDRSMetadataRequest(c fiber.Ctx) bool {
 	}
 }
 
-func (m *AuthzMiddleware) prepareRequestContext(c fiber.Ctx) (context.Context, string, *internalauth.Session) {
+func (m *AuthzMiddleware) prepareRequestContext(c fiber.Ctx) (context.Context, string, *access.Session) {
 	authHeader := c.Get(fiber.HeaderAuthorization)
-	session := internalauth.NewSession(m.mode)
+	session := access.NewSession(m.mode)
 	if m.mode == "gen3" {
 		session.AuthHeaderPresent = strings.TrimSpace(authHeader) != ""
 		session.AuthzEnforced = true
 	}
-	ctx := internalauth.WithSession(c.Context(), session)
+	ctx := access.WithSession(c.Context(), session)
 	return ctx, authHeader, session
 }
 
-func (m *AuthzMiddleware) applySession(c fiber.Ctx, ctx context.Context, session *internalauth.Session) error {
-	ctx = internalauth.WithSession(ctx, session)
+func (m *AuthzMiddleware) applySession(c fiber.Ctx, ctx context.Context, session *access.Session) error {
+	ctx = access.WithSession(ctx, session)
 	c.SetContext(ctx)
 	return c.Next()
 }
 
-func (m *AuthzMiddleware) authorizeWithPlugin(ctx context.Context, session *internalauth.Session, action, resource string) error {
+func (m *AuthzMiddleware) authorizeWithPlugin(ctx context.Context, session *access.Session, action, resource string) error {
 	if m.pluginManager == nil {
 		return nil
 	}
 	authzInput := &plugin.AuthorizationInput{
-		RequestID: common.GetRequestID(ctx),
+		RequestID: requestmeta.GetRequestID(ctx),
 		Subject:   session.Subject,
 		Action:    action,
 		Resource:  resource,

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/server/lfsapi"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -120,7 +120,7 @@ func WriteLFSError(c fiber.Ctx, status int, message string, challenge bool) erro
 	}
 	c.Set("Content-Type", "application/vnd.git-lfs+json")
 	payload := lfsapi.LFSErrorResponse{Message: message}
-	if reqID := common.GetRequestID(c.Context()); reqID != "" {
+	if reqID := requestmeta.GetRequestID(c.Context()); reqID != "" {
 		payload.RequestId = &reqID
 	}
 	docURL := "https://github.com/git-lfs/git-lfs/blob/main/docs/api"

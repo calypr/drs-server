@@ -12,6 +12,7 @@ import (
 	"github.com/calypr/syfon/apigen/server/drs"
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -37,11 +38,11 @@ retryLookup:
 				resolvedAlias = true
 				goto retryLookup
 			}
-			if aliasErr != nil && !errors.Is(aliasErr, common.ErrNotFound) {
+			if aliasErr != nil && !errors.Is(aliasErr, faults.ErrNotFound) {
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)

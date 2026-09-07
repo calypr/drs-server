@@ -17,9 +17,11 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	syfoncommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
+	"github.com/calypr/syfon/internal/requestmeta"
 )
 
 type InspectStorageRequest struct {
@@ -378,13 +380,13 @@ func (m *ObjectManager) inspectScopedStorageObject(ctx context.Context, req Insp
 	if err != nil {
 		return nil, &StorageInspectError{Kind: StorageInspectInvalidInput, Message: err.Error()}
 	}
-	if authz.IsAuthzEnforced(ctx) && !authz.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
-		return nil, &common.AuthorizationError{Method: objectMethodRead, Resources: []string{resource}}
+	if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
+		return nil, &access.AuthorizationError{Method: objectMethodRead, Resources: []string{resource}}
 	}
 
 	target, err := m.ResolveScopedUploadTarget(ctx, organization, project, key)
 	if err != nil {
-		if errors.Is(err, common.ErrInvalidInput) && strings.Contains(err.Error(), "no bucket scope configured") {
+		if errors.Is(err, faults.ErrInvalidInput) && strings.Contains(err.Error(), "no bucket scope configured") {
 			return nil, &StorageInspectError{Kind: StorageInspectScopeNotFound, Message: err.Error()}
 		}
 		return nil, &StorageInspectError{Kind: StorageInspectInvalidInput, Message: err.Error()}
@@ -679,7 +681,7 @@ func headS3ObjectWithRetry(ctx context.Context, client s3HeadObjectClient, bucke
 			return out, err
 		}
 		backoff := policy.backoff(attempt)
-		log.Printf("INFO: syfon_s3_head_retry request_id=%s bucket=%s key=%q attempt=%d max_attempts=%d backoff_ms=%d error=%q", common.GetRequestID(ctx), bucket, key, attempt+1, maxAttempts, backoff.Milliseconds(), err.Error())
+		log.Printf("INFO: syfon_s3_head_retry request_id=%s bucket=%s key=%q attempt=%d max_attempts=%d backoff_ms=%d error=%q", requestmeta.GetRequestID(ctx), bucket, key, attempt+1, maxAttempts, backoff.Milliseconds(), err.Error())
 		if err := sleepS3ListPageRetry(ctx, backoff); err != nil {
 			return nil, err
 		}

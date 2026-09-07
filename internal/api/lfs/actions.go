@@ -11,8 +11,8 @@ import (
 	"github.com/calypr/syfon/apigen/server/lfsapi"
 	"github.com/calypr/syfon/internal/api/attribution"
 	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
-	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/urlmanager"
 )
@@ -66,7 +66,7 @@ func prepareUploadActions(ctx context.Context, om *core.ObjectManager, oid strin
 	if err == nil {
 		return nil, existing.Size, nil
 	}
-	if !common.IsNotFoundError(err) {
+	if !faults.IsNotFoundError(err) {
 		return nil, reqSize, dbErrToBatchError(ctx, err)
 	}
 
@@ -117,10 +117,10 @@ func uploadPartToSignedURL(ctx context.Context, signedURL string, content []byte
 }
 
 func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	if common.IsNotFoundError(err) {
+	if faults.IsNotFoundError(err) {
 		return &lfsapi.ObjectError{Code: int32(http.StatusNotFound), Message: "object not found"}
 	}
-	if err == common.ErrUnauthorized {
+	if err == faults.ErrUnauthorized {
 		return &lfsapi.ObjectError{Code: int32(apimiddleware.AuthFailureStatus(ctx)), Message: "unauthorized"}
 	}
 	return &lfsapi.ObjectError{Code: int32(http.StatusInternalServerError), Message: err.Error()}

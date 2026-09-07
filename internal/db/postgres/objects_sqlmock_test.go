@@ -11,8 +11,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/calypr/syfon/apigen/server/drs"
-	internalauth "github.com/calypr/syfon/internal/auth"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/lib/pq"
 )
 
@@ -57,7 +57,7 @@ func TestDeleteObject(t *testing.T) {
 		mock.ExpectRollback()
 
 		err := pg.DeleteObject(context.Background(), "missing")
-		if !errors.Is(err, common.ErrNotFound) {
+		if !errors.Is(err, faults.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
@@ -109,7 +109,7 @@ func TestGetObject_NotFound(t *testing.T) {
 		WillReturnError(sql.ErrNoRows)
 
 	_, err := pg.GetObject(context.Background(), "missing")
-	if !errors.Is(err, common.ErrNotFound) {
+	if !errors.Is(err, faults.ErrNotFound) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
 }
@@ -205,9 +205,9 @@ func TestGetObject_IgnoresAuthContext(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT type, checksum FROM drs_object_checksum WHERE object_id = $1")).
 		WithArgs("obj-2").
 		WillReturnRows(sqlmock.NewRows([]string{"type", "checksum"}))
-	session := internalauth.NewSession("gen3")
+	session := access.NewSession("gen3")
 	session.SetAuthorizations([]string{"/programs/p1/projects/other"}, nil, true)
-	ctx := internalauth.WithSession(context.Background(), session)
+	ctx := access.WithSession(context.Background(), session)
 
 	obj, err := pg.GetObject(ctx, "obj-2")
 	if err != nil {

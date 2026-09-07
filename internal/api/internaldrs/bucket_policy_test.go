@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -81,7 +81,7 @@ func TestBucketPolicyHelpers(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected requestor create alone to be denied")
 		}
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected unauthorized error, got %v", err)
 		}
 	})

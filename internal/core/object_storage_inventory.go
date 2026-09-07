@@ -24,9 +24,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	syfoncommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/models"
+	"github.com/calypr/syfon/internal/requestmeta"
 )
 
 type StorageBucketObject struct {
@@ -346,8 +347,8 @@ func (m *ObjectManager) resolveProjectStorageScopeTargetForMethod(ctx context.Co
 	if err != nil {
 		return nil, &StorageInspectError{Kind: StorageInspectInvalidInput, Message: err.Error()}
 	}
-	if authz.IsAuthzEnforced(ctx) && !authz.HasMethodAccess(ctx, method, []string{resource}) {
-		return nil, &common.AuthorizationError{Method: method, Resources: []string{resource}}
+	if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, method, []string{resource}) {
+		return nil, &access.AuthorizationError{Method: method, Resources: []string{resource}}
 	}
 
 	scopes := make([]models.BucketScope, 0, 2)
@@ -778,7 +779,7 @@ func (m *ObjectManager) runExactStorageListTarget(ctx context.Context, work *sto
 	started := time.Now()
 	matches, err := m.listS3Prefix(ctx, work.cred, work.bucket, work.key, StoragePrefixListOptions{ExactPrefix: true, MaxKeys: 1})
 	if err != nil {
-		log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d error=%q", common.GetRequestID(ctx), work.bucket, work.key, time.Since(started).Milliseconds(), err.Error())
+		log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d error=%q", requestmeta.GetRequestID(ctx), work.bucket, work.key, time.Since(started).Milliseconds(), err.Error())
 		result := work.baseResult
 		result.Status, result.ErrorKind = classifyStorageProbeError(err)
 		result.Error = strings.TrimSpace(err.Error())
@@ -796,7 +797,7 @@ func (m *ObjectManager) runExactStorageListTarget(ctx context.Context, work *sto
 			break
 		}
 		if duration := time.Since(started); duration > storageListSlowExactThreshold {
-			log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d status=present", common.GetRequestID(ctx), work.bucket, work.key, duration.Milliseconds())
+			log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d status=present", requestmeta.GetRequestID(ctx), work.bucket, work.key, duration.Milliseconds())
 		}
 		result := work.baseResult
 		result.Exists = true
@@ -806,7 +807,7 @@ func (m *ObjectManager) runExactStorageListTarget(ctx context.Context, work *sto
 		return result, normalized[0], true
 	}
 	if duration := time.Since(started); duration > storageListSlowExactThreshold {
-		log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d status=not_found", common.GetRequestID(ctx), work.bucket, work.key, duration.Milliseconds())
+		log.Printf("INFO: syfon_bulk_list_validate_exact request_id=%s bucket=%s key=%q duration_ms=%d status=not_found", requestmeta.GetRequestID(ctx), work.bucket, work.key, duration.Milliseconds())
 	}
 	result := work.baseResult
 	result.Status = StorageProbeStatusNotFound
@@ -887,12 +888,12 @@ func defaultS3PrefixLister(ctx context.Context, cred models.S3Credential, bucket
 	requestPrefix := aws.ToString(input.Prefix)
 	logEnabled := storagePrefixListLoggingEnabled(ctx)
 	if logEnabled {
-		log.Printf("INFO: syfon_s3_prefix_list_start request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t", common.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead)
+		log.Printf("INFO: syfon_s3_prefix_list_start request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead)
 	}
 	out, stats, firstKeys, err := listS3PrefixPagesWithExactProbeRetry(ctx, client, input, bucket, prefix, requestPrefix, options, logEnabled)
 	if err != nil {
 		if logEnabled {
-			log.Printf("INFO: syfon_s3_prefix_list_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t pages=%d objects=%d retries=%d terminal_replay_attempts=%d terminal_disagreements=%d failed_page=%d token=%s last_key=%q duration_ms=%d error=%q", common.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead, stats.Pages, len(out), stats.Retries, stats.TerminalReplayAttempts, stats.TerminalDisagreements, stats.FailedPage, stats.LastTokenID, stats.LastKey, time.Since(started).Milliseconds(), err.Error())
+			log.Printf("INFO: syfon_s3_prefix_list_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t pages=%d objects=%d retries=%d terminal_replay_attempts=%d terminal_disagreements=%d failed_page=%d token=%s last_key=%q duration_ms=%d error=%q", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead, stats.Pages, len(out), stats.Retries, stats.TerminalReplayAttempts, stats.TerminalDisagreements, stats.FailedPage, stats.LastTokenID, stats.LastKey, time.Since(started).Milliseconds(), err.Error())
 		}
 		var inspectErr *StorageInspectError
 		if errors.As(err, &inspectErr) {
@@ -904,7 +905,7 @@ func defaultS3PrefixLister(ctx context.Context, cred models.S3Credential, bucket
 		return nil, classifyS3ListError(bucket, prefix, err)
 	}
 	if logEnabled {
-		log.Printf("INFO: syfon_s3_prefix_list_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t pages=%d objects=%d retries=%d terminal_replay_attempts=%d terminal_disagreements=%d first_keys=%q duration_ms=%d", common.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead, stats.Pages, len(out), stats.Retries, stats.TerminalReplayAttempts, stats.TerminalDisagreements, strings.Join(firstKeys, ","), time.Since(started).Milliseconds())
+		log.Printf("INFO: syfon_s3_prefix_list_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q exact_prefix=%t max_keys=%d include_head=%t pages=%d objects=%d retries=%d terminal_replay_attempts=%d terminal_disagreements=%d first_keys=%q duration_ms=%d", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, options.ExactPrefix, aws.ToInt32(input.MaxKeys), options.IncludeHead, stats.Pages, len(out), stats.Retries, stats.TerminalReplayAttempts, stats.TerminalDisagreements, strings.Join(firstKeys, ","), time.Since(started).Milliseconds())
 	}
 	if !options.IncludeHead || len(out) == 0 {
 		return out, nil
@@ -975,7 +976,7 @@ func listS3PrefixPagesWithExactProbeRetry(ctx context.Context, client s3ListObje
 		}
 		backoff := policy.backoff(attempt)
 		if logEnabled {
-			log.Printf("INFO: syfon_s3_exact_probe_retry request_id=%s bucket=%s key=%q attempt=%d max_attempts=%d backoff_ms=%d objects=%d", common.GetRequestID(ctx), bucket, prefix, attempt+1, maxAttempts, backoff.Milliseconds(), len(out))
+			log.Printf("INFO: syfon_s3_exact_probe_retry request_id=%s bucket=%s key=%q attempt=%d max_attempts=%d backoff_ms=%d objects=%d", requestmeta.GetRequestID(ctx), bucket, prefix, attempt+1, maxAttempts, backoff.Milliseconds(), len(out))
 		}
 		if err := sleepS3ListPageRetry(ctx, backoff); err != nil {
 			return nil, stats, firstKeys, err
@@ -1022,7 +1023,7 @@ func listS3PrefixPages(ctx context.Context, client s3ListObjectsV2Client, input 
 			stats.LastKey = out[len(out)-1].Key
 		}
 		if logEnabled {
-			log.Printf("INFO: syfon_s3_prefix_list_page_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects_added=%d objects_total=%d last_key=%q truncated=%t", common.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, added, len(out), stats.LastKey, aws.ToBool(page.IsTruncated))
+			log.Printf("INFO: syfon_s3_prefix_list_page_done request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects_added=%d objects_total=%d last_key=%q truncated=%t", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, added, len(out), stats.LastKey, aws.ToBool(page.IsTruncated))
 		}
 		if !aws.ToBool(page.IsTruncated) {
 			if options.MaxKeys != 1 {
@@ -1060,7 +1061,7 @@ func replayS3TerminalPage(ctx context.Context, client s3ListObjectsV2Client, bas
 		}
 		retries += pageRetries
 		if logEnabled {
-			log.Printf("INFO: syfon_s3_inventory_terminal_replay request_id=%s bucket=%s requested_prefix=%q page=%d token=%s replay=%d max_replays=%d objects=%d truncated=%t", common.GetRequestID(ctx), bucket, prefix, pageNumber, tokenID, attempt-1, maxAttempts-1, len(page.Contents), aws.ToBool(page.IsTruncated))
+			log.Printf("INFO: syfon_s3_inventory_terminal_replay request_id=%s bucket=%s requested_prefix=%q page=%d token=%s replay=%d max_replays=%d objects=%d truncated=%t", requestmeta.GetRequestID(ctx), bucket, prefix, pageNumber, tokenID, attempt-1, maxAttempts-1, len(page.Contents), aws.ToBool(page.IsTruncated))
 		}
 		if s3ListPageFingerprint(page) != firstFingerprint {
 			return replays, retries, incompleteS3ListingError(bucket, prefix, lastKey, "terminal replay returned different page content", nil)
@@ -1121,14 +1122,14 @@ func listS3PrefixPageWithRetry(ctx context.Context, client s3ListObjectsV2Client
 		}
 		if !isRetryableS3ListPageError(err) || attempt >= policy.MaxAttempts {
 			if logEnabled {
-				log.Printf("INFO: syfon_s3_prefix_list_page_failed request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects=%d attempt=%d max_attempts=%d last_key=%q retryable=%t error=%q", common.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, objectCount, attempt, policy.MaxAttempts, lastKey, isRetryableS3ListPageError(err), err.Error())
+				log.Printf("INFO: syfon_s3_prefix_list_page_failed request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects=%d attempt=%d max_attempts=%d last_key=%q retryable=%t error=%q", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, objectCount, attempt, policy.MaxAttempts, lastKey, isRetryableS3ListPageError(err), err.Error())
 			}
 			return nil, tokenID, retries, fmt.Errorf("list s3 objects for %s/%s failed at page %d after %d objects and %d attempts: %w", bucket, strings.Trim(strings.TrimSpace(prefix), "/"), pageNumber, objectCount, attempt, err)
 		}
 		retries++
 		backoff := policy.backoff(attempt)
 		if logEnabled {
-			log.Printf("INFO: syfon_s3_prefix_list_page_retry request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects=%d attempt=%d max_attempts=%d backoff_ms=%d last_key=%q error=%q", common.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, objectCount, attempt, policy.MaxAttempts, backoff.Milliseconds(), lastKey, err.Error())
+			log.Printf("INFO: syfon_s3_prefix_list_page_retry request_id=%s bucket=%s requested_prefix=%q input_prefix=%q page=%d token=%s objects=%d attempt=%d max_attempts=%d backoff_ms=%d last_key=%q error=%q", requestmeta.GetRequestID(ctx), bucket, prefix, requestPrefix, pageNumber, tokenID, objectCount, attempt, policy.MaxAttempts, backoff.Milliseconds(), lastKey, err.Error())
 		}
 		if err := sleepS3ListPageRetry(ctx, backoff); err != nil {
 			return nil, tokenID, retries, err

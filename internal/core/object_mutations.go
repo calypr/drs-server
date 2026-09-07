@@ -10,9 +10,10 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	syfoncommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/db"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -79,7 +80,7 @@ type DeleteOptions struct {
 
 func (m *ObjectManager) DeleteObjectWithOptions(ctx context.Context, id string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
-		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", common.ErrConflict)
+		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", faults.ErrConflict)
 	}
 	obj, err := m.db.GetObject(ctx, id)
 	if err != nil {
@@ -89,7 +90,7 @@ func (m *ObjectManager) DeleteObjectWithOptions(ctx context.Context, id string, 
 		return err
 	}
 	if opts.DeleteStorageData && (obj.PublicRead || len(ObjectAccessResources(obj)) > 0) {
-		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", common.ErrConflict)
+		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", faults.ErrConflict)
 	}
 	return m.db.DeleteObject(ctx, id)
 }
@@ -100,7 +101,7 @@ func (m *ObjectManager) BulkDeleteObjects(ctx context.Context, ids []string) err
 
 func (m *ObjectManager) BulkDeleteObjectsWithOptions(ctx context.Context, ids []string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
-		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", common.ErrConflict)
+		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", faults.ErrConflict)
 	}
 	toDelete, err := m.deletablePhysicalObjectIDsForBulk(ctx, ids)
 	if err != nil {
@@ -133,9 +134,9 @@ func (m *ObjectManager) deletablePhysicalObjectIDsForBulk(ctx context.Context, i
 		if !ok {
 			canonicalID, resolveErr := m.db.ResolveObjectAlias(ctx, objectID)
 			if resolveErr == nil && strings.TrimSpace(canonicalID) != "" {
-				return nil, fmt.Errorf("%w: bulk delete requires a physical object UUID; %q is an alias for %q", common.ErrConflict, objectID, strings.TrimSpace(canonicalID))
+				return nil, fmt.Errorf("%w: bulk delete requires a physical object UUID; %q is an alias for %q", faults.ErrConflict, objectID, strings.TrimSpace(canonicalID))
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, common.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
 				return nil, resolveErr
 			}
 			continue
@@ -186,7 +187,7 @@ func (m *ObjectManager) BulkUpdateAccessMethods(ctx context.Context, updates map
 	for _, objectID := range ids {
 		obj, ok := byID[objectID]
 		if !ok {
-			return common.ErrNotFound
+			return faults.ErrNotFound
 		}
 		if err := m.requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
 			return err
@@ -218,7 +219,7 @@ func (m *ObjectManager) RemoveObjectControlledAccess(ctx context.Context, object
 		}
 	}
 	if !found {
-		return nil, common.ErrNotFound
+		return nil, faults.ErrNotFound
 	}
 
 	if err := m.db.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
@@ -261,7 +262,7 @@ func (m *ObjectManager) validateExistingContentRead(ctx context.Context, objs []
 			if existing[j].PublicRead || m.hasObjectMethod(ctx, &existing[j], objectMethodRead) {
 				continue
 			}
-			return common.ErrUnauthorized
+			return faults.ErrUnauthorized
 		}
 	}
 	return nil
@@ -550,10 +551,10 @@ func (m *ObjectManager) RequireObjectResources(ctx context.Context, method strin
 	if strings.TrimSpace(method) == "" {
 		return nil
 	}
-	if authz.HasObjectMethodAccess(ctx, method, resources) {
+	if access.HasObjectMethodAccess(ctx, method, resources) {
 		return nil
 	}
-	return common.ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func (m *ObjectManager) requireScopeMethod(ctx context.Context, organization, project, method string) error {
@@ -562,7 +563,7 @@ func (m *ObjectManager) requireScopeMethod(ctx context.Context, organization, pr
 		return err
 	}
 	if strings.TrimSpace(resource) == "" {
-		return common.ErrUnauthorized
+		return faults.ErrUnauthorized
 	}
 	return m.RequireObjectResources(ctx, method, []string{resource})
 }
@@ -571,7 +572,7 @@ func (m *ObjectManager) requireObjectMethod(ctx context.Context, obj *models.Int
 	if m.hasObjectMethod(ctx, obj, method) {
 		return nil
 	}
-	return common.ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func (m *ObjectManager) requireAllObjectMethod(ctx context.Context, obj *models.InternalObject, method string) error {
@@ -579,10 +580,10 @@ func (m *ObjectManager) requireAllObjectMethod(ctx context.Context, obj *models.
 	if len(resources) == 0 {
 		return m.RequireObjectResources(ctx, method, resources)
 	}
-	if authz.HasMethodAccess(ctx, method, resources) {
+	if access.HasMethodAccess(ctx, method, resources) {
 		return nil
 	}
-	return common.ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func (m *ObjectManager) hasObjectMethod(ctx context.Context, obj *models.InternalObject, method string) bool {
@@ -596,7 +597,7 @@ func (m *ObjectManager) hasObjectMethod(ctx context.Context, obj *models.Interna
 	if strings.EqualFold(method, objectMethodRead) && obj != nil && obj.PublicReadPolicyKnown && len(ObjectAccessResources(obj)) == 0 {
 		return false
 	}
-	return authz.HasObjectMethodAccess(ctx, method, ObjectAccessResources(obj))
+	return access.HasObjectMethodAccess(ctx, method, ObjectAccessResources(obj))
 }
 
 func (m *ObjectManager) bulkObjectMethodError(ctx context.Context, objs []models.InternalObject, method string) error {
@@ -634,7 +635,7 @@ func (m *ObjectManager) bulkObjectMethodError(ctx context.Context, objs []models
 		resourceList = resourceList[:maxDeniedAccessResources]
 	}
 
-	return &common.AuthorizationError{
+	return &access.AuthorizationError{
 		Method:             method,
 		RecordID:           firstDeniedID,
 		Resources:          resourceList,

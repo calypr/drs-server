@@ -8,8 +8,9 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 	"github.com/calypr/syfon/internal/urlmanager"
@@ -29,7 +30,7 @@ func (d *coreTestDB) ResolveObjectAlias(ctx context.Context, aliasID string) (st
 			return canonical, nil
 		}
 	}
-	return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+	return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 }
 
 func (d *coreTestDB) ListS3Credentials(ctx context.Context) ([]models.S3Credential, error) {
@@ -118,17 +119,17 @@ func (m *capturingURLManager) InvalidateBucket(bucket string) {
 }
 
 func buildGen3Context(privileges map[string]map[string]bool) context.Context {
-	session := internalauth.NewSession("gen3")
+	session := access.NewSession("gen3")
 	session.AuthHeaderPresent = true
 	session.SetAuthorizations(nil, privileges, true)
-	return internalauth.WithSession(context.Background(), session)
+	return access.WithSession(context.Background(), session)
 }
 
 func buildLocalAuthzContext(privileges map[string]map[string]bool) context.Context {
-	session := internalauth.NewSession("local")
+	session := access.NewSession("local")
 	session.AuthzEnforced = true
 	session.SetAuthorizations(nil, privileges, true)
-	return internalauth.WithSession(context.Background(), session)
+	return access.WithSession(context.Background(), session)
 }
 
 func TestObjectManagerGetObjectLookupPaths(t *testing.T) {
@@ -220,7 +221,7 @@ func TestObjectManagerGetObjectLookupPaths(t *testing.T) {
 			ident:   "obj-3",
 			method:  "delete",
 			ctx:     buildGen3Context(map[string]map[string]bool{"/programs/b": {"delete": true}}),
-			wantErr: common.ErrUnauthorized,
+			wantErr: faults.ErrUnauthorized,
 		},
 		{
 			name: "not found",
@@ -232,7 +233,7 @@ func TestObjectManagerGetObjectLookupPaths(t *testing.T) {
 			ident:   "missing",
 			method:  "read",
 			ctx:     buildGen3Context(map[string]map[string]bool{"/data_file": {"read": true}}),
-			wantErr: common.ErrNotFound,
+			wantErr: faults.ErrNotFound,
 		},
 	}
 
@@ -288,7 +289,7 @@ func TestObjectManagerGetObjectAuthzParity(t *testing.T) {
 			_, err := om.GetObject(buildCtx(map[string]map[string]bool{
 				resource: {"create": true},
 			}), "obj-1", "read")
-			if !errors.Is(err, common.ErrUnauthorized) {
+			if !errors.Is(err, faults.ErrUnauthorized) {
 				t.Fatalf("expected missing read privilege to be unauthorized, got %v", err)
 			}
 		})
@@ -437,7 +438,7 @@ func TestObjectManagerLifecycleAuthorization(t *testing.T) {
 			"/programs/org/projects/project": {"read": true},
 		})
 		err := om.RegisterObjects(deniedCtx, []models.InternalObject{obj})
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected register without create privilege to be unauthorized, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "new-object") || !strings.Contains(err.Error(), "org/project") {
@@ -474,7 +475,7 @@ func TestObjectManagerLifecycleAuthorization(t *testing.T) {
 		err := om.ReplaceObjects(buildGen3Context(map[string]map[string]bool{
 			"/programs/old/projects/scope": {"update": true},
 		}), []models.InternalObject{replacement})
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected unauthorized grant replacement, got %v", err)
 		}
 		err = om.ReplaceObjects(buildGen3Context(map[string]map[string]bool{
@@ -545,13 +546,13 @@ func TestObjectManagerLifecycleAuthorization(t *testing.T) {
 			"/programs/org/projects/project": {"read": true},
 		})
 
-		if err := om.DeleteObject(deniedCtx, "obj"); !errors.Is(err, common.ErrUnauthorized) {
+		if err := om.DeleteObject(deniedCtx, "obj"); !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected delete to reject missing privilege, got %v", err)
 		}
-		if err := om.UpdateObjectAccessMethods(deniedCtx, "obj", accessMethods); !errors.Is(err, common.ErrUnauthorized) {
+		if err := om.UpdateObjectAccessMethods(deniedCtx, "obj", accessMethods); !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected access method update to reject missing privilege, got %v", err)
 		}
-		if err := om.CreateObjectAlias(deniedCtx, "alias", "obj"); !errors.Is(err, common.ErrUnauthorized) {
+		if err := om.CreateObjectAlias(deniedCtx, "alias", "obj"); !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected alias create to reject missing privilege, got %v", err)
 		}
 
@@ -672,7 +673,7 @@ func TestObjectManagerDeleteResolveAndSignDelegation(t *testing.T) {
 				}{Url: "s3://bucket/b"},
 			}},
 		})
-		if !errors.Is(err, common.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrUnauthorized) {
 			t.Fatalf("expected unauthorized error, got %v", err)
 		}
 	})

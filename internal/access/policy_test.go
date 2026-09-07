@@ -1,18 +1,16 @@
-package authz
+package access
 
 import (
 	"context"
 	"testing"
-
-	internalauth "github.com/calypr/syfon/internal/auth"
 )
 
 func testSessionContext(mode string, header bool, enforced bool, resources []string, privileges map[string]map[string]bool) context.Context {
-	session := internalauth.NewSession(mode)
+	session := NewSession(mode)
 	session.AuthHeaderPresent = header
 	session.AuthzEnforced = enforced
 	session.SetAuthorizations(resources, privileges, enforced)
-	return internalauth.WithSession(context.Background(), session)
+	return WithSession(context.Background(), session)
 }
 
 func TestGetUserAuthz(t *testing.T) {
@@ -45,30 +43,10 @@ func TestCheckAccess(t *testing.T) {
 		userResources   []string
 		expected        bool
 	}{
-		{
-			name:            "public record",
-			recordResources: nil,
-			userResources:   nil,
-			expected:        true,
-		},
-		{
-			name:            "single match",
-			recordResources: []string{"/p/a"},
-			userResources:   []string{"/p/a"},
-			expected:        true,
-		},
-		{
-			name:            "no match",
-			recordResources: []string{"/p/a"},
-			userResources:   []string{"/p/b"},
-			expected:        false,
-		},
-		{
-			name:            "any match",
-			recordResources: []string{"/p/a", "/p/b"},
-			userResources:   []string{"/p/c", "/p/b"},
-			expected:        true,
-		},
+		{name: "public record", recordResources: nil, userResources: nil, expected: true},
+		{name: "single match", recordResources: []string{"/p/a"}, userResources: []string{"/p/a"}, expected: true},
+		{name: "no match", recordResources: []string{"/p/a"}, userResources: []string{"/p/b"}, expected: false},
+		{name: "any match", recordResources: []string{"/p/a", "/p/b"}, userResources: []string{"/p/c", "/p/b"}, expected: true},
 	}
 
 	for _, tc := range tests {
@@ -108,9 +86,7 @@ func TestGetUserPrivileges(t *testing.T) {
 	})
 
 	t.Run("valid map returned", func(t *testing.T) {
-		expected := map[string]map[string]bool{
-			"/programs/a/projects/b": {"read": true, "*": false},
-		}
+		expected := map[string]map[string]bool{"/programs/a/projects/b": {"read": true, "*": false}}
 		ctx := testSessionContext("", false, false, nil, expected)
 		got := GetUserPrivileges(ctx)
 		if !got["/programs/a/projects/b"]["read"] {
@@ -120,9 +96,7 @@ func TestGetUserPrivileges(t *testing.T) {
 
 	t.Run("write alias is normalized before storage", func(t *testing.T) {
 		resource := "/programs/a/projects/b"
-		ctx := testSessionContext("", false, false, nil, map[string]map[string]bool{
-			resource: {"write": true},
-		})
+		ctx := testSessionContext("", false, false, nil, map[string]map[string]bool{resource: {"write": true}})
 		got := GetUserPrivileges(ctx)
 		if got[resource]["write"] {
 			t.Fatalf("did not expect write to persist in session privileges")
@@ -145,9 +119,7 @@ func TestHasMethodAccess(t *testing.T) {
 	})
 
 	t.Run("local authz-enforced mode checks privileges", func(t *testing.T) {
-		ctx := testSessionContext("local", false, true, nil, map[string]map[string]bool{
-			resource: {"read": true},
-		})
+		ctx := testSessionContext("local", false, true, nil, map[string]map[string]bool{resource: {"read": true}})
 		if !HasMethodAccess(ctx, "read", []string{resource}) {
 			t.Fatalf("expected read access")
 		}
@@ -164,37 +136,28 @@ func TestHasMethodAccess(t *testing.T) {
 	})
 
 	t.Run("gen3 with empty resources denies", func(t *testing.T) {
-		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{
-			resource: {"read": true},
-		})
+		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{resource: {"read": true}})
 		if HasMethodAccess(ctx, "read", nil) {
 			t.Fatalf("expected deny for empty resource set")
 		}
 	})
 
 	t.Run("gen3 allows method on all resources", func(t *testing.T) {
-		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{
-			resource:        {"read": true},
-			"/programs/a/x": {"*": true},
-		})
+		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{resource: {"read": true}, "/programs/a/x": {"*": true}})
 		if !HasMethodAccess(ctx, "read", []string{resource, "/programs/a/x"}) {
 			t.Fatalf("expected allow with explicit and wildcard methods")
 		}
 	})
 
 	t.Run("gen3 denies missing resource privilege", func(t *testing.T) {
-		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{
-			resource: {"read": true},
-		})
+		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{resource: {"read": true}})
 		if HasMethodAccess(ctx, "read", []string{resource, "/programs/missing"}) {
 			t.Fatalf("expected deny when any resource lacks privilege")
 		}
 	})
 
 	t.Run("gen3 denies when method missing", func(t *testing.T) {
-		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{
-			resource: {"create": true},
-		})
+		ctx := testSessionContext("gen3", true, true, nil, map[string]map[string]bool{resource: {"create": true}})
 		if HasMethodAccess(ctx, "read", []string{resource}) {
 			t.Fatalf("expected deny for missing method privilege")
 		}
@@ -204,10 +167,7 @@ func TestHasMethodAccess(t *testing.T) {
 func TestAuthorizationAnyAllBehavior(t *testing.T) {
 	first := "/programs/a/projects/first"
 	second := "/programs/a/projects/second"
-	ctx := testSessionContext("local", false, true, nil, map[string]map[string]bool{
-		first:  {"read": true},
-		second: {"create": true},
-	})
+	ctx := testSessionContext("local", false, true, nil, map[string]map[string]bool{first: {"read": true}, second: {"create": true}})
 
 	if !HasMethodAccess(ctx, "read", []string{first}) {
 		t.Fatal("expected a method check to allow the matching resource")

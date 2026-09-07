@@ -9,7 +9,7 @@ import (
 	"time"
 
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -106,7 +106,7 @@ func (db *SqliteDB) GetFileUsage(ctx context.Context, objectID string) (*models.
 		&lastDownload,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: file usage not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return nil, err

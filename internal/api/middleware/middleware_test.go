@@ -21,7 +21,7 @@ import (
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -83,10 +83,10 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if !authz.IsGen3Mode(c.Context()) {
+		if !access.IsGen3Mode(c.Context()) {
 			t.Fatalf("expected gen3 mode in context")
 		}
-		if authz.HasAuthHeader(c.Context()) {
+		if access.HasAuthHeader(c.Context()) {
 			t.Fatalf("did not expect auth header presence")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -108,7 +108,7 @@ func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if !authz.HasAuthHeader(c.Context()) {
+		if !access.HasAuthHeader(c.Context()) {
 			t.Fatalf("expected auth header presence to be true")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -281,14 +281,14 @@ func TestGen3ModePopulatesUserPrivilegesFromFence(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		resources := authz.GetUserAuthz(c.Context())
+		resources := access.GetUserAuthz(c.Context())
 		if len(resources) != 1 || resources[0] != "/programs/test/projects/p1" {
 			t.Fatalf("expected populated user resources, got %+v", resources)
 		}
-		if !authz.HasMethodAccess(c.Context(), "read", []string{"/programs/test/projects/p1"}) {
+		if !access.HasMethodAccess(c.Context(), "read", []string{"/programs/test/projects/p1"}) {
 			t.Fatalf("expected read access from Fence authz")
 		}
-		if !authz.HasMethodAccess(c.Context(), "create", []string{"/programs/test/projects/p1"}) {
+		if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/test/projects/p1"}) {
 			t.Fatalf("expected create access from Fence authz")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -377,13 +377,13 @@ func TestGen3MockAuthInjectsPrivileges(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if !authz.IsGen3Mode(c.Context()) {
+		if !access.IsGen3Mode(c.Context()) {
 			t.Fatalf("expected gen3 mode")
 		}
-		if !authz.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
+		if !access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
 			t.Fatalf("expected read on /data_file")
 		}
-		if !authz.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
+		if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
 			t.Fatalf("expected create on project resource")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -410,7 +410,7 @@ func TestGen3MockAuthRequireHeader(t *testing.T) {
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
 		// Without header, mock privileges should not be injected.
-		if authz.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
+		if access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
 			t.Fatalf("did not expect read access without auth header")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -442,23 +442,23 @@ func TestLocalAuthzCSVInjectsMethodAwarePrivileges(t *testing.T) {
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {
-		if authz.IsGen3Mode(c.Context()) {
+		if access.IsGen3Mode(c.Context()) {
 			t.Fatalf("did not expect gen3 mode")
 		}
-		if !authz.IsAuthzEnforced(c.Context()) {
+		if !access.IsAuthzEnforced(c.Context()) {
 			t.Fatalf("expected local authz enforcement")
 		}
 		resource := []string{"/programs/cbds/projects/end_to_end_test"}
-		if !authz.HasMethodAccess(c.Context(), "read", resource) {
+		if !access.HasMethodAccess(c.Context(), "read", resource) {
 			t.Fatalf("expected read access")
 		}
-		if authz.GetUserPrivileges(c.Context())[resource[0]]["write"] {
+		if access.GetUserPrivileges(c.Context())[resource[0]]["write"] {
 			t.Fatalf("did not expect write to persist in normalized privileges")
 		}
-		if !authz.HasMethodAccess(c.Context(), "file_upload", resource) {
+		if !access.HasMethodAccess(c.Context(), "file_upload", resource) {
 			t.Fatalf("expected write alias to grant file_upload access")
 		}
-		if authz.HasMethodAccess(c.Context(), "read", []string{"/programs/other/projects/nope"}) {
+		if access.HasMethodAccess(c.Context(), "read", []string{"/programs/other/projects/nope"}) {
 			t.Fatalf("did not expect access to another project")
 		}
 		return c.SendStatus(http.StatusOK)
@@ -551,10 +551,10 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			authHeader: "Basic " + base64.StdEncoding.EncodeToString([]byte("user:pass")),
 			wantStatus: http.StatusOK,
 			assert: func(t *testing.T, c fiber.Ctx) {
-				if authz.IsGen3Mode(c.Context()) {
+				if access.IsGen3Mode(c.Context()) {
 					t.Fatalf("did not expect gen3 mode in local auth")
 				}
-				if authz.HasAuthHeader(c.Context()) {
+				if access.HasAuthHeader(c.Context()) {
 					t.Fatalf("did not expect auth header presence in local auth")
 				}
 			},
@@ -564,10 +564,10 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			mode:       "gen3",
 			wantStatus: http.StatusOK,
 			assert: func(t *testing.T, c fiber.Ctx) {
-				if !authz.IsGen3Mode(c.Context()) {
+				if !access.IsGen3Mode(c.Context()) {
 					t.Fatalf("expected gen3 mode")
 				}
-				if authz.HasAuthHeader(c.Context()) {
+				if access.HasAuthHeader(c.Context()) {
 					t.Fatalf("did not expect auth header presence")
 				}
 			},
@@ -578,10 +578,10 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			authHeader: "Bearer malformed.token",
 			wantStatus: http.StatusOK,
 			assert: func(t *testing.T, c fiber.Ctx) {
-				if !authz.IsGen3Mode(c.Context()) {
+				if !access.IsGen3Mode(c.Context()) {
 					t.Fatalf("expected gen3 mode")
 				}
-				if !authz.HasAuthHeader(c.Context()) {
+				if !access.HasAuthHeader(c.Context()) {
 					t.Fatalf("expected auth header presence")
 				}
 			},
@@ -596,10 +596,10 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			},
 			wantStatus: http.StatusOK,
 			assert: func(t *testing.T, c fiber.Ctx) {
-				if !authz.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
+				if !access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
 					t.Fatalf("expected read access on /data_file")
 				}
-				if !authz.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
+				if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
 					t.Fatalf("expected create access on scoped resource")
 				}
 			},
@@ -612,10 +612,10 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			},
 			wantStatus: http.StatusOK,
 			assert: func(t *testing.T, c fiber.Ctx) {
-				if authz.IsGen3Mode(c.Context()) {
+				if access.IsGen3Mode(c.Context()) {
 					t.Fatalf("did not expect gen3 mode in local auth")
 				}
-				if authz.HasAuthHeader(c.Context()) {
+				if access.HasAuthHeader(c.Context()) {
 					t.Fatalf("did not expect auth header presence in local auth")
 				}
 			},

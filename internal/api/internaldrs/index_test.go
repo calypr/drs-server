@@ -17,7 +17,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/apigen/server/internalapi"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/db/sqlite"
@@ -27,11 +27,11 @@ import (
 )
 
 func indexTestAuthContext(base context.Context, mode string, authHeader bool, privileges map[string]map[string]bool) context.Context {
-	session := internalauth.NewSession(mode)
+	session := access.NewSession(mode)
 	session.AuthHeaderPresent = authHeader
 	session.AuthzEnforced = mode == "gen3" || mode == "local"
 	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
-	return internalauth.WithSession(base, session)
+	return access.WithSession(base, session)
 }
 
 func TestHandleInternalList_ScopeFilteringByReadPrivilege(t *testing.T) {

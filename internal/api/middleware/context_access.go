@@ -3,13 +3,13 @@ package middleware
 import (
 	"context"
 
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 )
 
 func MissingGen3AuthHeader(ctx context.Context) bool {
-	return authz.IsGen3Mode(ctx) && !authz.HasAuthHeader(ctx)
+	return access.IsGen3Mode(ctx) && !access.HasAuthHeader(ctx)
 }
 
 func AuthFailureStatus(ctx context.Context) int {
-	return authz.AuthStatusCode(ctx)
+	return access.AuthStatusCode(ctx)
 }

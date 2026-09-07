@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
@@ -142,10 +142,10 @@ func TestPrepareUploadActionsRequiresGlobalDataFileCreate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			session := internalauth.NewSession("gen3")
+			session := access.NewSession("gen3")
 			session.AuthHeaderPresent = true
 			session.SetAuthorizations(nil, tc.privileges, true)
-			ctx := internalauth.WithSession(context.Background(), session)
+			ctx := access.WithSession(context.Background(), session)
 
 			db := &testutils.MockDatabase{Objects: map[string]*drs.DrsObject{}}
 			om := core.NewObjectManager(db, &testutils.MockUrlManager{})

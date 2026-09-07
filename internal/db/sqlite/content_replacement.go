@@ -7,8 +7,9 @@ import (
 	"strings"
 
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -55,7 +56,7 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *models.InternalObject
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err := sqliteEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return "", err
@@ -64,8 +65,8 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *models.InternalObject
 	if err != nil {
 		return "", err
 	}
-	if !authz.HasMethodAccess(ctx, "update", currentResources) {
-		return "", common.ErrUnauthorized
+	if !access.HasMethodAccess(ctx, "update", currentResources) {
+		return "", faults.ErrUnauthorized
 	}
 	sha, hasSHA, err := common.ValidateCanonicalSHA256(obj.Checksums)
 	if err != nil {
@@ -101,10 +102,10 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *models.InternalObject
 	}
 	if sqliteHasNewResource(incomingResources, currentResources) {
 		if !publicRead && !sqliteCanReadContent(ctx, currentResources) {
-			return "", common.ErrUnauthorized
+			return "", faults.ErrUnauthorized
 		}
 		if !sqliteCanCreateResources(ctx, incomingResources, currentResources) {
-			return "", common.ErrUnauthorized
+			return "", faults.ErrUnauthorized
 		}
 	}
 	row, exists, err := sqliteLoadContentRowTx(ctx, tx, canonicalID)
@@ -112,7 +113,7 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *models.InternalObject
 		if err != nil {
 			return "", err
 		}
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if row.size != 0 && obj.Size != 0 && row.size != obj.Size && len(storedSHAs) > 0 {
 		return "", identityConflict("SHA %q has conflicting sizes %d and %d", storedSHAs[0], row.size, obj.Size)

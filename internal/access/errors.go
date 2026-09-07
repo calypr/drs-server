@@ -1,21 +1,12 @@
-package common
+package access
 
 import (
-	"errors"
 	"fmt"
 	"strings"
-)
 
-var (
-	ErrNotFound     = errors.New("not found")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrConflict     = errors.New("conflict")
-	ErrInvalidInput = errors.New("invalid input")
+	sycommon "github.com/calypr/syfon/common"
+	"github.com/calypr/syfon/internal/faults"
 )
-
-type PublicError interface {
-	PublicMessage() string
-}
 
 type AuthorizationError struct {
 	Method             string
@@ -31,7 +22,7 @@ func (e *AuthorizationError) Error() string {
 }
 
 func (e *AuthorizationError) Unwrap() error {
-	return ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func (e *AuthorizationError) PublicMessage() string {
@@ -73,20 +64,15 @@ func (e *AuthorizationError) PublicMessage() string {
 func formatResourceScopes(resources []string) []string {
 	out := make([]string, 0, len(resources))
 	for _, resource := range resources {
-		scope := ParseResourcePath(resource)
+		org, project, ok := sycommon.ResourceScope(resource)
 		switch {
-		case scope.Organization != "" && scope.Project != "":
-			out = append(out, scope.Organization+"/"+scope.Project)
-		case scope.Organization != "":
-			out = append(out, scope.Organization+"/*")
+		case ok && org != "" && project != "":
+			out = append(out, org+"/"+project)
+		case ok && org != "":
+			out = append(out, org+"/*")
 		default:
 			out = append(out, resource)
 		}
 	}
 	return out
 }
-
-func IsNotFoundError(err error) bool {
-	return errors.Is(err, ErrNotFound)
-}
-

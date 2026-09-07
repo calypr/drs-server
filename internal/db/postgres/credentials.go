@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/calypr/syfon/internal/common"
-	"github.com/calypr/syfon/internal/models"
 	"strings"
+
+	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/internal/models"
 
 	"github.com/calypr/syfon/internal/crypto"
 )
@@ -235,7 +237,7 @@ func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *models.Bucke
 	}
 
 	existing, err := db.GetBucketScope(ctx, org, project)
-	if err != nil && !errors.Is(err, common.ErrNotFound) {
+	if err != nil && !errors.Is(err, faults.ErrNotFound) {
 		return err
 	}
 	if err == nil && existing != nil {
@@ -273,7 +275,7 @@ func (db *PostgresDB) GetBucketScope(ctx context.Context, organization, projectI
 		&s.Organization, &s.ProjectID, &s.CredentialID, &s.Bucket, &s.PathPrefix,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bucket scope: %w", err)
@@ -319,7 +321,7 @@ func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, proje
 		return fmt.Errorf("failed to inspect deleted bucket scope count: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	return nil
 }

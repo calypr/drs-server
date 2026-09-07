@@ -9,7 +9,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/apigen/server/lfsapi"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
@@ -152,10 +152,10 @@ func TestLFSBatchGen3MissingAuthReturns401(t *testing.T) {
 	uM := &testutils.MockUrlManager{}
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
-		session := internalauth.NewSession("gen3")
+		session := access.NewSession("gen3")
 		session.AuthHeaderPresent = false
 		session.AuthzEnforced = true
-		ctx := internalauth.WithSession(c.Context(), session)
+		ctx := access.WithSession(c.Context(), session)
 		c.SetContext(ctx)
 		return c.Next()
 	})

@@ -9,8 +9,9 @@ import (
 	"time"
 
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -139,10 +140,10 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *mode
 		return "", err
 	}
 	if wasExisting && !publicRead && (sqliteHasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !sqliteCanReadContent(ctx, currentResources) {
-		return "", common.ErrUnauthorized
+		return "", faults.ErrUnauthorized
 	}
 	if !sqliteCanCreateResources(ctx, resources, currentResources) {
-		return "", common.ErrUnauthorized
+		return "", faults.ErrUnauthorized
 	}
 	if err := mergeContentRowTx(ctx, tx, row, obj, hasSHA, resources, currentResources); err != nil {
 		return "", err
@@ -503,13 +504,13 @@ func hasResourceOverlap(left, right []string) bool {
 }
 
 func sqliteCanReadContent(ctx context.Context, resources []string) bool {
-	if !authz.IsAuthzEnforced(ctx) {
+	if !access.IsAuthzEnforced(ctx) {
 		return true
 	}
 	if len(resources) == 0 {
 		return false
 	}
-	return authz.HasObjectMethodAccess(ctx, "read", resources)
+	return access.HasObjectMethodAccess(ctx, "read", resources)
 }
 
 func sqliteCanCreateResources(ctx context.Context, resources, current []string) bool {
@@ -521,7 +522,7 @@ func sqliteCanCreateResources(ctx context.Context, resources, current []string) 
 		if _, exists := currentSet[resource]; exists {
 			continue
 		}
-		if !authz.HasMethodAccess(ctx, "create", []string{resource}) {
+		if !access.HasMethodAccess(ctx, "create", []string{resource}) {
 			return false
 		}
 	}
@@ -533,8 +534,8 @@ func sqliteRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method st
 	if err != nil {
 		return err
 	}
-	if !authz.HasMethodAccess(ctx, method, resources) {
-		return common.ErrUnauthorized
+	if !access.HasMethodAccess(ctx, method, resources) {
+		return faults.ErrUnauthorized
 	}
 	return nil
 }
@@ -582,7 +583,7 @@ func normalizeChecksumLookup(value string) string {
 
 func identityConflict(format string, args ...interface{}) error {
 	params := make([]interface{}, 0, len(args)+1)
-	params = append(params, common.ErrConflict)
+	params = append(params, faults.ErrConflict)
 	params = append(params, args...)
 	return fmt.Errorf("%w: "+format, params...)
 }

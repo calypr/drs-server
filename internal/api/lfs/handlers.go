@@ -13,6 +13,7 @@ import (
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/urlmanager"
 )
@@ -108,13 +109,13 @@ func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 		return lfsapi.LfsVerify200Response{}, nil
 	}
 
-	if !common.IsNotFoundError(err) {
+	if !faults.IsNotFoundError(err) {
 		return lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
 	}
 
 	pending, err := s.om.PopPendingLFSMeta(ctx, oid)
 	if err != nil {
-		if common.IsNotFoundError(err) {
+		if faults.IsNotFoundError(err) {
 			return lfsapi.LfsVerify404ApplicationVndGitLfsPlusJSONResponse{Message: "Object not found"}, nil
 		}
 		return lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
@@ -211,7 +212,7 @@ func (s *LFSServer) resolveUploadProxyTarget(ctx context.Context, oid string) (b
 	if obj, getErr := s.om.GetObject(ctx, oid, "read"); getErr == nil {
 		bucket, key, err := canonicalLFSUploadBucketKey(ctx, s.om, obj, defaultBucket)
 		return bucket, key, obj.Id, err
-	} else if !common.IsNotFoundError(getErr) {
+	} else if !faults.IsNotFoundError(getErr) {
 		return "", "", "", getErr
 	}
 
@@ -222,7 +223,7 @@ func (s *LFSServer) resolveUploadProxyTarget(ctx context.Context, oid string) (b
 		}
 		bucket, key, err := canonicalLFSUploadBucketKey(ctx, s.om, &obj, defaultBucket)
 		return bucket, key, obj.Id, err
-	} else if !common.IsNotFoundError(getErr) {
+	} else if !faults.IsNotFoundError(getErr) {
 		return "", "", "", getErr
 	}
 

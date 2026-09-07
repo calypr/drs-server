@@ -8,7 +8,7 @@ import (
 	"time"
 
 	sycommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 
 	"github.com/lib/pq"
@@ -58,7 +58,7 @@ func (db *PostgresDB) GetFileUsage(ctx context.Context, objectID string) (*model
 		&lastDownload,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("%w: file usage not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return nil, err

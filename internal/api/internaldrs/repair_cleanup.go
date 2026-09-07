@@ -13,28 +13,28 @@ import (
 	serverdrs "github.com/calypr/syfon/apigen/server/drs"
 	serverinternalapi "github.com/calypr/syfon/apigen/server/internalapi"
 	sycommon "github.com/calypr/syfon/common"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/api/apiutil"
 	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
-	"github.com/calypr/syfon/internal/authz"
-	intcommon "github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/repair"
 	"github.com/gofiber/fiber/v3"
 )
 
 func authorizeStorageCleanupScope(ctx context.Context, organization, project string, methods ...string) error {
-	if !authz.IsAuthzEnforced(ctx) {
+	if !access.IsAuthzEnforced(ctx) {
 		return nil
 	}
 	resource, err := sycommon.ResourcePath(organization, project)
 	if err != nil {
 		return err
 	}
-	if authz.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || authz.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
+	if access.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || access.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
 		return nil
 	}
-	return intcommon.ErrUnauthorized
+	return faults.ErrUnauthorized
 }
 
 func handleInternalScopeRepairAuditFiber(om *core.ObjectManager) fiber.Handler {

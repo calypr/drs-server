@@ -10,6 +10,7 @@ import (
 	"github.com/calypr/syfon/apigen/server/drs"
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/urlmanager"
 )
@@ -45,7 +46,7 @@ func (m *MockDatabase) GetObject(ctx context.Context, id string) (*models.Intern
 		attachAuthorizationsToAccessMethods(&wrapped)
 		return &wrapped, nil
 	}
-	return nil, fmt.Errorf("%w: object not found", common.ErrNotFound)
+	return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
 }
 
 func (m *MockDatabase) DeleteObject(ctx context.Context, id string) error {
@@ -242,11 +243,11 @@ func (m *MockDatabase) ListObjectIDsByResources(ctx context.Context, resources [
 
 func (m *MockDatabase) CreateObjectAlias(ctx context.Context, aliasID, canonicalObjectID string) error {
 	if m.Objects == nil {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	obj, ok := m.Objects[canonicalObjectID]
 	if !ok {
-		return fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	copyObj := *obj
 	copyObj.Id = aliasID
@@ -265,7 +266,7 @@ func (m *MockDatabase) ResolveObjectAlias(ctx context.Context, aliasID string) (
 			return aliasID, nil
 		}
 	}
-	return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+	return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 }
 
 func (m *MockDatabase) RegisterObjects(ctx context.Context, objects []models.InternalObject) error {
@@ -338,7 +339,7 @@ func (m *MockDatabase) UpdateObjectAccessMethods(ctx context.Context, objectID s
 func (m *MockDatabase) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) error {
 	obj, ok := m.Objects[objectID]
 	if !ok {
-		return common.ErrNotFound
+		return faults.ErrNotFound
 	}
 	wrapped := models.InternalObject{DrsObject: *obj}
 	if authz, ok := m.ObjectAuthz[objectID]; ok {
@@ -350,7 +351,7 @@ func (m *MockDatabase) RemoveObjectControlledAccess(ctx context.Context, objectI
 	}
 	target := sycommon.NormalizeAccessResources([]string{resource})
 	if len(target) == 0 {
-		return common.ErrNotFound
+		return faults.ErrNotFound
 	}
 	found := false
 	filtered := make([]string, 0, len(resources))
@@ -362,7 +363,7 @@ func (m *MockDatabase) RemoveObjectControlledAccess(ctx context.Context, objectI
 		filtered = append(filtered, existing)
 	}
 	if !found {
-		return common.ErrNotFound
+		return faults.ErrNotFound
 	}
 	if len(filtered) == 0 {
 		delete(m.ObjectAuthz, objectID)
@@ -380,14 +381,14 @@ func (m *MockDatabase) RemoveObjectControlledAccess(ctx context.Context, objectI
 func (m *MockDatabase) RemoveObjectControlledAccessBulk(ctx context.Context, objectIDs []string, resource string) (int, error) {
 	target := sycommon.NormalizeAccessResources([]string{resource})
 	if len(target) == 0 {
-		return 0, common.ErrNotFound
+		return 0, faults.ErrNotFound
 	}
 	orgWide := !strings.Contains(target[0], "/project/")
 	count := 0
 	for _, objectID := range objectIDs {
 		obj, ok := m.Objects[objectID]
 		if !ok {
-			return count, common.ErrNotFound
+			return count, faults.ErrNotFound
 		}
 		wrapped := models.InternalObject{DrsObject: *obj}
 		if objectAuthz, ok := m.ObjectAuthz[objectID]; ok {
@@ -498,19 +499,19 @@ func (m *MockDatabase) CreateBucketScope(ctx context.Context, scope *models.Buck
 
 func (m *MockDatabase) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
 	if m.BucketScopes == nil {
-		return fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	k := bucketScopeKey(organization, projectID)
 	scope, ok := m.BucketScopes[k]
 	if !ok {
-		return fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	if strings.TrimSpace(scope.CredentialID) != strings.TrimSpace(credentialID) &&
 		strings.TrimSpace(scope.Bucket) != strings.TrimSpace(credentialID) {
-		return fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	if strings.Trim(strings.TrimSpace(scope.PathPrefix), "/") != strings.Trim(strings.TrimSpace(pathPrefix), "/") {
-		return fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	delete(m.BucketScopes, k)
 	return nil
@@ -519,12 +520,12 @@ func (m *MockDatabase) DeleteBucketScope(ctx context.Context, organization, proj
 func (m *MockDatabase) GetBucketScope(ctx context.Context, organization, projectID string) (*models.BucketScope, error) {
 	m.GetBucketScopeCalls++
 	if m.BucketScopes == nil {
-		return nil, fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	k := bucketScopeKey(organization, projectID)
 	s, ok := m.BucketScopes[k]
 	if !ok {
-		return nil, fmt.Errorf("%w: bucket scope not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
 	}
 	cp := s
 	return &cp, nil
@@ -550,22 +551,22 @@ func (m *MockDatabase) SavePendingLFSMeta(ctx context.Context, entries []models.
 
 func (m *MockDatabase) GetPendingLFSMeta(ctx context.Context, oid string) (*models.PendingLFSMeta, error) {
 	if m.PendingMeta == nil {
-		return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 	}
 	e, ok := m.PendingMeta[oid]
 	if !ok {
-		return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 	}
 	return &e, nil
 }
 
 func (m *MockDatabase) PopPendingLFSMeta(ctx context.Context, oid string) (*models.PendingLFSMeta, error) {
 	if m.PendingMeta == nil {
-		return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 	}
 	e, ok := m.PendingMeta[oid]
 	if !ok {
-		return nil, fmt.Errorf("%w: pending metadata not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
 	}
 	delete(m.PendingMeta, oid)
 	return &e, nil
@@ -615,11 +616,11 @@ func (m *MockDatabase) RecordFileDownload(ctx context.Context, objectID string) 
 
 func (m *MockDatabase) GetFileUsage(ctx context.Context, objectID string) (*models.FileUsage, error) {
 	if m.Usage == nil {
-		return nil, fmt.Errorf("%w: file usage not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
 	}
 	u, ok := m.Usage[objectID]
 	if !ok {
-		return nil, fmt.Errorf("%w: file usage not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
 	}
 	copyUsage := u
 	return &copyUsage, nil

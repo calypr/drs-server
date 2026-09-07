@@ -10,21 +10,10 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/models"
+	"github.com/calypr/syfon/internal/requestmeta"
 )
-
-func TestWithAndGetRequestID(t *testing.T) {
-	ctx := context.Background()
-	if got := GetRequestID(ctx); got != "" {
-		t.Fatalf("expected empty request id, got %q", got)
-	}
-
-	ctx = WithRequestID(ctx, "rid-123")
-	if got := GetRequestID(ctx); got != "rid-123" {
-		t.Fatalf("expected request id rid-123, got %q", got)
-	}
-}
 
 func TestAuditS3CredentialAccess_LogsSuccessAndError(t *testing.T) {
 	orig := slog.Default()
@@ -33,11 +22,11 @@ func TestAuditS3CredentialAccess_LogsSuccessAndError(t *testing.T) {
 	slog.SetDefault(logger)
 	t.Cleanup(func() { slog.SetDefault(orig) })
 
-	ctx := WithRequestID(context.Background(), "req-abc")
+	ctx := requestmeta.WithRequestID(context.Background(), "req-abc")
 	AuditS3CredentialAccess(ctx, "read", "bucket-a", nil)
 
-	session := internalauth.NewSession("gen3")
-	errCtx := internalauth.WithSession(ctx, session)
+	session := access.NewSession("gen3")
+	errCtx := access.WithSession(ctx, session)
 	AuditS3CredentialAccess(errCtx, "write", "bucket-b", errors.New("boom"))
 
 	out := buf.String()

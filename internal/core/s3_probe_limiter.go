@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/requestmeta"
 )
 
 const (
@@ -62,7 +62,7 @@ func acquireS3Probe(ctx context.Context, operation, bucket, key string) (func(),
 	case limiter.permits <- struct{}{}:
 		waited := time.Since(started)
 		if waited >= 100*time.Millisecond {
-			log.Printf("INFO: syfon_s3_probe_limiter_wait request_id=%s operation=%s bucket=%s key=%q wait_ms=%d", common.GetRequestID(ctx), operation, bucket, key, waited.Milliseconds())
+			log.Printf("INFO: syfon_s3_probe_limiter_wait request_id=%s operation=%s bucket=%s key=%q wait_ms=%d", requestmeta.GetRequestID(ctx), operation, bucket, key, waited.Milliseconds())
 		}
 		return func() { <-limiter.permits }, nil
 	case <-ctx.Done():

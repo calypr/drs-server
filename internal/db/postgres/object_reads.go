@@ -10,6 +10,7 @@ import (
 	"github.com/calypr/syfon/apigen/server/drs"
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/lib/pq"
 )
@@ -17,12 +18,12 @@ import (
 func (db *PostgresDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = $1", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return "", err
@@ -52,11 +53,11 @@ retryLookup:
 				resolvedAlias = true
 				goto retryLookup
 			}
-			if aliasErr != nil && !errors.Is(aliasErr, common.ErrNotFound) {
+			if aliasErr != nil && !errors.Is(aliasErr, faults.ErrNotFound) {
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)
@@ -170,10 +171,10 @@ func (db *PostgresDB) GetBulkObjects(ctx context.Context, ids []string) ([]model
 					obj, resolveErr = db.GetObject(ctx, resolved)
 					ok = resolveErr == nil
 				}
-			} else if !errors.Is(resolveErr, common.ErrNotFound) {
+			} else if !errors.Is(resolveErr, faults.ErrNotFound) {
 				return nil, resolveErr
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, common.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
 				return nil, resolveErr
 			}
 		}

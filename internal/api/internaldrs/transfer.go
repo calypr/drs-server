@@ -18,6 +18,7 @@ import (
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/urlmanager"
 	"github.com/gofiber/fiber/v3"
@@ -204,7 +205,7 @@ func handleInternalUploadURLFiber(om *core.ObjectManager) fiber.Handler {
 		}
 
 		obj, err := om.GetObject(c.Context(), fileID, "update")
-		if err != nil && !errors.Is(err, common.ErrNotFound) {
+		if err != nil && !errors.Is(err, faults.ErrNotFound) {
 			return apiutil.HandleError(c, err)
 		}
 
@@ -320,9 +321,9 @@ func handleInternalUploadBulkFiber(om *core.ObjectManager) fiber.Handler {
 				errMsg := err.Error()
 				res.Error = &errMsg
 				switch {
-				case errors.Is(err, common.ErrUnauthorized):
+				case errors.Is(err, faults.ErrUnauthorized):
 					res.Status = http.StatusUnauthorized
-				case errors.Is(err, common.ErrNotFound):
+				case errors.Is(err, faults.ErrNotFound):
 					res.Status = http.StatusNotFound
 				default:
 					res.Status = http.StatusInternalServerError

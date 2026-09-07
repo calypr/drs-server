@@ -326,12 +326,12 @@ func (s *Service) addDuplicateFindings(objects []*auditedObject) {
 			continue
 		}
 		resource := strings.SplitN(key, "|", 2)[0]
-		scope := intcommon.ParseResourcePath(resource)
+		org, project, _ := syfoncommon.ResourceScope(resource)
 		for _, obj := range group {
 			obj.findings = append(obj.findings, newFinding(FindingDuplicateSHA256Sibling, SeverityWarn, obj.record, obj.sha256, obj.currentURLs, obj.canonicalURL, false, "same sha256 appears in multiple DIDs for this scope"))
 			if obj.scope.Organization == "" {
-				obj.scope.Organization = scope.Organization
-				obj.scope.Project = scope.Project
+				obj.scope.Organization = org
+				obj.scope.Project = project
 			}
 		}
 	}

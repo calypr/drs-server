@@ -8,47 +8,47 @@ import (
 	"strings"
 
 	sycommon "github.com/calypr/syfon/common"
+	"github.com/calypr/syfon/internal/access"
 	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
-	"github.com/calypr/syfon/internal/authz"
 )
 
 func (s *MetricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {
-	access, err := resolveMetricsAccess(ctx)
+	resolved, err := resolveMetricsAccess(ctx)
 	if err != nil {
 		return metricsAccess{}, http.StatusBadRequest, false
 	}
 
-	if !authz.IsAuthzEnforced(ctx) {
-		return access, 0, true
+	if !access.IsAuthzEnforced(ctx) {
+		return resolved, 0, true
 	}
 	if apimiddleware.MissingGen3AuthHeader(ctx) {
-		return access, http.StatusUnauthorized, false
+		return resolved, http.StatusUnauthorized, false
 	}
 
 	// Baseline read access for metrics: global access or scoped access
-	if authz.HasMethodAccess(ctx, "read", []string{"/data_file"}) ||
-		authz.HasMethodAccess(ctx, "read", []string{"/programs"}) {
-		return access, 0, true
+	if access.HasMethodAccess(ctx, "read", []string{"/data_file"}) ||
+		access.HasMethodAccess(ctx, "read", []string{"/programs"}) {
+		return resolved, 0, true
 	}
 
-	if access.isScoped() {
-		scope, err := sycommon.ResourcePath(access.organization, access.project)
+	if resolved.isScoped() {
+		scope, err := sycommon.ResourcePath(resolved.organization, resolved.project)
 		if err != nil {
-			return access, http.StatusBadRequest, false
+			return resolved, http.StatusBadRequest, false
 		}
-		if authz.HasMethodAccess(ctx, "read", []string{scope}) {
-			return access, 0, true
+		if access.HasMethodAccess(ctx, "read", []string{scope}) {
+			return resolved, 0, true
 		}
-		return access, http.StatusForbidden, false
+		return resolved, http.StatusForbidden, false
 	}
 
 	scopes := readableMetricsScopes(ctx)
 	if len(scopes) > 0 {
-		access.scopes = scopes
-		return access, 0, true
+		resolved.scopes = scopes
+		return resolved, 0, true
 	}
 
-	return access, http.StatusForbidden, false
+	return resolved, http.StatusForbidden, false
 }
 
 type metricsAccess struct {
@@ -79,7 +79,7 @@ func resolveMetricsAccess(ctx context.Context) (metricsAccess, error) {
 }
 
 func readableMetricsScopes(ctx context.Context) []metricsScope {
-	privs := authz.GetUserPrivileges(ctx)
+	privs := access.GetUserPrivileges(ctx)
 	scopes := make([]metricsScope, 0, len(privs))
 	seen := map[string]bool{}
 	for resource, methods := range privs {

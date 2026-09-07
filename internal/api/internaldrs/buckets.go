@@ -10,6 +10,7 @@ import (
 	"github.com/calypr/syfon/internal/api/routeutil"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/gofiber/fiber/v3"
 )
@@ -33,7 +34,7 @@ type projectCleanupResponse struct {
 
 func handleInternalBucketsFiber(c fiber.Ctx, om *core.ObjectManager) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apiutil.HandleError(c, common.ErrUnauthorized)
+		return apiutil.HandleError(c, faults.ErrUnauthorized)
 	}
 	visible, err := om.ListVisibleBuckets(c.Context())
 	if err != nil {
@@ -300,7 +301,7 @@ func handleInternalDeleteProjectFiber(c fiber.Ctx, om *core.ObjectManager) error
 		return apiutil.Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apiutil.HandleError(c, common.ErrUnauthorized)
+		return apiutil.HandleError(c, faults.ErrUnauthorized)
 	}
 	if err := authorizeBucketScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
 		return apiutil.HandleError(c, err)
@@ -343,7 +344,7 @@ func handleInternalDeleteProjectFiber(c fiber.Ctx, om *core.ObjectManager) error
 
 func handleInternalListBucketScopesFiber(c fiber.Ctx, om *core.ObjectManager) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apiutil.HandleError(c, common.ErrUnauthorized)
+		return apiutil.HandleError(c, faults.ErrUnauthorized)
 	}
 	routeCredentialID := strings.TrimSpace(c.Params("bucket"))
 	if routeCredentialID == "" {

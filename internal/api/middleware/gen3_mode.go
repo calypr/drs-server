@@ -6,13 +6,13 @@ import (
 
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
-	internalauth "github.com/calypr/syfon/internal/auth"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/requestmeta"
 	"github.com/calypr/syfon/plugin"
 	"github.com/gofiber/fiber/v3"
 )
 
-func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authHeader string, session *internalauth.Session) error {
+func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authHeader string, session *access.Session) error {
 	if m.mock.Enabled {
 		return m.handleGen3MockAuth(c, ctx, session)
 	}
@@ -34,7 +34,7 @@ func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authH
 		}
 	} else {
 		input := &plugin.AuthenticationInput{
-			RequestID:  common.GetRequestID(ctx),
+			RequestID:  requestmeta.GetRequestID(ctx),
 			AuthHeader: authHeader,
 			Metadata:   map[string]interface{}{},
 		}
@@ -51,7 +51,7 @@ func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authH
 	}
 	session.SetSubject(output.Subject)
 	session.SetClaims(output.Claims)
-	session.SetSource(internalauth.SourceGen3Fence)
+	session.SetSource(access.SourceGen3Fence)
 
 	tokenString, err := extractBearerLikeToken(authHeader)
 	if err != nil {
@@ -72,13 +72,13 @@ func (m *AuthzMiddleware) handleGen3Auth(c fiber.Ctx, ctx context.Context, authH
 	return m.applySession(c, ctx, session)
 }
 
-func (m *AuthzMiddleware) handleGen3MockAuth(c fiber.Ctx, ctx context.Context, session *internalauth.Session) error {
+func (m *AuthzMiddleware) handleGen3MockAuth(c fiber.Ctx, ctx context.Context, session *access.Session) error {
 	if m.mock.RequireAuthHeader && !session.AuthHeaderPresent {
 		return m.applySession(c, ctx, session)
 	}
 	session.AuthHeaderPresent = true
 	session.AuthzEnforced = true
-	session.SetSource(internalauth.SourceGen3Mock)
+	session.SetSource(access.SourceGen3Mock)
 	resources, privileges := m.mockAuthPrivileges()
 	session.SetAuthorizations(resources, privileges, true)
 	if err := m.authorizeWithPlugin(ctx, session, c.Method(), c.Path()); err != nil {

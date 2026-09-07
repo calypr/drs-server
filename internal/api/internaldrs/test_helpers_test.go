@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	internalauth "github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/core"
 	"github.com/calypr/syfon/internal/urlmanager"
 	"github.com/gofiber/fiber/v3"
@@ -32,19 +32,19 @@ func dataTestAuthContext(base context.Context, mode string, authHeader bool, pri
 	if mode == "local-authz" {
 		sessionMode = "local"
 	}
-	session := internalauth.NewSession(sessionMode)
+	session := access.NewSession(sessionMode)
 	session.AuthHeaderPresent = authHeader
 	session.AuthzEnforced = sessionMode == "gen3" || mode == "local-authz"
 	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
-	return internalauth.WithSession(base, session)
+	return access.WithSession(base, session)
 }
 
 func policyTestContext(mode string, authHeader bool, privileges map[string]map[string]bool) context.Context {
-	session := internalauth.NewSession(mode)
+	session := access.NewSession(mode)
 	session.AuthHeaderPresent = authHeader
 	session.AuthzEnforced = mode == "gen3" || mode == "local"
 	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
-	return internalauth.WithSession(context.Background(), session)
+	return access.WithSession(context.Background(), session)
 }
 
 func (m *capturingMultipartURLManager) SignURL(ctx context.Context, accessId string, url string, opts urlmanager.SignOptions) (string, error) {

@@ -12,6 +12,7 @@ import (
 	"github.com/calypr/syfon/apigen/server/metricsapi"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/db"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -172,7 +173,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 
 	usage, err := s.database.GetFileUsage(ctx, objectID)
 	if err != nil {
-		if errors.Is(err, common.ErrNotFound) {
+		if errors.Is(err, faults.ErrNotFound) {
 			return metricsapi.GetMetricsFile404Response{}, nil
 		}
 		return metricsapi.GetMetricsFile500Response{}, nil
@@ -360,7 +361,7 @@ func collectScopedUsage(ctx context.Context, database db.MetricsStore, objects m
 			}
 			obj, objErr := objects.GetObject(ctx, id, "read")
 			if objErr != nil {
-				if errors.Is(objErr, common.ErrNotFound) || errors.Is(objErr, common.ErrUnauthorized) {
+				if errors.Is(objErr, faults.ErrNotFound) || errors.Is(objErr, faults.ErrUnauthorized) {
 					continue
 				}
 				return nil, models.FileUsageSummary{}, objErr
@@ -442,7 +443,7 @@ func listMultiScopedFileUsage(ctx context.Context, database db.MetricsStore, obj
 func objectInScope(ctx context.Context, objects metricsObjectReader, objectID, organization, project string) (bool, error) {
 	obj, err := objects.GetObject(ctx, objectID, "read")
 	if err != nil {
-		if errors.Is(err, common.ErrNotFound) || errors.Is(err, common.ErrUnauthorized) {
+		if errors.Is(err, faults.ErrNotFound) || errors.Is(err, faults.ErrUnauthorized) {
 			return false, nil
 		}
 		return false, err

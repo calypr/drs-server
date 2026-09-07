@@ -11,9 +11,10 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/drs"
 	syfoncommon "github.com/calypr/syfon/common"
-	"github.com/calypr/syfon/internal/authz"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/db"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/urlmanager"
 )
@@ -120,7 +121,7 @@ func (c *bucketCatalog) lookupBucketScope(ctx context.Context, organization, pro
 
 	scope, err := c.db.GetBucketScope(ctx, organization, project)
 	if err != nil {
-		if common.IsNotFoundError(err) {
+		if faults.IsNotFoundError(err) {
 			c.bucketScopeCache.set(models.BucketScope{Organization: organization, ProjectID: project}, false)
 			return models.BucketScope{}, false, nil
 		}
@@ -206,7 +207,7 @@ func (m *ObjectManager) listVisibleBucketsUncached(ctx context.Context) (map[str
 		if resourceErr != nil || strings.TrimSpace(resource) == "" {
 			continue
 		}
-		if authz.IsAuthzEnforced(ctx) && !authz.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
+		if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
 			continue
 		}
 		if _, seen := programsSeen[credentialID][resource]; seen {
@@ -257,9 +258,9 @@ func (m *ObjectManager) listVisibleBucketsUncached(ctx context.Context) (map[str
 }
 
 func (m *ObjectManager) listVisibleBucketsFromRows(ctx context.Context, lister db.BucketVisibilityLister, creds []models.S3Credential) (map[string]VisibleBucket, error) {
-	restrictToResources := authz.IsAuthzEnforced(ctx) &&
-		!authz.HasMethodAccess(ctx, objectMethodRead, []string{"/programs"}) &&
-		!authz.HasMethodAccess(ctx, objectMethodRead, []string{"/data_file"})
+	restrictToResources := access.IsAuthzEnforced(ctx) &&
+		!access.HasMethodAccess(ctx, objectMethodRead, []string{"/programs"}) &&
+		!access.HasMethodAccess(ctx, objectMethodRead, []string{"/data_file"})
 	rows, err := lister.ListBucketVisibilityRows(ctx, readableResources(ctx), true, restrictToResources)
 	if err != nil {
 		return nil, err
@@ -289,7 +290,7 @@ func (m *ObjectManager) listVisibleBucketsFromRows(ctx context.Context, lister d
 		if resourceErr != nil || strings.TrimSpace(resource) == "" {
 			continue
 		}
-		if restrictToResources && !authz.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
+		if restrictToResources && !access.HasMethodAccess(ctx, objectMethodRead, []string{resource}) {
 			continue
 		}
 		if _, seen := programsSeen[credentialID][resource]; seen {
@@ -361,7 +362,7 @@ func (m *ObjectManager) listBucketsVisibleObjects(ctx context.Context) ([]models
 	if err != nil {
 		return nil, err
 	}
-	if !authz.IsAuthzEnforced(ctx) || authz.HasMethodAccess(ctx, objectMethodRead, []string{"/programs"}) || authz.HasMethodAccess(ctx, objectMethodRead, []string{"/data_file"}) {
+	if !access.IsAuthzEnforced(ctx) || access.HasMethodAccess(ctx, objectMethodRead, []string{"/programs"}) || access.HasMethodAccess(ctx, objectMethodRead, []string{"/data_file"}) {
 		return objects, nil
 	}
 	return m.filterObjectsByMethod(ctx, objects, objectMethodRead), nil

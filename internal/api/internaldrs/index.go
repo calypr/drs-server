@@ -15,6 +15,7 @@ import (
 	"github.com/calypr/syfon/internal/api/routeutil"
 	"github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/core"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/gofiber/fiber/v3"
 )
@@ -471,12 +472,12 @@ func handleInternalUpdateFiber(c fiber.Ctx, om *core.ObjectManager) error {
 		return apiutil.HandleError(c, err)
 	}
 	if req.Size != nil && *req.Size != existing.Size {
-		return apiutil.HandleError(c, fmt.Errorf("%w: object size is immutable", common.ErrConflict))
+		return apiutil.HandleError(c, fmt.Errorf("%w: object size is immutable", faults.ErrConflict))
 	}
 	if incomingSHA, ok := common.CanonicalSHA256(update.Checksums); ok {
 		storedSHA, stored := common.CanonicalSHA256(existing.Checksums)
 		if stored && incomingSHA != storedSHA {
-			return apiutil.HandleError(c, fmt.Errorf("%w: object checksum identity is immutable", common.ErrConflict))
+			return apiutil.HandleError(c, fmt.Errorf("%w: object checksum identity is immutable", faults.ErrConflict))
 		}
 	}
 	merged, err := core.MergeInternalObjectUpdate(*existing, update, id, time.Now().UTC())

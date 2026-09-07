@@ -9,8 +9,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/server/metricsapi"
 	sycommon "github.com/calypr/syfon/common"
+	"github.com/calypr/syfon/internal/access"
 	apimiddleware "github.com/calypr/syfon/internal/api/middleware"
-	"github.com/calypr/syfon/internal/authz"
 	intcommon "github.com/calypr/syfon/internal/common"
 	"github.com/calypr/syfon/internal/models"
 )
@@ -71,7 +71,7 @@ func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, reques
 }
 
 func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.RecordProviderTransferEventsJSONRequestBody) (int, bool) {
-	if !authz.IsGen3Mode(ctx) {
+	if !access.IsGen3Mode(ctx) {
 		return 0, true
 	}
 	if apimiddleware.MissingGen3AuthHeader(ctx) {
@@ -85,7 +85,7 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 		if !ok {
 			return http.StatusForbidden, false
 		}
-		if !authz.HasAnyMethodAccess(ctx, []string{resource}, "create", "update") {
+		if !access.HasAnyMethodAccess(ctx, []string{resource}, "create", "update") {
 			return http.StatusForbidden, false
 		}
 	}

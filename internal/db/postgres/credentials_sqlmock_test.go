@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/calypr/syfon/internal/common"
-	"github.com/calypr/syfon/internal/crypto"
-	"github.com/calypr/syfon/internal/models"
 	"regexp"
 	"testing"
+
+	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/crypto"
+	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/internal/models"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -340,7 +342,7 @@ func TestGetAndListBucketScopes(t *testing.T) {
 			WillReturnError(sql.ErrNoRows)
 
 		_, err := pg.GetBucketScope(context.Background(), "org", "proj")
-		if !errors.Is(err, common.ErrNotFound) {
+		if !errors.Is(err, faults.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
 	})

@@ -9,18 +9,19 @@ import (
 
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
 func (db *SqliteDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("%w: object not found", common.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
 	}
 	if err != nil {
 		return "", err
@@ -48,10 +49,10 @@ func (db *SqliteDB) GetBulkObjects(ctx context.Context, ids []string) ([]models.
 					obj, resolveErr = db.GetObject(ctx, resolved)
 					ok = resolveErr == nil
 				}
-			} else if !errors.Is(resolveErr, common.ErrNotFound) {
+			} else if !errors.Is(resolveErr, faults.ErrNotFound) {
 				return nil, resolveErr
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, common.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
 				return nil, resolveErr
 			}
 		}

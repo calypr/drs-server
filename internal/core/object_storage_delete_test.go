@@ -13,6 +13,7 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/calypr/syfon/apigen/server/drs"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 )
@@ -117,10 +118,10 @@ func TestBulkDeleteObjectsWithStorageRejectsWithoutSideEffects(t *testing.T) {
 	}
 	om := NewObjectManager(db, &capturingURLManager{})
 
-	if err := om.DeleteObjectWithOptions(context.Background(), "obj-1", DeleteOptions{DeleteStorageData: true}); !errors.Is(err, common.ErrConflict) {
+	if err := om.DeleteObjectWithOptions(context.Background(), "obj-1", DeleteOptions{DeleteStorageData: true}); !errors.Is(err, faults.ErrConflict) {
 		t.Fatalf("expected explicit single-object storage deletion conflict, got %v", err)
 	}
-	if err := om.BulkDeleteObjectsWithOptions(context.Background(), []string{"obj-1", "obj-2", "obj-3"}, DeleteOptions{DeleteStorageData: true}); !errors.Is(err, common.ErrConflict) {
+	if err := om.BulkDeleteObjectsWithOptions(context.Background(), []string{"obj-1", "obj-2", "obj-3"}, DeleteOptions{DeleteStorageData: true}); !errors.Is(err, faults.ErrConflict) {
 		t.Fatalf("expected explicit storage deletion conflict, got %v", err)
 	}
 	if deleter.deleteObjectCalls != 0 {

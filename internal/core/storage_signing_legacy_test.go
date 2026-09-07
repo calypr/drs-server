@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 	"github.com/calypr/syfon/internal/testutils"
 	"github.com/calypr/syfon/internal/urlmanager"
@@ -129,7 +129,7 @@ func TestObjectManagerLegacyS3DownloadCompatibility(t *testing.T) {
 			"HTAN_INT|one": {Organization: "HTAN_INT", ProjectID: "one", Bucket: "bforepc-a", PathPrefix: "bforepc-prod"},
 			"HTAN_INT|two": {Organization: "HTAN_INT", ProjectID: "two", Bucket: "bforepc-b", PathPrefix: "bforepc-prod"},
 		}, nil)
-		if _, err := om.SignObjectURL(context.Background(), obj, legacy, urlmanager.SignOptions{}); !errors.Is(err, common.ErrConflict) {
+		if _, err := om.SignObjectURL(context.Background(), obj, legacy, urlmanager.SignOptions{}); !errors.Is(err, faults.ErrConflict) {
 			t.Fatalf("expected conflicting legacy mapping error, got %v", err)
 		}
 	})

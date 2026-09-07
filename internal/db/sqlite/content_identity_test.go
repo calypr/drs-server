@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/server/drs"
-	"github.com/calypr/syfon/internal/auth"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -29,7 +30,7 @@ func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T
 	if err := db.RegisterObjects(testIdentityAuth(resourceA, "create", "read"), []models.InternalObject{first}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []models.InternalObject{second}); !errors.Is(err, common.ErrUnauthorized) {
+	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []models.InternalObject{second}); !errors.Is(err, faults.ErrUnauthorized) {
 		t.Fatalf("expected missing target B create to deny merge, got %v", err)
 	}
 
@@ -106,7 +107,7 @@ func TestContentIdentityReplaceIsAtomicAndPreservesSHA(t *testing.T) {
 	}
 	bad := replacement
 	bad.Size++
-	if err := db.ReplaceObjects(ctx, []models.InternalObject{bad}); !errors.Is(err, common.ErrConflict) {
+	if err := db.ReplaceObjects(ctx, []models.InternalObject{bad}); !errors.Is(err, faults.ErrConflict) {
 		t.Fatalf("expected immutable-size conflict, got %v", err)
 	}
 	got, err = db.GetObject(context.Background(), "replace")
@@ -230,7 +231,7 @@ func testIdentityAuth(resource string, methods ...string) context.Context {
 }
 
 func withIdentityPrivileges(ctx context.Context, resource string, methods ...string) context.Context {
-	session := auth.FromContext(ctx)
+	session := access.FromContext(ctx)
 	privileges := make(map[string]map[string]bool, len(session.Privileges)+1)
 	for existing, existingMethods := range session.Privileges {
 		privileges[existing] = make(map[string]bool, len(existingMethods))
@@ -247,5 +248,5 @@ func withIdentityPrivileges(ctx context.Context, resource string, methods ...str
 	resources := append([]string(nil), session.Resources...)
 	resources = append(resources, resource)
 	session.SetAuthorizations(resources, privileges, true)
-	return auth.WithSession(ctx, session)
+	return access.WithSession(ctx, session)
 }

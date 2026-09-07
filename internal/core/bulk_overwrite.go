@@ -9,6 +9,7 @@ import (
 
 	sycommon "github.com/calypr/syfon/common"
 	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/models"
 )
 
@@ -82,7 +83,7 @@ func (m *ObjectManager) BulkOverwriteObjects(ctx context.Context, organization, 
 		if aliasErr == nil && canonicalID != sourceDID {
 			return result, fmt.Errorf("%w: target DID %q is an alias for %q", ErrBulkOverwriteConflict, sourceDID, canonicalID)
 		}
-		if aliasErr != nil && !common.IsNotFoundError(aliasErr) {
+		if aliasErr != nil && !faults.IsNotFoundError(aliasErr) {
 			return result, aliasErr
 		}
 		targetDID := sourceDID
@@ -121,7 +122,7 @@ func (m *ObjectManager) BulkOverwriteObjects(ctx context.Context, organization, 
 				return result, err
 			}
 			if !m.hasObjectMethod(ctx, &candidate, objectMethodUpdate) {
-				return result, common.ErrUnauthorized
+				return result, faults.ErrUnauthorized
 			}
 			result.Replaced++
 		} else {
@@ -129,7 +130,7 @@ func (m *ObjectManager) BulkOverwriteObjects(ctx context.Context, organization, 
 				return result, err
 			}
 			if !m.hasObjectMethod(ctx, &candidate, objectMethodCreate) {
-				return result, common.ErrUnauthorized
+				return result, faults.ErrUnauthorized
 			}
 			result.Created++
 		}

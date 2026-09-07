@@ -1,14 +1,16 @@
-package common
+package access
 
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/calypr/syfon/internal/faults"
 )
 
 func TestAuthorizationError_UnwrapAndClassifiers(t *testing.T) {
 	err := &AuthorizationError{Method: "read", RecordID: "obj-1"}
-	if !errors.Is(err, ErrUnauthorized) {
+	if !errors.Is(err, faults.ErrUnauthorized) {
 		t.Fatalf("expected AuthorizationError to unwrap to ErrUnauthorized")
 	}
 }
@@ -27,14 +29,3 @@ func TestAuthorizationError_PublicMessage(t *testing.T) {
 		t.Fatalf("unexpected public message: %q", msg)
 	}
 }
-
-func TestNotFoundClassifier(t *testing.T) {
-	wrapped := errors.New("outer: " + ErrNotFound.Error())
-	if IsNotFoundError(wrapped) {
-		t.Fatalf("expected direct string wrapping not to satisfy errors.Is")
-	}
-	if !IsNotFoundError(ErrNotFound) {
-		t.Fatalf("expected ErrNotFound to classify")
-	}
-}
-
