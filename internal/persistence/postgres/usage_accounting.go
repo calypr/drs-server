@@ -58,7 +58,7 @@ func (db *PostgresDB) GetFileUsage(ctx context.Context, objectID string) (*usage
 		&lastDownload,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+		return nil, faults.ErrFileUsageNotFound
 	}
 	if err != nil {
 		return nil, err

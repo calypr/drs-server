@@ -275,7 +275,7 @@ func (db *PostgresDB) GetBucketScope(ctx context.Context, organization, projectI
 		&s.Organization, &s.ProjectID, &s.CredentialID, &s.Bucket, &s.PathPrefix,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return nil, faults.ErrBucketScopeNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bucket scope: %w", err)
@@ -321,7 +321,7 @@ func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, proje
 		return fmt.Errorf("failed to inspect deleted bucket scope count: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return faults.ErrBucketScopeNotFound
 	}
 	return nil
 }

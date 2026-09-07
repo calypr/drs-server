@@ -149,10 +149,10 @@ func (db *PostgresDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *ob
 		return "", err
 	}
 	if wasExisting && !publicRead && (postgresHasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !postgresCanReadContent(ctx, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", faults.ErrAccessDenied
 	}
 	if !postgresCanCreateResources(ctx, resources, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", faults.ErrAccessDenied
 	}
 	if err := postgresMergeContentRowTx(ctx, tx, row, obj, resources, currentResources); err != nil {
 		return "", err
@@ -503,7 +503,7 @@ func postgresRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method 
 		return err
 	}
 	if !access.HasMethodAccess(ctx, method, resources) {
-		return faults.ErrUnauthorized
+		return faults.ErrAccessDenied
 	}
 	return nil
 }

@@ -1,17 +1,17 @@
 package objects
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
 	clienthash "github.com/calypr/syfon/client/hash"
+	"github.com/calypr/syfon/internal/faults"
 )
 
-var ErrNoValidSHA256 = errors.New("no valid sha256 values provided")
-var ErrConflictingSHA256 = errors.New("conflicting sha256 values provided")
-var ErrAccessMethodsRequired = errors.New("candidate must include at least one access method with a non-empty url")
+var ErrNoValidSHA256 = faults.New(faults.CodeNoValidSHA256, faults.CategoryInvalidInput, "no valid sha256 values provided")
+var ErrConflictingSHA256 = faults.New(faults.CodeConflictingSHA256, faults.CategoryConflict, "conflicting sha256 values provided")
+var ErrAccessMethodsRequired = faults.New(faults.CodeAccessMethodsRequired, faults.CategoryInvalidInput, "candidate must include at least one access method with a non-empty url")
 
 var sha256Like = regexp.MustCompile(`^[A-Fa-f0-9]{64}$`)
 

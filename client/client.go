@@ -40,27 +40,87 @@ type BasicAuth struct {
 
 type APIError = apierror.APIError
 type ErrorCode = apierror.Code
+type ErrorCategory = apierror.Category
 
 const (
-	ErrorCodeNotFound      = apierror.CodeNotFound
-	ErrorCodeUnauthorized  = apierror.CodeUnauthorized
-	ErrorCodeForbidden     = apierror.CodeForbidden
-	ErrorCodeConflict      = apierror.CodeConflict
-	ErrorCodeInvalidInput  = apierror.CodeInvalidInput
-	ErrorCodeRateLimited   = apierror.CodeRateLimited
-	ErrorCodeUnavailable   = apierror.CodeUnavailable
-	ErrorCodeInternal      = apierror.CodeInternal
-	ErrorCodeRequestFailed = apierror.CodeRequestFailed
+	ErrorCodeNotFound                  = apierror.CodeNotFound
+	ErrorCodeUnauthorized              = apierror.CodeUnauthorized
+	ErrorCodeForbidden                 = apierror.CodeForbidden
+	ErrorCodeConflict                  = apierror.CodeConflict
+	ErrorCodeInvalidInput              = apierror.CodeInvalidInput
+	ErrorCodeRateLimited               = apierror.CodeRateLimited
+	ErrorCodeUnavailable               = apierror.CodeUnavailable
+	ErrorCodeInternal                  = apierror.CodeInternal
+	ErrorCodeRequestFailed             = apierror.CodeRequestFailed
+	ErrorCodeObjectNotFound            = apierror.CodeObjectNotFound
+	ErrorCodeBucketScopeNotFound       = apierror.CodeBucketScopeNotFound
+	ErrorCodeFileUsageNotFound         = apierror.CodeFileUsageNotFound
+	ErrorCodeMultipartUploadNotFound   = apierror.CodeMultipartUploadNotFound
+	ErrorCodeNoValidSHA256             = apierror.CodeNoValidSHA256
+	ErrorCodeConflictingSHA256         = apierror.CodeConflictingSHA256
+	ErrorCodeAccessMethodsRequired     = apierror.CodeAccessMethodsRequired
+	ErrorCodeObjectSizeImmutable       = apierror.CodeObjectSizeImmutable
+	ErrorCodeObjectChecksumImmutable   = apierror.CodeObjectChecksumImmutable
+	ErrorCodeBulkOverwriteConflict     = apierror.CodeBulkOverwriteConflict
+	ErrorCodeBucketNotConfigured       = apierror.CodeBucketNotConfigured
+	ErrorCodeObjectLocationUnavailable = apierror.CodeObjectLocationUnavailable
+	ErrorCodeAuthenticationRequired    = apierror.CodeAuthenticationRequired
+	ErrorCodeAccessDenied              = apierror.CodeAccessDenied
+	ErrorCodeStorageInvalid            = apierror.CodeStorageInvalid
+	ErrorCodeStorageNotFound           = apierror.CodeStorageNotFound
+	ErrorCodeStorageForbidden          = apierror.CodeStorageForbidden
+	ErrorCodeStorageUnavailable        = apierror.CodeStorageUnavailable
+	ErrorCodeStorageIncomplete         = apierror.CodeStorageIncomplete
+	ErrorCodeStorageUnsupported        = apierror.CodeStorageUnsupported
+	ErrorCodeStorageProviderError      = apierror.CodeStorageProviderError
+	ErrorCodeProjectScopeNotFound      = apierror.CodeProjectScopeNotFound
+	ErrorCodeStorageCredentialMissing  = apierror.CodeStorageCredentialMissing
+	ErrorCodeStorageBucketUnavailable  = apierror.CodeStorageBucketUnavailable
+	ErrorCodeStorageListingIncomplete  = apierror.CodeStorageListingIncomplete
+
+	ErrorCategoryNotFound     = apierror.CategoryNotFound
+	ErrorCategoryUnauthorized = apierror.CategoryUnauthorized
+	ErrorCategoryForbidden    = apierror.CategoryForbidden
+	ErrorCategoryConflict     = apierror.CategoryConflict
+	ErrorCategoryInvalidInput = apierror.CategoryInvalidInput
+	ErrorCategoryRateLimited  = apierror.CategoryRateLimited
+	ErrorCategoryUnavailable  = apierror.CategoryUnavailable
+	ErrorCategoryInternal     = apierror.CategoryInternal
 )
 
 var (
-	ErrNotFound     = apierror.ErrNotFound
-	ErrUnauthorized = apierror.ErrUnauthorized
-	ErrForbidden    = apierror.ErrForbidden
-	ErrConflict     = apierror.ErrConflict
-	ErrInvalidInput = apierror.ErrInvalidInput
-	ErrRateLimited  = apierror.ErrRateLimited
-	ErrUnavailable  = apierror.ErrUnavailable
+	ErrNotFound                  = apierror.ErrNotFound
+	ErrUnauthorized              = apierror.ErrUnauthorized
+	ErrForbidden                 = apierror.ErrForbidden
+	ErrConflict                  = apierror.ErrConflict
+	ErrInvalidInput              = apierror.ErrInvalidInput
+	ErrRateLimited               = apierror.ErrRateLimited
+	ErrUnavailable               = apierror.ErrUnavailable
+	ErrObjectNotFound            = apierror.ErrObjectNotFound
+	ErrBucketScopeNotFound       = apierror.ErrBucketScopeNotFound
+	ErrFileUsageNotFound         = apierror.ErrFileUsageNotFound
+	ErrMultipartUploadNotFound   = apierror.ErrMultipartUploadNotFound
+	ErrNoValidSHA256             = apierror.ErrNoValidSHA256
+	ErrConflictingSHA256         = apierror.ErrConflictingSHA256
+	ErrAccessMethodsRequired     = apierror.ErrAccessMethodsRequired
+	ErrObjectSizeImmutable       = apierror.ErrObjectSizeImmutable
+	ErrObjectChecksumImmutable   = apierror.ErrObjectChecksumImmutable
+	ErrBulkOverwriteConflict     = apierror.ErrBulkOverwriteConflict
+	ErrBucketNotConfigured       = apierror.ErrBucketNotConfigured
+	ErrObjectLocationUnavailable = apierror.ErrObjectLocationUnavailable
+	ErrAuthenticationRequired    = apierror.ErrAuthenticationRequired
+	ErrAccessDenied              = apierror.ErrAccessDenied
+	ErrStorageInvalid            = apierror.ErrStorageInvalid
+	ErrStorageNotFound           = apierror.ErrStorageNotFound
+	ErrStorageForbidden          = apierror.ErrStorageForbidden
+	ErrStorageUnavailable        = apierror.ErrStorageUnavailable
+	ErrStorageIncomplete         = apierror.ErrStorageIncomplete
+	ErrStorageUnsupported        = apierror.ErrStorageUnsupported
+	ErrStorageProviderError      = apierror.ErrStorageProviderError
+	ErrProjectScopeNotFound      = apierror.ErrProjectScopeNotFound
+	ErrStorageCredentialMissing  = apierror.ErrStorageCredentialMissing
+	ErrStorageBucketUnavailable  = apierror.ErrStorageBucketUnavailable
+	ErrStorageListingIncomplete  = apierror.ErrStorageListingIncomplete
 )
 
 // Client implements syfonclient.SyfonClient

@@ -9,7 +9,8 @@ runtime boundary is visible in code review.
 
 Each API has one generated package containing its models, client bindings, and
 Fiber v3 server bindings. The generated packages are `drs`, `lfsapi`,
-`bucketapi`, `metricsapi`, and `internalapi`.
+`bucketapi`, `metricsapi`, and `internalapi`. Their shared error envelope is
+defined once in `openapi/error.openapi.yaml` and generated into `errorapi`.
 
 The generator configs live in `apigen/codegen/`:
 

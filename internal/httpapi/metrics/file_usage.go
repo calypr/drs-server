@@ -204,7 +204,7 @@ func (s *MetricsServer) readableBulkObjectIDs(ctx context.Context, access metric
 func (s *MetricsServer) objectInScope(ctx context.Context, objectID string, access metricsAccess) (bool, error) {
 	items, err := s.reporter.ListReadableObjectIDs(ctx, access.scopeQuery(), []string{objectID})
 	if err != nil {
-		if errors.Is(err, faults.ErrNotFound) || errors.Is(err, faults.ErrUnauthorized) {
+		if errors.Is(err, faults.ErrNotFound) || errors.Is(err, faults.ErrAccessDenied) {
 			return false, nil
 		}
 		return false, err

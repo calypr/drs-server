@@ -453,18 +453,6 @@ func handleInternalDeleteProjectBucketObjectsFiber(service *projectstorage.Proje
 }
 
 func handleInspectStorageError(c fiber.Ctx, err error) error {
-	if inspectErr, ok := err.(*projectstorage.Error); ok {
-		switch inspectErr.Kind {
-		case projectstorage.ErrorInvalidInput, projectstorage.ErrorUnsupported:
-			return response.Reject(c, fiber.StatusBadRequest, inspectErr.Error())
-		case projectstorage.ErrorScopeNotFound, projectstorage.ErrorCredentialMissing, projectstorage.ErrorObjectNotFound:
-			return response.Reject(c, fiber.StatusNotFound, inspectErr.Error())
-		case projectstorage.ErrorBucketUnavailable:
-			return response.Reject(c, fiber.StatusConflict, inspectErr.Error())
-		case projectstorage.ErrorPermissionDenied:
-			return response.Reject(c, fiber.StatusForbidden, inspectErr.Error())
-		}
-	}
 	return response.HandleError(c, err)
 }
 

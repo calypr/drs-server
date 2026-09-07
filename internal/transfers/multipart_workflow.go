@@ -2,15 +2,15 @@ package transfers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/storage"
 )
 
 // ErrMultipartUploadNotFound indicates that a multipart upload is not owned by this lifecycle.
-var ErrMultipartUploadNotFound = errors.New("multipart upload not found")
+var ErrMultipartUploadNotFound = faults.New(faults.CodeMultipartUploadNotFound, faults.CategoryNotFound, "multipart upload not found")
 
 // MultipartLifecycle owns the provider target associated with each upload ID.
 type MultipartLifecycle struct {

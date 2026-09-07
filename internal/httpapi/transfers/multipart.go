@@ -108,7 +108,7 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 
 		urlStr, err := lifecycle.SignPart(c.Context(), req.UploadId, req.PartNumber)
 		if errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
+			return response.HandleError(c, err)
 		}
 		if err != nil {
 			return response.HandleError(c, err)
@@ -132,7 +132,7 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 			parts[i] = storage.CompletedPart{ETag: p.ETag, PartNumber: p.PartNumber}
 		}
 		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-			return response.Reject(c, fiber.StatusNotFound, "Upload ID not found")
+			return response.HandleError(c, err)
 		} else if err != nil {
 			return response.HandleError(c, err)
 		}

@@ -141,10 +141,10 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 		return "", err
 	}
 	if wasExisting && !publicRead && (sqliteHasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !sqliteCanReadContent(ctx, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", faults.ErrAccessDenied
 	}
 	if !sqliteCanCreateResources(ctx, resources, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", faults.ErrAccessDenied
 	}
 	if err := mergeContentRowTx(ctx, tx, row, obj, resources, currentResources); err != nil {
 		return "", err
@@ -505,7 +505,7 @@ func sqliteRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method st
 		return err
 	}
 	if !access.HasMethodAccess(ctx, method, resources) {
-		return faults.ErrUnauthorized
+		return faults.ErrAccessDenied
 	}
 	return nil
 }

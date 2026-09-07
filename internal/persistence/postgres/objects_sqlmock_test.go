@@ -60,6 +60,9 @@ func TestDeleteObject(t *testing.T) {
 		if !errors.Is(err, faults.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
+		if code, ok := faults.CodeOf(err); !ok || code != faults.CodeObjectNotFound {
+			t.Fatalf("expected exact object-not-found code, got %q", code)
+		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Fatalf("unmet expectations: %v", err)
 		}

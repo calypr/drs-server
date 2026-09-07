@@ -14,3 +14,20 @@ func TestNotFoundClassifier(t *testing.T) {
 		t.Fatalf("expected ErrNotFound to classify")
 	}
 }
+
+func TestDefinitionMatchesItsExactCodeAndBroadCategory(t *testing.T) {
+	exact := Define(CodeObjectNotFound, CategoryNotFound, "missing object")
+	if !errors.Is(exact, ErrNotFound) {
+		t.Fatal("exact definition should match its broad category sentinel")
+	}
+	if !errors.Is(exact, exact) {
+		t.Fatal("exact definition should match itself")
+	}
+	other := Define(CodeFileUsageNotFound, CategoryNotFound, "missing usage")
+	if errors.Is(exact, other) {
+		t.Fatal("different exact definitions must not match")
+	}
+	if errors.Unwrap(exact) != nil {
+		t.Fatal("category must be represented by Is, not causal unwrapping")
+	}
+}

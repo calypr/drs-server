@@ -1346,6 +1346,8 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 	}
 	if _, err := db.GetFileUsage(ctx, oid); err == nil {
 		t.Fatalf("expected not found for missing object usage")
+	} else if code, ok := faults.CodeOf(err); !ok || code != faults.CodeFileUsageNotFound {
+		t.Fatalf("expected exact file-usage-not-found code, got %q", code)
 	}
 
 	now := time.Now().UTC()
@@ -2010,6 +2012,9 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	_, err = db.GetBucketScope(ctx, "calypr", "missing")
 	if !errors.Is(err, faults.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing scope, got: %v", err)
+	}
+	if code, ok := faults.CodeOf(err); !ok || code != faults.CodeBucketScopeNotFound {
+		t.Fatalf("expected exact bucket-scope-not-found code, got %q", code)
 	}
 }
 

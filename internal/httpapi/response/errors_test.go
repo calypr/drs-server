@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
@@ -27,7 +27,7 @@ func (e publicMessageError) Error() string {
 }
 
 func (e publicMessageError) Unwrap() error {
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func (e publicMessageError) PublicMessage() string {
@@ -36,28 +36,29 @@ func (e publicMessageError) PublicMessage() string {
 
 func TestHandleError(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		ctx         context.Context
-		wantStatus  int
-		wantCode    faults.Code
-		wantMessage string
+		name         string
+		err          error
+		ctx          context.Context
+		wantStatus   int
+		wantCode     faults.Code
+		wantCategory faults.Category
+		wantMessage  string
 	}{
 		{name: "nil", wantStatus: http.StatusOK},
-		{name: "unknown", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, wantCode: "internal_error", wantMessage: "Internal Server Error"},
-		{name: "not found", err: faults.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: "not_found", wantMessage: "Resource not found"},
-		{name: "unauthorized", err: faults.ErrUnauthorized, wantStatus: http.StatusForbidden, wantCode: "forbidden", wantMessage: "Unauthorized"},
-		{name: "unauthorized gen3 without header", err: faults.ErrUnauthorized, ctx: sessionContext("gen3", false), wantStatus: http.StatusUnauthorized, wantCode: "unauthorized", wantMessage: "Unauthorized"},
-		{name: "public unauthorized message", err: publicMessageError{message: "object is outside your grants"}, wantStatus: http.StatusForbidden, wantCode: "forbidden", wantMessage: "object is outside your grants"},
-		{name: "public unauthorized message gen3 without header", err: publicMessageError{message: "object is outside your grants"}, ctx: sessionContext("gen3", false), wantStatus: http.StatusUnauthorized, wantCode: "unauthorized", wantMessage: "Unauthorized"},
-		{name: "public unauthorized message gen3 with header", err: publicMessageError{message: "object is outside your grants"}, ctx: sessionContext("gen3", true), wantStatus: http.StatusForbidden, wantCode: "forbidden", wantMessage: "object is outside your grants"},
-		{name: "forbidden", err: faults.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: "forbidden", wantMessage: "Forbidden"},
-		{name: "conflict", err: faults.ErrConflict, wantStatus: http.StatusConflict, wantCode: "conflict", wantMessage: "conflict"},
-		{name: "invalid input", err: faults.ErrInvalidInput, wantStatus: http.StatusBadRequest, wantCode: "invalid_input", wantMessage: "invalid input"},
-		{name: "rate limited", err: faults.ErrRateLimited, wantStatus: http.StatusTooManyRequests, wantCode: "rate_limited", wantMessage: "Rate limit exceeded"},
-		{name: "unavailable", err: faults.ErrUnavailable, wantStatus: http.StatusServiceUnavailable, wantCode: "unavailable", wantMessage: "Service Unavailable"},
-		{name: "invalid checksum", err: objects.ErrNoValidSHA256, wantStatus: http.StatusBadRequest, wantCode: "invalid_input", wantMessage: "A valid SHA256 checksum is required"},
-		{name: "missing access methods", err: objects.ErrAccessMethodsRequired, wantStatus: http.StatusBadRequest, wantCode: "invalid_input", wantMessage: objects.ErrAccessMethodsRequired.Error()},
+		{name: "unknown", err: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, wantCode: faults.CodeInternal, wantCategory: faults.CategoryInternal, wantMessage: "Internal Server Error"},
+		{name: "not found", err: faults.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: faults.CodeNotFound, wantCategory: faults.CategoryNotFound, wantMessage: "Resource not found"},
+		{name: "legacy unauthorized", err: faults.ErrUnauthorized, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "Unauthorized"},
+		{name: "legacy unauthorized without credentials", err: faults.ErrUnauthorized, ctx: sessionContext("gen3", false), wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized, wantMessage: "Unauthorized"},
+		{name: "authentication required", err: faults.ErrAuthenticationRequired, wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized, wantMessage: "Unauthorized"},
+		{name: "access denied", err: faults.ErrAccessDenied, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "Forbidden"},
+		{name: "public access denied message", err: publicMessageError{message: "object is outside your grants"}, wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden, wantMessage: "object is outside your grants"},
+		{name: "forbidden", err: faults.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: faults.CodeForbidden, wantCategory: faults.CategoryForbidden, wantMessage: "Forbidden"},
+		{name: "conflict", err: faults.ErrConflict, wantStatus: http.StatusConflict, wantCode: faults.CodeConflict, wantCategory: faults.CategoryConflict, wantMessage: "conflict"},
+		{name: "invalid input", err: faults.ErrInvalidInput, wantStatus: http.StatusBadRequest, wantCode: faults.CodeInvalidInput, wantCategory: faults.CategoryInvalidInput, wantMessage: "invalid input"},
+		{name: "rate limited", err: faults.ErrRateLimited, wantStatus: http.StatusTooManyRequests, wantCode: faults.CodeRateLimited, wantCategory: faults.CategoryRateLimited, wantMessage: "Rate limit exceeded"},
+		{name: "unavailable", err: faults.ErrUnavailable, wantStatus: http.StatusServiceUnavailable, wantCode: faults.CodeUnavailable, wantCategory: faults.CategoryUnavailable, wantMessage: "Service Unavailable"},
+		{name: "invalid checksum", err: objects.ErrNoValidSHA256, wantStatus: http.StatusBadRequest, wantCode: faults.CodeNoValidSHA256, wantCategory: faults.CategoryInvalidInput, wantMessage: "A valid SHA256 checksum is required"},
+		{name: "missing access methods", err: objects.ErrAccessMethodsRequired, wantStatus: http.StatusBadRequest, wantCode: faults.CodeAccessMethodsRequired, wantCategory: faults.CategoryInvalidInput, wantMessage: objects.ErrAccessMethodsRequired.Error()},
 	}
 
 	for _, tc := range tests {
@@ -82,7 +83,7 @@ func TestHandleError(t *testing.T) {
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 					t.Fatalf("decode response body: %v", err)
 				}
-				if body.Code != tc.wantCode || body.Status != tc.wantStatus || body.Message != tc.wantMessage || body.Msg != tc.wantMessage {
+				if body.Code != tc.wantCode || body.Category != tc.wantCategory || body.Status != tc.wantStatus || body.StatusCode == nil || *body.StatusCode != tc.wantStatus || body.Message != tc.wantMessage || body.Msg == nil || *body.Msg != tc.wantMessage {
 					t.Fatalf("unexpected error body: %+v", body)
 				}
 			}
@@ -93,7 +94,7 @@ func TestHandleError(t *testing.T) {
 func TestHandleErrorCarriesWrappedFaultCodeAndDetail(t *testing.T) {
 	app := fiber.New()
 	app.Get("/", func(c fiber.Ctx) error {
-		return HandleError(c, fmt.Errorf("%w: object size is immutable", faults.ErrConflict))
+		return HandleError(c, objectrecords.ErrObjectSizeImmutable)
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
@@ -104,21 +105,24 @@ func TestHandleErrorCarriesWrappedFaultCodeAndDetail(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if body.Code != "conflict" || body.Status != http.StatusConflict || body.Message != "conflict: object size is immutable" {
+	if body.Code != faults.CodeObjectSizeImmutable || body.Category != faults.CategoryConflict || body.Status != http.StatusConflict || body.Message != "object size is immutable" {
 		t.Fatalf("unexpected error body: %+v", body)
 	}
 }
 
 func TestReject(t *testing.T) {
 	tests := []struct {
-		name       string
-		status     int
-		message    string
-		wantStatus int
-		wantCode   faults.Code
+		name         string
+		status       int
+		message      string
+		wantStatus   int
+		wantCode     faults.Code
+		wantCategory faults.Category
 	}{
-		{name: "client rejection", status: http.StatusBadRequest, message: "bucket is required", wantStatus: http.StatusBadRequest, wantCode: "invalid_input"},
-		{name: "server rejection", status: http.StatusInternalServerError, message: "dependency unavailable", wantStatus: http.StatusInternalServerError, wantCode: "internal_error"},
+		{name: "client rejection", status: http.StatusBadRequest, message: "bucket is required", wantStatus: http.StatusBadRequest, wantCode: faults.CodeInvalidInput, wantCategory: faults.CategoryInvalidInput},
+		{name: "authentication rejection", status: http.StatusUnauthorized, message: "Unauthorized", wantStatus: http.StatusUnauthorized, wantCode: faults.CodeAuthenticationRequired, wantCategory: faults.CategoryUnauthorized},
+		{name: "authorization rejection", status: http.StatusForbidden, message: "Forbidden", wantStatus: http.StatusForbidden, wantCode: faults.CodeAccessDenied, wantCategory: faults.CategoryForbidden},
+		{name: "server rejection", status: http.StatusInternalServerError, message: "dependency unavailable", wantStatus: http.StatusInternalServerError, wantCode: faults.CodeInternal, wantCategory: faults.CategoryInternal},
 	}
 
 	for _, tc := range tests {
@@ -143,7 +147,7 @@ func TestReject(t *testing.T) {
 			if tc.status >= http.StatusInternalServerError {
 				wantMessage = http.StatusText(tc.status)
 			}
-			if body.Code != tc.wantCode || body.Status != tc.wantStatus || body.Message != wantMessage {
+			if body.Code != tc.wantCode || body.Category != tc.wantCategory || body.Status != tc.wantStatus || body.Message != wantMessage {
 				t.Fatalf("unexpected error body: %+v", body)
 			}
 		})
@@ -164,7 +168,7 @@ func TestRejectIncludesRequestID(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if body.RequestID != "request-123" || body.Code != "rate_limited" {
+	if body.RequestId == nil || *body.RequestId != "request-123" || body.Code != "rate_limited" {
 		t.Fatalf("unexpected error body: %+v", body)
 	}
 }

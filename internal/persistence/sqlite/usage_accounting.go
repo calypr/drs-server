@@ -106,7 +106,7 @@ func (db *SqliteDB) GetFileUsage(ctx context.Context, objectID string) (*usage.F
 		&lastDownload,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+		return nil, faults.ErrFileUsageNotFound
 	}
 	if err != nil {
 		return nil, err

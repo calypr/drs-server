@@ -11,12 +11,14 @@ LFS_OPENAPI ?= $(OPENAPI_DIR)/lfs.openapi.yaml
 BUCKET_OPENAPI ?= $(OPENAPI_DIR)/bucket.openapi.yaml
 METRICS_OPENAPI ?= $(OPENAPI_DIR)/metrics.openapi.yaml
 INTERNAL_OPENAPI ?= $(OPENAPI_DIR)/internal.openapi.yaml
+ERROR_OPENAPI ?= $(OPENAPI_DIR)/error.openapi.yaml
 SCHEMAS_SUBMODULE ?= data-repository-service-schemas
 OAPI_DRS_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-drs.yaml
 OAPI_LFS_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-lfs.yaml
 OAPI_BUCKET_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-bucket.yaml
 OAPI_METRICS_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-metrics.yaml
 OAPI_INTERNAL_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-internal.yaml
+OAPI_ERROR_CONFIG ?= $(CODEGEN_CONFIG_DIR)/oapi-error.yaml
 
 AUTO_INIT_SUBMODULE ?= 0
 GOCACHE ?= $(PWD)/.gocache
@@ -90,7 +92,9 @@ gen:
 .PHONY: gen-api
 gen-api:
 	@set -euo pipefail; \
-	mkdir -p apigen/drs apigen/lfsapi apigen/bucketapi apigen/metricsapi apigen/internalapi; \
+	mkdir -p apigen/errorapi apigen/drs apigen/lfsapi apigen/bucketapi apigen/metricsapi apigen/internalapi; \
+	echo "Generating the shared API error model..."; \
+	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_ERROR_CONFIG)" "$(ERROR_OPENAPI)" > apigen/errorapi/error.gen.go; \
 	echo "Generating combined DRS client and Fiber server bindings..."; \
 	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_DRS_CONFIG)" "$(OPENAPI_DIR)/openapi.yaml" > apigen/drs/drs.gen.go; \
 	echo "Generating combined LFS client and Fiber server bindings..."; \
@@ -101,7 +105,7 @@ gen-api:
 	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_METRICS_CONFIG)" "$(METRICS_OPENAPI)" > apigen/metricsapi/metrics.gen.go; \
 	echo "Generating combined internal client and Fiber server bindings..."; \
 	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_INTERNAL_CONFIG)" "$(INTERNAL_OPENAPI)" > apigen/internalapi/internal.gen.go; \
-	echo "Generated combined API bindings into ./apigen/{drs,lfsapi,bucketapi,metricsapi,internalapi}"
+	echo "Generated API bindings into ./apigen/{errorapi,drs,lfsapi,bucketapi,metricsapi,internalapi}"
 
 .PHONY: test
 test:

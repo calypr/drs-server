@@ -24,7 +24,7 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 	if access.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || access.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
 		return nil
 	}
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler {

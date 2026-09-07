@@ -29,7 +29,7 @@ func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T
 	if err := db.RegisterObjects(testIdentityAuth(resourceA, "create", "read"), []objects.Record{first}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []objects.Record{second}); !errors.Is(err, faults.ErrUnauthorized) {
+	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []objects.Record{second}); !errors.Is(err, faults.ErrAccessDenied) {
 		t.Fatalf("expected missing target B create to deny merge, got %v", err)
 	}
 

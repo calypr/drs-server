@@ -43,6 +43,7 @@ func TestOpenAPIRoutesServedInRegistrationOrder(t *testing.T) {
 		RouteLFSSpec,
 		RouteBucketSpec,
 		RouteInternalSpec,
+		RouteErrorSpec,
 	}
 	var got []string
 	for _, routes := range app.Stack() {
@@ -72,6 +73,7 @@ func TestOpenAPISpecRoutesServed(t *testing.T) {
 		RouteLFSSpec,
 		RouteBucketSpec,
 		RouteInternalSpec,
+		RouteErrorSpec,
 	}
 	for _, path := range paths {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))

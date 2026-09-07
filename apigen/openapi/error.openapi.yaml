@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Syfon Error Contract
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    APIError:
+      type: object
+      description: A stable Syfon API error.
+      required:
+        - code
+        - category
+        - status
+        - message
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        category:
+          $ref: '#/components/schemas/ErrorCategory'
+        status:
+          type: integer
+          description: HTTP response status.
+        message:
+          type: string
+          description: Human-readable error message.
+        request_id:
+          type: string
+          description: Request identifier for support and log correlation.
+        msg:
+          type: string
+          deprecated: true
+          description: GA4GH-compatible alias for message.
+        status_code:
+          type: integer
+          deprecated: true
+          description: GA4GH-compatible alias for status.
+    ErrorCode:
+      type: string
+      description: Stable machine-readable application error code.
+      enum:
+        - not_found
+        - unauthorized
+        - forbidden
+        - conflict
+        - invalid_input
+        - rate_limited
+        - unavailable
+        - internal_error
+        - request_failed
+        - object_not_found
+        - bucket_scope_not_found
+        - file_usage_not_found
+        - multipart_upload_not_found
+        - no_valid_sha256
+        - conflicting_sha256
+        - access_methods_required
+        - object_size_immutable
+        - object_checksum_immutable
+        - bulk_overwrite_conflict
+        - bucket_not_configured
+        - object_location_unavailable
+        - authentication_required
+        - access_denied
+        - storage_invalid
+        - storage_not_found
+        - storage_forbidden
+        - storage_unavailable
+        - storage_incomplete
+        - storage_unsupported
+        - storage_provider_error
+        - project_scope_not_found
+        - storage_credential_missing
+        - storage_bucket_unavailable
+        - storage_listing_incomplete
+    ErrorCategory:
+      type: string
+      description: Broad machine-readable error category.
+      enum:
+        - not_found
+        - unauthorized
+        - forbidden
+        - conflict
+        - invalid_input
+        - rate_limited
+        - unavailable
+        - internal_error

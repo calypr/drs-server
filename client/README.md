@@ -75,9 +75,9 @@ func main() {
 ```
 
 All Syfon API failures return `*syclient.APIError`. The error preserves the
-HTTP status, stable machine-readable code, public message, request ID, request
-method and URL, response headers, and response body. Use `errors.Is` for portable
-control flow:
+HTTP status, exact machine-readable code, broad error category, public message,
+request ID, request method and URL, response headers, and response body. Use
+`errors.Is` with a broad sentinel for portable control flow:
 
 ```go
 record, err := c.DRS().GetObject(context.Background(), "object-id")
@@ -86,7 +86,21 @@ if errors.Is(err, syclient.ErrNotFound) {
 }
 ```
 
-`APIError.Code` has the exported `syclient.ErrorCode` type. Compare it with
-constants such as `syclient.ErrorCodeConflict` when the exact wire code matters.
-The exported sentinels are `ErrNotFound`, `ErrUnauthorized`, `ErrForbidden`,
+`APIError.Code` has the exported `syclient.ErrorCode` type and preserves
+unknown server-defined codes. Exact sentinels work with `errors.Is`, while the
+broad sentinel remains available for fallback handling:
+
+```go
+switch {
+case errors.Is(err, syclient.ErrObjectChecksumImmutable):
+  // Do not retry this update with a different checksum.
+case errors.Is(err, syclient.ErrConflict):
+  // Handle another conflict reason.
+}
+```
+
+Code comparisons such as
+`apiErr.Code == syclient.ErrorCodeObjectChecksumImmutable` are also stable.
+`APIError.Category` has the exported `syclient.ErrorCategory` type. The
+exported broad sentinels are `ErrNotFound`, `ErrUnauthorized`, `ErrForbidden`,
 `ErrConflict`, `ErrInvalidInput`, `ErrRateLimited`, and `ErrUnavailable`.

@@ -209,8 +209,8 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 				errMsg := err.Error()
 				res.Error = &errMsg
 				switch {
-				case errors.Is(err, faults.ErrUnauthorized):
-					res.Status = http.StatusUnauthorized
+				case errors.Is(err, faults.ErrAccessDenied):
+					res.Status = http.StatusForbidden
 				case errors.Is(err, faults.ErrNotFound):
 					res.Status = http.StatusNotFound
 				default:

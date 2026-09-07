@@ -16,12 +16,12 @@ import (
 func (db *SqliteDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	if err != nil {
 		return "", err

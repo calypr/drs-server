@@ -2,12 +2,16 @@ package records
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 
 	"github.com/calypr/syfon/internal/faults"
+)
+
+var (
+	ErrObjectSizeImmutable     = faults.New(faults.CodeObjectSizeImmutable, faults.CategoryConflict, "object size is immutable")
+	ErrObjectChecksumImmutable = faults.New(faults.CodeObjectChecksumImmutable, faults.CategoryConflict, "object checksum identity is immutable")
 )
 
 func (m *mutationService) UpdateRecord(ctx context.Context, id string, update objectmodel.Record, explicitSize *int64, now time.Time) (objectmodel.Record, error) {
@@ -16,12 +20,12 @@ func (m *mutationService) UpdateRecord(ctx context.Context, id string, update ob
 		return objectmodel.Record{}, err
 	}
 	if explicitSize != nil && *explicitSize != existing.Size {
-		return objectmodel.Record{}, fmt.Errorf("%w: object size is immutable", faults.ErrConflict)
+		return objectmodel.Record{}, ErrObjectSizeImmutable
 	}
 	if incomingSHA, ok := objectmodel.CanonicalSHA256(update.Checksums); ok {
 		storedSHA, stored := objectmodel.CanonicalSHA256(existing.Checksums)
 		if stored && incomingSHA != storedSHA {
-			return objectmodel.Record{}, fmt.Errorf("%w: object checksum identity is immutable", faults.ErrConflict)
+			return objectmodel.Record{}, ErrObjectChecksumImmutable
 		}
 	}
 	merged, err := objectmodel.MergeRecordUpdate(*existing, update, id, now.UTC())

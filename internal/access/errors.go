@@ -1,6 +1,7 @@
 package access
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,12 +18,20 @@ type AuthorizationError struct {
 	TruncatedResources int
 }
 
+func (e *AuthorizationError) ErrorCode() faults.Code {
+	return faults.CodeAccessDenied
+}
+
+func (e *AuthorizationError) ErrorCategory() faults.Category {
+	return faults.CategoryForbidden
+}
+
 func (e *AuthorizationError) Error() string {
 	return e.PublicMessage()
 }
 
-func (e *AuthorizationError) Unwrap() error {
-	return faults.ErrUnauthorized
+func (e *AuthorizationError) Is(target error) bool {
+	return errors.Is(faults.ErrAccessDenied, target)
 }
 
 func (e *AuthorizationError) PublicMessage() string {

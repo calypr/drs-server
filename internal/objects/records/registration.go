@@ -36,7 +36,7 @@ func (m *mutationService) validateExistingContentRead(ctx context.Context, objs 
 			if existing[j].PublicRead || hasObjectMethod(ctx, &existing[j], objectMethodRead) {
 				continue
 			}
-			return faults.ErrUnauthorized
+			return faults.ErrAccessDenied
 		}
 	}
 	return nil

@@ -6,6 +6,7 @@ generate:
   strict-server: true
 import-mapping:
   ./openapi.yaml: github.com/calypr/syfon/apigen/drs
+  ./error.openapi.yaml: github.com/calypr/syfon/apigen/errorapi
 output-options:
   skip-prune: false
   user-templates:

@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -224,4 +226,43 @@ func (e *Error) Error() string {
 		return e.Message
 	}
 	return string(e.Kind)
+}
+
+func (e *Error) ErrorCode() faults.Code {
+	if e == nil {
+		return faults.CodeInternal
+	}
+	switch e.Kind {
+	case ErrorInvalidInput:
+		return faults.CodeInvalidInput
+	case ErrorScopeNotFound:
+		return faults.CodeProjectScopeNotFound
+	case ErrorCredentialMissing:
+		return faults.CodeStorageCredentialMissing
+	case ErrorPermissionDenied:
+		return faults.CodeAccessDenied
+	case ErrorObjectNotFound:
+		return faults.CodeObjectNotFound
+	case ErrorBucketUnavailable:
+		return faults.CodeStorageBucketUnavailable
+	case ErrorListingIncomplete:
+		return faults.CodeStorageListingIncomplete
+	case ErrorUnsupported:
+		return faults.CodeStorageUnsupported
+	default:
+		return faults.CodeInternal
+	}
+}
+
+func (e *Error) ErrorCategory() faults.Category {
+	category, ok := faults.CategoryForCode(e.ErrorCode())
+	if !ok {
+		return faults.CategoryInternal
+	}
+	return category
+}
+
+func (e *Error) Is(target error) bool {
+	definition := faults.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
+	return errors.Is(definition, target)
 }

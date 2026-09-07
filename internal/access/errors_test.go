@@ -10,7 +10,7 @@ import (
 
 func TestAuthorizationError_UnwrapAndClassifiers(t *testing.T) {
 	err := &AuthorizationError{Method: "read", RecordID: "obj-1"}
-	if !errors.Is(err, faults.ErrUnauthorized) {
+	if !errors.Is(err, faults.ErrAccessDenied) {
 		t.Fatalf("expected AuthorizationError to unwrap to ErrUnauthorized")
 	}
 }

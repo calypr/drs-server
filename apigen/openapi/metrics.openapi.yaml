@@ -424,39 +424,7 @@ components:
       description: Deprecated. Transfer metrics always return persisted provider events with freshness metadata, including missing sync windows and latest completed sync time.
   schemas:
     APIError:
-      type: object
-      description: A stable Syfon API error.
-      required:
-        - code
-        - status
-        - message
-      properties:
-        code:
-          type: string
-          description: Stable machine-readable error code.
-          enum:
-            - not_found
-            - unauthorized
-            - forbidden
-            - conflict
-            - invalid_input
-            - rate_limited
-            - unavailable
-            - internal_error
-            - request_failed
-        status:
-          type: integer
-          description: HTTP response status.
-        message:
-          type: string
-          description: Human-readable error message.
-        request_id:
-          type: string
-          description: Request identifier for support and log correlation.
-        msg:
-          type: string
-          deprecated: true
-          description: GA4GH-compatible alias for message.
+      $ref: './error.openapi.yaml#/components/schemas/APIError'
     FileUsage:
       type: object
       properties:

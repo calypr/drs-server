@@ -1,6 +1,11 @@
 package storage
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/calypr/syfon/internal/faults"
+)
 
 type ErrorKind string
 
@@ -19,6 +24,53 @@ type OperationError struct {
 	Provider   string
 	Capability string
 	Cause      error
+}
+
+func (e *OperationError) ErrorCode() faults.Code {
+	if e == nil {
+		return ""
+	}
+	switch e.Kind {
+	case ErrorInvalid:
+		return faults.CodeStorageInvalid
+	case ErrorNotFound:
+		return faults.CodeStorageNotFound
+	case ErrorForbidden:
+		return faults.CodeStorageForbidden
+	case ErrorUnavailable:
+		return faults.CodeStorageUnavailable
+	case ErrorIncomplete:
+		return faults.CodeStorageIncomplete
+	case ErrorUnsupported:
+		return faults.CodeStorageUnsupported
+	case ErrorProvider:
+		return faults.CodeStorageProviderError
+	default:
+		return faults.CodeStorageProviderError
+	}
+}
+
+func (e *OperationError) ErrorCategory() faults.Category {
+	if e == nil {
+		return ""
+	}
+	switch e.Kind {
+	case ErrorNotFound:
+		return faults.CategoryNotFound
+	case ErrorForbidden:
+		return faults.CategoryForbidden
+	case ErrorInvalid, ErrorUnsupported:
+		return faults.CategoryInvalidInput
+	case ErrorUnavailable, ErrorIncomplete, ErrorProvider:
+		return faults.CategoryUnavailable
+	default:
+		return faults.CategoryUnavailable
+	}
+}
+
+func (e *OperationError) Is(target error) bool {
+	definition := faults.Define(e.ErrorCode(), e.ErrorCategory(), e.Error())
+	return errors.Is(definition, target)
 }
 
 func (e *OperationError) Error() string {

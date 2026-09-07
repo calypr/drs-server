@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	ErrNoBucketConfigured = errors.New("no bucket configured")
-	ErrNoObjectLocation   = errors.New("no object location available")
+	ErrNoBucketConfigured = faults.New(faults.CodeBucketNotConfigured, faults.CategoryUnavailable, "no bucket configured")
+	ErrNoObjectLocation   = faults.New(faults.CodeObjectLocationUnavailable, faults.CategoryNotFound, "no object location available")
 )
 
 type PreparationObjectPort interface {

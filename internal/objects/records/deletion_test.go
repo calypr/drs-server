@@ -59,7 +59,7 @@ func assertRecordExists(t *testing.T, db *sqlite.SqliteDB, id string, exists boo
 func TestDeleteObjectRequiresEveryResource(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, faults.ErrUnauthorized) {
+	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, faults.ErrAccessDenied) {
 		t.Fatalf("shared delete: %v", err)
 	}
 	assertRecordExists(t, db, "shared", true)
@@ -117,7 +117,7 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 func TestCreateObjectAliasRequiresUpdateAccess(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.CreateObjectAlias(deletionContext(), "denied", "other"); !errors.Is(err, faults.ErrUnauthorized) {
+	if err := service.CreateObjectAlias(deletionContext(), "denied", "other"); !errors.Is(err, faults.ErrAccessDenied) {
 		t.Fatalf("unauthorized alias: %v", err)
 	}
 	if _, err := db.ResolveObjectAlias(context.Background(), "denied"); !errors.Is(err, faults.ErrNotFound) {
@@ -178,7 +178,7 @@ func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
 			if err != nil || count != 0 {
 				t.Fatalf("repeat scope delete = %d, %v", count, err)
 			}
-			if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, faults.ErrUnauthorized) {
+			if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, faults.ErrAccessDenied) {
 				t.Fatalf("unauthorized scope delete: %v", err)
 			}
 		})

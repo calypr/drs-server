@@ -46,7 +46,7 @@ func (m *mutationService) BulkUpdateAccessMethods(ctx context.Context, updates m
 	for _, objectID := range ids {
 		obj, ok := byID[objectID]
 		if !ok {
-			return faults.ErrNotFound
+			return faults.ErrObjectNotFound
 		}
 		if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
 			return err
@@ -78,7 +78,7 @@ func (m *mutationService) RemoveObjectControlledAccess(ctx context.Context, obje
 		}
 	}
 	if !found {
-		return nil, faults.ErrNotFound
+		return nil, faults.ErrObjectNotFound
 	}
 
 	if err := m.accessPolicy.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
@@ -99,7 +99,7 @@ func (m *mutationService) RequireObjectResources(ctx context.Context, method str
 	if access.HasObjectMethodAccess(ctx, method, resources) {
 		return nil
 	}
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func requireScopeMethod(ctx context.Context, organization, project, method string) error {
@@ -108,19 +108,19 @@ func requireScopeMethod(ctx context.Context, organization, project, method strin
 		return err
 	}
 	if strings.TrimSpace(resource) == "" {
-		return faults.ErrUnauthorized
+		return faults.ErrAccessDenied
 	}
 	if access.HasObjectMethodAccess(ctx, method, []string{resource}) {
 		return nil
 	}
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func requireObjectMethod(ctx context.Context, obj *objectmodel.Record, method string) error {
 	if hasObjectMethod(ctx, obj, method) {
 		return nil
 	}
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func requireAllObjectMethod(ctx context.Context, obj *objectmodel.Record, method string) error {
@@ -129,12 +129,12 @@ func requireAllObjectMethod(ctx context.Context, obj *objectmodel.Record, method
 		if access.HasObjectMethodAccess(ctx, method, resources) {
 			return nil
 		}
-		return faults.ErrUnauthorized
+		return faults.ErrAccessDenied
 	}
 	if access.HasMethodAccess(ctx, method, resources) {
 		return nil
 	}
-	return faults.ErrUnauthorized
+	return faults.ErrAccessDenied
 }
 
 func hasObjectMethod(ctx context.Context, obj *objectmodel.Record, method string) bool {

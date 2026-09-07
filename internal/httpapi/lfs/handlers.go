@@ -12,7 +12,6 @@ import (
 
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/faults"
-	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
@@ -174,8 +173,8 @@ func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
 	if faults.IsNotFoundError(err) {
 		return &lfsapi.ObjectError{Code: 404, Message: "object not found"}
 	}
-	if err == faults.ErrUnauthorized {
-		return &lfsapi.ObjectError{Code: int32(apimiddleware.AuthFailureStatus(ctx)), Message: "unauthorized"}
+	if errors.Is(err, faults.ErrAccessDenied) {
+		return &lfsapi.ObjectError{Code: http.StatusForbidden, Message: "forbidden"}
 	}
 	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}
 }

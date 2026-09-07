@@ -27,14 +27,14 @@ func TestRegisterRoutesUsesDirectFiberCleanupParams(t *testing.T) {
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", response.StatusCode)
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", response.StatusCode)
 	}
 	var body apiresponse.APIError
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Code != "internal_error" || body.Message != http.StatusText(http.StatusInternalServerError) {
+	if body.Code != "storage_unavailable" || body.Category != "unavailable" || body.Message != http.StatusText(http.StatusServiceUnavailable) {
 		t.Fatalf("unexpected error body: %+v", body)
 	}
 }

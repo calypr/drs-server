@@ -84,7 +84,7 @@ func TestAuthorizeScopeWritePolicy(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("AuthorizeScopeWrite() error = %v, wantErr=%t", err, tt.wantErr)
 			}
-			if tt.wantErr && !errors.Is(err, faults.ErrUnauthorized) {
+			if tt.wantErr && !errors.Is(err, faults.ErrAccessDenied) {
 				t.Fatalf("AuthorizeScopeWrite() error = %v, want unauthorized", err)
 			}
 		})

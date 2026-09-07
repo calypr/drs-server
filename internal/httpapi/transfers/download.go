@@ -8,6 +8,8 @@ import (
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/config"
+	"github.com/calypr/syfon/internal/faults"
+	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/httpapi/response"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
@@ -37,6 +39,9 @@ func firstSupportedAccessURL(obj *objects.Record) string {
 
 func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return response.HandleError(c, faults.ErrAuthenticationRequired)
+	}
 	fileID := c.Params("file_id")
 
 	obj, err := objectService.GetObject(c.Context(), fileID, "read")
@@ -90,6 +95,9 @@ func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Servi
 
 func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.Service, transferService *domaintransfers.Service) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return response.HandleError(c, faults.ErrAuthenticationRequired)
+	}
 	fileID := c.Params("file_id")
 	startStr := c.Query("start")
 	endStr := c.Query("end")

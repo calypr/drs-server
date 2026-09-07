@@ -26,14 +26,14 @@ func (db *PostgresDB) DeleteObject(ctx context.Context, id string) error {
 
 	requestedID := strings.TrimSpace(id)
 	if requestedID == "" {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	canonicalID, found, err := postgresObjectIDTx(ctx, tx, requestedID)
 	if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	if err := postgresEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
@@ -51,7 +51,7 @@ func (db *PostgresDB) DeleteObject(ctx context.Context, id string) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -74,7 +74,7 @@ func (db *PostgresDB) DeleteObjectAlias(ctx context.Context, aliasID string) err
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	return tx.Commit()
 }
@@ -99,7 +99,7 @@ func (db *PostgresDB) CreateObjectAlias(ctx context.Context, aliasID, canonicalO
 	var exists string
 	err = tx.QueryRowContext(ctx, "SELECT id FROM drs_object WHERE id = $1", canonicalObjectID).Scan(&exists)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func (db *PostgresDB) UpdateObjectAccessMethods(ctx context.Context, objectID st
 		return err
 	}
 	if !found {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return faults.ErrObjectNotFound
 	}
 	if err := postgresRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 		return err
@@ -239,13 +239,13 @@ func (db *PostgresDB) RemoveObjectControlledAccess(ctx context.Context, objectID
 		return err
 	}
 	if !found {
-		return faults.ErrNotFound
+		return faults.ErrObjectNotFound
 	}
 	if err := postgresEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return err
 	}
 	if !access.HasMethodAccess(ctx, "update", []string{resource}) {
-		return faults.ErrUnauthorized
+		return faults.ErrAccessDenied
 	}
 
 	var exists int
@@ -253,7 +253,7 @@ func (db *PostgresDB) RemoveObjectControlledAccess(ctx context.Context, objectID
 		return err
 	}
 	if exists == 0 {
-		return faults.ErrNotFound
+		return faults.ErrObjectNotFound
 	}
 	currentResources, err := postgresResourcesTx(ctx, tx, canonicalID)
 	if err != nil {
@@ -292,7 +292,7 @@ func (db *PostgresDB) RemoveObjectControlledAccessBulk(ctx context.Context, obje
 	}
 	orgWide := !strings.Contains(resource, "/project/")
 	if !orgWide && !access.HasMethodAccess(ctx, "delete", []string{resource}) {
-		return 0, faults.ErrUnauthorized
+		return 0, faults.ErrAccessDenied
 	}
 	seen := make(map[string]struct{}, len(objectIDs))
 	removed := 0
@@ -366,7 +366,7 @@ func (db *PostgresDB) BulkUpdateAccessMethods(ctx context.Context, updates map[s
 			return resolveErr
 		}
 		if !found {
-			return faults.ErrNotFound
+			return faults.ErrObjectNotFound
 		}
 		if err := postgresRequireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
 			return err

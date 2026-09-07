@@ -2,7 +2,6 @@ package records
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,7 +12,7 @@ import (
 	"github.com/calypr/syfon/internal/faults"
 )
 
-var ErrBulkOverwriteConflict = errors.New("bulk overwrite conflict")
+var ErrBulkOverwriteConflict = faults.New(faults.CodeBulkOverwriteConflict, faults.CategoryConflict, "bulk overwrite conflict")
 
 // BulkOverwriteResult summarizes a project-scoped, source-wins metadata copy.
 type BulkOverwriteResult struct {
@@ -122,7 +121,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 				return result, err
 			}
 			if !hasObjectMethod(ctx, &candidate, objectMethodUpdate) {
-				return result, faults.ErrUnauthorized
+				return result, faults.ErrAccessDenied
 			}
 			result.Replaced++
 		} else {
@@ -130,7 +129,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 				return result, err
 			}
 			if !hasObjectMethod(ctx, &candidate, objectMethodCreate) {
-				return result, faults.ErrUnauthorized
+				return result, faults.ErrAccessDenied
 			}
 			result.Created++
 		}

@@ -28,12 +28,12 @@ type objectRow struct {
 func (db *PostgresDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = $1", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	if err != nil {
 		return "", err
@@ -67,7 +67,7 @@ retryLookup:
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, faults.ErrObjectNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)

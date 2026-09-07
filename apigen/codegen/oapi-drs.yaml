@@ -4,6 +4,8 @@ generate:
   models: true
   fiber-server: true
   strict-server: true
+import-mapping:
+  ./error.openapi.yaml: github.com/calypr/syfon/apigen/errorapi
 output-options:
   skip-prune: false
   user-templates:

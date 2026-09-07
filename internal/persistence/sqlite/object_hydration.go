@@ -51,7 +51,7 @@ retryLookup:
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, faults.ErrObjectNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)

@@ -59,7 +59,7 @@ func (m *queryService) GetBulkObjects(ctx context.Context, ids []string, require
 			matching := objectsWithSHA256(siblingsByChecksum[sha], sha)
 			family := canonicalizeContentObjects(matching)
 			if len(family) == 0 {
-				return nil, faults.ErrNotFound
+				return nil, faults.ErrObjectNotFound
 			}
 			resolved = family[0]
 		}
@@ -371,7 +371,7 @@ func (m *queryService) ListMissingScopedSHA256(ctx context.Context, organization
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" || project == "" || len(checksums) == 0 {
-		return nil, faults.ErrUnauthorized
+		return nil, faults.ErrAccessDenied
 	}
 	if err := requireScopeMethod(ctx, organization, project, objectMethodRead); err != nil {
 		return nil, err

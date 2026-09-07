@@ -9,6 +9,7 @@ const (
 	RouteLFSSpec      = "/index/openapi-lfs.yaml"
 	RouteBucketSpec   = "/index/openapi-bucket.yaml"
 	RouteInternalSpec = "/index/openapi-internal.yaml"
+	RouteErrorSpec    = "/index/error.openapi.yaml"
 )
 
 // RegisterSwaggerRoutes adds Swagger/OpenAPI docs endpoints.
@@ -19,4 +20,5 @@ func RegisterSwaggerRoutes(router fiber.Router) {
 	router.Get(RouteLFSSpec, handleLFSOpenAPISpec)
 	router.Get(RouteBucketSpec, handleBucketOpenAPISpec)
 	router.Get(RouteInternalSpec, handleInternalOpenAPISpec)
+	router.Get(RouteErrorSpec, handleErrorOpenAPISpec)
 }

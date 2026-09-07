@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/faults"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
@@ -18,14 +18,8 @@ type publicError interface {
 	PublicMessage() string
 }
 
-// APIError is the stable error envelope returned by Syfon HTTP APIs.
-type APIError struct {
-	Code      faults.Code `json:"code"`
-	Status    int         `json:"status"`
-	Message   string      `json:"message"`
-	RequestID string      `json:"request_id,omitempty"`
-	Msg       string      `json:"msg,omitempty"`
-}
+// APIError is the generated error envelope shared by every Syfon HTTP API.
+type APIError = errorapi.APIError
 
 func HandleError(c fiber.Ctx, err error) error {
 	if err == nil {
@@ -34,45 +28,55 @@ func HandleError(c fiber.Ctx, err error) error {
 
 	code, ok := faults.CodeOf(err)
 	if !ok {
-		switch {
-		case errors.Is(err, objects.ErrNoValidSHA256), errors.Is(err, objects.ErrAccessMethodsRequired):
-			code = faults.CodeInvalidInput
-		default:
-			code = faults.CodeInternal
-		}
+		code = faults.CodeInternal
 	}
-	status := statusForCode(code)
+	category, categoryOK := faults.CategoryOf(err)
+	if !categoryOK {
+		category, categoryOK = faults.CategoryForCode(code)
+	}
+	if !categoryOK {
+		category = faults.CategoryInternal
+	}
+	status := statusForCategory(category)
 	msg := err.Error()
 
-	switch code {
-	case faults.CodeNotFound:
+	switch category {
+	case faults.CategoryNotFound:
 		msg = "Resource not found"
-	case faults.CodeUnauthorized:
-		status = http.StatusForbidden
-		code = faults.CodeForbidden
-		if access.IsGen3Mode(c.Context()) && !access.HasAuthHeader(c.Context()) {
-			status = http.StatusUnauthorized
-			code = faults.CodeUnauthorized
+	case faults.CategoryUnauthorized:
+		if code == faults.CodeUnauthorized {
+			code = faults.CodeAccessDenied
+			category = faults.CategoryForbidden
+			status = http.StatusForbidden
+			if access.IsGen3Mode(c.Context()) && !access.HasAuthHeader(c.Context()) {
+				code = faults.CodeAuthenticationRequired
+				category = faults.CategoryUnauthorized
+				status = http.StatusUnauthorized
+			}
 		}
 		msg = "Unauthorized"
 		var publicErr publicError
 		if status == http.StatusForbidden && errors.As(err, &publicErr) {
 			msg = publicErr.PublicMessage()
 		}
-	case faults.CodeForbidden:
+	case faults.CategoryForbidden:
 		msg = "Forbidden"
-	case faults.CodeRateLimited:
+		var publicErr publicError
+		if errors.As(err, &publicErr) {
+			msg = publicErr.PublicMessage()
+		}
+	case faults.CategoryRateLimited:
 		msg = "Rate limit exceeded"
-	case faults.CodeUnavailable:
+	case faults.CategoryUnavailable:
 		msg = "Service unavailable"
-	case faults.CodeInvalidInput:
-		switch {
-		case errors.Is(err, objects.ErrNoValidSHA256):
+	case faults.CategoryInvalidInput:
+		switch code {
+		case faults.CodeNoValidSHA256:
 			msg = "A valid SHA256 checksum is required"
-		case errors.Is(err, objects.ErrAccessMethodsRequired):
+		case faults.CodeAccessMethodsRequired:
 			msg = err.Error()
 		}
-	case faults.CodeInternal:
+	case faults.CategoryInternal:
 		msg = http.StatusText(http.StatusInternalServerError)
 	}
 	if status >= http.StatusInternalServerError {
@@ -86,7 +90,7 @@ func HandleError(c fiber.Ctx, err error) error {
 		slog.Warn("request rejected", "request_id", requestID, "method", c.Method(), "path", c.Path(), "status", status, "msg", msg, "err", err)
 	}
 
-	return send(c, code, status, msg, requestID)
+	return sendWithCategory(c, code, category, status, msg, requestID)
 }
 
 func Reject(c fiber.Ctx, status int, msg string) error {
@@ -96,7 +100,14 @@ func Reject(c fiber.Ctx, status int, msg string) error {
 	} else {
 		slog.Warn("request rejected", "request_id", requestID, "method", c.Method(), "path", c.Path(), "status", status, "msg", msg)
 	}
-	return send(c, codeForStatus(status), status, msg, requestID)
+	code := codeForStatus(status)
+	if status == http.StatusUnauthorized {
+		code = faults.CodeAuthenticationRequired
+	} else if status == http.StatusForbidden {
+		code = faults.CodeAccessDenied
+	}
+	category, _ := faults.CategoryForCode(code)
+	return sendWithCategory(c, code, category, status, msg, requestID)
 }
 
 // FiberErrorHandler converts errors returned through Fiber into the same API
@@ -110,29 +121,44 @@ func FiberErrorHandler(c fiber.Ctx, err error) error {
 }
 
 func send(c fiber.Ctx, code faults.Code, status int, msg, requestID string) error {
-	payload := NewAPIError(c.Context(), code, status, msg)
+	category, _ := faults.CategoryForCode(code)
+	return sendWithCategory(c, code, category, status, msg, requestID)
+}
+
+func sendWithCategory(c fiber.Ctx, code faults.Code, category faults.Category, status int, msg, requestID string) error {
+	payload := NewAPIErrorWithCategory(c.Context(), code, category, status, msg)
 	if requestID != "" {
-		payload.RequestID = requestID
+		payload.RequestId = &requestID
 	}
 	return c.Status(status).JSON(payload)
 }
 
 // NewAPIError builds the shared wire payload for Fiber and generated handlers.
 func NewAPIError(ctx context.Context, code faults.Code, status int, msg string) APIError {
+	category, _ := faults.CategoryForCode(code)
+	return NewAPIErrorWithCategory(ctx, code, category, status, msg)
+}
+
+func NewAPIErrorWithCategory(ctx context.Context, code faults.Code, category faults.Category, status int, msg string) APIError {
 	msg = strings.TrimSpace(msg)
 	if status >= http.StatusInternalServerError {
-		msg = http.StatusText(status)
+		msg = publicStatusText(status)
 	}
 	if msg == "" {
-		msg = http.StatusText(status)
+		msg = publicStatusText(status)
 	}
-	return APIError{
-		Code:      code,
-		Status:    status,
-		Message:   msg,
-		RequestID: requestid.GetRequestID(ctx),
-		Msg:       msg,
+	payload := APIError{Code: code, Category: category, Status: status, Message: msg, Msg: &msg, StatusCode: &status}
+	if requestID := requestid.GetRequestID(ctx); requestID != "" {
+		payload.RequestId = &requestID
 	}
+	return payload
+}
+
+func publicStatusText(status int) string {
+	if message := http.StatusText(status); message != "" {
+		return message
+	}
+	return http.StatusText(http.StatusInternalServerError)
 }
 
 func codeForStatus(status int) faults.Code {
@@ -160,20 +186,28 @@ func codeForStatus(status int) faults.Code {
 }
 
 func statusForCode(code faults.Code) int {
-	switch code {
-	case faults.CodeInvalidInput:
+	category, ok := faults.CategoryForCode(code)
+	if !ok {
+		return http.StatusInternalServerError
+	}
+	return statusForCategory(category)
+}
+
+func statusForCategory(category faults.Category) int {
+	switch category {
+	case faults.CategoryInvalidInput:
 		return http.StatusBadRequest
-	case faults.CodeUnauthorized:
+	case faults.CategoryUnauthorized:
 		return http.StatusUnauthorized
-	case faults.CodeForbidden:
+	case faults.CategoryForbidden:
 		return http.StatusForbidden
-	case faults.CodeNotFound:
+	case faults.CategoryNotFound:
 		return http.StatusNotFound
-	case faults.CodeConflict:
+	case faults.CategoryConflict:
 		return http.StatusConflict
-	case faults.CodeRateLimited:
+	case faults.CategoryRateLimited:
 		return http.StatusTooManyRequests
-	case faults.CodeUnavailable:
+	case faults.CategoryUnavailable:
 		return http.StatusServiceUnavailable
 	default:
 		return http.StatusInternalServerError

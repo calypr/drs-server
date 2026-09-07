@@ -59,7 +59,7 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (stri
 		return "", err
 	}
 	if !found {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	if err := postgresEnsureNoLegacyDuplicateTx(ctx, tx, canonicalID); err != nil {
 		return "", err
@@ -69,7 +69,7 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (stri
 		return "", err
 	}
 	if !access.HasMethodAccess(ctx, "update", currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", faults.ErrAccessDenied
 	}
 	sha, hasSHA, err := objects.ValidateCanonicalSHA256(obj.Checksums)
 	if err != nil {
@@ -105,10 +105,10 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (stri
 	}
 	if postgresHasNewResource(incomingResources, currentResources) {
 		if !publicRead && !postgresCanReadContent(ctx, currentResources) {
-			return "", faults.ErrUnauthorized
+			return "", faults.ErrAccessDenied
 		}
 		if !postgresCanCreateResources(ctx, incomingResources, currentResources) {
-			return "", faults.ErrUnauthorized
+			return "", faults.ErrAccessDenied
 		}
 	}
 	row, exists, err := postgresLoadContentRowTx(ctx, tx, canonicalID)
@@ -116,7 +116,7 @@ func replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (stri
 		if err != nil {
 			return "", err
 		}
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", faults.ErrObjectNotFound
 	}
 	if row.size != 0 && obj.Size != 0 && row.size != obj.Size && len(storedSHAs) > 0 {
 		return "", postgresIdentityConflict("SHA %q has conflicting sizes %d and %d", storedSHAs[0], row.size, obj.Size)

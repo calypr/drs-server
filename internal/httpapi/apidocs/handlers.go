@@ -90,6 +90,19 @@ func handleInternalOpenAPISpec(c fiber.Ctx) error {
 	return nil
 }
 
+func handleErrorOpenAPISpec(c fiber.Ctx) error {
+	specBytes, err := loadSpecBytesByName("error.openapi.yaml")
+	if err != nil {
+		return sendInternalServerError(c, "Error OpenAPI spec file not found: "+err.Error())
+	}
+	c.Set("Content-Type", "application/yaml")
+	if err := c.Send(specBytes); err != nil {
+		log.Printf("write error openapi spec response: %v", err)
+		return err
+	}
+	return nil
+}
+
 func sendInternalServerError(c fiber.Ctx, message string) error {
 	c.Set("Content-Type", "text/plain; charset=utf-8")
 	c.Set("X-Content-Type-Options", "nosniff")

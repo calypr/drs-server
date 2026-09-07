@@ -211,7 +211,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []objects.Record{candidate})
-		if !errors.Is(err, faults.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrAccessDenied) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})
@@ -226,7 +226,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 		})
 
 		_, err := om.BulkOverwriteObjects(ctx, "org", "target", []objects.Record{candidate})
-		if !errors.Is(err, faults.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrAccessDenied) {
 			t.Fatalf("expected target-project authorization failure, got %v", err)
 		}
 	})

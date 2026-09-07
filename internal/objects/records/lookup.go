@@ -25,7 +25,7 @@ func (m *queryService) GetObject(ctx context.Context, ident string, requiredMeth
 // physical rows used to build the merged objectmodel.Record.
 func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, requiredMethod string) (*objectmodel.CanonicalContent, error) {
 	if strings.TrimSpace(ident) == "" {
-		return nil, faults.ErrNotFound
+		return nil, faults.ErrObjectNotFound
 	}
 
 	checksum, checksumIdent := objectmodel.NormalizeSHA256Query(ident)
@@ -59,7 +59,7 @@ func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, re
 		}
 	}
 
-	return nil, faults.ErrNotFound
+	return nil, faults.ErrObjectNotFound
 }
 
 func (m *queryService) canonicalContentForChecksum(ctx context.Context, checksum, method string) (*objectmodel.CanonicalContent, bool, error) {
@@ -98,7 +98,7 @@ func (m *queryService) lookupObjectByChecksum(ctx context.Context, ident string,
 				return nil, false, err
 			}
 			if len(allMatches) > 0 {
-				return nil, true, faults.ErrUnauthorized
+				return nil, true, faults.ErrAccessDenied
 			}
 		}
 		return nil, false, nil
@@ -164,7 +164,7 @@ func (m *queryService) canonicalContentForObject(ctx context.Context, obj *objec
 	physical := objectsWithSHA256(siblings, sha)
 	canonical := canonicalizeContentObjects(physical)
 	if len(canonical) == 0 {
-		return nil, faults.ErrNotFound
+		return nil, faults.ErrObjectNotFound
 	}
 	return &objectmodel.CanonicalContent{ContentID: objectmodel.ContentID(sha), Record: canonical[0], Records: physical}, nil
 }

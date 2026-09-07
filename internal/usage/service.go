@@ -321,7 +321,7 @@ func (s *Service) collectScopedUsage(ctx context.Context, scope Scope, inactiveS
 			}
 			obj, objErr := s.objects.GetObject(ctx, id, "read")
 			if objErr != nil {
-				if errors.Is(objErr, faults.ErrNotFound) || errors.Is(objErr, faults.ErrUnauthorized) {
+				if errors.Is(objErr, faults.ErrNotFound) || errors.Is(objErr, faults.ErrAccessDenied) {
 					continue
 				}
 				return nil, FileUsageSummary{}, objErr

@@ -82,7 +82,7 @@ func TestBucketPolicyHelpers(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected requestor create alone to be denied")
 		}
-		if !errors.Is(err, faults.ErrUnauthorized) {
+		if !errors.Is(err, faults.ErrAccessDenied) {
 			t.Fatalf("expected unauthorized error, got %v", err)
 		}
 	})
