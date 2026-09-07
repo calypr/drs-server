@@ -48,12 +48,21 @@ syfon/
 ├── apigen/         # Generated OpenAPI models (separate Go module)
 ├── client/         # Go client SDK (separate Go module)
 ├── cmd/            # CLI commands (serve, upload, download, version, ...)
-├── config/         # Config loading and validation
-├── db/             # Database interfaces, SQLite and PostgreSQL drivers
-├── internal/api/   # HTTP route handlers (DRS, internal, LFS, metrics)
-├── service/        # High-level DRS business logic
-├── urlmanager/     # Cloud storage signing and multipart logic
-└── version/        # Build and version info
+├── internal/httpapi/ # HTTP routes, handlers, middleware, and protocol adapters
+├── internal/objects/ # Catalog queries, mutations, and canonical content
+├── internal/buckets/ # Bucket credentials, scopes, visibility, and cache policy
+├── internal/storage/ # Provider-neutral storage and provider adapters
+├── internal/transfers/ # Access issuance, upload workflows, and multipart sessions
+├── internal/usage/ # Event writer contracts and scoped accounting reports
+├── internal/maintenance/projectstorage/ # Storage inspection and project cleanup
+├── internal/maintenance/scoperepair/ # Catalog reference audit and repair
+├── internal/requestid/ # Request correlation through context
+├── internal/faults/ # Shared error classifications
+├── internal/persistence/ # SQLite and PostgreSQL adapters
+├── internal/access/ # Authorization policy and authentication integrations
+├── internal/credentialcipher/ # Credential encryption
+├── internal/config/ # Config loading and validation
+└── internal/version/ # Build and version info
 ```
 
 ## Next Steps

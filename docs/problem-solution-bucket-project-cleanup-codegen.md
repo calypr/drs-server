@@ -53,9 +53,9 @@ DELETE /data/buckets/{bucket}/scopes?organization=<org>&project_id=<project>
 
 Runtime path:
 
-- Route constant: `internal/common/routes.go`
-- Handler registration: `internal/api/internaldrs/buckets.go`
-- Handler: `handleInternalDeleteBucketScopeFiber`
+- Route constant and registration: `internal/httpapi/buckets/routes.go`
+- Handler file: `internal/httpapi/buckets/handlers.go`
+- Handler function: `handleInternalDeleteBucketScopeFiber`
 
 Behavior:
 
@@ -75,9 +75,9 @@ DELETE /data/projects/{organization}/{project_id}
 
 Runtime path:
 
-- Route constant: `internal/common/routes.go`
-- Handler registration: `internal/api/internaldrs/buckets.go`
-- Handler: `handleInternalDeleteProjectFiber`
+- Route constant and registration: `internal/httpapi/maintenance/routes.go`
+- Handler file: `internal/httpapi/maintenance/project_cleanup.go`
+- Handler function: `handleInternalDeleteProjectFiber`
 
 Behavior:
 

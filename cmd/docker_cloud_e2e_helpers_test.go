@@ -16,7 +16,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/client/drs"
 	syclient "github.com/calypr/syfon/client"
-	"github.com/calypr/syfon/internal/crypto"
+	"github.com/calypr/syfon/internal/credentialcipher"
 )
 
 type providerServerConfig struct {
@@ -54,7 +54,7 @@ func startSyfonServerProcessWithConfigPath(t *testing.T, configPath string, extr
 
 	cmd := exec.Command(binaryPath, "serve", "--config", configPath)
 	cmd.Dir = rootDir
-	cmd.Env = append(os.Environ(), crypto.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
+	cmd.Env = append(os.Environ(), credentialcipher.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
 	for key, val := range extraEnv {
 		cmd.Env = append(cmd.Env, key+"="+val)
 	}

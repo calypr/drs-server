@@ -5,7 +5,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/calypr/syfon/internal/common"
+	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/storage/address"
 )
 
 func validateConfig(cfg *Config) error {
@@ -40,22 +41,22 @@ func validateConfig(cfg *Config) error {
 
 	// Validate configured bucket credentials.
 	for i, cred := range cfg.Buckets {
-		bucketProvider, err := common.ParseBucketProvider(cred.Provider)
+		bucketProvider, err := address.ParseBucketProvider(cred.Provider)
 		if err != nil {
 			return fmt.Errorf("buckets[%d]: %w", i, err)
 		}
 		cfg.Buckets[i].Provider = bucketProvider
-		cfg.Buckets[i].CredentialID = common.DeriveCredentialID(
+		cfg.Buckets[i].CredentialID = buckets.DeriveCredentialID(
 			cred.Bucket,
 			bucketProvider,
 			cred.Region,
 			cred.Endpoint,
 			cred.AccessKey,
 		)
-		if err := common.ValidateBucketNameWithEndpoint(bucketProvider, cred.Bucket, cred.Endpoint); err != nil {
+		if err := address.ValidateBucketNameWithEndpoint(bucketProvider, cred.Bucket, cred.Endpoint); err != nil {
 			return fmt.Errorf("buckets[%d]: %w", i, err)
 		}
-		if bucketProvider == common.S3Provider {
+		if bucketProvider == address.S3Provider {
 			if cred.Region == "" {
 				return fmt.Errorf("buckets[%d]: region is required for provider=%s", i, bucketProvider)
 			}
@@ -107,7 +108,7 @@ func validateConfig(cfg *Config) error {
 			if err != nil {
 				return fmt.Errorf("bucket_scopes[%d]: invalid path: %w", i, err)
 			}
-			if common.ProviderFromScheme(u.Scheme) == "" {
+			if address.ProviderFromScheme(u.Scheme) == "" {
 				return fmt.Errorf("bucket_scopes[%d]: unsupported storage scheme: %s", i, u.Scheme)
 			}
 			pathBucket := strings.TrimSpace(u.Host)
@@ -117,7 +118,7 @@ func validateConfig(cfg *Config) error {
 			if scope.Bucket != "" && !strings.EqualFold(scope.Bucket, pathBucket) {
 				return fmt.Errorf("bucket_scopes[%d]: bucket %q does not match path bucket %q", i, scope.Bucket, pathBucket)
 			}
-			prefix, err := common.NormalizeStoragePath(scope.Path, pathBucket)
+			prefix, err := address.NormalizeStoragePath(scope.Path, pathBucket)
 			if err != nil {
 				return fmt.Errorf("bucket_scopes[%d]: %w", i, err)
 			}

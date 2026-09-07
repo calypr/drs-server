@@ -13,21 +13,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/api/internaldrs"
-	"github.com/calypr/syfon/internal/common"
-	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/core"
-	"github.com/calypr/syfon/internal/crypto"
-	"github.com/calypr/syfon/internal/models"
-	"github.com/calypr/syfon/internal/signer/s3"
-	"github.com/calypr/syfon/internal/testutils"
-	"github.com/calypr/syfon/internal/urlmanager"
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/config"
+	"github.com/calypr/syfon/internal/credentialcipher"
+	"github.com/calypr/syfon/internal/httpapi"
+	"github.com/calypr/syfon/internal/maintenance/projectstorage"
+	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/transfers"
+	"github.com/calypr/syfon/internal/usage"
 )
 
 var (
 	testConfigPath = flag.String("testConfig", "", "Path to config file for integration test")
 )
+
+func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
+	t.Helper()
+	database, err := sqlite.NewSqliteDB(":memory:")
+	if err != nil {
+		t.Fatalf("create in-memory SQLite database: %v", err)
+	}
+	return database
+}
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -35,7 +45,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestS3Integration(t *testing.T) {
-	t.Setenv(crypto.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	configPath := *testConfigPath
 	if configPath == "" {
 		// Create a temporary config for testing if none provided
@@ -89,11 +99,11 @@ s3_credentials:
 	project := "test-project"
 
 	// Setup Server
-	database := testutils.NewInMemoryDB()
+	database := newSQLiteDatabase(t)
 
 	// Pre-load credentials from config (mimic server startup logic)
 	for _, c := range cfg.S3Credentials {
-		cred := &models.S3Credential{
+		cred := &buckets.Credential{
 			Bucket:    c.Bucket,
 			Provider:  c.Provider,
 			Region:    c.Region,
@@ -105,7 +115,7 @@ s3_credentials:
 			t.Fatalf("Failed to preload credential: %v", err)
 		}
 	}
-	if err := database.CreateBucketScope(context.Background(), &models.BucketScope{
+	if err := database.CreateBucketScope(context.Background(), &buckets.Scope{
 		Organization: organization,
 		ProjectID:    project,
 		Bucket:       bucketName,
@@ -113,11 +123,41 @@ s3_credentials:
 		t.Fatalf("Failed to preload bucket scope: %v", err)
 	}
 
-	uM := urlmanager.NewManager(database, cfg.Signing)
-	uM.RegisterSigner(common.S3Provider, s3.NewS3Signer(database))
+	backend := sqliteServerBackend(database)
+	invalidator := &storageInvalidator{}
+	bucketDependencies := backend.bucketDependencies
+	bucketDependencies.Fallback = newBucketVisibilityFallback(
+		backend.objectDependencies.Scope,
+		backend.objectDependencies.Reader,
+	)
+	bucketService, err := buckets.NewService(bucketDependencies, invalidator)
+	if err != nil {
+		t.Fatalf("failed to initialize bucket service: %v", err)
+	}
+	storageManager, err := newStorageManager(bucketService, t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("failed to initialize storage manager: %v", err)
+	}
+	invalidator.manager = storageManager
 	app := fiber.New()
-	om := core.NewObjectManager(database, uM)
-	internaldrs.RegisterInternalRoutes(app, om)
+	objectService := objects.NewService(backend.objectDependencies)
+	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
+	transferService := transfers.NewService(transfers.Dependencies{
+		Access: storageManager, Multipart: storageManager, Scopes: bucketService, Credentials: bucketService,
+		Pending: backend.pending, Events: backend.usageIngest,
+	})
+	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{Scopes: bucketService, Credentials: bucketService, Visibility: bucketService, Inventory: storageManager, Probe: storageManager, Delete: storageManager, Physical: objectService, CleanupObjects: objectService, CleanupScopes: bucketService})
+	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
+	httpapi.RegisterRoutes(app, httpapi.Dependencies{
+		Objects:          objectService,
+		Transfers:        transferService,
+		UsageIngest:      backend.usageIngest,
+		UsageReports:     usageService.Reports(),
+		Buckets:          bucketService,
+		ProjectInspector: projectStorageService.Inspector,
+		ProjectCleanup:   projectStorageService.ProjectCleanup,
+		ScopeRepair:      scopeRepairService,
+	}, httpapi.Options{Internal: true})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -149,7 +149,7 @@ The Helm chart still ships an init job for deployments that want pre-provisioned
 
 ```bash
 go test ./... -count=1
-./db/scripts/init_sqlite_db.sh drs_local.db
+./internal/persistence/sqlite/scripts/init_sqlite_db.sh drs_local.db
 go run . serve --config local.yaml
 ```
 
@@ -239,14 +239,22 @@ syfon download --did <did> --out /tmp/README.md
 
 # Architecture
 
-The project follows a modular structure to ensure maintainability:
-- `db/core`: Core interfaces and models.
-- `db/sqlite`, `db/postgres`: Database implementation drivers.
-- `internal/api`: Subpackages for different API contexts (Core, internal compatibility, LFS, metrics, docs, middleware).
-- `service`: High-level business logic implementing the DRS service.
-- `urlmanager`: Logic for interacting with cloud storage providers.
+The server composes focused domain and adapter packages:
 
-See DB table details and relationships in [db/README.md](db/README.md).
+- `internal/objects` owns catalog records, checksum identity, and canonical content. Query and mutation components keep their persistence dependencies separate.
+- `internal/buckets` owns credentials, scopes, visibility, and cache policy.
+- `internal/storage` owns provider-neutral storage operations and the S3, GCS, Azure, and file adapters.
+- `internal/transfers` owns access issuance, upload workflows, multipart sessions, and pending metadata. HTTP adapters translate protocol requests and results.
+- `internal/usage` defines the event writer contract and owns scoped accounting reports.
+- `internal/maintenance/projectstorage` separates storage inspection from project cleanup. `internal/maintenance/scoperepair` audits and repairs catalog references.
+- `internal/requestid` carries a request ID through context for logs and audit events. `internal/faults` defines shared error classifications.
+- `internal/httpapi` owns route registration, handlers, middleware, and protocol adapters.
+- `internal/persistence` owns the SQLite and PostgreSQL adapters.
+- `internal/access` owns authorization policy and authentication integrations.
+- `internal/credentialcipher` owns credential encryption.
+- `cmd/server` composes these packages into the server runtime.
+
+See persistence table details and relationships in [internal/persistence/README.md](internal/persistence/README.md).
 
 ## Go Client SDK (Multi-Module)
 
@@ -273,7 +281,7 @@ The project uses a Makefile for common tasks:
 - `make gen`: Generates the DRS server stubs from the official GA4GH OpenAPI spec (Git submodule) and refreshes the shared `apigen/*` OpenAPI outputs.
 - `make test`: Runs all unit and integration tests.
 - `make test-unit`: Runs unit tests only (excludes integration packages).
-- `make coverage`: Runs coverage for core production packages (db/service/middleware/url signing) and writes `coverage/coverage.out`, `coverage/coverage.txt`, and `coverage/coverage.html`.
+- `make coverage`: Runs coverage for core production packages (persistence/service/middleware/url signing) and writes `coverage/coverage.out`, `coverage/coverage.txt`, and `coverage/coverage.html`.
 - `make coverage-full`: Runs broader compatibility-layer coverage (includes internal compatibility and LFS packages).
 - `make serve ARGS="--config /path/to/config.yaml"`: Starts the DRS server.
 
@@ -282,7 +290,7 @@ The project uses a Makefile for common tasks:
 Syfon currently uses `oapi-codegen` for both server-side and client-facing API artifacts:
 
 - `make gen` bundles the GA4GH DRS spec into `apigen/openapi/openapi.yaml` and refreshes all generated packages under `apigen/client/*` and `apigen/server/*`.
-- The runtime HTTP wiring, middleware, and compatibility behavior still live in handwritten code under `cmd/server` and `internal/api/*`.
+- The runtime HTTP wiring, middleware, and compatibility behavior live in handwritten code under `cmd/server` and `internal/httpapi/*`.
 - The client module itself is handwritten, but its request and response shapes come from the same generated OpenAPI contracts, so client and server stay aligned.
 
 This split is intentional: generated code keeps the schema surface in sync, while handwritten runtime code preserves control over routing, auth, and compatibility behavior.

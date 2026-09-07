@@ -39,10 +39,10 @@ echo ""
 
 # Test cryptography fixes (HIGH-3, LOW-2)
 echo "[3/5] Testing Cryptography Fixes (HIGH-3, LOW-2)..."
-go test -v ./internal/crypto -run TestLocalCredentialKeyPath_DefaultPath
-go test -v ./internal/crypto -run TestLocalCredentialKeyPath_ExplicitEnvVar
-go test -v ./internal/crypto -run TestLocalCredentialKeyPath_SQLiteDir
-go test -v ./internal/crypto -run TestLocalKeyManager_KeyIDLength
+go test -v ./internal/credentialcipher -run TestLocalCredentialKeyPath_DefaultPath
+go test -v ./internal/credentialcipher -run TestLocalCredentialKeyPath_ExplicitEnvVar
+go test -v ./internal/credentialcipher -run TestLocalCredentialKeyPath_SQLiteDir
+go test -v ./internal/credentialcipher -run TestLocalKeyManager_KeyIDLength
 echo "✓ HIGH-3: KEK default path moved from /tmp to /app"
 echo "✓ LOW-2: KEK fingerprint extended to 128-bit"
 echo ""

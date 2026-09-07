@@ -1,12 +1,12 @@
 # Syfon architecture and reorganization
 
-This page describes the current Syfon layout at the 2026-09-04 audit baseline. It replaces the old directory-move proposal that this file used to contain. The dependency map and accepted worklist below are self-contained.
+This page is a historical snapshot of the Syfon layout at the 2026-09-04 audit baseline. It replaces the older directory-move proposal that this file used to contain, but it does not describe the post-audit architecture. Use `docs/internal-architecture-plan/` and the current source tree for active package ownership.
 
-## Current dependency map
+## Audit baseline dependency map
 
-The server is built from these ownership boundaries:
+At the audit baseline, the server used these ownership boundaries:
 
-| Responsibility | Current owner | Dependency direction |
+| Responsibility | Owner at the audit baseline | Dependency direction |
 | --- | --- | --- |
 | Process and server construction | `main.go`, `cmd/root.go`, `cmd/server/server.go`, `cmd/server/options.go` | Loads `internal/config`, creates a database, creates `internal/core.ObjectManager`, and mounts the route packages. |
 | Generated protocol types | `apigen/server/*` and `apigen/client/*` | Separate `github.com/calypr/syfon/apigen` module. Server handlers and client services use the generated bindings. |
@@ -19,7 +19,7 @@ The server is built from these ownership boundaries:
 | Repair | `internal/repair`, `internal/api/internaldrs/repair_cleanup.go` | Repair coordinates storage checks and cleanup. Its current in-process adapter calls core through a transport-shaped request. Task 3 replaces that adapter with a direct interface while keeping `/data/inspect`. |
 | Public client and transfers | `client/*` | Separate `github.com/calypr/syfon/client` module for client services, transfer engines, and provider backends. The root module and published client module paths stay unchanged. |
 
-The normal server path is:
+The server path at the audit baseline was:
 
 1. `main.go` executes `cmd.RootCmd`.
 2. `cmd/server/server.go` loads configuration, creates either `sqlite.NewSqliteDB` or `postgres.NewPostgresDB`, creates `urlmanager.Manager`, and creates `core.ObjectManager`.
@@ -27,9 +27,9 @@ The normal server path is:
 4. A route handler calls `ObjectManager` or a narrower database capability.
 5. Core resolves object identity and access policy, then reads or writes through the database contract. URL signing goes through `urlmanager`. Storage inspection and deletion use their existing provider-specific core paths.
 
-Keep the DRS, internal API, LFS, and metrics protocol boundaries. Keep both database backends, provider-specific implementations, authentication and session separation, repair, URL management, and the public `client` and `apigen` module paths. Generated bindings remain under `apigen`; they do not move into `internal`.
+The audit kept the DRS, internal API, LFS, and metrics protocol boundaries. It also kept both database backends, provider-specific implementations, authentication and session separation, repair, URL management, and the public `client` and `apigen` module paths. Generated bindings remained under `apigen`.
 
-The audit found no basis for deleting or merging a whole tracked package.
+This baseline conclusion was superseded by the execution plan and the 2026-09 package migration.
 
 ## Accepted implementation worklist
 
@@ -54,4 +54,4 @@ Each work item needs focused package and direct-importer checks. Run the full th
 
 The earlier proposal came from the 2026-04-15 Fiber and OpenAPI migration period. It suggested moving `service/` to `internal/service/`, moving `db/` and `urlmanager/` below `internal/infra/`, consolidating handlers below `internal/handler/`, moving `apigen/` to `internal/gen/`, moving `client/` to `pkg/client/`, and deleting `api/types/`.
 
-Those paths are historical proposal targets. The current source uses `internal/core`, `internal/db`, `internal/urlmanager`, `internal/api`, `apigen`, and `client`. Do not use the earlier layout or its phase instructions for new changes. The accepted worklist above supersedes it.
+Those paths were proposal targets before the 2026-09 architecture migration. Do not use the earlier layout or its phase instructions for new changes. The audit worklist above superseded it.

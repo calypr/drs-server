@@ -130,15 +130,21 @@ func (f *fakeBucketClient) DeleteProjectDataWithResponse(ctx context.Context, or
 }
 
 type fakeMetricsClient struct {
-	summaryResp   *metricsapi.GetMetricsSummaryResponse
-	summaryErr    error
-	summaryParams *metricsapi.GetMetricsSummaryParams
-	filesResp     *metricsapi.ListMetricsFilesResponse
-	filesErr      error
-	filesParams   *metricsapi.ListMetricsFilesParams
-	fileResp      *metricsapi.GetMetricsFileResponse
-	fileErr       error
-	fileObjectID  string
+	summaryResp             *metricsapi.GetMetricsSummaryResponse
+	summaryErr              error
+	summaryParams           *metricsapi.GetMetricsSummaryParams
+	filesResp               *metricsapi.ListMetricsFilesResponse
+	filesErr                error
+	filesParams             *metricsapi.ListMetricsFilesParams
+	fileResp                *metricsapi.GetMetricsFileResponse
+	fileErr                 error
+	fileObjectID            string
+	transferSummaryResp     *metricsapi.GetTransferSummaryResponse
+	transferSummaryErr      error
+	transferSummaryParams   *metricsapi.GetTransferSummaryParams
+	transferBreakdownResp   *metricsapi.GetTransferBreakdownResponse
+	transferBreakdownErr    error
+	transferBreakdownParams *metricsapi.GetTransferBreakdownParams
 }
 
 func (f *fakeMetricsClient) ListMetricsFilesWithResponse(ctx context.Context, params *metricsapi.ListMetricsFilesParams, reqEditors ...metricsapi.RequestEditorFn) (*metricsapi.ListMetricsFilesResponse, error) {
@@ -173,11 +179,13 @@ func (f *fakeMetricsClient) RecordProviderTransferEventsWithResponse(ctx context
 }
 
 func (f *fakeMetricsClient) GetTransferBreakdownWithResponse(ctx context.Context, params *metricsapi.GetTransferBreakdownParams, reqEditors ...metricsapi.RequestEditorFn) (*metricsapi.GetTransferBreakdownResponse, error) {
-	return &metricsapi.GetTransferBreakdownResponse{HTTPResponse: &http.Response{StatusCode: http.StatusNotImplemented}}, nil
+	f.transferBreakdownParams = params
+	return f.transferBreakdownResp, f.transferBreakdownErr
 }
 
 func (f *fakeMetricsClient) GetTransferSummaryWithResponse(ctx context.Context, params *metricsapi.GetTransferSummaryParams, reqEditors ...metricsapi.RequestEditorFn) (*metricsapi.GetTransferSummaryResponse, error) {
-	return &metricsapi.GetTransferSummaryResponse{HTTPResponse: &http.Response{StatusCode: http.StatusNotImplemented}}, nil
+	f.transferSummaryParams = params
+	return f.transferSummaryResp, f.transferSummaryErr
 }
 
 type fakeLFSClient struct {
@@ -435,6 +443,113 @@ func TestMetricsService(t *testing.T) {
 		}
 		if got.ObjectId == nil || *got.ObjectId != objectID || fake.fileObjectID != objectID {
 			t.Fatalf("unexpected file response: %+v / requested %q", got, fake.fileObjectID)
+		}
+	})
+
+	t.Run("transfer summary maps generated values and query params", func(t *testing.T) {
+		eventCount := int64(12)
+		accessIssuedCount := int64(3)
+		downloadEventCount := int64(7)
+		uploadEventCount := int64(2)
+		bytesRequested := int64(101)
+		bytesDownloaded := int64(88)
+		bytesUploaded := int64(13)
+		stale := true
+		missingBuckets := []string{"provider-a"}
+		latest := now.Add(-time.Hour)
+		requiredFrom := now.Add(-24 * time.Hour)
+		requiredTo := now
+		fake := &fakeMetricsClient{
+			transferSummaryResp: &metricsapi.GetTransferSummaryResponse{
+				HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+				JSON200: &metricsapi.TransferAttributionSummary{
+					EventCount:         &eventCount,
+					AccessIssuedCount:  &accessIssuedCount,
+					DownloadEventCount: &downloadEventCount,
+					UploadEventCount:   &uploadEventCount,
+					BytesRequested:     &bytesRequested,
+					BytesDownloaded:    &bytesDownloaded,
+					BytesUploaded:      &bytesUploaded,
+					Freshness: &metricsapi.TransferMetricsFreshness{
+						IsStale:             &stale,
+						MissingBuckets:      &missingBuckets,
+						LatestCompletedSync: &latest,
+						RequiredFrom:        &requiredFrom,
+						RequiredTo:          &requiredTo,
+					},
+				},
+			},
+		}
+		got, err := NewMetricsService(fake).TransferSummary(context.Background(), TransferMetricsOptions{
+			Organization:         "org",
+			ProjectID:            "project",
+			Direction:            "download",
+			From:                 requiredFrom.Format(time.RFC3339Nano),
+			To:                   requiredTo.Format(time.RFC3339Nano),
+			Provider:             "provider-a",
+			Bucket:               "bucket-a",
+			SHA256:               "sha256",
+			User:                 "user@example.com",
+			ReconciliationStatus: "matched",
+			AllowStale:           true,
+		})
+		if err != nil {
+			t.Fatalf("TransferSummary returned error: %v", err)
+		}
+		if got.EventCount != eventCount || got.AccessIssuedCount != accessIssuedCount || got.DownloadEventCount != downloadEventCount || got.UploadEventCount != uploadEventCount || got.BytesRequested != bytesRequested || got.BytesDownloaded != bytesDownloaded || got.BytesUploaded != bytesUploaded {
+			t.Fatalf("unexpected transfer summary: %+v", got)
+		}
+		if got.Freshness == nil || !got.Freshness.IsStale || len(got.Freshness.MissingBuckets) != 1 || got.Freshness.MissingBuckets[0] != missingBuckets[0] || !got.Freshness.LatestCompletedSync.Equal(latest) || !got.Freshness.RequiredFrom.Equal(requiredFrom) || !got.Freshness.RequiredTo.Equal(requiredTo) {
+			t.Fatalf("unexpected transfer freshness: %+v", got.Freshness)
+		}
+		if fake.transferSummaryParams == nil || string(*fake.transferSummaryParams.Organization) != "org" || string(*fake.transferSummaryParams.Project) != "project" || string(*fake.transferSummaryParams.Direction) != "download" || string(*fake.transferSummaryParams.ReconciliationStatus) != "matched" || !fake.transferSummaryParams.From.Equal(requiredFrom) || !fake.transferSummaryParams.To.Equal(requiredTo) || string(*fake.transferSummaryParams.Provider) != "provider-a" || string(*fake.transferSummaryParams.Bucket) != "bucket-a" || string(*fake.transferSummaryParams.Sha256) != "sha256" || string(*fake.transferSummaryParams.User) != "user@example.com" || !*fake.transferSummaryParams.AllowStale {
+			t.Fatalf("unexpected transfer summary params: %+v", fake.transferSummaryParams)
+		}
+
+		missingBuckets[0] = "changed"
+		if got.Freshness.MissingBuckets[0] != "provider-a" {
+			t.Fatalf("mapping retained generated slice alias: %+v", got.Freshness.MissingBuckets)
+		}
+	})
+
+	t.Run("transfer breakdown maps generated values and nils", func(t *testing.T) {
+		groupBy := metricsapi.TransferBreakdownResponseGroupBy("provider")
+		key := "provider-a"
+		organization := "org"
+		provider := "s3"
+		eventCount := int64(4)
+		bytesRequested := int64(40)
+		bytesDownloaded := int64(32)
+		bytesUploaded := int64(8)
+		lastTransfer := now.Add(-30 * time.Minute)
+		fake := &fakeMetricsClient{
+			transferBreakdownResp: &metricsapi.GetTransferBreakdownResponse{
+				HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+				JSON200: &metricsapi.TransferBreakdownResponse{
+					GroupBy: &groupBy,
+					Data: &[]metricsapi.TransferAttributionBreakdown{
+						{Key: &key, Organization: &organization, Provider: &provider, EventCount: &eventCount, BytesRequested: &bytesRequested, BytesDownloaded: &bytesDownloaded, BytesUploaded: &bytesUploaded, LastTransferTime: &lastTransfer},
+						{},
+					},
+				},
+			},
+		}
+		got, err := NewMetricsService(fake).TransferBreakdown(context.Background(), TransferMetricsOptions{GroupBy: "provider"})
+		if err != nil {
+			t.Fatalf("TransferBreakdown returned error: %v", err)
+		}
+		if got.GroupBy != "provider" || len(got.Data) != 2 {
+			t.Fatalf("unexpected transfer breakdown: %+v", got)
+		}
+		row := got.Data[0]
+		if row.Key != key || row.Organization != organization || row.Provider != provider || row.EventCount != eventCount || row.BytesRequested != bytesRequested || row.BytesDownloaded != bytesDownloaded || row.BytesUploaded != bytesUploaded || !row.LastTransferTime.Equal(lastTransfer) {
+			t.Fatalf("unexpected transfer breakdown row: %+v", row)
+		}
+		if got.Data[1] != (TransferAttributionBreakdown{}) {
+			t.Fatalf("nil generated fields should map to zero DTO fields: %+v", got.Data[1])
+		}
+		if fake.transferBreakdownParams == nil || fake.transferBreakdownParams.GroupBy == nil || string(*fake.transferBreakdownParams.GroupBy) != "provider" {
+			t.Fatalf("unexpected transfer breakdown params: %+v", fake.transferBreakdownParams)
 		}
 	})
 

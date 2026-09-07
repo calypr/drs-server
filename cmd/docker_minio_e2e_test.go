@@ -22,7 +22,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/calypr/syfon/internal/crypto"
+	"github.com/calypr/syfon/internal/credentialcipher"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -256,7 +256,7 @@ func startSyfonServerProcess(t *testing.T, minioEnv *minioContainer) *syfonServe
 
 	cmd := exec.Command(binaryPath, "serve", "--config", configPath)
 	cmd.Dir = rootDir
-	cmd.Env = append(os.Environ(), crypto.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
+	cmd.Env = append(os.Environ(), credentialcipher.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	stdoutPipe, err := cmd.StdoutPipe()

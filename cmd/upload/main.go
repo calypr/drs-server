@@ -18,7 +18,7 @@ import (
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/calypr/syfon/cmd/transferprogress"
 	syfoncommon "github.com/calypr/syfon/common"
-	intcommon "github.com/calypr/syfon/internal/common"
+	intobjects "github.com/calypr/syfon/internal/objects"
 	"github.com/spf13/cobra"
 )
 
@@ -89,10 +89,11 @@ var Cmd = &cobra.Command{
 			if project == "" {
 				return fmt.Errorf("--project is required when --did is omitted")
 			}
-			did, err = intcommon.MintObjectIDFromChecksum(checksum, syfoncommon.AuthzMapToControlledAccess(authzMap))
-			if err != nil {
-				return err
+			minted, mintErr := intobjects.MintRecordIDFromChecksum(checksum, syfoncommon.AuthzMapToControlledAccess(authzMap))
+			if mintErr != nil {
+				return mintErr
 			}
+			did = string(minted)
 		}
 
 		am := drsapi.AccessMethod{Type: "s3"}
