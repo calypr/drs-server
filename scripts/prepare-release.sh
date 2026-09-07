@@ -99,14 +99,6 @@ bump_patch() {
   base="${base#v}"
   IFS=. read -r major minor patch <<<"$base"
   patch=$((10#$patch + 1))
-  if [[ $patch -gt 9 ]]; then
-    patch=0
-    minor=$((10#$minor + 1))
-    if [[ $minor -gt 9 ]]; then
-      minor=0
-      major=$((10#$major + 1))
-    fi
-  fi
   echo "v${major}.${minor}.${patch}"
 }
 

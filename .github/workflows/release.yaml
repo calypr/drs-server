@@ -33,7 +33,13 @@ jobs:
       github.actor != 'nektos/act' &&
       (
         github.event_name == 'push' ||
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_branch == 'development' &&
+          github.event.workflow_run.conclusion == 'success'
+        )
       )
 
     permissions:
@@ -50,7 +56,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_run' && 'development' || github.ref }}
+
+      - name: Verify workflow source commit
+        if: github.event_name == 'workflow_run'
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -90,7 +102,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.root_tag }}
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -139,7 +151,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.root_tag }}
 
       - name: Fetch tags
         run: git fetch --tags --force

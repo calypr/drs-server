@@ -20,5 +20,5 @@ fi
 relative_dir="${example_dir#"$repo_root/client/"}"
 (
   cd "$repo_root/client"
-  go build -o "$example_dir/readme-example" "./$relative_dir"
+  GOWORK=off go build -o "$example_dir/readme-example" "./$relative_dir"
 )
