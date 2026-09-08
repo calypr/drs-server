@@ -139,7 +139,7 @@ empty or is not valid JSON. For a valid payload, a known exact code from the
 top-level or nested `error` object wins over numeric code or status fields, and
 its category is derived from that code. An unknown code string is kept in
 `APIError.Code` for forward compatibility. The parsed message and request ID
-are preserved.
+are preserved. Fractional and out-of-range numeric codes are ignored.
 
 The server accepts `X-Request-Id`. If the header is empty, the server creates a
 request ID. The server includes that ID in the error response and logs it with

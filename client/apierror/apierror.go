@@ -181,7 +181,11 @@ func valueString(value any) string {
 	case string:
 		return strings.TrimSpace(typed)
 	case float64:
-		return strconv.FormatInt(int64(typed), 10)
+		number := strconv.FormatFloat(typed, 'f', -1, 64)
+		if _, err := strconv.ParseInt(number, 10, 64); err != nil {
+			return ""
+		}
+		return number
 	case json.Number:
 		return typed.String()
 	default:

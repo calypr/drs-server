@@ -296,3 +296,16 @@ func FuzzFromResponseNeverPanics(f *testing.F) {
 		}
 	})
 }
+
+func TestMalformedNumericCodeDoesNotInventClassification(t *testing.T) {
+	for _, body := range []string{`{"code":404.5}`, `{"code":1e100}`} {
+		err := FromResponse(&http.Response{StatusCode: http.StatusInternalServerError}, []byte(body))
+		if err.Code != errorapi.ErrorCodeInternalError || err.Category != errorapi.ErrorCategoryInternalError {
+			t.Fatalf("invalid numeric code %s changed HTTP fallback: %+v", body, err)
+		}
+	}
+	unknown := FromResponse(&http.Response{StatusCode: 500}, []byte(`{"code":"404.5"}`))
+	if unknown.Code != "404.5" {
+		t.Fatalf("unknown string code was not preserved: %+v", unknown)
+	}
+}
