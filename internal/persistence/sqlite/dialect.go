@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/calypr/syfon/internal/persistence/store"
 )
@@ -12,6 +13,43 @@ import (
 type sqliteDialect struct{}
 
 var _ store.Dialect = sqliteDialect{}
+
+func parseSQLiteTransferTime(value any) (time.Time, bool) {
+	switch v := value.(type) {
+	case time.Time:
+		if v.IsZero() {
+			return time.Time{}, false
+		}
+		return v.UTC(), true
+	case string:
+		return parseSQLiteTransferTimeString(v)
+	case []byte:
+		return parseSQLiteTransferTimeString(string(v))
+	default:
+		return time.Time{}, false
+	}
+}
+
+func parseSQLiteTransferTimeString(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
 
 func (sqliteDialect) Rebind(query string) string {
 	return query
@@ -306,7 +344,7 @@ func (db *SqliteDB) initSchema() error {
 	if _, err := db.db.Exec(`CREATE INDEX IF NOT EXISTS idx_transfer_attr_direction_time ON transfer_attribution_event(direction, event_time)`); err != nil {
 		return err
 	}
-	if err := db.backfillAccessGrants(context.Background()); err != nil {
+	if err := store.BackfillAccessGrants(context.Background(), db.db, sqliteDialect{}); err != nil {
 		return err
 	}
 	return nil

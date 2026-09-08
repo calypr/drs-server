@@ -1,45 +1,46 @@
-package postgres
+package store
 
 import (
 	"context"
-
-	"github.com/lib/pq"
+	"strings"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 )
 
-func (db *PostgresDB) ListBucketVisibilityRows(ctx context.Context, resources []string, includeUnscoped, restrictToResources bool) ([]buckets.VisibilityRow, error) {
-	args := make([]any, 0, 2)
+func (db *Store) ListBucketVisibilityRows(ctx context.Context, resources []string, includeUnscoped, restrictToResources bool) ([]buckets.VisibilityRow, error) {
 	query := `
 		SELECT DISTINCT am.url, am.type, COALESCE(ca.resource, '')
 		FROM drs_object o
 		INNER JOIN drs_object_access_method am ON am.object_id = o.id
 		LEFT JOIN drs_object_controlled_access ca ON ca.object_id = o.id`
+	var args []any
 	if restrictToResources {
 		resources = clientaccess.NormalizeAccessResources(resources)
 		if len(resources) == 0 && !includeUnscoped {
 			return []buckets.VisibilityRow{}, nil
 		}
-		args = append(args, pq.Array(resources), includeUnscoped)
-		query += `
-		WHERE (
-			COALESCE(array_length($1::text[], 1), 0) > 0
-			AND EXISTS (
+		parts := make([]string, 0, 2)
+		if len(resources) > 0 {
+			clause, clauseArgs := db.dialect.ListArgs("ca_auth.resource", resources)
+			parts = append(parts, `EXISTS (
 				SELECT 1
 				FROM drs_object_controlled_access ca_auth
-				WHERE ca_auth.object_id = o.id AND ca_auth.resource = ANY($1)
-			)
-		) OR (
-			$2
-			AND NOT EXISTS (
+				WHERE ca_auth.object_id = o.id AND `+clause+`
+			)`)
+			args = append(args, clauseArgs...)
+		}
+		if includeUnscoped {
+			parts = append(parts, `? AND NOT EXISTS (
 				SELECT 1
 				FROM drs_object_controlled_access ca_auth
 				WHERE ca_auth.object_id = o.id
-			)
-		)`
+			)`)
+			args = append(args, includeUnscoped)
+		}
+		query += ` WHERE (` + strings.Join(parts, " OR ") + `)`
 	}
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

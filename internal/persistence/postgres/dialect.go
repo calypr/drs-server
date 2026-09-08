@@ -449,7 +449,7 @@ func (s *postgresSchemaBootstrap) ensureTransferAttributionSchema() error {
 			return fmt.Errorf("failed to initialize transfer attribution schema: %w", err)
 		}
 	}
-	if err := (&PostgresDB{db: s.db}).backfillAccessGrants(context.Background()); err != nil {
+	if err := store.BackfillAccessGrants(context.Background(), s.db, postgresDialect{}); err != nil {
 		return fmt.Errorf("failed to backfill access grants: %w", err)
 	}
 	return nil
