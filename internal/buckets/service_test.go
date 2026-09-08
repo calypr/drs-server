@@ -171,3 +171,66 @@ func TestGetS3CredentialDoesNotTreatLegacyTextAsMissing(t *testing.T) {
 		t.Fatalf("legacy text error should not trigger alias fallback, list calls=%d", credentials.listCalls)
 	}
 }
+
+func TestPutPreservesCredentialReuseAndScopeBeforeCredentialOrder(t *testing.T) {
+	credential := Credential{
+		CredentialID: "credential-id",
+		Bucket:       "physical-bucket",
+		Provider:     "file",
+		Endpoint:     "/old-root",
+	}
+	service, credentials, scopes := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil, nil)
+	path := "s3://physical-bucket/project"
+	if err := service.Put(context.Background(), PutRequest{
+		Bucket:       "physical-bucket",
+		Organization: "org",
+		ProjectID:    "project",
+		Path:         &path,
+	}); err != nil {
+		t.Fatalf("Put scope-only update: %v", err)
+	}
+	if credentials.saveCalls != 0 {
+		t.Fatalf("scope-only update saved credential %d times", credentials.saveCalls)
+	}
+	if scopes.createCalls != 1 || scopes.lastCreated == nil {
+		t.Fatalf("scope-only update created scope calls=%d scope=%+v", scopes.createCalls, scopes.lastCreated)
+	}
+	if got := *scopes.lastCreated; got.CredentialID != credential.CredentialID || got.Bucket != credential.Bucket || got.PathPrefix != "project" {
+		t.Fatalf("scope-only scope=%+v, want credential reuse and normalized path", got)
+	}
+}
+
+func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *testing.T) {
+	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	provider := "file"
+	endpoint := "/file-root"
+	if err := service.Put(context.Background(), PutRequest{Bucket: "new-bucket", Provider: &provider, Endpoint: &endpoint}); err != nil {
+		t.Fatalf("Put new credential: %v", err)
+	}
+	if credentials.lastSaved == nil {
+		t.Fatal("new credential was not saved")
+	}
+	wantID := DeriveCredentialID("new-bucket", "file", "", endpoint, "")
+	if credentials.lastSaved.CredentialID != wantID || credentials.lastSaved.Endpoint != endpoint {
+		t.Fatalf("saved credential=%+v, want derived ID %q and endpoint %q", *credentials.lastSaved, wantID, endpoint)
+	}
+
+	service, credentials, scopes = newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	scopes.createErr = errors.New("scope write failed")
+	if err := service.Put(context.Background(), PutRequest{Bucket: "blocked-bucket", Provider: &provider, Endpoint: &endpoint, Organization: "org"}); !errors.Is(err, scopes.createErr) {
+		t.Fatalf("Put scope error=%v, want %v", err, scopes.createErr)
+	}
+	if credentials.saveCalls != 0 {
+		t.Fatalf("scope failure saved credential %d times", credentials.saveCalls)
+	}
+
+	service, credentials, _ = newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	if err := service.Put(context.Background(), PutRequest{Bucket: "s3-bucket", Provider: stringPtr("s3")}); err == nil {
+		t.Fatal("S3 credential without secrets unexpectedly succeeded")
+	}
+	if credentials.saveCalls != 0 {
+		t.Fatalf("invalid S3 credential saved %d times", credentials.saveCalls)
+	}
+}
+
+func stringPtr(value string) *string { return &value }

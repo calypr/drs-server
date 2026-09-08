@@ -1,9 +1,6 @@
 package buckets
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/bucketapi"
@@ -54,26 +51,19 @@ func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
 }
 
 func (s *bucketServer) PutBucket(c fiber.Ctx) error {
-	bucketService := s.bucketService
 	var req bucketapi.PutBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 
 	rawProvider := strings.TrimSpace(bucketStringValue(req.Provider))
-	bucketProvider, err := address.ParseBucketProvider(rawProvider)
-	if err != nil {
+	if _, err := address.ParseBucketProvider(rawProvider); err != nil {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "provider must be one of: s3, gcs, azure")
 	}
-	req.Provider = bucketPointer(bucketProvider)
 
 	req.Bucket = strings.TrimSpace(req.Bucket)
 	req.Organization = strings.TrimSpace(req.Organization)
 	req.ProjectId = strings.TrimSpace(req.ProjectId)
-	region := strings.TrimSpace(bucketStringValue(req.Region))
-	accessKey := strings.TrimSpace(bucketStringValue(req.AccessKey))
-	secretKey := strings.TrimSpace(bucketStringValue(req.SecretKey))
-	endpoint := strings.TrimSpace(bucketStringValue(req.Endpoint))
 	if req.Bucket == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "bucket is required")
 	}
@@ -83,140 +73,41 @@ func (s *bucketServer) PutBucket(c fiber.Ctx) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
-		return apimiddleware.HandleError(c, err)
-	}
-
-	prefix, err := address.NormalizeStoragePath(readOptionalPath(req.Path), req.Bucket)
-	if err != nil {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
-	}
-
-	credentialID := ""
-	var existingCred *domainbuckets.Credential
-	var credErr error
-	existingCred, credErr = bucketService.GetS3Credential(c.Context(), req.Bucket)
-	if credErr != nil && !isCredentialNotFoundError(credErr) {
-		return apimiddleware.HandleError(c, credErr)
-	}
-	if credErr == nil && existingCred != nil {
-		credentialID = existingCred.CredentialID
-	}
-	if credentialID == "" {
-		credentialID = domainbuckets.DeriveCredentialID(req.Bucket, bucketProvider, region, endpoint, accessKey)
-	}
-	if existingCred == nil {
-		existingCred, credErr = bucketService.GetS3Credential(c.Context(), credentialID)
-		if credErr != nil && !isCredentialNotFoundError(credErr) {
-			return apimiddleware.HandleError(c, credErr)
-		}
-	}
-	hasExistingCred := credErr == nil && existingCred != nil
-	if hasExistingCred && rawProvider == "" {
-		bucketProvider = existingCred.Provider
-		req.Provider = bucketPointer(bucketProvider)
-	}
-	scopeOnly := hasExistingCred && accessKey == "" && secretKey == "" && endpoint == "" && region == "" && rawProvider == "" && req.Organization != ""
-
-	if !hasExistingCred && bucketProvider == address.S3Provider && (accessKey == "" || secretKey == "") {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "access_key and secret_key are required for new s3 credentials")
-	}
-
-	if req.Organization != "" {
-		if err := bucketService.CreateBucketScope(c.Context(), &domainbuckets.Scope{
-			Organization: req.Organization,
-			ProjectID:    req.ProjectId,
-			CredentialID: credentialID,
-			Bucket:       req.Bucket,
-			PathPrefix:   prefix,
-		}); err != nil {
-			return apimiddleware.HandleError(c, err)
-		}
-	}
-	if scopeOnly {
-		return c.SendStatus(fiber.StatusCreated)
-	}
-
-	if hasExistingCred {
-		if region == "" {
-			region = existingCred.Region
-		}
-		if accessKey == "" {
-			accessKey = existingCred.AccessKey
-		}
-		if secretKey == "" {
-			secretKey = existingCred.SecretKey
-		}
-		if endpoint == "" {
-			endpoint = existingCred.Endpoint
-		}
-	}
-	if err := address.ValidateBucketNameWithEndpoint(bucketProvider, req.Bucket, endpoint); err != nil {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
-	}
-
-	cred := &domainbuckets.Credential{
-		CredentialID: credentialID,
+	if err := s.bucketService.Put(c.Context(), domainbuckets.PutRequest{
 		Bucket:       req.Bucket,
-		Provider:     bucketProvider,
-		Region:       region,
-		AccessKey:    accessKey,
-		SecretKey:    secretKey,
-		Endpoint:     endpoint,
-	}
-	if bucketProvider == address.S3Provider && (strings.TrimSpace(cred.AccessKey) == "" || strings.TrimSpace(cred.SecretKey) == "") {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "access_key and secret_key are required for s3 credentials")
-	}
-	if err := bucketService.SaveS3Credential(c.Context(), cred); err != nil {
+		Organization: req.Organization,
+		ProjectID:    req.ProjectId,
+		Provider:     req.Provider,
+		Region:       req.Region,
+		AccessKey:    req.AccessKey,
+		SecretKey:    req.SecretKey,
+		Endpoint:     req.Endpoint,
+		Path:         req.Path,
+	}); err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
 
-func isCredentialNotFoundError(err error) bool {
-	return err != nil && errors.Is(err, errorapi.ErrStorageCredentialMissing)
-}
-
-func authorizeBucketDelete(ctx context.Context, bucketService *domainbuckets.Service, bucket string) error {
-	if apimiddleware.MissingGen3AuthHeader(ctx) {
-		return errorapi.ErrAuthenticationRequired
-	}
-	scopes, err := bucketService.ListBucketScopes(ctx)
-	if err != nil {
-		return err
-	}
-	if !domainbuckets.BucketsAllowedByNames(ctx, scopes, bucket, "delete", "update") {
-		return errorapi.ErrAccessDenied
-	}
-	return nil
-}
-
 func (s *bucketServer) DeleteBucket(c fiber.Ctx, bucket string) error {
-	bucketService := s.bucketService
 	credentialID := strings.TrimSpace(bucket)
 	if credentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "bucket name is required")
 	}
-	if err := authorizeBucketDelete(c.Context(), bucketService, credentialID); err != nil {
-		return apimiddleware.HandleError(c, err)
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	if err := bucketService.DeleteS3Credential(c.Context(), credentialID); err != nil {
+	if err := s.bucketService.DeleteBucket(c.Context(), credentialID); err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
-	bucketService := s.bucketService
 	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
-	cred, err := bucketService.GetS3Credential(c.Context(), routeCredentialID)
-	if err != nil {
-		return apimiddleware.HandleError(c, err)
-	}
-
 	var req bucketapi.AddBucketScopeRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
@@ -229,28 +120,14 @@ func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), req.Organization, req.ProjectId, "create", "update"); err != nil {
-		return apimiddleware.HandleError(c, err)
-	}
 
-	prefix, err := address.NormalizeStoragePath(readOptionalPath(req.Path), cred.Bucket)
-	if err != nil {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
-	}
-	if err := bucketService.CreateBucketScope(c.Context(), &domainbuckets.Scope{
-		Organization: req.Organization,
-		ProjectID:    req.ProjectId,
-		CredentialID: cred.CredentialID,
-		Bucket:       cred.Bucket,
-		PathPrefix:   prefix,
-	}); err != nil {
+	if err := s.bucketService.CreateScopeForBucket(c.Context(), routeCredentialID, req.Organization, req.ProjectId, readOptionalPath(req.Path)); err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
 
 func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
-	bucketService := s.bucketService
 	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
@@ -267,54 +144,13 @@ func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, para
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	if err := domainbuckets.AuthorizeScopeWrite(c.Context(), organization, projectID, "delete", "update"); err != nil {
-		return apimiddleware.HandleError(c, err)
-	}
-	pathPrefix := ""
-	if scopePath != "" {
-		cred, err := bucketService.GetS3Credential(c.Context(), routeCredentialID)
-		if err != nil {
-			return apimiddleware.HandleError(c, err)
-		}
-		pathPrefix, err = address.NormalizeStoragePath(scopePath, cred.Bucket)
-		if err != nil {
-			return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
-		}
-	}
-	scopes, err := bucketService.ListBucketScopes(c.Context())
-	if err != nil {
-		return apimiddleware.HandleError(c, err)
-	}
-	matchCount := 0
-	for _, scope := range scopes {
-		if !(strings.EqualFold(scope.Bucket, routeCredentialID) || strings.EqualFold(scope.CredentialID, routeCredentialID)) {
-			continue
-		}
-		if strings.TrimSpace(scope.Organization) != organization {
-			continue
-		}
-		if strings.TrimSpace(scope.ProjectID) != projectID {
-			continue
-		}
-		if strings.Trim(strings.TrimSpace(scope.PathPrefix), "/") != pathPrefix {
-			continue
-		}
-		matchCount++
-	}
-	if matchCount == 0 {
-		return apimiddleware.HandleError(c, errorapi.ErrBucketScopeNotFound)
-	}
-	if matchCount > 1 {
-		return apimiddleware.Reject(c, fiber.StatusConflict, "bucket scope delete matched multiple rows")
-	}
-	if err := bucketService.DeleteBucketScope(c.Context(), organization, projectID, routeCredentialID, pathPrefix); err != nil {
+	if err := s.bucketService.DeleteScope(c.Context(), routeCredentialID, organization, projectID, scopePath); err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
-	bucketService := s.bucketService
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
@@ -323,31 +159,15 @@ func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
 
-	scopes, err := bucketService.ListBucketScopes(c.Context())
+	scopes, err := s.bucketService.ListVisibleScopes(c.Context(), routeCredentialID)
 	if err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 
-	result := []bucketapi.BucketScopeResponse{}
+	result := make([]bucketapi.BucketScopeResponse, 0, len(scopes))
 	for _, scope := range scopes {
-		if strings.EqualFold(scope.Bucket, routeCredentialID) || strings.EqualFold(scope.CredentialID, routeCredentialID) {
-			if !domainbuckets.ScopeAllowed(c.Context(), scope, "read") {
-				continue
-			}
-			scheme := "s3"
-			if cred, err := bucketService.GetS3Credential(c.Context(), scope.CredentialID); err == nil && cred != nil {
-				scheme = address.ProviderToScheme(cred.Provider)
-			}
-			path := fmt.Sprintf("%s://%s", scheme, scope.Bucket)
-			if strings.TrimSpace(scope.PathPrefix) != "" {
-				path = fmt.Sprintf("%s/%s", path, strings.Trim(strings.TrimSpace(scope.PathPrefix), "/"))
-			}
-			result = append(result, bucketapi.BucketScopeResponse{
-				Organization: scope.Organization,
-				ProjectId:    scope.ProjectID,
-				Path:         &path,
-			})
-		}
+		path := scope.Path
+		result = append(result, bucketapi.BucketScopeResponse{Organization: scope.Organization, ProjectId: scope.ProjectID, Path: &path})
 	}
 	return c.JSON(result)
 }

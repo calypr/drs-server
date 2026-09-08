@@ -10,7 +10,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
-	"github.com/calypr/syfon/internal/storage/address"
 )
 
 type internalInspectObjectRequest struct {
@@ -389,34 +388,17 @@ func handleInternalInspectProjectScopesFiber(bucketService *buckets.Service) fib
 		if organization == "" || project == "" {
 			return apimiddleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 		}
-		scopes, err := bucketService.ListBucketScopes(c.Context())
+		scopes, err := bucketService.ListVisibleProjectScopes(c.Context(), organization, project)
 		if err != nil {
 			return apimiddleware.HandleError(c, err)
 		}
 		out := internalInspectProjectScopesResponse{Items: make([]internalInspectProjectScopeItem, 0)}
 		for _, scope := range scopes {
-			if !strings.EqualFold(strings.TrimSpace(scope.Organization), organization) {
-				continue
-			}
-			scopeProject := strings.TrimSpace(scope.ProjectID)
-			if scopeProject != "" && !strings.EqualFold(scopeProject, project) {
-				continue
-			}
-			if !buckets.ScopeAllowed(c.Context(), scope, "read") {
-				continue
-			}
 			row := internalInspectProjectScopeItem{
-				Bucket:       strings.TrimSpace(scope.Bucket),
-				Organization: organization,
-				ProjectID:    scopeProject,
-			}
-			scheme := "s3"
-			if cred, err := bucketService.GetS3Credential(c.Context(), scope.CredentialID); err == nil && cred != nil {
-				scheme = address.ProviderToScheme(cred.Provider)
-			}
-			row.Path = scheme + "://" + strings.TrimSpace(scope.Bucket)
-			if scope.PathPrefix != "" {
-				row.Path += "/" + strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
+				Bucket:       scope.Bucket,
+				Organization: scope.Organization,
+				ProjectID:    scope.ProjectID,
+				Path:         scope.Path,
 			}
 			out.Items = append(out.Items, row)
 		}

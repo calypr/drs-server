@@ -328,6 +328,50 @@ func TestVisibleToCallerMatchesPhysicalAndCredentialAliases(t *testing.T) {
 	}
 }
 
+func TestVisibleScopeOperationsPreserveTheirDistinctReadPolicies(t *testing.T) {
+	allowed := mustResource(t, "Org", "Project")
+	root := mustResource(t, "Org", "")
+	service, _, _ := newFakeService(
+		[]Credential{
+			{CredentialID: "gcs-id", Bucket: "physical-gcs", Provider: "gcs"},
+			{CredentialID: "s3-id", Bucket: "physical-s3", Provider: "s3"},
+		},
+		[]Scope{
+			{CredentialID: "gcs-id", Bucket: "physical-gcs", Organization: "Org", ProjectID: "Project", PathPrefix: "data"},
+			{CredentialID: "s3-id", Bucket: "physical-s3", Organization: "Org", ProjectID: "", PathPrefix: ""},
+			{CredentialID: "gcs-id", Bucket: "physical-gcs", Organization: "Other", ProjectID: "Project", PathPrefix: "secret"},
+		},
+		&fakeVisibilityQuery{}, nil, nil,
+	)
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{
+		allowed: {"read": true},
+		root:    {"read": true},
+	}, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	scopes, err := service.ListVisibleScopes(ctx, "PHYSICAL-GCS")
+	if err != nil {
+		t.Fatalf("ListVisibleScopes: %v", err)
+	}
+	if !reflect.DeepEqual(scopes, []VisibleScope{{Organization: "Org", ProjectID: "Project", Path: "gs://physical-gcs/data"}}) {
+		t.Fatalf("visible bucket scopes=%+v", scopes)
+	}
+
+	projectScopes, err := service.ListVisibleProjectScopes(ctx, "org", "project")
+	if err != nil {
+		t.Fatalf("ListVisibleProjectScopes: %v", err)
+	}
+	want := []VisibleProjectScope{
+		{Bucket: "physical-gcs", Organization: "org", ProjectID: "Project", Path: "gs://physical-gcs/data"},
+		{Bucket: "physical-s3", Organization: "org", ProjectID: "", Path: "s3://physical-s3"},
+	}
+	if !reflect.DeepEqual(projectScopes, want) {
+		t.Fatalf("visible project scopes=%+v, want %+v", projectScopes, want)
+	}
+}
+
 func visiblePrograms(visible map[string]VisibleBucket) map[string][]string {
 	result := make(map[string][]string, len(visible))
 	for key, bucket := range visible {
