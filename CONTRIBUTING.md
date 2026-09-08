@@ -45,7 +45,7 @@ The canonical GA4GH schema is the `data-repository-service-schemas` submodule. L
 make gen
 ```
 
-Commit the input changes and the generated output together. Do not edit files under `apigen/client` or `apigen/server` by hand. Read the [OpenAPI code-generation guide](docs/operator-guide-code-generation.md) for the generated package layout and runtime serving path.
+Commit the input changes and the generated output together. Do not edit files under `apigen/{errorapi,drs,lfsapi,bucketapi,metricsapi,internalapi}` by hand. Read the [OpenAPI code-generation guide](docs/operator-guide-code-generation.md) for the generated package layout and runtime serving path.
 
 ## Migrate root-module imports
 

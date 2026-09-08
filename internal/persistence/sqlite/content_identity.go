@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -141,10 +141,10 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 		return "", err
 	}
 	if wasExisting && !publicRead && (sqliteHasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !sqliteCanReadContent(ctx, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", errorapi.ErrAccessDenied
 	}
 	if !sqliteCanCreateResources(ctx, resources, currentResources) {
-		return "", faults.ErrUnauthorized
+		return "", errorapi.ErrAccessDenied
 	}
 	if err := mergeContentRowTx(ctx, tx, row, obj, resources, currentResources); err != nil {
 		return "", err
@@ -505,7 +505,7 @@ func sqliteRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method st
 		return err
 	}
 	if !access.HasMethodAccess(ctx, method, resources) {
-		return faults.ErrUnauthorized
+		return errorapi.ErrAccessDenied
 	}
 	return nil
 }
@@ -553,7 +553,7 @@ func normalizeChecksumLookup(value string) string {
 
 func identityConflict(format string, args ...interface{}) error {
 	params := make([]interface{}, 0, len(args)+1)
-	params = append(params, faults.ErrConflict)
+	params = append(params, errorapi.ErrConflict)
 	params = append(params, args...)
 	return fmt.Errorf("%w: "+format, params...)
 }

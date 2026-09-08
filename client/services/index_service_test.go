@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/drs"
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/drs"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 func TestIndexServiceOperationsAndUpsert(t *testing.T) {
@@ -57,10 +58,7 @@ func TestIndexServiceOperationsAndUpsert(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&lastBulkCreate); err != nil {
 				t.Fatalf("Decode bulk create body returned error: %v", err)
 			}
-			records := make([]internalapi.InternalRecord, 0, len(lastBulkCreate.Records))
-			for _, rec := range lastBulkCreate.Records {
-				records = append(records, rec)
-			}
+			records := append([]internalapi.InternalRecord(nil), lastBulkCreate.Records...)
 			writeJSON(t, w, http.StatusCreated, internalapi.ListRecordsResponse{Records: &records})
 		case r.Method == http.MethodPost && r.URL.Path == "/index/bulk/hashes":
 			if err := json.NewDecoder(r.Body).Decode(&lastBulkHashes); err != nil {
@@ -339,7 +337,8 @@ func TestIndexServiceRemoveControlledAccessRequiresJSON200(t *testing.T) {
 
 	service := NewIndexService(mustInternalClient(t, server.URL), &fakeRequester{})
 	_, err := service.RemoveControlledAccess(context.Background(), "did-ca", "/organization/org/project/proj")
-	if err == nil || !strings.Contains(err.Error(), "failed to remove controlled access: 204") {
+	var apiErr *apierror.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNoContent {
 		t.Fatalf("expected 204 failure, got %v", err)
 	}
 }

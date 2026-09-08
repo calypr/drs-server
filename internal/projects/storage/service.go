@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -85,7 +87,8 @@ func (s *Inspector) InspectProjectStorage(ctx context.Context, organization, pro
 		if len(items) == 0 || !errors.As(listErr, &inspectErr) || inspectErr.Kind != ErrorListingIncomplete {
 			return nil, listErr
 		}
-		warning = strings.TrimSpace(listErr.Error())
+		logStorageDiagnostic(ctx, listErr, "inventory")
+		warning = safeStorageErrorMessage(listErr, "inventory")
 	}
 	normalized := normalizeObjects(items, target)
 	summary := summarize(normalized, target, mode)
@@ -330,19 +333,80 @@ func mapStorageError(err error, capability, bucket, key string) error {
 	case storage.ErrorForbidden:
 		kind = ErrorPermissionDenied
 	case storage.ErrorUnavailable:
-		kind = ErrorBucketUnavailable
+		return err
 	case storage.ErrorIncomplete:
 		kind = ErrorListingIncomplete
 	case storage.ErrorUnsupported:
 		kind = ErrorUnsupported
 	case storage.ErrorProvider:
 		return err
+	default:
+		return err
 	}
-	message := operation.Error()
-	if strings.TrimSpace(message) == "" {
-		message = fmt.Sprintf("storage %s failed for %s/%s", capability, bucket, key)
+	return &Error{Kind: kind, Message: storageErrorMessage(kind, capability, bucket, key), Cause: err}
+}
+
+func safeStorageErrorMessage(err error, capability string) string {
+	if err == nil {
+		return ""
 	}
-	return &Error{Kind: kind, Message: message}
+	var inspectErr *Error
+	if errors.As(err, &inspectErr) {
+		return inspectErr.PublicMessage()
+	}
+	var operation *storage.OperationError
+	if errors.As(err, &operation) {
+		switch operation.Kind {
+		case storage.ErrorUnavailable:
+			return fmt.Sprintf("storage %s is temporarily unavailable", capability)
+		case storage.ErrorIncomplete:
+			return fmt.Sprintf("storage %s returned incomplete results", capability)
+		case storage.ErrorForbidden:
+			return "storage access is forbidden"
+		case storage.ErrorNotFound:
+			return "storage object was not found"
+		case storage.ErrorInvalid:
+			return fmt.Sprintf("storage %s request is invalid", capability)
+		case storage.ErrorUnsupported:
+			return fmt.Sprintf("storage %s is not supported", capability)
+		default:
+			return fmt.Sprintf("storage %s failed", capability)
+		}
+	}
+	return fmt.Sprintf("storage %s failed", capability)
+}
+
+func logStorageDiagnostic(ctx context.Context, err error, capability string) {
+	if err == nil {
+		return
+	}
+	provider := ""
+	diagnostic := err
+	var operation *storage.OperationError
+	if errors.As(err, &operation) {
+		provider = operation.Provider
+		diagnostic = operation
+	}
+	slog.Warn("project storage operation failed", "request_id", requestid.GetRequestID(ctx), "provider", provider, "capability", capability, "err", diagnostic)
+}
+
+func storageErrorMessage(kind ErrorKind, capability, bucket, key string) string {
+	switch kind {
+	case ErrorInvalidInput:
+		return fmt.Sprintf("storage %s request is invalid", capability)
+	case ErrorCredentialMissing:
+		return fmt.Sprintf("no stored storage credential found for bucket %q", bucket)
+	case ErrorObjectNotFound:
+		return fmt.Sprintf("storage object %q was not found", key)
+	case ErrorPermissionDenied:
+		return "storage access is forbidden"
+	case ErrorListingIncomplete:
+		return fmt.Sprintf("storage %s returned incomplete results", capability)
+	case ErrorUnsupported:
+		return fmt.Sprintf("storage %s is not supported", capability)
+	default:
+		return fmt.Sprintf("storage %s failed", capability)
+	}
 }
 
 func (s *Inspector) credentialForBucket(ctx context.Context, bucket string) (*buckets.Credential, error) {

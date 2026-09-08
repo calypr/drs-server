@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/request"
 	syfonclient "github.com/calypr/syfon/client/services"
 )

@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -18,7 +18,7 @@ func (s *DataService) multipartInitRequest(ctx context.Context, req internalapi.
 		return internalapi.InternalMultipartInitOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartInitOutput{}, apiResponseError("failed to init multipart", resp.StatusCode(), resp.Body)
+		return internalapi.InternalMultipartInitOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -29,7 +29,7 @@ func (d *DataService) multipartUploadRequest(ctx context.Context, req internalap
 		return internalapi.InternalMultipartUploadOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartUploadOutput{}, apiResponseError("failed to upload part", resp.StatusCode(), resp.Body)
+		return internalapi.InternalMultipartUploadOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -40,7 +40,7 @@ func (d *DataService) multipartCompleteRequest(ctx context.Context, req internal
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return apiResponseError("failed to complete multipart", resp.StatusCode(), resp.Body)
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }

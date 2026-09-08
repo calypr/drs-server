@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
@@ -16,10 +16,10 @@ func handleInternalCreateFiber(objectService *objectrecords.Service) fiber.Handl
 	return func(c fiber.Ctx) error {
 		candidates, err := decodeInternalCreateCandidates(c, time.Now().UTC())
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: " + err.Error())
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 		if err := objectService.RegisterObjects(c.Context(), candidates); err != nil {
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 
 		if strings.HasSuffix(c.Path(), "/bulk") {

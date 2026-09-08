@@ -85,8 +85,8 @@ func TestAllRegisteredEndpoints_WithMocks(t *testing.T) {
 		{Method: http.MethodPost, Template: "/ga4gh/drs/v1/objects/register"},
 		{Method: http.MethodPost, Template: "/ga4gh/drs/v1/objects"},
 		{Method: http.MethodPost, Template: "/ga4gh/drs/v1/objects/access"},
-		{Method: http.MethodPost, Template: "/ga4gh/drs/v1/objects/access-methods"},
-		{Method: http.MethodPost, Template: "/ga4gh/drs/v1/objects/delete"},
+		{Method: http.MethodPut, Template: "/ga4gh/drs/v1/objects/access-methods"},
+		{Method: http.MethodPut, Template: "/ga4gh/drs/v1/objects/delete"},
 		{Method: http.MethodPost, Template: "/info/lfs/objects/batch"},
 		{Method: http.MethodPost, Template: "/index/bulk/sha256/validity"},
 		{Method: http.MethodGet, Template: "/index/v1/metrics/summary"},
@@ -185,7 +185,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 			SecretKey: "mock-secret",
 		},
 	}}
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	authRuntime := authentication.NewRuntime(logger, "local", "", "")

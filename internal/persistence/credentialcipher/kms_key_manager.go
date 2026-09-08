@@ -3,7 +3,6 @@ package credentialcipher
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -41,7 +40,7 @@ func (m *awsKMSKeyManager) WrapDataKey(ctx context.Context, dataKey []byte) (*Wr
 
 func (m *awsKMSKeyManager) UnwrapDataKey(ctx context.Context, wrapped *WrappedDataKey) ([]byte, error) {
 	if wrapped == nil {
-		return nil, errors.New("wrapped data key is required")
+		return nil, fmt.Errorf("wrapped data key is required")
 	}
 	blob, err := base64.RawStdEncoding.DecodeString(wrapped.Ciphertext)
 	if err != nil {

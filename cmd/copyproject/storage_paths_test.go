@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	"github.com/calypr/syfon/apigen/bucketapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/cmd/projectcopy"
 )
 

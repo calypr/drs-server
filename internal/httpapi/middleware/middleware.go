@@ -72,9 +72,7 @@ func isPublicDRSMetadataRequest(c fiber.Ctx) bool {
 	method := strings.ToUpper(strings.TrimSpace(c.Method()))
 	path := strings.TrimSuffix(strings.TrimSpace(c.Path()), "/")
 	const drsPrefix = "/ga4gh/drs/v1"
-	if strings.HasPrefix(path, drsPrefix) {
-		path = strings.TrimPrefix(path, drsPrefix)
-	}
+	path = strings.TrimPrefix(path, drsPrefix)
 	if !strings.HasPrefix(path, "/objects") {
 		return false
 	}
@@ -125,12 +123,12 @@ func (m *AuthzMiddleware) applyResult(c fiber.Ctx, ctx context.Context, fallback
 		if result.BasicChallenge {
 			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="syfon"`)
 		}
-		return c.SendStatus(fiber.StatusUnauthorized)
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	case authentication.DecisionForbidden:
-		return c.SendStatus(fiber.StatusForbidden)
+		return Reject(c, fiber.StatusForbidden, "Forbidden")
 	case authentication.DecisionInternalError:
-		return c.SendStatus(fiber.StatusInternalServerError)
+		return Reject(c, fiber.StatusInternalServerError, "Internal Server Error")
 	default:
-		return c.SendStatus(fiber.StatusUnauthorized)
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 }

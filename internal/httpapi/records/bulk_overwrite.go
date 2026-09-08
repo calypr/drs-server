@@ -1,13 +1,12 @@
 package records
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/gofiber/fiber/v3"
@@ -31,13 +30,13 @@ func handleInternalBulkOverwriteFiber(objectService *objectrecords.Service) fibe
 	return func(c fiber.Ctx) error {
 		var req bulkOverwriteRequest
 		if err := c.Bind().JSON(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		if strings.TrimSpace(req.Organization) == "" || strings.TrimSpace(req.Project) == "" || len(req.Records) == 0 {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body: organization, project, and records are required")
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and records are required")
 		}
 		if len(req.Records) > maxInternalBulkOverwrite {
-			return c.Status(fiber.StatusRequestEntityTooLarge).SendString(fmt.Sprintf("too many records: maximum is %d", maxInternalBulkOverwrite))
+			return middleware.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many records: maximum is %d", maxInternalBulkOverwrite))
 		}
 
 		candidates := make([]objects.Record, 0, len(req.Records))
@@ -47,17 +46,14 @@ func handleInternalBulkOverwriteFiber(objectService *objectrecords.Service) fibe
 			record.Project = &req.Project
 			obj, err := internalRecordToObject(record, now)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).SendString(fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
+				return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 			}
 			candidates = append(candidates, obj)
 		}
 
 		result, err := objectService.BulkOverwriteObjects(c.Context(), req.Organization, req.Project, candidates)
 		if err != nil {
-			if errors.Is(err, objectrecords.ErrBulkOverwriteConflict) {
-				return c.Status(fiber.StatusConflict).SendString(err.Error())
-			}
-			return response.HandleError(c, err)
+			return middleware.HandleError(c, err)
 		}
 		return c.JSON(bulkOverwriteResponse{
 			Processed:       len(candidates),

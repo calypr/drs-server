@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 type AuthorizationError struct {
@@ -17,12 +17,20 @@ type AuthorizationError struct {
 	TruncatedResources int
 }
 
+func (e *AuthorizationError) ErrorCode() errorapi.ErrorCode {
+	return errorapi.ErrorCodeAccessDenied
+}
+
+func (e *AuthorizationError) ErrorCategory() errorapi.ErrorCategory {
+	return errorapi.ErrorCategoryForbidden
+}
+
 func (e *AuthorizationError) Error() string {
 	return e.PublicMessage()
 }
 
-func (e *AuthorizationError) Unwrap() error {
-	return faults.ErrUnauthorized
+func (e *AuthorizationError) Is(target error) bool {
+	return errorapi.ErrAccessDenied.Is(target)
 }
 
 func (e *AuthorizationError) PublicMessage() string {

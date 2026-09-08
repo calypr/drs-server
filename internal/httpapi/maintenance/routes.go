@@ -1,7 +1,6 @@
 package maintenance
 
 import (
-	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
@@ -21,25 +20,20 @@ const (
 	RouteRepairScopeApply              = "/data/repair/project-scope/apply"
 )
 
-func RegisterRepairRoutes(router fiber.Router, service *scoperepair.Service) {
-	router.Post(RouteRepairScopeAudit, handleInternalScopeRepairAuditFiber(service))
-	router.Post(RouteRepairScopeApply, handleInternalScopeRepairApplyFiber(service))
+// ProjectCleanupHandler returns the project cleanup handler.
+func ProjectCleanupHandler(service *projectstorage.ProjectCleanup) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		return handleInternalDeleteProjectFiber(c, service)
+	}
 }
 
-func RegisterInspectionRoutes(router fiber.Router, inspector *projectstorage.Inspector, cleanup *projectstorage.ProjectCleanup, bucketService *buckets.Service) {
+func RegisterUndocumentedRoutes(router fiber.Router, repair *scoperepair.Service, inspector *projectstorage.Inspector, cleanup *projectstorage.ProjectCleanup) {
+	router.Post(RouteRepairScopeAudit, handleInternalScopeRepairAuditFiber(repair))
+	router.Post(RouteRepairScopeApply, handleInternalScopeRepairApplyFiber(repair))
 	router.Post(RouteInspectObject, handleInternalInspectObjectFiber(inspector))
 	router.Post(RouteInspectObjectBulk, handleInternalInspectObjectBulkFiber(inspector))
 	router.Post(RouteInspectObjectBulkList, handleInternalInspectObjectBulkListFiber(inspector))
 	router.Post(RouteInspectProjectBucket, handleInternalInspectProjectBucketFiber(inspector))
-	router.Post(RouteInspectProjectBucketInventory, handleInternalInspectProjectBucketInventoryFiber(inspector))
 	router.Post(RouteInspectProjectRecords, handleInternalInspectProjectRecordsFiber(inspector))
-	router.Get(RouteInspectProjectScopes, handleInternalInspectProjectScopesFiber(bucketService))
-	router.Post(RouteInspectProjectScopes, handleInternalInspectProjectScopesFiber(bucketService))
 	router.Post(RouteDeleteProjectBucketObjects, handleInternalDeleteProjectBucketObjectsFiber(cleanup))
-}
-
-func RegisterProjectCleanupRoute(router fiber.Router, service *projectstorage.ProjectCleanup) {
-	router.Delete(RouteProjectCleanup, func(c fiber.Ctx) error {
-		return handleInternalDeleteProjectFiber(c, service)
-	})
 }

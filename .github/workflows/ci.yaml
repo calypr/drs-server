@@ -34,8 +34,8 @@ jobs:
 
       - name: Verify generated API bindings are up to date
         run: |
-          make gen-server gen-client
-          git diff --exit-code -- apigen/server apigen/client apigen/openapi/internal.openapi.yaml apigen/openapi/bucket.openapi.yaml
+          make gen-api
+          git diff --exit-code -- apigen apigen/openapi/internal.openapi.yaml apigen/openapi/bucket.openapi.yaml
 
   test:
     name: Unit, router, and endpoint tests
@@ -67,6 +67,9 @@ jobs:
       - name: Compile the client README example
         run: scripts/check-client-readme.sh
 
+      - name: Test modules without the workspace
+        run: make test-modules
+
       - name: Run server endpoint router tests
         run: |
           CGO_ENABLED=1 go test ./cmd/server \
@@ -87,7 +90,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_binary_endpoint_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -101,7 +104,7 @@ jobs:
       - name: Upload binary endpoint coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_binary_endpoint_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -183,7 +186,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_root_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -197,7 +200,7 @@ jobs:
       - name: Upload root coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_root_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -212,7 +215,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_client_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -226,7 +229,7 @@ jobs:
       - name: Upload client coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_client_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -248,7 +251,7 @@ jobs:
             client/coverage/coverage.out
 
   static-checks:
-    name: Vet, vuln, and plugins
+    name: Vet, Staticcheck, vuln, and plugins
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: verify-generated
@@ -269,8 +272,14 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
+      - name: Install Staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+
       - name: Run go vet
         run: go vet ./... ./client/... ./apigen/...
+
+      - name: Run Staticcheck
+        run: $(go env GOPATH)/bin/staticcheck ./... ./client/... ./apigen/errorapi/...
 
       - name: Check for Go CVEs - Root module
         run: $(go env GOPATH)/bin/govulncheck ./...

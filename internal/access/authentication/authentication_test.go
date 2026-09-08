@@ -17,7 +17,6 @@ import (
 	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/plugin"
-	hplugin "github.com/hashicorp/go-plugin"
 )
 
 func TestBuiltInAuthenticationPlugins(t *testing.T) {
@@ -420,11 +419,6 @@ func TestPluginRPCDelegation(t *testing.T) {
 		t.Fatalf("unexpected authz rpc output: out=%+v err=%v", authzOut, err)
 	}
 
-	var authnPlugin hplugin.Plugin = &authnPluginRPC{}
-	var authzPlugin hplugin.Plugin = &authzPluginRPC{}
-	if authnPlugin == nil || authzPlugin == nil {
-		t.Fatal("expected RPC adapters to implement go-plugin Plugin")
-	}
 }
 
 var _ plugin.AuthenticationPlugin = (*authenticationPluginManager)(nil)

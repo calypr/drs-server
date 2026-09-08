@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/calypr/syfon/apigen/server/drs"
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi"

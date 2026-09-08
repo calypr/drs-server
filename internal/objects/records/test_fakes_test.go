@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -17,7 +17,7 @@ type bulkOverwriteStore struct {
 func (f *bulkOverwriteStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := f.Objects[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copyObj := *obj
 	return &copyObj, nil
@@ -76,7 +76,7 @@ func (f *bulkOverwriteStore) DeleteObjectAlias(_ context.Context, aliasID string
 
 func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := f.Objects[canonicalID]; !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	if f.Aliases == nil {
 		f.Aliases = make(map[string]string)
@@ -88,7 +88,7 @@ func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canon
 func (f *bulkOverwriteStore) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
 	canonicalID, ok := f.Aliases[aliasID]
 	if !ok {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return canonicalID, nil
 }
@@ -123,7 +123,7 @@ func (f *readObjectStore) CreateObject(_ context.Context, obj *objects.Record) e
 func (f *readObjectStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := f.Objects[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copyObj := *obj
 	return &copyObj, nil

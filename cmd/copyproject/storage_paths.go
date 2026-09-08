@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 	"github.com/calypr/syfon/cmd/projectcopy"
 
 	clientaccess "github.com/calypr/syfon/client/access"

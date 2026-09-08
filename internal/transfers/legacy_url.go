@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -67,7 +67,7 @@ func (s *Service) resolveLegacyS3DownloadURL(ctx context.Context, obj *objects.R
 		}
 	}
 	if len(mappedURLs) > 1 {
-		return "", fmt.Errorf("%w: legacy S3 URL %q maps to conflicting physical locations %q and %q", faults.ErrConflict, accessURL, mappedURLs[0], mappedURLs[1])
+		return "", fmt.Errorf("%w: legacy S3 URL %q maps to conflicting physical locations %q and %q", errorapi.ErrConflict, accessURL, mappedURLs[0], mappedURLs[1])
 	}
 	return mappedURLs[0], nil
 }

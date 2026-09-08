@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,7 +57,7 @@ func (d *GenericDownloader) downloadSingle(ctx context.Context, guid string, dst
 	var err error
 	if startOffset > 0 {
 		body, err = d.Source.GetRangeReader(ctx, guid, startOffset, expectedSize-startOffset)
-		if err == transfer.ErrRangeIgnored {
+		if errors.Is(err, transfer.ErrRangeIgnored) {
 			// Server ignored our range request, restart from zero.
 			startOffset = 0
 			body, err = d.Source.GetReader(ctx, guid)
@@ -212,7 +213,10 @@ func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, d
 
 	var soFar atomic.Int64
 	bufPool := sync.Pool{
-		New: func() any { return make([]byte, 256*1024) },
+		New: func() any {
+			buf := make([]byte, 256*1024)
+			return &buf
+		},
 	}
 
 	progress := common.GetProgress(ctx)
@@ -242,10 +246,11 @@ func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, d
 				defer partBody.Close()
 
 				w := io.NewOffsetWriter(file, partStart)
-				buf := bufPool.Get().([]byte)
+				bufPtr := bufPool.Get().(*[]byte)
+				buf := *bufPtr
 				progressReader := newDownloadProgressReader(partBody, progress, oid, soFar.Load(), &soFar)
 				written, err := io.CopyBuffer(w, progressReader, buf)
-				bufPool.Put(buf)
+				bufPool.Put(bufPtr)
 				if err != nil {
 					_ = progressReader.FlushPendingProgress()
 					return err

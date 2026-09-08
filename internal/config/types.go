@@ -60,8 +60,6 @@ type BucketConfig struct {
 	Resources    []BucketResourceConfig `json:"resources,omitempty" yaml:"resources,omitempty"`
 }
 
-type S3Config = BucketConfig
-
 type BucketResourceConfig struct {
 	Organization string `json:"organization" yaml:"organization"`
 	OrgPath      string `json:"org_path,omitempty" yaml:"org_path,omitempty"`

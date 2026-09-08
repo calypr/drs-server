@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func newClockedService(clock *manualClock, scopes []Scope, credentials []Credential, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
@@ -214,7 +214,7 @@ func TestDeleteBucketScopeDoesNotClearOrCleanupAfterFailedDelete(t *testing.T) {
 func TestLookupBucketScopeConvertsNotFoundErrorsToCachedMisses(t *testing.T) {
 	clock := &manualClock{}
 	service, _, scopes := newClockedService(clock, nil, nil, nil)
-	scopes.getErr = faults.ErrNotFound
+	scopes.getErr = errorapi.ErrNotFound
 	if _, found, err := service.LookupBucketScope(context.Background(), "org", "project"); err != nil || found {
 		t.Fatalf("not-found lookup=(%v,%v), want nil,false", err, found)
 	}

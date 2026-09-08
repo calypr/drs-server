@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
@@ -39,7 +39,7 @@ var (
 func (f *transferObjectStoreFake) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := f.fixture.Objects[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return f.copyObject(id, obj), nil
 }
@@ -68,7 +68,7 @@ func (f *transferAliasStoreFake) DeleteObjectAlias(_ context.Context, aliasID st
 func (f *transferAliasStoreFake) CreateObjectAlias(_ context.Context, aliasID, canonicalObjectID string) error {
 	obj, ok := f.fixture.Objects[canonicalObjectID]
 	if !ok {
-		return faults.ErrNotFound
+		return errorapi.ErrNotFound
 	}
 	copyObj := *obj
 	copyObj.Id = objects.RecordID(aliasID)
@@ -80,7 +80,7 @@ func (f *transferAliasStoreFake) ResolveObjectAlias(_ context.Context, aliasID s
 	if _, ok := f.fixture.Objects[aliasID]; ok {
 		return aliasID, nil
 	}
-	return "", faults.ErrNotFound
+	return "", errorapi.ErrNotFound
 }
 
 func (f *transferObjectStoreFake) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
@@ -223,7 +223,7 @@ func (f *transferBucketStoreFake) DeleteBucketScope(_ context.Context, organizat
 	key := transferBucketScopeKey(organization, projectID)
 	scope, ok := f.fixture.BucketScopes[key]
 	if !ok || (credentialID != "" && scope.CredentialID != credentialID && scope.Bucket != credentialID) || strings.Trim(scope.PathPrefix, "/") != strings.Trim(pathPrefix, "/") {
-		return faults.ErrNotFound
+		return errorapi.ErrNotFound
 	}
 	delete(f.fixture.BucketScopes, key)
 	return nil
@@ -233,7 +233,7 @@ func (f *transferBucketStoreFake) GetBucketScope(_ context.Context, organization
 	f.fixture.GetBucketScopeCalls++
 	scope, ok := f.fixture.BucketScopes[transferBucketScopeKey(organization, project)]
 	if !ok {
-		return nil, faults.ErrNotFound
+		return nil, errorapi.ErrNotFound
 	}
 	copyScope := scope
 	return &copyScope, nil

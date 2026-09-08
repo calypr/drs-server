@@ -1,12 +1,14 @@
 package apidocs
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -32,6 +34,25 @@ func TestSwaggerUIRoutesServed(t *testing.T) {
 	}
 }
 
+func TestOpenAPISpecFailureUsesAPIErrorContract(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", func(c fiber.Ctx) error {
+		return sendInternalServerError(c, "private filesystem detail")
+	})
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatalf("test request failed: %v", err)
+	}
+	var body errorapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp.StatusCode != http.StatusInternalServerError || body.Status != http.StatusInternalServerError || body.Code != errorapi.ErrorCodeInternalError || body.Category != errorapi.ErrorCategoryInternalError || body.Message != http.StatusText(http.StatusInternalServerError) {
+		t.Fatalf("unexpected error response: status=%d body=%+v", resp.StatusCode, body)
+	}
+}
+
 func TestOpenAPIRoutesServedInRegistrationOrder(t *testing.T) {
 	app := fiber.New()
 	RegisterSwaggerRoutes(app)
@@ -43,6 +64,7 @@ func TestOpenAPIRoutesServedInRegistrationOrder(t *testing.T) {
 		RouteLFSSpec,
 		RouteBucketSpec,
 		RouteInternalSpec,
+		RouteErrorSpec,
 	}
 	var got []string
 	for _, routes := range app.Stack() {
@@ -72,6 +94,7 @@ func TestOpenAPISpecRoutesServed(t *testing.T) {
 		RouteLFSSpec,
 		RouteBucketSpec,
 		RouteInternalSpec,
+		RouteErrorSpec,
 	}
 	for _, path := range paths {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))

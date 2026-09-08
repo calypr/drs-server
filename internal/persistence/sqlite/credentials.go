@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/requestid"
 
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
@@ -35,7 +35,7 @@ func (db *SqliteDB) GetS3Credential(ctx context.Context, credentialID string) (*
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
 		return nil, wrapped
 	}
-	parsed, err := credentialcipher.ParseS3CredentialFromStorage(&c)
+	parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &c)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to decrypt credential: %w", err)
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
@@ -67,9 +67,9 @@ func (db *SqliteDB) getS3CredentialByPhysicalBucket(ctx context.Context, bucket 
 	}
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("credential not found")
+		return nil, errorapi.ErrStorageCredentialMissing
 	case 1:
-		parsed, err := credentialcipher.ParseS3CredentialFromStorage(&matches[0])
+		parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &matches[0])
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt credential: %w", err)
 		}
@@ -87,7 +87,7 @@ func (db *SqliteDB) SaveS3Credential(ctx context.Context, cred *buckets.Credenti
 			cred.CredentialID = buckets.DeriveCredentialID(cred.Bucket, cred.Provider, cred.Region, cred.Endpoint, cred.AccessKey)
 		}
 	}
-	stored, err := credentialcipher.PrepareS3CredentialForStorage(cred)
+	stored, err := credentialcipher.PrepareS3CredentialForStorage(ctx, cred)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to prepare credential for storage: %w", err)
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
@@ -164,9 +164,8 @@ func (db *SqliteDB) DeleteS3Credential(ctx context.Context, credentialID string)
 		return err
 	}
 	if rows == 0 {
-		notFoundErr := fmt.Errorf("credential not found")
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, notFoundErr)
-		return notFoundErr
+		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, errorapi.ErrStorageCredentialMissing)
+		return errorapi.ErrStorageCredentialMissing
 	}
 	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, nil)
 	return nil
@@ -175,7 +174,7 @@ func (db *SqliteDB) DeleteS3Credential(ctx context.Context, credentialID string)
 func (db *SqliteDB) resolveCredentialID(ctx context.Context, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", fmt.Errorf("credential not found")
+		return "", errorapi.ErrStorageCredentialMissing
 	}
 	var exact string
 	err := db.db.QueryRowContext(ctx, "SELECT credential_id FROM s3_credential WHERE credential_id = ?", raw).Scan(&exact)
@@ -206,7 +205,7 @@ func (db *SqliteDB) ListS3Credentials(ctx context.Context) ([]buckets.Credential
 			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", err)
 			return nil, err
 		}
-		parsed, err := credentialcipher.ParseS3CredentialFromStorage(&c)
+		parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &c)
 		if err != nil {
 			wrapped := fmt.Errorf("failed to decrypt credential for bucket %s: %w", c.Bucket, err)
 			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", c.Bucket, wrapped)
@@ -235,7 +234,7 @@ func (db *SqliteDB) CreateBucketScope(ctx context.Context, scope *buckets.Scope)
 	}
 
 	existing, err := db.GetBucketScope(ctx, org, project)
-	if err != nil && !errors.Is(err, faults.ErrNotFound) {
+	if err != nil && !errors.Is(err, errorapi.ErrNotFound) {
 		return err
 	}
 	if err == nil && existing != nil {
@@ -273,7 +272,7 @@ func (db *SqliteDB) GetBucketScope(ctx context.Context, organization, projectID 
 		&s.Organization, &s.ProjectID, &s.CredentialID, &s.Bucket, &s.PathPrefix,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return nil, errorapi.ErrBucketScopeNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bucket scope: %w", err)
@@ -320,7 +319,7 @@ func (db *SqliteDB) DeleteBucketScope(ctx context.Context, organization, project
 		return fmt.Errorf("failed to inspect deleted bucket scope count: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return errorapi.ErrBucketScopeNotFound
 	}
 	return nil
 }

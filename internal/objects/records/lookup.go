@@ -6,7 +6,7 @@ import (
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 // GetObject retrieves the prepared canonical record identified by ID, alias,
@@ -25,7 +25,7 @@ func (m *queryService) GetObject(ctx context.Context, ident string, requiredMeth
 // physical rows used to build the merged objectmodel.Record.
 func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, requiredMethod string) (*objectmodel.CanonicalContent, error) {
 	if strings.TrimSpace(ident) == "" {
-		return nil, faults.ErrNotFound
+		return nil, errorapi.ErrObjectNotFound
 	}
 
 	checksum, checksumIdent := objectmodel.NormalizeSHA256Query(ident)
@@ -59,7 +59,7 @@ func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, re
 		}
 	}
 
-	return nil, faults.ErrNotFound
+	return nil, errorapi.ErrObjectNotFound
 }
 
 func (m *queryService) canonicalContentForChecksum(ctx context.Context, checksum, method string) (*objectmodel.CanonicalContent, bool, error) {
@@ -98,7 +98,7 @@ func (m *queryService) lookupObjectByChecksum(ctx context.Context, ident string,
 				return nil, false, err
 			}
 			if len(allMatches) > 0 {
-				return nil, true, faults.ErrUnauthorized
+				return nil, true, errorapi.ErrAccessDenied
 			}
 		}
 		return nil, false, nil
@@ -111,7 +111,7 @@ func (m *queryService) lookupObjectByID(ctx context.Context, ident string) (*obj
 	if err == nil {
 		return obj, true, nil
 	}
-	if faults.IsNotFoundError(err) {
+	if errorapi.IsNotFoundError(err) {
 		return nil, false, nil
 	}
 	return nil, false, err
@@ -120,7 +120,7 @@ func (m *queryService) lookupObjectByID(ctx context.Context, ident string) (*obj
 func (m *queryService) lookupObjectByAlias(ctx context.Context, ident string) (*objectmodel.Record, bool, error) {
 	canonicalID, aliasErr := m.aliases.ResolveObjectAlias(ctx, ident)
 	if aliasErr != nil {
-		if faults.IsNotFoundError(aliasErr) {
+		if errorapi.IsNotFoundError(aliasErr) {
 			return nil, false, nil
 		}
 		return nil, false, aliasErr
@@ -131,7 +131,7 @@ func (m *queryService) lookupObjectByAlias(ctx context.Context, ident string) (*
 
 	obj, err := m.recordReader.GetObject(ctx, canonicalID)
 	if err != nil {
-		if faults.IsNotFoundError(err) {
+		if errorapi.IsNotFoundError(err) {
 			return nil, false, nil
 		}
 		return nil, false, err
@@ -164,7 +164,7 @@ func (m *queryService) canonicalContentForObject(ctx context.Context, obj *objec
 	physical := objectsWithSHA256(siblings, sha)
 	canonical := canonicalizeContentObjects(physical)
 	if len(canonical) == 0 {
-		return nil, faults.ErrNotFound
+		return nil, errorapi.ErrObjectNotFound
 	}
 	return &objectmodel.CanonicalContent{ContentID: objectmodel.ContentID(sha), Record: canonical[0], Records: physical}, nil
 }

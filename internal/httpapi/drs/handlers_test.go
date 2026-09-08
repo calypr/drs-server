@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	generated "github.com/calypr/syfon/apigen/server/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/gofiber/fiber/v3"
@@ -177,14 +177,12 @@ func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 	}
 }
 
-func TestDeleteAndAccessMethodAliases(t *testing.T) {
+func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 	for _, methodPath := range []struct {
 		method string
 		path   string
 	}{
-		{method: http.MethodPost, path: "/objects/object-1/delete"},
 		{method: http.MethodPut, path: "/objects/object-1/delete"},
-		{method: http.MethodPost, path: "/objects/delete"},
 		{method: http.MethodPut, path: "/objects/delete"},
 	} {
 		db := newDRSObjectStore(map[string]*objects.Record{
@@ -222,13 +220,11 @@ func TestDeleteAndAccessMethodAliases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal access method request: %v", err)
 	}
-	for _, method := range []string{http.MethodPost, http.MethodPut} {
-		resp, err := app.Test(httptest.NewRequest(method, "/objects/object-1/access-methods", bytes.NewReader(body)))
-		if err != nil {
-			t.Fatalf("%s access method request failed: %v", method, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("%s access method status = %d, want %d", method, resp.StatusCode, http.StatusOK)
-		}
+	resp, err := app.Test(httptest.NewRequest(http.MethodPut, "/objects/object-1/access-methods", bytes.NewReader(body)))
+	if err != nil {
+		t.Fatalf("access method request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("access method status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }

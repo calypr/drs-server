@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
@@ -68,7 +68,7 @@ func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 
 	explicitZero := int64(0)
 	_, err = service.UpdateRecord(context.Background(), "object", objectmodel.Record{}, &explicitZero, now)
-	if !errors.Is(err, faults.ErrConflict) || !strings.Contains(err.Error(), "object size is immutable") {
+	if !errors.Is(err, errorapi.ErrConflict) || !strings.Contains(err.Error(), "object size is immutable") {
 		t.Fatalf("explicit zero size error = %v", err)
 	}
 	if len(writer.replaced) != 1 {

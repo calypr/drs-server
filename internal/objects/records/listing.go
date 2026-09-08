@@ -9,9 +9,9 @@ import (
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 func (m *queryService) GetObjectsByChecksums(ctx context.Context, hashes []string, requiredMethod string) (map[string][]objectmodel.Record, error) {
@@ -59,7 +59,7 @@ func (m *queryService) GetBulkObjects(ctx context.Context, ids []string, require
 			matching := objectsWithSHA256(siblingsByChecksum[sha], sha)
 			family := canonicalizeContentObjects(matching)
 			if len(family) == 0 {
-				return nil, faults.ErrNotFound
+				return nil, errorapi.ErrObjectNotFound
 			}
 			resolved = family[0]
 		}
@@ -371,7 +371,7 @@ func (m *queryService) ListMissingScopedSHA256(ctx context.Context, organization
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" || project == "" || len(checksums) == 0 {
-		return nil, faults.ErrUnauthorized
+		return nil, errorapi.ErrAccessDenied
 	}
 	if err := requireScopeMethod(ctx, organization, project, objectMethodRead); err != nil {
 		return nil, err
@@ -499,20 +499,6 @@ func (m *queryService) listReadableObjectIDs(ctx context.Context) ([]string, boo
 	return ids, true, err
 }
 
-func (m *queryService) listReadableObjectIDsPage(ctx context.Context, startAfter string, limit, offset int) ([]string, bool, error) {
-	pager := m.pages
-	if pager == nil || !access.IsAuthzEnforced(ctx) {
-		return nil, false, nil
-	}
-	if access.IsGen3Mode(ctx) && !access.HasAuthHeader(ctx) {
-		return []string{}, true, nil
-	}
-
-	resources := readableResources(ctx)
-	ids, err := pager.ListObjectIDsPageByResources(ctx, resources, true, startAfter, limit, offset)
-	return ids, true, err
-}
-
 func (m *queryService) canPageScopeRead(ctx context.Context, organization, project string) bool {
 	if !access.IsAuthzEnforced(ctx) {
 		return true
@@ -570,19 +556,6 @@ func authorizedResources(ctx context.Context, method string) []string {
 		}
 	}
 	return clientaccess.NormalizeAccessResources(resources)
-}
-
-func (m *queryService) authorizedChecksumIDs(ctx context.Context, checksum, requiredMethod string) ([]string, bool, error) {
-	lister := m.authorizedQuery
-	if lister == nil {
-		return nil, false, nil
-	}
-	resources, includeUnscoped, restrictToResources := objectMethodResourceFilter(ctx, requiredMethod)
-	byChecksum, err := lister.ListObjectIDsByChecksumsAndResources(ctx, []string{checksum}, resources, includeUnscoped, restrictToResources)
-	if err != nil {
-		return nil, false, err
-	}
-	return byChecksum[checksum], true, nil
 }
 
 func searchAfterID(ids []string, startAfter string) int {

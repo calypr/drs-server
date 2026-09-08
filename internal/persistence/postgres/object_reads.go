@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
 )
@@ -28,12 +28,12 @@ type objectRow struct {
 func (db *PostgresDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", errorapi.ErrObjectNotFound
 	}
 	var canonicalID string
 	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = $1", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
-		return "", fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return "", errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return "", err
@@ -63,11 +63,11 @@ retryLookup:
 				resolvedAlias = true
 				goto retryLookup
 			}
-			if aliasErr != nil && !errors.Is(aliasErr, faults.ErrNotFound) {
+			if aliasErr != nil && !errors.Is(aliasErr, errorapi.ErrNotFound) {
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)
@@ -176,10 +176,10 @@ func (db *PostgresDB) GetBulkObjects(ctx context.Context, ids []string) ([]objec
 					obj, resolveErr = db.GetObject(ctx, resolved)
 					ok = resolveErr == nil
 				}
-			} else if !errors.Is(resolveErr, faults.ErrNotFound) {
+			} else if !errors.Is(resolveErr, errorapi.ErrNotFound) {
 				return nil, resolveErr
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, errorapi.ErrNotFound) {
 				return nil, resolveErr
 			}
 		}
@@ -352,9 +352,9 @@ func (db *PostgresDB) ListObjectIDsByScope(ctx context.Context, organization, pr
 		err  error
 	)
 	if project != "" {
-		resource, err := clientaccess.ResourcePath(organization, project)
-		if err != nil {
-			return nil, err
+		resource, resourceErr := clientaccess.ResourcePath(organization, project)
+		if resourceErr != nil {
+			return nil, resourceErr
 		}
 		rows, err = db.db.QueryContext(ctx, `
 			SELECT DISTINCT ca.object_id

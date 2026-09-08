@@ -2,21 +2,22 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net/http"
 	"path"
 	"strings"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/transfer"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
-var ErrNoRecordsForHash = errors.New("no records found for hash")
-var ErrObjectNotFound = errors.New("drs object not found")
+var ErrNoRecordsForHash = fmt.Errorf("no records found for hash")
+
+// Deprecated: use errorapi.ErrNotFound.
+var ErrObjectNotFound = errorapi.ErrNotFound
 
 type DRSService struct {
 	gen   drsapi.ClientWithResponsesInterface
@@ -60,10 +61,7 @@ func (s *DRSService) GetObject(ctx context.Context, objectID string) (drsapi.Drs
 		return drsapi.DrsObject{}, err
 	}
 	if resp.JSON200 == nil {
-		if resp.StatusCode() == http.StatusNotFound {
-			return drsapi.DrsObject{}, fmt.Errorf("%w: %s", ErrObjectNotFound, objectID)
-		}
-		return drsapi.DrsObject{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.DrsObject{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -78,7 +76,7 @@ func (s *DRSService) DeleteObject(ctx context.Context, objectID string, deleteSt
 		return err
 	}
 	if resp.StatusCode() != 200 && resp.StatusCode() != 204 {
-		return apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -97,7 +95,7 @@ func (s *DRSService) GetAccessURL(ctx context.Context, objectID, accessID string
 		return drsapi.AccessURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return drsapi.AccessURL{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.AccessURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -108,7 +106,7 @@ func (s *DRSService) RegisterObjects(ctx context.Context, req drsapi.RegisterObj
 		return drsapi.N201ObjectsCreated{}, err
 	}
 	if resp.JSON201 == nil {
-		return drsapi.N201ObjectsCreated{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.N201ObjectsCreated{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -121,10 +119,7 @@ func (s *DRSService) UpdateObjectAccessMethods(ctx context.Context, objectID str
 		return drsapi.DrsObject{}, err
 	}
 	if resp.JSON200 == nil {
-		if resp.StatusCode() == http.StatusNotFound {
-			return drsapi.DrsObject{}, fmt.Errorf("%w: %s", ErrObjectNotFound, objectID)
-		}
-		return drsapi.DrsObject{}, apiResponseError("unexpected response", resp.StatusCode(), resp.Body)
+		return drsapi.DrsObject{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -153,8 +148,11 @@ func (s *DRSService) BatchGetObjectsByHash(ctx context.Context, hashes []string)
 		if err != nil {
 			return DRSPage{}, fmt.Errorf("get objects by checksum %s: %w", checksum, err)
 		}
-		if resp.JSON200 == nil || resp.JSON200.ResolvedDrsObject == nil {
-			return DRSPage{}, fmt.Errorf("get objects by checksum %s failed: unexpected response: %d", checksum, resp.StatusCode())
+		if resp.JSON200 == nil {
+			return DRSPage{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		}
+		if resp.JSON200.ResolvedDrsObject == nil {
+			return DRSPage{}, fmt.Errorf("get objects by checksum %s: response is missing resolved objects", checksum)
 		}
 		for _, obj := range *resp.JSON200.ResolvedDrsObject {
 			id := strings.TrimSpace(obj.Id)

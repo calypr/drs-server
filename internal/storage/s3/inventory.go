@@ -222,11 +222,11 @@ func (s *backend) listPageWithRetry(ctx context.Context, client s3ListClient, ba
 		if err == nil {
 			switch {
 			case page == nil:
-				err = errors.New("provider returned an empty list page")
+				err = fmt.Errorf("provider returned an empty list page")
 			case aws.ToBool(page.IsTruncated) && strings.TrimSpace(aws.ToString(page.NextContinuationToken)) == "":
-				err = errors.New("provider returned a malformed truncated list page without next continuation token")
+				err = fmt.Errorf("provider returned a malformed truncated list page without next continuation token")
 			case aws.ToBool(page.IsTruncated) && len(page.Contents) == 0:
-				err = errors.New("provider returned an empty malformed truncated list page")
+				err = fmt.Errorf("provider returned an empty malformed truncated list page")
 			default:
 				return page, tokenID, retries, nil
 			}
@@ -297,7 +297,7 @@ func incompleteListingError(bucket, prefix, lastKey, reason string, cause error)
 	if cause != nil {
 		message += ": " + cause.Error()
 	}
-	return &storage.OperationError{Kind: storage.ErrorIncomplete, Provider: address.S3Provider, Capability: "inventory", Cause: errors.New(message)}
+	return &storage.OperationError{Kind: storage.ErrorIncomplete, Provider: address.S3Provider, Capability: "inventory", Cause: fmt.Errorf("%s", message)}
 }
 
 func classifyListError(bucket, prefix string, err error) error {

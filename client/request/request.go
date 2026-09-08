@@ -5,7 +5,6 @@ package request
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/hashicorp/go-retryablehttp"
@@ -31,18 +31,6 @@ type Request struct {
 
 	BaseURL   string
 	UserAgent string
-}
-
-type ResponseError struct {
-	Method  string
-	URL     string
-	Status  int
-	Body    string
-	Headers http.Header
-}
-
-func (e *ResponseError) Error() string {
-	return fmt.Sprintf("%s %s: status %d body=%s", e.Method, e.URL, e.Status, e.Body)
 }
 
 type RequestOption func(*RequestBuilder)
@@ -122,6 +110,16 @@ func newRequestor(
 		logger = logs.NewGen3Logger(nil, "", "")
 	}
 	retryClient := retryablehttp.NewClient()
+	// Keep the final HTTP response available for the shared API error decoder.
+	retryClient.ErrorHandler = func(resp *http.Response, err error, _ int) (*http.Response, error) {
+		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			return nil, err
+		}
+		return resp, nil
+	}
 	retryClient.RetryMax = 5
 	retryClient.Logger = logger
 	retryClient.RetryWaitMin = defaultRetryWaitMin
@@ -219,7 +217,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 
 	httpReq, err := http.NewRequestWithContext(ctx, rb.Method, rb.Url, rb.Body)
 	if err != nil {
-		return errors.New("failed to create HTTP request: " + err.Error())
+		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Apply default headers
@@ -251,7 +249,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 			if resp != nil {
 				resp.Body.Close()
 			}
-			return errors.New("request failed: " + err.Error())
+			return fmt.Errorf("request failed: %w", err)
 		}
 		return r.handleResponse(method, resp, out)
 	}
@@ -266,7 +264,7 @@ func (r *Request) Do(ctx context.Context, method, path string, body, out any, op
 		if resp != nil {
 			resp.Body.Close()
 		}
-		return errors.New("request failed after retries: " + err.Error())
+		return fmt.Errorf("request failed after retries: %w", err)
 	}
 
 	return r.handleResponse(method, resp, out)
@@ -306,13 +304,14 @@ func (r *Request) handleResponse(method string, resp *http.Response, out any) er
 			return fmt.Errorf("read response body: %w", err)
 		}
 		if resp.StatusCode >= 400 {
-			return &ResponseError{
-				Method:  method,
-				URL:     resp.Request.URL.String(),
-				Status:  resp.StatusCode,
-				Body:    strings.TrimSpace(string(data)),
-				Headers: resp.Header.Clone(),
+			apiErr := apierror.FromResponse(resp, data)
+			if apiErr.Method == "" {
+				apiErr.Method = method
 			}
+			if apiErr.URL == "" && resp.Request != nil && resp.Request.URL != nil {
+				apiErr.URL = resp.Request.URL.String()
+			}
+			return apiErr
 		}
 
 		if out != nil && len(data) > 0 {

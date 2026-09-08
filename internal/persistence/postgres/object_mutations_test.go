@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func TestDeleteObjectAlias_PreservesTransactionAndNotFoundIdentity(t *testing.T) {
@@ -43,7 +43,7 @@ func TestDeleteObjectAlias_PreservesTransactionAndNotFoundIdentity(t *testing.T)
 		mock.ExpectRollback()
 
 		err := pg.DeleteObjectAlias(context.Background(), "missing")
-		if !errors.Is(err, faults.ErrNotFound) {
+		if !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {

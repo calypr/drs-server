@@ -3,7 +3,7 @@ package lfs
 import (
 	"context"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"

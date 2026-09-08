@@ -36,6 +36,10 @@ coverage:
         flags: [client]
         target: auto
         threshold: 1%
+    patch:
+      default:
+        target: 60%
+        threshold: 0%
 
 flags:
   root:

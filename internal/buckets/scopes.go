@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 // ListBucketScopes delegates scope enumeration without changing repository
@@ -59,7 +59,7 @@ func (s *Service) LookupBucketScope(ctx context.Context, organization, project s
 
 	scope, err := s.scopeStore.GetBucketScope(ctx, organization, project)
 	if err != nil {
-		if faults.IsNotFoundError(err) {
+		if errorapi.IsNotFoundError(err) {
 			s.scopeCache.set(Scope{Organization: organization, ProjectID: project}, false)
 			return Scope{}, false, nil
 		}

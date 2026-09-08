@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 )
@@ -31,12 +31,15 @@ func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
-	responseBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
-	if string(responseBody) != "Upload ID not found" {
-		t.Errorf("expected exact not-found body, got %q", responseBody)
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
 
@@ -57,12 +60,15 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, _ := app.Test(req)
-	responseBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
-	if string(responseBody) != "Upload ID not found" {
-		t.Errorf("expected exact not-found body, got %q", responseBody)
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
 
@@ -96,7 +102,7 @@ func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *test
 	}
 }
 
-func TestHandleInternalMultipartCompleteDeletesSessionBeforeProviderError(t *testing.T) {
+func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *testing.T) {
 	fake := &internalDRSStorageFake{completeErr: errors.New("provider completion failed")}
 	om := newInternalDRSObjectManager(&transferHTTPFixture{}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
@@ -115,7 +121,17 @@ func TestHandleInternalMultipartCompleteDeletesSessionBeforeProviderError(t *tes
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected provider failure to map to 500, got %d", resp.StatusCode)
 	}
-	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, domaintransfers.ErrMultipartUploadNotFound) {
-		t.Fatalf("expected consumed upload ID after provider failure, got %v", err)
+	resp.Body.Close()
+	fake.completeErr = nil
+	resp, err = app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
+	if err != nil {
+		t.Fatalf("retry complete request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected successful retry after provider recovery, got %d", resp.StatusCode)
+	}
+	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+		t.Fatalf("expected consumed upload ID after successful completion, got %v", err)
 	}
 }

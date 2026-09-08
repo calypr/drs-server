@@ -9,16 +9,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
+	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
 var _ domaintransfers.AccessPort = (*internalDRSStorageFake)(nil)
 var _ domaintransfers.MultipartPort = (*internalDRSStorageFake)(nil)
-
-func ptr[T any](v T) *T { return &v }
 
 type internalDRSStorageFake struct {
 	mu sync.Mutex
@@ -28,7 +29,6 @@ type internalDRSStorageFake struct {
 	signURL       string
 	signID        string
 	signOpts      storage.AccessOptions
-	uploadURL     string
 	completeErr   error
 	completeParts []storage.CompletedPart
 }
@@ -47,14 +47,6 @@ func dataTestAuthContext(base context.Context, mode string, authHeader bool, pri
 	session.AuthzEnforced = sessionMode == "gen3" || mode == "local-authz"
 	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
 	return access.WithSession(base, session)
-}
-
-func policyTestContext(mode string, authHeader bool, privileges map[string]map[string]bool) context.Context {
-	session := access.NewSession(mode)
-	session.AuthHeaderPresent = authHeader
-	session.AuthzEnforced = mode == "gen3" || mode == "local"
-	session.SetAuthorizations(nil, privileges, session.AuthzEnforced)
-	return access.WithSession(context.Background(), session)
 }
 
 func (m *internalDRSStorageFake) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
@@ -105,8 +97,7 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 		c.SetContext(req.Context())
 		return c.Next()
 	})
-	RegisterObjectRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
-	RegisterBulkAndMultipartRoutes(app, fixture.ObjectService, fixture.TransferService)
+	registerTransferRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
 
 	rr := httptest.NewRecorder()
 	resp, err := app.Test(req)
@@ -126,30 +117,17 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 	return rr
 }
 
-func doInternalDRSTestRequestWithAlias(req *http.Request, fixture internalDRSTestFixture, method string, pattern string, handler fiber.Handler) *httptest.ResponseRecorder {
-	app := fiber.New()
-	app.Use(func(c fiber.Ctx) error {
-		c.SetContext(req.Context())
-		return c.Next()
-	})
-	RegisterObjectRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
-	RegisterBulkAndMultipartRoutes(app, fixture.ObjectService, fixture.TransferService)
-	app.Add([]string{method}, pattern, handler)
+type unimplementedInternalServer struct {
+	internalapi.ServerInterface
+}
 
-	rr := httptest.NewRecorder()
-	resp, err := app.Test(req)
-	if err != nil {
-		rr.WriteHeader(http.StatusInternalServerError)
-		_, _ = rr.WriteString(err.Error())
-		return rr
-	}
-	defer resp.Body.Close()
-	for k, vals := range resp.Header {
-		for _, v := range vals {
-			rr.Header().Add(k, v)
-		}
-	}
-	rr.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(rr, resp.Body)
-	return rr
+type transfersTestServer struct {
+	*TransfersServer
+	unimplementedInternalServer
+}
+
+func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
+	internalapi.RegisterHandlers(router, &transfersTestServer{
+		TransfersServer: NewTransfersServer(objectService, transferService, fileCounters),
+	})
 }

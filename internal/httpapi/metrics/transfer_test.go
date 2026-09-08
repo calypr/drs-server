@@ -1,7 +1,9 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,10 +11,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
+
+type providerErrorIngestor struct {
+	*metricsIngestFake
+	err error
+}
+
+type transferErrorReporter struct {
+	usage.Reporter
+	freshnessErr error
+	summaryErr   error
+	breakdownErr error
+}
+
+func (r transferErrorReporter) GetTransferFreshness(context.Context, usage.Filter) (usage.Freshness, error) {
+	return usage.Freshness{}, r.freshnessErr
+}
+
+func (r transferErrorReporter) GetTransferAttributionSummary(context.Context, usage.TransferSummaryQuery) (usage.Summary, error) {
+	return usage.Summary{}, r.summaryErr
+}
+
+func (r transferErrorReporter) GetTransferAttributionBreakdown(context.Context, usage.TransferBreakdownQuery) ([]usage.Breakdown, error) {
+	return nil, r.breakdownErr
+}
+
+func (i providerErrorIngestor) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
+	return i.err
+}
 
 func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	objectReader := newMetricsObjectReader(map[string]*objects.Record{
@@ -136,6 +167,121 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	}
 	if breakdown.GroupBy != "user" || len(breakdown.Data) != 1 || breakdown.Data[0].Key != "user@example.com" || breakdown.Data[0].BytesDownloaded != 42 {
 		t.Fatalf("unexpected breakdown: %+v", breakdown)
+	}
+}
+
+func TestProviderTransferPayloadValidation(t *testing.T) {
+	base := providerTransferPayload{ProviderEventID: "event-1", Direction: usage.ProviderTransferDirectionDownload, Provider: "s3", Bucket: "bucket"}
+	for _, tc := range []struct {
+		name string
+		edit func(*providerTransferPayload)
+	}{
+		{name: "direction", edit: func(v *providerTransferPayload) { v.Direction = "copy" }},
+		{name: "required field", edit: func(v *providerTransferPayload) { v.ProviderEventID = "" }},
+		{name: "negative bytes", edit: func(v *providerTransferPayload) { v.BytesTransferred = -1 }},
+		{name: "reconciliation status", edit: func(v *providerTransferPayload) { v.ReconciliationStatus = "unknown" }},
+		{name: "event time", edit: func(v *providerTransferPayload) { v.EventTime = "not-a-time" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value := base
+			tc.edit(&value)
+			if _, err := providerTransferPayloadToUsage(value); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+	value := base
+	value.ObjectKey = " /root/object "
+	value.HTTPMethod = " get "
+	converted, err := providerTransferPayloadToUsage(value)
+	if err != nil || converted.ObjectKey != "root/object" || converted.HTTPMethod != "GET" {
+		t.Fatalf("normalized provider event = %+v, err=%v", converted, err)
+	}
+}
+
+func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
+	state := &metricsTransferState{}
+	valid := &metricsapi.RecordProviderTransferEventsJSONRequestBody{Events: []metricsapi.ProviderTransferEvent{{
+		ProviderEventId: "event-1",
+		Direction:       metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+		Provider:        "s3",
+		Bucket:          "bucket",
+	}}}
+	server := NewMetricsServer(nil, &metricsIngestFake{state: state})
+
+	response, err := server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", false, false, nil), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
+	if err != nil {
+		t.Fatalf("missing auth error: %v", err)
+	}
+	if _, ok := response.(metricsapi.RecordProviderTransferEvents401JSONResponse); !ok {
+		t.Fatalf("missing auth response = %T", response)
+	}
+	response, err = server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", true, true, nil), metricsapi.RecordProviderTransferEventsRequestObject{})
+	if err != nil {
+		t.Fatalf("empty body auth error: %v", err)
+	}
+	if _, ok := response.(metricsapi.RecordProviderTransferEvents403JSONResponse); !ok {
+		t.Fatalf("empty body response = %T", response)
+	}
+	response, err = server.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: &metricsapi.RecordProviderTransferEventsJSONRequestBody{Events: []metricsapi.ProviderTransferEvent{{ProviderEventId: "bad", Direction: "copy", Provider: "s3", Bucket: "bucket"}}}})
+	if err != nil {
+		t.Fatalf("invalid event error: %v", err)
+	}
+	if _, ok := response.(metricsapi.RecordProviderTransferEvents400JSONResponse); !ok {
+		t.Fatalf("invalid event response = %T", response)
+	}
+	wantErr := errors.New("ingest failed")
+	failing := NewMetricsServer(nil, providerErrorIngestor{metricsIngestFake: &metricsIngestFake{state: state}, err: wantErr})
+	_, err = failing.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("dependency error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing.T) {
+	wantErr := errors.New("transfer report unavailable")
+	server := NewMetricsServer(transferErrorReporter{freshnessErr: wantErr}, nil)
+	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
+		t.Fatalf("summary freshness error = %v", err)
+	}
+	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{}); !errors.Is(err, wantErr) {
+		t.Fatalf("breakdown freshness error = %v", err)
+	}
+	server = NewMetricsServer(transferErrorReporter{summaryErr: wantErr, breakdownErr: wantErr}, nil)
+	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
+		t.Fatalf("summary dependency error = %v", err)
+	}
+	groupBy := metricsapi.GetTransferBreakdownParamsGroupBy("invalid")
+	response, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{Params: metricsapi.GetTransferBreakdownParams{GroupBy: &groupBy}})
+	if err != nil {
+		t.Fatalf("invalid breakdown group error = %v", err)
+	}
+	if _, ok := response.(metricsapi.GetTransferBreakdown400JSONResponse); !ok {
+		t.Fatalf("invalid breakdown response = %T", response)
+	}
+	groupBy = metricsapi.GetTransferBreakdownParamsGroupBy("scope")
+	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{Params: metricsapi.GetTransferBreakdownParams{GroupBy: &groupBy}}); !errors.Is(err, wantErr) {
+		t.Fatalf("breakdown dependency error = %v", err)
+	}
+	unauthorized := metricsTestContext(context.Background(), "gen3", false, false, nil)
+	server = NewMetricsServer(transferErrorReporter{}, nil)
+	if _, err := server.GetTransferSummary(unauthorized, metricsapi.GetTransferSummaryRequestObject{}); err != nil {
+		t.Fatalf("unauthorized summary error = %v", err)
+	}
+}
+
+func TestTransferReportAuthResponsesCoverStatusVariants(t *testing.T) {
+	ctx := context.Background()
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusBadRequest} {
+		if got := getTransferSummaryAuthResponse(ctx, status); got == nil {
+			t.Fatalf("summary auth response for %d is nil", status)
+		}
+		if got := getTransferBreakdownAuthResponse(ctx, status); got == nil {
+			t.Fatalf("breakdown auth response for %d is nil", status)
+		}
+	}
+	if generatedTime(nil) != nil {
+		t.Fatal("generatedTime(nil) returned a value")
 	}
 }
 

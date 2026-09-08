@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -30,7 +30,7 @@ func newServerObjectStore(records map[string]*objects.Record) *serverObjectStore
 func (s *serverObjectStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	record, ok := s.records[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return cloneServerRecord(record), nil
 }
@@ -87,7 +87,7 @@ func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []object
 func (s *serverObjectStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []objects.AccessMethod) error {
 	record, ok := s.records[id]
 	if !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	copyMethods := append([]objects.AccessMethod(nil), methods...)
 	record.AccessMethods = &copyMethods
@@ -106,10 +106,10 @@ func (s *serverObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates
 func (s *serverObjectStore) RemoveObjectControlledAccess(_ context.Context, id, resource string) error {
 	record, ok := s.records[id]
 	if !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	if record.ControlledAccess == nil {
-		return fmt.Errorf("%w: resource not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: resource not found", errorapi.ErrNotFound)
 	}
 	filtered := make([]string, 0, len(*record.ControlledAccess))
 	found := false
@@ -121,7 +121,7 @@ func (s *serverObjectStore) RemoveObjectControlledAccess(_ context.Context, id, 
 		filtered = append(filtered, existing)
 	}
 	if !found {
-		return fmt.Errorf("%w: resource not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: resource not found", errorapi.ErrNotFound)
 	}
 	if len(filtered) == 0 {
 		record.ControlledAccess = nil
@@ -149,7 +149,7 @@ func (s *serverObjectStore) DeleteObjectAlias(_ context.Context, aliasID string)
 
 func (s *serverObjectStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := s.records[canonicalID]; !ok {
-		return fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	if s.aliases == nil {
 		s.aliases = make(map[string]string)
@@ -161,7 +161,7 @@ func (s *serverObjectStore) CreateObjectAlias(_ context.Context, aliasID, canoni
 func (s *serverObjectStore) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
 	canonicalID, ok := s.aliases[aliasID]
 	if !ok {
-		return "", fmt.Errorf("%w: alias not found", faults.ErrNotFound)
+		return "", fmt.Errorf("%w: alias not found", errorapi.ErrNotFound)
 	}
 	return canonicalID, nil
 }
@@ -356,7 +356,7 @@ func (s *serverBucketStore) GetS3Credential(_ context.Context, id string) (*buck
 			return &copyCredential, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: credential not found", faults.ErrNotFound)
+	return nil, fmt.Errorf("%w: credential not found", errorapi.ErrNotFound)
 }
 
 func (s *serverBucketStore) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
@@ -399,7 +399,7 @@ func (s *serverBucketStore) DeleteBucketScope(_ context.Context, organization, p
 	key := organization + "|" + project
 	scope, ok := s.scopes[key]
 	if !ok || (scope.CredentialID != credentialID && scope.Bucket != credentialID) || strings.Trim(scope.PathPrefix, "/") != strings.Trim(pathPrefix, "/") {
-		return fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return fmt.Errorf("%w: bucket scope not found", errorapi.ErrNotFound)
 	}
 	delete(s.scopes, key)
 	return nil
@@ -408,7 +408,7 @@ func (s *serverBucketStore) DeleteBucketScope(_ context.Context, organization, p
 func (s *serverBucketStore) GetBucketScope(_ context.Context, organization, project string) (*buckets.Scope, error) {
 	scope, ok := s.scopes[organization+"|"+project]
 	if !ok {
-		return nil, fmt.Errorf("%w: bucket scope not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: bucket scope not found", errorapi.ErrNotFound)
 	}
 	copyScope := scope
 	return &copyScope, nil
@@ -439,7 +439,7 @@ func (serverUsageStore) RecordProviderTransferEvents(context.Context, []usage.Pr
 	return nil
 }
 func (serverUsageStore) GetFileUsage(context.Context, string) (*usage.FileUsage, error) {
-	return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+	return nil, fmt.Errorf("%w: file usage not found", errorapi.ErrNotFound)
 }
 func (serverUsageStore) ListFileUsageByObjectIDs(context.Context, []string) ([]usage.FileUsage, error) {
 	return []usage.FileUsage{}, nil
@@ -468,10 +468,10 @@ func (serverPendingStore) SavePendingMetadata(context.Context, []transferlfs.Pen
 	return nil
 }
 func (serverPendingStore) GetPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
-	return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 }
 func (serverPendingStore) PopPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
-	return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 }
 
 var _ transferlfs.PendingStore = serverPendingStore{}

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -272,7 +273,7 @@ func (s *Service) addStorageFindings(ctx context.Context, object *auditedObject)
 		kind := FindingStorageProbeError
 		severity := SeverityWarn
 		message := err.Error()
-		if errors.Is(err, ErrStorageObjectNotFound) {
+		if errors.Is(err, errorapi.ErrStorageNotFound) {
 			kind = FindingStorageObjectMissing
 			severity = SeverityError
 			message = "storage object not found"

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -60,7 +61,7 @@ type fakeProbe struct {
 func (f *fakeProbe) Inspect(_ context.Context, request StorageInspectRequest) (StorageInspectResult, error) {
 	f.calls = append(f.calls, request.ObjectURL)
 	if f.missing[request.ObjectURL] {
-		return StorageInspectResult{}, ErrStorageObjectNotFound
+		return StorageInspectResult{}, errorapi.ErrStorageNotFound
 	}
 	return StorageInspectResult{ObjectURL: request.ObjectURL}, nil
 }

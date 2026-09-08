@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/drs"
+	"github.com/calypr/syfon/apigen/drs"
 	syclient "github.com/calypr/syfon/client"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 )

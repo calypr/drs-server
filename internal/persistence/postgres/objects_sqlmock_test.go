@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
 )
@@ -57,8 +57,11 @@ func TestDeleteObject(t *testing.T) {
 		mock.ExpectRollback()
 
 		err := pg.DeleteObject(context.Background(), "missing")
-		if !errors.Is(err, faults.ErrNotFound) {
+		if !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("expected not found error, got %v", err)
+		}
+		if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeObjectNotFound {
+			t.Fatalf("expected exact object-not-found code, got %q", code)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Fatalf("unmet expectations: %v", err)
@@ -109,7 +112,7 @@ func TestGetObject_NotFound(t *testing.T) {
 		WillReturnError(sql.ErrNoRows)
 
 	_, err := pg.GetObject(context.Background(), "missing")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
 }
@@ -356,6 +359,24 @@ func TestListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 	}
 	if len(ids) != 2 || ids[0] != "org-wide" || ids[1] != "project-scoped" {
 		t.Fatalf("unexpected ids: %+v", ids)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestListObjectIDsByScopeReturnsQueryError(t *testing.T) {
+	pg, mock, rawDB := newMockPostgresDB(t)
+	defer rawDB.Close()
+
+	queryErr := errors.New("query failed")
+	mock.ExpectQuery("ca\\.resource = \\$1").
+		WithArgs("/organization/calypr/project/project").
+		WillReturnError(queryErr)
+
+	_, err := pg.ListObjectIDsByScope(context.Background(), "calypr", "project")
+	if !errors.Is(err, queryErr) {
+		t.Fatalf("expected query error %v, got %v", queryErr, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)

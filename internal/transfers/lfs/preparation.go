@@ -2,22 +2,16 @@ package lfs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
-)
-
-var (
-	ErrNoBucketConfigured = errors.New("no bucket configured")
-	ErrNoObjectLocation   = errors.New("no object location available")
 )
 
 type PreparationObjectPort interface {
@@ -104,7 +98,7 @@ func (w *PreparationWorkflow) PrepareDownload(ctx context.Context, oid string) (
 		}
 	}
 	if sourceURL == "" {
-		return DownloadPreparation{}, ErrNoObjectLocation
+		return DownloadPreparation{}, errorapi.ErrObjectLocationUnavailable
 	}
 
 	signedURL, err := w.transfer.SignObjectURL(ctx, object, sourceURL, storage.AccessOptions{})
@@ -112,7 +106,7 @@ func (w *PreparationWorkflow) PrepareDownload(ctx context.Context, oid string) (
 		return DownloadPreparation{}, err
 	}
 	if w.downloads == nil {
-		return DownloadPreparation{}, errors.New("file counters are not configured")
+		return DownloadPreparation{}, fmt.Errorf("file counters are not configured")
 	}
 	if err := w.downloads.RecordFileDownload(ctx, oid); err != nil {
 		return DownloadPreparation{}, err
@@ -134,14 +128,14 @@ func (w *PreparationWorkflow) PrepareUpload(ctx context.Context, oid string, req
 	if err == nil {
 		return UploadPreparation{Existing: true, Size: existing.Size}, nil
 	}
-	if !faults.IsNotFoundError(err) {
+	if !errorapi.IsNotFoundError(err) {
 		return result, err
 	}
 	if err := w.objects.RequireObjectResources(ctx, "create", []string{"/data_file"}); err != nil {
 		return result, err
 	}
 	if !w.hasConfiguredBucket(ctx) {
-		return result, ErrNoBucketConfigured
+		return result, errorapi.ErrBucketNotConfigured
 	}
 	if reqSize < 0 {
 		result.Size = 0
@@ -156,7 +150,7 @@ func (w *PreparationWorkflow) ResolveUploadTarget(ctx context.Context, oid strin
 	}
 	if object, getErr := w.objects.GetObject(ctx, oid, "read"); getErr == nil {
 		return w.targetForObject(ctx, object)
-	} else if !faults.IsNotFoundError(getErr) {
+	} else if !errorapi.IsNotFoundError(getErr) {
 		return UploadTarget{}, getErr
 	}
 
@@ -166,7 +160,7 @@ func (w *PreparationWorkflow) ResolveUploadTarget(ctx context.Context, oid strin
 			return UploadTarget{}, conversionErr
 		}
 		return w.targetForObject(ctx, &object)
-	} else if !faults.IsNotFoundError(getErr) {
+	} else if !errorapi.IsNotFoundError(getErr) {
 		return UploadTarget{}, getErr
 	}
 	return UploadTarget{Bucket: defaultBucket, Key: oid, ObjectID: oid}, nil
@@ -174,21 +168,21 @@ func (w *PreparationWorkflow) ResolveUploadTarget(ctx context.Context, oid strin
 
 func (w *PreparationWorkflow) getPendingMetadata(ctx context.Context, oid string) (*PendingMetadata, error) {
 	if w.pending == nil {
-		return nil, errors.New("pending LFS metadata store is not configured")
+		return nil, fmt.Errorf("pending LFS metadata store is not configured")
 	}
 	return w.pending.GetPendingMetadata(ctx, oid)
 }
 
 func (w *PreparationWorkflow) firstConfiguredBucket(ctx context.Context) (string, error) {
 	if w.credentials == nil {
-		return "", ErrNoBucketConfigured
+		return "", errorapi.ErrBucketNotConfigured
 	}
 	credentials, err := w.credentials.ListS3Credentials(ctx)
 	if err != nil {
 		return "", err
 	}
 	if len(credentials) == 0 || strings.TrimSpace(credentials[0].Bucket) == "" {
-		return "", ErrNoBucketConfigured
+		return "", errorapi.ErrBucketNotConfigured
 	}
 	return strings.TrimSpace(credentials[0].Bucket), nil
 }

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
-	"github.com/calypr/syfon/internal/faults"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 
@@ -630,7 +630,7 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 		{CredentialID: "org-a/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-a", SecretKey: "secret-a"},
 		{CredentialID: "org-b/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-b", SecretKey: "secret-b"},
 	} {
-		stored, err := credentialcipher.PrepareS3CredentialForStorage(&cred)
+		stored, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &cred)
 		if err != nil {
 			t.Fatalf("PrepareS3CredentialForStorage(%s) failed: %v", cred.CredentialID, err)
 		}
@@ -655,7 +655,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	first, err := credentialcipher.PrepareS3CredentialForStorage(&buckets.Credential{
+	first, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
 		CredentialID: "org-a/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -673,7 +673,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		t.Fatalf("raw first insert failed: %v", err)
 	}
 
-	second, err := credentialcipher.PrepareS3CredentialForStorage(&buckets.Credential{
+	second, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
 		CredentialID: "org-b/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -1042,6 +1042,45 @@ func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 	}
 }
 
+func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
+	ctx := context.Background()
+	db, err := NewSqliteDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	now := time.Now()
+	if err := db.RegisterObjects(ctx, []objects.Record{
+		{Id: "org-wide", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {}}},
+		{Id: "project-scoped", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {"project"}}},
+		{Id: "other-org", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"other": {"project"}}},
+	}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
+	}
+
+	ids, err := db.ListObjectIDsByScope(ctx, "org", "")
+	if err != nil {
+		t.Fatalf("ListObjectIDsByScope returned error: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "org-wide" || ids[1] != "project-scoped" {
+		t.Fatalf("unexpected ids: %+v", ids)
+	}
+}
+
+func TestSqliteDB_ListObjectIDsByScopeReturnsQueryError(t *testing.T) {
+	db, err := NewSqliteDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	if err := db.db.Close(); err != nil {
+		t.Fatalf("failed to close db: %v", err)
+	}
+
+	_, err = db.ListObjectIDsByScope(context.Background(), "org", "project")
+	if err == nil {
+		t.Fatal("expected query error")
+	}
+}
+
 func testAccessMethod(url string) objects.AccessMethod {
 	return objects.AccessMethod{
 		Type:      "s3",
@@ -1307,6 +1346,8 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 	}
 	if _, err := db.GetFileUsage(ctx, oid); err == nil {
 		t.Fatalf("expected not found for missing object usage")
+	} else if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeFileUsageNotFound {
+		t.Fatalf("expected exact file-usage-not-found code, got %q", code)
 	}
 
 	now := time.Now().UTC()
@@ -1969,8 +2010,11 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	}
 
 	_, err = db.GetBucketScope(ctx, "calypr", "missing")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing scope, got: %v", err)
+	}
+	if code, ok := errorapi.CodeOf(err); !ok || code != errorapi.ErrorCodeBucketScopeNotFound {
+		t.Fatalf("expected exact bucket-scope-not-found code, got %q", code)
 	}
 }
 
@@ -2010,7 +2054,7 @@ func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 	}
 
 	_, err = db.GetPendingMetadata(ctx, "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
-	if !errors.Is(err, faults.ErrNotFound) {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing pending metadata, got: %v", err)
 	}
 }

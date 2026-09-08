@@ -1,7 +1,7 @@
 package services
 
 import (
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 )
 
 // Options and request types for client services.

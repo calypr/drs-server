@@ -2,11 +2,10 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 )
 
 type BucketsService struct {
@@ -23,7 +22,7 @@ func (s *BucketsService) List(ctx context.Context) (bucketapi.BucketsResponse, e
 		return bucketapi.BucketsResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return bucketapi.BucketsResponse{}, fmt.Errorf("unexpected response: %d", resp.StatusCode())
+		return bucketapi.BucketsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -34,7 +33,7 @@ func (s *BucketsService) Put(ctx context.Context, req bucketapi.PutBucketRequest
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return fmt.Errorf("failed to put bucket: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -45,7 +44,7 @@ func (s *BucketsService) Delete(ctx context.Context, bucket string) error {
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return fmt.Errorf("failed to delete bucket: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -56,7 +55,7 @@ func (s *BucketsService) AddScope(ctx context.Context, bucket string, req bucket
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return fmt.Errorf("failed to add scope: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -75,7 +74,7 @@ func (s *BucketsService) DeleteScope(ctx context.Context, bucket, organization, 
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return fmt.Errorf("failed to delete bucket scope: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -86,7 +85,7 @@ func (s *BucketsService) ListScopes(ctx context.Context, bucket string) ([]bucke
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("failed to list bucket scopes: %d", resp.StatusCode())
+		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -97,7 +96,7 @@ func (s *BucketsService) DeleteProjectData(ctx context.Context, organization, pr
 		return bucketapi.DeleteProjectDataResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return bucketapi.DeleteProjectDataResponse{}, fmt.Errorf("failed to delete project data: %d", resp.StatusCode())
+		return bucketapi.DeleteProjectDataResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }

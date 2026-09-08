@@ -41,7 +41,7 @@ To use another DRS OpenAPI file, pass an absolute or repository-relative path:
 make gen OPENAPI=/path/to/data_repository_service.openapi.yaml
 ```
 
-The command bundles the DRS document into `apigen/openapi/openapi.yaml`, then writes generated files under `apigen/server/*` and `apigen/client/*`. The server configs use `oapi-codegen` Fiber and strict-server templates. The client configs generate request and response bindings without server adapters.
+The command bundles the DRS document into `apigen/openapi/openapi.yaml`, then writes combined client and Fiber server bindings under `apigen/{drs,lfsapi,bucketapi,metricsapi,internalapi}`. Each API uses one `oapi-codegen` config with models, client, Fiber server, and strict-server generation enabled. The services reference `apigen/openapi/error.openapi.yaml`, which generates the shared wire model in `apigen/errorapi`.
 
 Do not edit generated files by hand. Change an OpenAPI input or generator config, run `make gen`, and commit the input and generated output together.
 

@@ -1,6 +1,0 @@
-package: internalapi
-generate:
-  client: true
-  models: true
-import-mapping:
-  ./openapi.yaml: github.com/calypr/syfon/apigen/client/drs

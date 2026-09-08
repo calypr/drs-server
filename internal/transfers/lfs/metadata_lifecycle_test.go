@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -48,7 +48,7 @@ func TestStagePendingMetadataDefaultsCanonicalOIDAndTwentyMinuteTTL(t *testing.T
 
 func TestStagePendingMetadataRejectsMissingOIDAndChecksum(t *testing.T) {
 	workflow := NewMetadataWorkflow(&pendingFake{}, nil, nil)
-	if err := workflow.StagePendingMetadata(context.Background(), PendingMetadata{}); !errors.Is(err, faults.ErrInvalidInput) {
+	if err := workflow.StagePendingMetadata(context.Background(), PendingMetadata{}); !errors.Is(err, errorapi.ErrInvalidInput) {
 		t.Fatalf("StagePendingMetadata() error = %v, want invalid input", err)
 	}
 }

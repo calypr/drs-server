@@ -106,13 +106,14 @@ func (s *Inspector) validationTarget(ctx context.Context, request ListValidation
 	credential, err := s.credentialForBucket(ctx, bucket)
 	if err != nil {
 		base.Status, base.ErrorKind = classifyError(err)
-		base.Error = strings.TrimSpace(err.Error())
+		logStorageDiagnostic(ctx, err, "inventory")
+		base.Error = safeStorageErrorMessage(err, "inventory")
 		base.ValidationStatus = validationErrorStatus(request)
 		return base, nil, false
 	}
 	if visibleErr != nil {
 		base.Status, base.ErrorKind = classifyError(visibleErr)
-		base.Error = strings.TrimSpace(visibleErr.Error())
+		base.Error = safeStorageErrorMessage(visibleErr, "inventory")
 		base.ValidationStatus = validationErrorStatus(request)
 		return base, nil, false
 	}
@@ -221,7 +222,8 @@ func (s *Inspector) runExactValidation(ctx context.Context, unresolved map[strin
 				var present *StorageObject
 				if err != nil {
 					outcome.Status, outcome.ErrorKind = classifyError(err)
-					outcome.Error = strings.TrimSpace(err.Error())
+					logStorageDiagnostic(ctx, err, "inventory")
+					outcome.Error = safeStorageErrorMessage(err, "inventory")
 				} else {
 					for index := range items {
 						if strings.Trim(strings.TrimSpace(items[index].Key), "/") != work.key {

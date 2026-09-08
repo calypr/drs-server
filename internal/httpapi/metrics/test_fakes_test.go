@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -48,7 +48,7 @@ func (f *metricsObjectReaderFake) ListObjectIDsByScope(_ context.Context, organi
 func (f *metricsObjectReaderFake) GetObject(_ context.Context, id, _ string) (*objects.Record, error) {
 	record, ok := f.records[id]
 	if !ok {
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
 	return &record, nil
 }
@@ -157,7 +157,7 @@ func newMetricsReport(objects *metricsObjectReaderFake, fileUsage map[string]usa
 func (f *metricsReportFake) GetFileUsage(_ context.Context, objectID string) (*usage.FileUsage, error) {
 	item, ok := f.fileUsage[objectID]
 	if !ok {
-		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+		return nil, fmt.Errorf("%w: file usage not found", errorapi.ErrNotFound)
 	}
 	return &item, nil
 }

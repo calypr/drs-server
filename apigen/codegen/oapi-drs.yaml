@@ -1,11 +1,15 @@
 package: drs
 generate:
+  client: true
   models: true
   fiber-server: true
   strict-server: true
+import-mapping:
+  ./error.openapi.yaml: github.com/calypr/syfon/apigen/errorapi
 output-options:
   skip-prune: false
   user-templates:
+    client-with-responses.tmpl: apigen/templates/client-with-responses.tmpl
     imports.tmpl: apigen/templates/imports.tmpl
     fiber/fiber-handler.tmpl: apigen/templates/fiber/fiber-handler.tmpl
     fiber/fiber-interface.tmpl: apigen/templates/fiber/fiber-interface.tmpl

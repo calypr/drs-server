@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	bucketapi "github.com/calypr/syfon/apigen/client/bucketapi"
+	bucketapi "github.com/calypr/syfon/apigen/bucketapi"
 	"github.com/calypr/syfon/client/transfer"
 	s3driver "github.com/calypr/syfon/client/transfer/providers/s3"
 )

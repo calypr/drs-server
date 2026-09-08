@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/transfer"
@@ -93,23 +93,6 @@ func (f *fakeBackend) Delete(ctx context.Context, guid string) error {
 	return errors.New("not implemented")
 }
 
-func (f *fakeBackend) resolvedObject(guid string) *transfer.ResolvedObject {
-	size := f.size
-	if size == 0 && len(f.data) > 0 {
-		size = int64(len(f.data))
-	}
-	if size == 0 {
-		size = 64
-	}
-	return &transfer.ResolvedObject{
-		Id:           guid,
-		Name:         "payload.bin",
-		Size:         size,
-		ProviderURL:  "https://download.example.com/object",
-		AccessMethod: "https",
-	}
-}
-
 func (f *fakeBackend) ResolveDownloadURL(ctx context.Context, guid string, accessID string) (string, error) {
 	if f.resolveDownloadURLFunc != nil {
 		return f.resolveDownloadURLFunc(ctx, guid, accessID)
@@ -170,35 +153,6 @@ func (f *fakeBackend) Download(ctx context.Context, url string, rangeStart, rang
 		return newDownloadResponse(url, f.data[start:], http.StatusPartialContent), nil
 	}
 	return newDownloadResponse(url, f.data, http.StatusOK), nil
-}
-
-type fakeResolver struct {
-	backend *fakeBackend
-}
-
-func (f *fakeResolver) Resolve(ctx context.Context, id string) (*transfer.ResolvedObject, error) {
-	return f.backend.resolvedObject(id), nil
-}
-
-func (f *fakeResolver) Name() string {
-	return f.backend.Name()
-}
-
-func (f *fakeResolver) Logger() transfer.TransferLogger {
-	return f.backend.Logger()
-}
-
-func newDownloadJSONResponse(rawURL, body string) *http.Response {
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		parsedURL = &url.URL{}
-	}
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(strings.NewReader(body)),
-		Request:    &http.Request{URL: parsedURL},
-		Header:     make(http.Header),
-	}
 }
 
 func TestDownloadToPathMultipart(t *testing.T) {

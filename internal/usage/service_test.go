@@ -257,3 +257,94 @@ func TestServiceFallbackMergesTransferBreakdownAndFreshness(t *testing.T) {
 		t.Fatalf("unexpected placeholder freshness: %+v err=%v", freshness, err)
 	}
 }
+
+func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
+	store := &reportStoreSpy{
+		files:      []FileUsage{{ObjectID: "object-1", Size: 17}},
+		summaries:  FileUsageSummary{TotalFiles: 4},
+		transfer:   map[string]Summary{"": {EventCount: 3}},
+		breakdowns: map[string][]Breakdown{"": {{Key: "provider", EventCount: 2}}},
+	}
+	service := NewService(Dependencies{Reports: store})
+	ctx := context.Background()
+
+	got, err := service.GetFileUsage(ctx, "object-1")
+	if err != nil || got == nil || got.Size != 17 {
+		t.Fatalf("GetFileUsage() = %+v, %v", got, err)
+	}
+	items, err := service.ListFileUsageByObjectIDs(ctx, []string{"object-1"})
+	if err != nil || len(items) != 1 || items[0].ObjectID != "object-1" {
+		t.Fatalf("ListFileUsageByObjectIDs() = %+v, %v", items, err)
+	}
+	items, err = service.ListFileUsage(ctx, FileUsageQuery{Limit: 1})
+	if err != nil || len(items) != 1 || store.listCalls != 1 {
+		t.Fatalf("ListFileUsage() = %+v, %v (calls=%d)", items, err, store.listCalls)
+	}
+	summary, err := service.GetFileUsageSummary(ctx, FileUsageSummaryQuery{})
+	if err != nil || summary.TotalFiles != 4 || store.summaryCalls != 1 {
+		t.Fatalf("GetFileUsageSummary() = %+v, %v (calls=%d)", summary, err, store.summaryCalls)
+	}
+	transfer, err := service.GetTransferAttributionSummary(ctx, TransferSummaryQuery{})
+	if err != nil || transfer.EventCount != 3 || store.transferCalls != 1 {
+		t.Fatalf("GetTransferAttributionSummary() = %+v, %v (calls=%d)", transfer, err, store.transferCalls)
+	}
+	breakdown, err := service.GetTransferAttributionBreakdown(ctx, TransferBreakdownQuery{GroupBy: "scope"})
+	if err != nil || len(breakdown) != 1 || breakdown[0].Key != "provider" || store.breakdownCalls != 1 {
+		t.Fatalf("GetTransferAttributionBreakdown() = %+v, %v (calls=%d)", breakdown, err, store.breakdownCalls)
+	}
+	if service.Reports() != service {
+		t.Fatal("Reports() did not return the service reporter")
+	}
+
+	var unavailable *Service
+	if _, err := unavailable.GetFileUsage(ctx, "object-1"); !errors.Is(err, ErrReportsUnavailable) {
+		t.Fatalf("nil GetFileUsage() error = %v", err)
+	}
+	if _, err := unavailable.ListFileUsageByObjectIDs(ctx, nil); !errors.Is(err, ErrReportsUnavailable) {
+		t.Fatalf("nil ListFileUsageByObjectIDs() error = %v", err)
+	}
+	if _, err := NewService(Dependencies{}).GetFileUsageSummary(ctx, FileUsageSummaryQuery{}); !errors.Is(err, ErrReportsUnavailable) {
+		t.Fatalf("missing reports summary error = %v", err)
+	}
+}
+
+func TestServiceFallbackHonorsInactiveSinceAndObjectMetadata(t *testing.T) {
+	name := "named-object"
+	cutoff := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	old := cutoff.Add(-time.Hour)
+	fresh := cutoff.Add(time.Hour)
+	store := &reportStoreSpy{files: []FileUsage{
+		{ObjectID: "old", UploadCount: 2, DownloadCount: 4, LastDownloadTime: &old},
+		{ObjectID: "fresh", UploadCount: 3, DownloadCount: 5, LastDownloadTime: &fresh},
+	}}
+	objects := &objectReaderSpy{
+		ids: map[string][]string{"org/project": {"fresh", "old", "missing"}},
+		objects: map[string]*objects.Record{
+			"missing": {Id: "missing", Name: &name, Size: 23},
+		},
+	}
+	service := NewService(Dependencies{Reports: store, Objects: objects})
+	items, err := service.ListFileUsage(context.Background(), FileUsageQuery{
+		Scope:         ScopeQuery{Organization: "org", Project: "project"},
+		InactiveSince: &cutoff,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{items[0].ObjectID, items[1].ObjectID}; !reflect.DeepEqual(got, []string{"missing", "old"}) {
+		t.Fatalf("inactive fallback items = %v", got)
+	}
+	if items[0].Name != name || items[0].Size != 23 {
+		t.Fatalf("missing-object metadata = %+v", items[0])
+	}
+	summary, err := service.GetFileUsageSummary(context.Background(), FileUsageSummaryQuery{
+		Scope:         ScopeQuery{Organization: "org", Project: "project"},
+		InactiveSince: &cutoff,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.TotalFiles != 3 || summary.TotalUploads != 5 || summary.TotalDownloads != 9 || summary.InactiveFileCount != 2 || summary.RecordCount != 3 {
+		t.Fatalf("inactive fallback summary = %+v", summary)
+	}
+}

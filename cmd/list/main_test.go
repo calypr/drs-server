@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	syfonclient "github.com/calypr/syfon/client/services"
 )
 

@@ -5,26 +5,26 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/metricsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsapi.GetTransferSummaryRequestObject) (metricsapi.GetTransferSummaryResponseObject, error) {
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
-		return getTransferSummaryAuthResponse(statusCode), nil
+		return getTransferSummaryAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferSummaryParamsToFilter(request.Params)
 	freshness, _, err := s.transferFreshness(ctx, filter)
 	if err != nil {
-		return metricsapi.GetTransferSummary500Response{}, nil
+		return nil, err
 	}
 	summary, err := s.reporter.GetTransferAttributionSummary(ctx, usage.TransferSummaryQuery{
 		Filter: filter,
 		Scope:  access.scopeQuery(),
 	})
 	if err != nil {
-		return metricsapi.GetTransferSummary500Response{}, nil
+		return nil, err
 	}
 	generated := toGeneratedTransferSummary(summary)
 	generated.Freshness = &freshness
@@ -34,12 +34,12 @@ func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsa
 func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metricsapi.GetTransferBreakdownRequestObject) (metricsapi.GetTransferBreakdownResponseObject, error) {
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
-		return getTransferBreakdownAuthResponse(statusCode), nil
+		return getTransferBreakdownAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferBreakdownParamsToFilter(request.Params)
 	freshness, _, err := s.transferFreshness(ctx, filter)
 	if err != nil {
-		return metricsapi.GetTransferBreakdown500Response{}, nil
+		return nil, err
 	}
 	groupBy := "scope"
 	if request.Params.GroupBy != nil {
@@ -48,7 +48,7 @@ func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	switch groupBy {
 	case "scope", "user", "provider", "object":
 	default:
-		return metricsapi.GetTransferBreakdown400Response{}, nil
+		return metricsapi.GetTransferBreakdown400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 	items, err := s.reporter.GetTransferAttributionBreakdown(ctx, usage.TransferBreakdownQuery{
 		Filter:  filter,
@@ -56,7 +56,7 @@ func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metric
 		Scope:   access.scopeQuery(),
 	})
 	if err != nil {
-		return metricsapi.GetTransferBreakdown500Response{}, nil
+		return nil, err
 	}
 	generatedItems := make([]metricsapi.TransferAttributionBreakdown, 0, len(items))
 	for _, item := range items {
@@ -70,25 +70,25 @@ func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	}, nil
 }
 
-func getTransferSummaryAuthResponse(statusCode int) metricsapi.GetTransferSummaryResponseObject {
+func getTransferSummaryAuthResponse(ctx context.Context, statusCode int) metricsapi.GetTransferSummaryResponseObject {
 	switch statusCode {
 	case http.StatusUnauthorized:
-		return metricsapi.GetTransferSummary401Response{}
+		return metricsapi.GetTransferSummary401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized))
 	case http.StatusForbidden:
-		return metricsapi.GetTransferSummary403Response{}
+		return metricsapi.GetTransferSummary403JSONResponse(metricsAPIError(ctx, http.StatusForbidden))
 	default:
-		return metricsapi.GetTransferSummary400Response{}
+		return metricsapi.GetTransferSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest))
 	}
 }
 
-func getTransferBreakdownAuthResponse(statusCode int) metricsapi.GetTransferBreakdownResponseObject {
+func getTransferBreakdownAuthResponse(ctx context.Context, statusCode int) metricsapi.GetTransferBreakdownResponseObject {
 	switch statusCode {
 	case http.StatusUnauthorized:
-		return metricsapi.GetTransferBreakdown401Response{}
+		return metricsapi.GetTransferBreakdown401JSONResponse(metricsAPIError(ctx, http.StatusUnauthorized))
 	case http.StatusForbidden:
-		return metricsapi.GetTransferBreakdown403Response{}
+		return metricsapi.GetTransferBreakdown403JSONResponse(metricsAPIError(ctx, http.StatusForbidden))
 	default:
-		return metricsapi.GetTransferBreakdown400Response{}
+		return metricsapi.GetTransferBreakdown400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest))
 	}
 }
 

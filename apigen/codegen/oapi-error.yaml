@@ -1,0 +1,5 @@
+package: errorapi
+generate:
+  models: true
+output-options:
+  skip-prune: true

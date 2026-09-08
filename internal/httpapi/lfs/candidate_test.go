@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	generated "github.com/calypr/syfon/apigen/server/lfsapi"
+	generated "github.com/calypr/syfon/apigen/lfsapi"
 )
 
 func TestFromGeneratedCandidatePreservesLegacyFields(t *testing.T) {

@@ -2,9 +2,8 @@ package services
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/calypr/syfon/apigen/client/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 )
 
 type LFSService struct {
@@ -26,7 +25,7 @@ func (s *LFSService) Batch(ctx context.Context, op lfsapi.BatchRequestOperation,
 		return nil, err
 	}
 	if resp.ApplicationvndGitLfsJSON200 == nil {
-		return nil, fmt.Errorf("lfs batch failed: %d", resp.StatusCode())
+		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return resp.ApplicationvndGitLfsJSON200, nil
 }
@@ -42,7 +41,7 @@ func (s *LFSService) StageMetadata(ctx context.Context, candidates []lfsapi.DrsO
 		return 0, err
 	}
 	if resp.JSON200 == nil {
-		return 0, fmt.Errorf("lfs stage metadata failed: %d", resp.StatusCode())
+		return 0, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return resp.JSON200.Staged, nil
 }
@@ -58,7 +57,7 @@ func (s *LFSService) Verify(ctx context.Context, oid string, size int64) error {
 		return err
 	}
 	if resp.StatusCode() != 200 {
-		return fmt.Errorf("lfs verify failed: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }

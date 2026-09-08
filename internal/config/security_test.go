@@ -125,7 +125,7 @@ func TestSecretRedaction_PostgresConfig(t *testing.T) {
 }
 
 func TestSecretRedaction_S3Config(t *testing.T) {
-	cfg := S3Config{
+	cfg := BucketConfig{
 		Bucket:    "my-bucket",
 		Provider:  "s3",
 		Region:    "us-east-1",

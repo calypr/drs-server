@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/faults"
 
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -29,7 +29,7 @@ func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T
 	if err := db.RegisterObjects(testIdentityAuth(resourceA, "create", "read"), []objects.Record{first}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []objects.Record{second}); !errors.Is(err, faults.ErrUnauthorized) {
+	if err := db.RegisterObjects(testIdentityAuth(resourceA, "read", "create", "update"), []objects.Record{second}); !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("expected missing target B create to deny merge, got %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestContentIdentityRejectsConflictingSHAAtomically(t *testing.T) {
 	obj := identityTestObject("conflict", checksums[0].Checksum, "/organization/org/project/p", "s3://bucket/conflict")
 	obj.Checksums = checksums
 	err = db.RegisterObjects(context.Background(), []objects.Record{obj})
-	if !errors.Is(err, objects.ErrConflictingSHA256) {
+	if !errors.Is(err, errorapi.ErrConflictingSHA256) {
 		t.Fatalf("expected conflicting SHA error, got %v", err)
 	}
 	var rows int
@@ -106,7 +106,7 @@ func TestContentIdentityReplaceIsAtomicAndPreservesSHA(t *testing.T) {
 	}
 	bad := replacement
 	bad.Size++
-	if err := db.ReplaceObjects(ctx, []objects.Record{bad}); !errors.Is(err, faults.ErrConflict) {
+	if err := db.ReplaceObjects(ctx, []objects.Record{bad}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("expected immutable-size conflict, got %v", err)
 	}
 	got, err = db.GetObject(context.Background(), "replace")

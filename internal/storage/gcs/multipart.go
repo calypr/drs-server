@@ -23,7 +23,7 @@ import (
 var newClient = func(ctx context.Context, cred *buckets.Credential) (*storage.Client, error) {
 	secret := strings.TrimSpace(cred.SecretKey)
 	if secret != "" && json.Valid([]byte(secret)) {
-		client, err := storage.NewClient(ctx, option.WithCredentialsJSON([]byte(secret)))
+		client, err := storage.NewClient(ctx, option.WithAuthCredentialsJSON(option.ServiceAccount, []byte(secret)))
 		if err != nil {
 			return nil, err
 		}

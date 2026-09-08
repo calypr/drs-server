@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -137,7 +137,7 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 		events: &events,
 		entry:  &PendingMetadata{OID: sha, Candidate: candidate},
 	}
-	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: faults.ErrNotFound}
+	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound}
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	workflow := NewMetadataWorkflow(pending, objectsPort, accounting)
 

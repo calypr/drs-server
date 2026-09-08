@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/usage"
 
 	"github.com/lib/pq"
@@ -58,7 +58,7 @@ func (db *PostgresDB) GetFileUsage(ctx context.Context, objectID string) (*usage
 		&lastDownload,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+		return nil, errorapi.ErrFileUsageNotFound
 	}
 	if err != nil {
 		return nil, err

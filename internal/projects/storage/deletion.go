@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -25,8 +24,10 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 	target, err := s.inspector.resolveScope(ctx, organization, project, deleteMethod)
 	if err != nil {
 		results := make([]DeleteResult, 0, len(unique))
+		logStorageDiagnostic(ctx, err, "delete")
+		message := safeStorageErrorMessage(err, "delete")
 		for _, objectURL := range unique {
-			results = append(results, DeleteResult{ObjectURL: objectURL, Status: "error", Error: err.Error()})
+			results = append(results, DeleteResult{ObjectURL: objectURL, Status: "error", Error: message})
 		}
 		return results
 	}
@@ -37,7 +38,8 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 		switch {
 		case parseErr != nil:
 			result.Status = "error"
-			result.Error = parseErr.Error()
+			logStorageDiagnostic(ctx, parseErr, "delete")
+			result.Error = safeStorageErrorMessage(parseErr, "delete")
 		case parseStatus == "invalid":
 			result.Status = "invalid"
 			result.Error = "object_url must resolve to a deletable storage target"
@@ -50,7 +52,8 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 				result.Error = "storage deletion is not configured"
 			} else if deleteErr := s.delete.DeleteExact(ctx, []storage.DeleteTarget{{Location: objectURL}}); deleteErr != nil {
 				result.Status = "error"
-				result.Error = mapStorageDeleteError(deleteErr).Error()
+				logStorageDiagnostic(ctx, deleteErr, "delete")
+				result.Error = safeStorageErrorMessage(deleteErr, "delete")
 			}
 		}
 		results = append(results, result)
@@ -151,12 +154,4 @@ func uniqueURLs(values []string) []string {
 		result = append(result, value)
 	}
 	return result
-}
-
-func mapStorageDeleteError(err error) error {
-	var operation *storage.OperationError
-	if errors.As(err, &operation) && operation.Cause != nil {
-		return operation.Cause
-	}
-	return err
 }

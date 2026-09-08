@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	syclient "github.com/calypr/syfon/client"
 )
 

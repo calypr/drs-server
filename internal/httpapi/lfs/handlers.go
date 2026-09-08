@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clienthash "github.com/calypr/syfon/client/hash"
-	"github.com/calypr/syfon/internal/faults"
-	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
@@ -58,6 +59,12 @@ func (s *LFSServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequest
 	hashAlgorithm := "sha256"
 	for _, input := range req.Objects {
 		objectResponse := lfsapi.BatchResponseObject{Oid: input.Oid, Size: input.Size}
+		if input.Size < 0 {
+			objectResponse.Size = 0
+			objectResponse.Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "size must be non-negative"}
+			responseObjects = append(responseObjects, objectResponse)
+			continue
+		}
 		oid := clienthash.NormalizeOid(input.Oid)
 		if oid == "" {
 			objectResponse.Error = &lfsapi.ObjectError{Code: int32(http.StatusBadRequest), Message: "invalid oid"}
@@ -102,16 +109,19 @@ func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 	if oid == "" {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "invalid oid"}, nil
 	}
+	if request.Body.Size < 0 {
+		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "size must be non-negative"}, nil
+	}
 
 	if err := s.metadataWorkflow.Verify(ctx, oid); err != nil {
 		var candidateErr *transferlfs.MetadataCandidateError
 		if errors.As(err, &candidateErr) {
 			return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
 		}
-		if faults.IsNotFoundError(err) {
+		if errorapi.IsNotFoundError(err) {
 			return lfsapi.LfsVerify404ApplicationVndGitLfsPlusJSONResponse{Message: "Object not found"}, nil
 		}
-		return lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
+		return lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse{Message: lfsInternalError(ctx, "verify", http.StatusInternalServerError, err)}, nil
 	}
 	return lfsapi.LfsVerify200Response{}, nil
 }
@@ -126,6 +136,11 @@ func (s *LFSServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 	if input == nil || len(input.Candidates) == 0 {
 		return lfsapi.LfsStageMetadata400JSONResponse{Message: "candidates cannot be empty"}, nil
 	}
+	for index, candidate := range input.Candidates {
+		if candidate.Size != nil && *candidate.Size < 0 {
+			return lfsapi.LfsStageMetadata400JSONResponse{Message: fmt.Sprintf("candidate[%d] size must be non-negative", index)}, nil
+		}
+	}
 
 	candidates := make([]objects.Candidate, 0, len(input.Candidates))
 	for _, candidate := range input.Candidates {
@@ -139,7 +154,7 @@ func (s *LFSServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 			}
 			return lfsapi.LfsStageMetadata400JSONResponse{Message: fmt.Sprintf("candidate[%d] invalid: %v", stageErr.Index, stageErr)}, nil
 		}
-		return lfsapi.LfsStageMetadata500JSONResponse{Message: err.Error()}, nil
+		return lfsapi.LfsStageMetadata500JSONResponse{Message: lfsInternalError(ctx, "stage metadata", http.StatusInternalServerError, err)}, nil
 	}
 	return lfsapi.LfsStageMetadata200JSONResponse{Staged: int32(len(candidates))}, nil
 }
@@ -151,31 +166,31 @@ func (s *LFSServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUpload
 	}
 	target, err := s.preparationWorkflow.ResolveUploadTarget(ctx, oid)
 	if err != nil {
-		if errors.Is(err, transferlfs.ErrNoBucketConfigured) {
-			return lfsapi.LfsUploadProxy507TextResponse(err.Error()), nil
+		if errors.Is(err, errorapi.ErrBucketNotConfigured) {
+			return lfsapi.LfsUploadProxy507TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInsufficientStorage, err)), nil
 		}
-		return lfsapi.LfsUploadProxy500TextResponse(err.Error()), nil
+		return lfsapi.LfsUploadProxy500TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInternalServerError, err)), nil
 	}
 	if err := s.uploadWorkflow.Upload(ctx, request.Body, target.Bucket, target.Key, target.ObjectID); err != nil {
-		return lfsapi.LfsUploadProxy500TextResponse(err.Error()), nil
+		return lfsapi.LfsUploadProxy500TextResponse(lfsInternalError(ctx, "upload", http.StatusInternalServerError, err)), nil
 	}
 	return lfsapi.LfsUploadProxy200Response{}, nil
 }
 
 func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	if errors.Is(err, transferlfs.ErrNoObjectLocation) {
+	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
 		return &lfsapi.ObjectError{Code: 404, Message: "no object location available"}
 	}
-	if errors.Is(err, transferlfs.ErrNoBucketConfigured) {
-		return &lfsapi.ObjectError{Code: 507, Message: "no bucket configured"}
+	if errors.Is(err, errorapi.ErrBucketNotConfigured) {
+		return &lfsapi.ObjectError{Code: http.StatusInsufficientStorage, Message: lfsInternalError(ctx, "batch", http.StatusInsufficientStorage, err)}
 	}
-	if faults.IsNotFoundError(err) {
+	if errorapi.IsNotFoundError(err) {
 		return &lfsapi.ObjectError{Code: 404, Message: "object not found"}
 	}
-	if err == faults.ErrUnauthorized {
-		return &lfsapi.ObjectError{Code: int32(apimiddleware.AuthFailureStatus(ctx)), Message: "unauthorized"}
+	if errors.Is(err, errorapi.ErrAccessDenied) {
+		return &lfsapi.ObjectError{Code: http.StatusForbidden, Message: "forbidden"}
 	}
-	return &lfsapi.ObjectError{Code: 500, Message: err.Error()}
+	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}
 }
 
 func downloadErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
@@ -183,8 +198,19 @@ func downloadErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError
 	if errors.As(err, &lookupErr) {
 		return dbErrToBatchError(ctx, lookupErr.Err)
 	}
-	if errors.Is(err, transferlfs.ErrNoObjectLocation) {
+	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
 		return dbErrToBatchError(ctx, err)
 	}
-	return &lfsapi.ObjectError{Code: 500, Message: err.Error()}
+	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch download", http.StatusInternalServerError, err)}
+}
+
+func lfsInternalError(ctx context.Context, operation string, status int, err error) string {
+	slog.Error(
+		"lfs request failed",
+		"request_id", requestid.GetRequestID(ctx),
+		"operation", operation,
+		"status", status,
+		"err", err,
+	)
+	return http.StatusText(status)
 }

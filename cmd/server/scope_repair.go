@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
@@ -152,7 +153,7 @@ func (r storageRepairInspector) Inspect(ctx context.Context, req scoperepair.Sto
 	}
 	if err := results[0].Err; err != nil {
 		if isStorageObjectNotFound(err) {
-			return scoperepair.StorageInspectResult{}, scoperepair.ErrStorageObjectNotFound
+			return scoperepair.StorageInspectResult{}, errorapi.ErrStorageNotFound
 		}
 		return scoperepair.StorageInspectResult{}, err
 	}

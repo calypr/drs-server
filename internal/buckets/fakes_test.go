@@ -2,11 +2,10 @@ package buckets
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 type fakeCredentialStore struct {
@@ -44,7 +43,7 @@ func (f *fakeCredentialStore) GetS3Credential(_ context.Context, bucket string) 
 			return &copy, nil
 		}
 	}
-	return nil, errors.New("credential not found")
+	return nil, errorapi.ErrStorageCredentialMissing
 }
 
 func (f *fakeCredentialStore) ListS3Credentials(context.Context) ([]Credential, error) {
@@ -161,7 +160,7 @@ func (f *fakeScopeStore) GetBucketScope(_ context.Context, organization, project
 			return &copy, nil
 		}
 	}
-	return nil, faults.ErrNotFound
+	return nil, errorapi.ErrNotFound
 }
 
 func (f *fakeScopeStore) ListBucketScopes(context.Context) ([]Scope, error) {
@@ -214,12 +213,6 @@ func (r *recordingInvalidator) snapshot() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.aliases...)
-}
-
-func (r *recordingInvalidator) reset() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.aliases = nil
 }
 
 type manualClock struct {

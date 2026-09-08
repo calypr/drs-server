@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -47,11 +47,11 @@ retryLookup:
 				resolvedAlias = true
 				goto retryLookup
 			}
-			if aliasErr != nil && !errors.Is(aliasErr, faults.ErrNotFound) {
+			if aliasErr != nil && !errors.Is(aliasErr, errorapi.ErrNotFound) {
 				return nil, aliasErr
 			}
 		}
-		return nil, fmt.Errorf("%w: object not found", faults.ErrNotFound)
+		return nil, errorapi.ErrObjectNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch record: %w", err)

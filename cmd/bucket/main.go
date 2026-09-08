@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/bucketapi"
+	"github.com/calypr/syfon/apigen/bucketapi"
 	sybucket "github.com/calypr/syfon/client/bucket"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"

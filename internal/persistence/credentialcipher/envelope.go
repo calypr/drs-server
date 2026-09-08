@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -26,7 +25,7 @@ type credentialEnvelopeV2 struct {
 	Ciphertext string `json:"c"`
 }
 
-func EncryptCredentialField(plaintext string) (string, error) {
+func EncryptCredentialField(ctx context.Context, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
@@ -49,7 +48,7 @@ func EncryptCredentialField(plaintext string) (string, error) {
 		return "", err
 	}
 
-	wrapped, err := manager.WrapDataKey(context.Background(), dek)
+	wrapped, err := manager.WrapDataKey(ctx, dek)
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +67,7 @@ func EncryptCredentialField(plaintext string) (string, error) {
 	return credentialCipherPrefixV2 + base64.RawStdEncoding.EncodeToString(b), nil
 }
 
-func DecryptCredentialField(value string) (string, error) {
+func DecryptCredentialField(ctx context.Context, value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
@@ -77,14 +76,14 @@ func DecryptCredentialField(value string) (string, error) {
 	}
 
 	if strings.HasPrefix(value, credentialCipherPrefixV2) {
-		return decryptCredentialFieldV2(value)
+		return decryptCredentialFieldV2(ctx, value)
 	}
 
 	// Backward compatibility for legacy v1 ciphertexts.
 	return decryptCredentialFieldV1(value)
 }
 
-func decryptCredentialFieldV2(value string) (string, error) {
+func decryptCredentialFieldV2(ctx context.Context, value string) (string, error) {
 	payloadB64 := strings.TrimPrefix(value, credentialCipherPrefixV2)
 	payload, err := base64.RawStdEncoding.DecodeString(payloadB64)
 	if err != nil {
@@ -96,7 +95,7 @@ func decryptCredentialFieldV2(value string) (string, error) {
 		return "", fmt.Errorf("envelope parse failed: %w", err)
 	}
 	if strings.TrimSpace(envelope.Manager) == "" {
-		return "", errors.New("envelope manager is required")
+		return "", fmt.Errorf("envelope manager is required")
 	}
 
 	manager, err := resolveCredentialKeyManager(envelope.Manager)
@@ -104,7 +103,7 @@ func decryptCredentialFieldV2(value string) (string, error) {
 		return "", err
 	}
 
-	dek, err := manager.UnwrapDataKey(context.Background(), &WrappedDataKey{
+	dek, err := manager.UnwrapDataKey(ctx, &WrappedDataKey{
 		Manager:    envelope.Manager,
 		KeyID:      envelope.KeyID,
 		Ciphertext: envelope.WrappedDEK,
@@ -134,7 +133,7 @@ func decryptCredentialFieldV1(value string) (string, error) {
 		return "", err
 	}
 	if len(key) == 0 {
-		return "", errors.New("encrypted credential found but master key is not configured")
+		return "", fmt.Errorf("encrypted credential found but master key is not configured")
 	}
 
 	payloadB64 := strings.TrimPrefix(value, credentialCipherPrefixV1)
@@ -193,7 +192,7 @@ func decryptPackedAESGCM(key, payload []byte) ([]byte, error) {
 	}
 	nonceSize := gcm.NonceSize()
 	if len(payload) < nonceSize {
-		return nil, errors.New("ciphertext payload too short")
+		return nil, fmt.Errorf("ciphertext payload too short")
 	}
 	nonce := payload[:nonceSize]
 	ciphertext := payload[nonceSize:]

@@ -1,14 +1,15 @@
 package transfers
 
 import (
-	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/server/internalapi"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/httpapi/response"
+	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
@@ -37,16 +38,19 @@ func firstSupportedAccessURL(obj *objects.Record) string {
 
 func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+	}
 	fileID := c.Params("file_id")
 
 	obj, err := objectService.GetObject(c.Context(), fileID, "read")
 	if err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	objectURL := firstSupportedAccessURL(obj)
 	if objectURL == "" {
-		return c.Status(fiber.StatusNotFound).SendString("No supported cloud location found for this file")
+		return apimiddleware.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
 	}
 
 	opts := storage.AccessOptions{}
@@ -64,21 +68,21 @@ func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Servi
 
 	signedURL, err := transferService.SignObjectURL(c.Context(), obj, objectURL, opts)
 	if err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	if fileCounters == nil {
-		return response.HandleError(c, errors.New("file usage recorder is not configured"))
+		return apimiddleware.HandleError(c, fmt.Errorf("file usage recorder is not configured"))
 	}
 	if err := fileCounters.RecordFileDownload(c.Context(), string(obj.Id)); err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 	if err := transferService.RecordAccessIssued(c.Context(), domaintransfers.AccessRequest{
 		Object:     obj,
 		Direction:  usage.ProviderTransferDirectionDownload,
 		StorageURL: objectURL,
 	}); err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	if c.Query("redirect") == "true" {
@@ -90,31 +94,34 @@ func handleInternalDownloadFiber(c fiber.Ctx, objectService *objectrecords.Servi
 
 func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.Service, transferService *domaintransfers.Service) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
+	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
+		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+	}
 	fileID := c.Params("file_id")
 	startStr := c.Query("start")
 	endStr := c.Query("end")
 
 	if startStr == "" || endStr == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("Missing 'start' or 'end' query parameter")
+		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Missing 'start' or 'end' query parameter")
 	}
 
 	start, err := strconv.ParseInt(startStr, 10, 64)
 	if err != nil || start < 0 {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid 'start' parameter")
+		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid 'start' parameter")
 	}
 	end, err := strconv.ParseInt(endStr, 10, 64)
 	if err != nil || end < start {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid 'end' parameter")
+		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
 	}
 
 	obj, err := objectService.GetObject(c.Context(), fileID, "read")
 	if err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	objectURL := firstSupportedAccessURL(obj)
 	if objectURL == "" {
-		return c.Status(fiber.StatusNotFound).SendString("No supported cloud location found for this file")
+		return apimiddleware.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
 	}
 
 	bucketID := ""
@@ -128,7 +135,7 @@ func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.S
 	}
 	signedURL, err := transferService.SignObjectDownloadPart(c.Context(), obj, bucketID, objectURL, start, end, opts)
 	if err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 	if err := transferService.RecordAccessIssued(c.Context(), domaintransfers.AccessRequest{
 		Object:         obj,
@@ -138,7 +145,7 @@ func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.S
 		RangeEnd:       &end,
 		BytesRequested: end - start + 1,
 	}); err != nil {
-		return response.HandleError(c, err)
+		return apimiddleware.HandleError(c, err)
 	}
 
 	return c.JSON(internalapi.InternalSignedURL{Url: &signedURL})

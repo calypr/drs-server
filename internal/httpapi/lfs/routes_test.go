@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/apigen/server/lfsapi"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -127,6 +129,50 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 	}
 	if storageFake.complete.UploadID != "opaque-upload-id" || len(storageFake.complete.Parts) != 1 || storageFake.complete.Parts[0].ETag != "etag" {
 		t.Fatalf("multipart completion = %+v", storageFake.complete)
+	}
+}
+
+func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
+	const detail = "postgres://user:secret@database"
+	oid := strings.Repeat("e", 64)
+	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{})
+	ports.objectReader.getErr = errors.New(detail)
+	server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+
+	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
+		Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 1},
+	})
+	if err != nil {
+		t.Fatalf("verify returned error: %v", err)
+	}
+	internal, ok := response.(lfsapi.LfsVerify500ApplicationVndGitLfsPlusJSONResponse)
+	if !ok || internal.Message != http.StatusText(http.StatusInternalServerError) || strings.Contains(internal.Message, detail) {
+		t.Fatalf("unexpected verify response: %#v", response)
+	}
+
+	ports.objectReader.getErr = nil
+	response507, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
+		Oid:  oid,
+		Body: strings.NewReader("payload"),
+	})
+	if err != nil {
+		t.Fatalf("upload proxy returned error: %v", err)
+	}
+	insufficient, ok := response507.(lfsapi.LfsUploadProxy507TextResponse)
+	if !ok || string(insufficient) != http.StatusText(http.StatusInsufficientStorage) {
+		t.Fatalf("unexpected upload response: %#v", response507)
+	}
+}
+
+func TestLFSBatchInternalErrorsDoNotExposeDetails(t *testing.T) {
+	const detail = "credential secret leaked"
+	internal := dbErrToBatchError(context.Background(), errors.New(detail))
+	if internal.Code != http.StatusInternalServerError || internal.Message != http.StatusText(http.StatusInternalServerError) || strings.Contains(internal.Message, detail) {
+		t.Fatalf("unexpected batch error: %+v", internal)
+	}
+	insufficient := dbErrToBatchError(context.Background(), errorapi.ErrBucketNotConfigured)
+	if insufficient.Code != http.StatusInsufficientStorage || insufficient.Message != http.StatusText(http.StatusInsufficientStorage) {
+		t.Fatalf("unexpected no-bucket error: %+v", insufficient)
 	}
 }
 

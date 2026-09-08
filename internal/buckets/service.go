@@ -3,15 +3,16 @@ package buckets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 const defaultScopeCacheTTL = 30 * time.Second
 
-var errMissingVisibilitySource = errors.New("bucket service requires a visibility query or fallback")
+var errMissingVisibilitySource = fmt.Errorf("bucket service requires a visibility query or fallback")
 
 // Dependencies are the narrow repository and visibility ports used by Service.
 // Visibility is an optional persistence optimization; Fallback is the
@@ -45,13 +46,13 @@ type Service struct {
 // scope-cache lifetime. A nil invalidator is a supported no-op configuration.
 func NewService(deps Dependencies, invalidator cacheInvalidator) (*Service, error) {
 	if deps.Credentials == nil {
-		return nil, errors.New("bucket service requires credential reader")
+		return nil, fmt.Errorf("bucket service requires credential reader")
 	}
 	if deps.CredentialAdmin == nil {
-		return nil, errors.New("bucket service requires credential admin")
+		return nil, fmt.Errorf("bucket service requires credential admin")
 	}
 	if deps.Scopes == nil {
-		return nil, errors.New("bucket service requires scope store")
+		return nil, fmt.Errorf("bucket service requires scope store")
 	}
 	if deps.Visibility == nil && deps.Fallback == nil {
 		return nil, errMissingVisibilitySource
@@ -104,5 +105,5 @@ func (s *Service) GetS3Credential(ctx context.Context, bucket string) (*Credenti
 }
 
 func isCredentialNotFoundError(err error) bool {
-	return faults.IsNotFoundError(err) || strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
+	return err != nil && errors.Is(err, errorapi.ErrStorageCredentialMissing)
 }

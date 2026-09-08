@@ -7,15 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/hash"
 )
 
-var (
-	// ErrRangeIgnored indicates a server ignored a Range header and sent the full body.
-	ErrRangeIgnored = fmt.Errorf("server ignored range request and returned full body")
-)
+var ErrRangeIgnored = fmt.Errorf("server ignored range request and returned full body")
 
 // TransferLogger is the minimal logging surface used by the transfer engines.
 type TransferLogger interface {

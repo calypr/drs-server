@@ -3,17 +3,18 @@ package usage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 var (
-	ErrReportsUnavailable = errors.New("usage report store is unavailable")
-	ErrObjectsUnavailable = errors.New("usage object reader is unavailable")
-	ErrInvalidGroupBy     = errors.New("invalid transfer breakdown group_by")
+	ErrReportsUnavailable = fmt.Errorf("usage report store is unavailable")
+	ErrObjectsUnavailable = fmt.Errorf("usage object reader is unavailable")
+	ErrInvalidGroupBy     = fmt.Errorf("invalid transfer breakdown group_by")
 )
 
 // Scope identifies one organization/project authorization scope.
@@ -321,7 +322,7 @@ func (s *Service) collectScopedUsage(ctx context.Context, scope Scope, inactiveS
 			}
 			obj, objErr := s.objects.GetObject(ctx, id, "read")
 			if objErr != nil {
-				if errors.Is(objErr, faults.ErrNotFound) || errors.Is(objErr, faults.ErrUnauthorized) {
+				if errors.Is(objErr, errorapi.ErrNotFound) || errors.Is(objErr, errorapi.ErrAccessDenied) {
 					continue
 				}
 				return nil, FileUsageSummary{}, objErr

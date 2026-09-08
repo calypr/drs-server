@@ -8,8 +8,8 @@ import (
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 )
 
 func (m *mutationService) DeleteBulkByScope(ctx context.Context, organization, project string) (int, error) {
@@ -54,7 +54,7 @@ type DeleteOptions struct {
 
 func (m *mutationService) DeleteObjectWithOptions(ctx context.Context, id string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
-		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", faults.ErrConflict)
+		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}
 	obj, err := m.recordReader.GetObject(ctx, id)
 	if err != nil {
@@ -64,7 +64,7 @@ func (m *mutationService) DeleteObjectWithOptions(ctx context.Context, id string
 		return err
 	}
 	if opts.DeleteStorageData && (obj.PublicRead || len(objectmodel.AccessResources(obj)) > 0) {
-		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", faults.ErrConflict)
+		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", errorapi.ErrConflict)
 	}
 	return m.recordWriter.DeleteObject(ctx, id)
 }
@@ -75,7 +75,7 @@ func (m *mutationService) BulkDeleteObjects(ctx context.Context, ids []string) e
 
 func (m *mutationService) BulkDeleteObjectsWithOptions(ctx context.Context, ids []string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
-		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", faults.ErrConflict)
+		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}
 	toDelete, err := m.deletablePhysicalObjectIDsForBulk(ctx, ids)
 	if err != nil {
@@ -108,9 +108,9 @@ func (m *mutationService) deletablePhysicalObjectIDsForBulk(ctx context.Context,
 		if !ok {
 			canonicalID, resolveErr := m.aliases.ResolveObjectAlias(ctx, objectID)
 			if resolveErr == nil && strings.TrimSpace(canonicalID) != "" {
-				return nil, fmt.Errorf("%w: bulk delete requires a physical object UUID; %q is an alias for %q", faults.ErrConflict, objectID, strings.TrimSpace(canonicalID))
+				return nil, fmt.Errorf("%w: bulk delete requires a physical object UUID; %q is an alias for %q", errorapi.ErrConflict, objectID, strings.TrimSpace(canonicalID))
 			}
-			if resolveErr != nil && !errors.Is(resolveErr, faults.ErrNotFound) {
+			if resolveErr != nil && !errors.Is(resolveErr, errorapi.ErrNotFound) {
 				return nil, resolveErr
 			}
 			continue
@@ -197,10 +197,6 @@ func (m *mutationService) DeleteObjectsByChecksums(ctx context.Context, hashes [
 	}
 	return len(toDelete), nil
 }
-func (m *mutationService) deletableObjectIDs(ctx context.Context, ids []string) ([]string, error) {
-	return m.deletableObjectIDsForMethod(ctx, ids, true)
-}
-
 func (m *mutationService) deletableObjectIDsForMethod(ctx context.Context, ids []string, requireAll bool) ([]string, error) {
 	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
 	if err != nil {

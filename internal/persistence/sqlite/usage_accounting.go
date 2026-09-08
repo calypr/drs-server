@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/faults"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -106,7 +106,7 @@ func (db *SqliteDB) GetFileUsage(ctx context.Context, objectID string) (*usage.F
 		&lastDownload,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: file usage not found", faults.ErrNotFound)
+		return nil, errorapi.ErrFileUsageNotFound
 	}
 	if err != nil {
 		return nil, err

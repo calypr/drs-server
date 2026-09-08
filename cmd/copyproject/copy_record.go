@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/services"
 	transferdownload "github.com/calypr/syfon/client/transfer/download"
 	"github.com/calypr/syfon/client/transfer/upload"

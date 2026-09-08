@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/calypr/syfon/internal/faults"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
@@ -62,7 +62,7 @@ func (db *SqliteDB) GetPendingMetadata(ctx context.Context, oid string) (*transf
 		WHERE oid = ? AND expires_time > ?
 	`, oid, time.Now().UTC()).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+			return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}
@@ -102,7 +102,7 @@ func (db *SqliteDB) PopPendingMetadata(ctx context.Context, oid string) (*transf
 		WHERE oid = ? AND expires_time > ?
 	`, oid, time.Now().UTC()).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: pending metadata not found", faults.ErrNotFound)
+			return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 		}
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}

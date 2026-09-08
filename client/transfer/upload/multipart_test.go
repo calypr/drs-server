@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"

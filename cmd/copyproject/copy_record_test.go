@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/services"
 	"github.com/spf13/cobra"

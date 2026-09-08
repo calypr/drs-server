@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
+	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/client/common"
 )
 

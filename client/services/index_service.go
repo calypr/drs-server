@@ -9,8 +9,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/client/drs"
-	"github.com/calypr/syfon/apigen/client/internalapi"
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/request"
 
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -31,7 +32,7 @@ func (s *IndexService) Get(ctx context.Context, did string) (internalapi.Interna
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, &responseStatusError{status: resp.StatusCode()}
+		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -45,7 +46,7 @@ func (s *IndexService) GetByHash(ctx context.Context, hash string) (internalapi.
 		return internalapi.ListRecordsResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.ListRecordsResponse{}, fmt.Errorf("failed to get record by hash: %d", resp.StatusCode())
+		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -56,7 +57,7 @@ func (s *IndexService) Create(ctx context.Context, rec internalapi.InternalRecor
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.InternalRecordResponse{}, fmt.Errorf("failed to create record: %d", resp.StatusCode())
+		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -67,7 +68,7 @@ func (s *IndexService) Update(ctx context.Context, did string, rec internalapi.I
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, fmt.Errorf("failed to update record: %d", resp.StatusCode())
+		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -78,7 +79,7 @@ func (s *IndexService) Delete(ctx context.Context, did string) error {
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return fmt.Errorf("failed to delete record: %d", resp.StatusCode())
+		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -91,7 +92,7 @@ func (s *IndexService) RemoveControlledAccess(ctx context.Context, did, resource
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, fmt.Errorf("failed to remove controlled access: %d", resp.StatusCode())
+		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -145,7 +146,7 @@ func (s *IndexService) DeleteByQuery(ctx context.Context, opts DeleteByQueryOpti
 		return internalapi.DeleteByQueryResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.DeleteByQueryResponse{}, fmt.Errorf("failed to delete by query: %d", resp.StatusCode())
+		return internalapi.DeleteByQueryResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -156,7 +157,7 @@ func (s *IndexService) CreateBulk(ctx context.Context, req internalapi.BulkCreat
 		return internalapi.ListRecordsResponse{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.ListRecordsResponse{}, fmt.Errorf("failed to bulk create: %d", resp.StatusCode())
+		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -167,7 +168,7 @@ func (s *IndexService) BulkHashes(ctx context.Context, req internalapi.BulkHashe
 		return internalapi.ListRecordsResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.ListRecordsResponse{}, fmt.Errorf("failed to bulk hashes: %d", resp.StatusCode())
+		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -178,7 +179,7 @@ func (s *IndexService) DeleteBulk(ctx context.Context, req internalapi.BulkHashe
 		return 0, err
 	}
 	if resp.JSON200 == nil {
-		return 0, fmt.Errorf("failed to bulk delete: %d", resp.StatusCode())
+		return 0, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	if resp.JSON200.Deleted == nil {
 		return 0, nil
@@ -192,7 +193,7 @@ func (s *IndexService) BulkSHA256Validity(ctx context.Context, req internalapi.B
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("failed to bulk sha256 validity: %d", resp.StatusCode())
+		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -206,7 +207,7 @@ func (s *IndexService) MissingSHA256(ctx context.Context, req internalapi.BulkMi
 		return internalapi.BulkMissingSHA256Response{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.BulkMissingSHA256Response{}, fmt.Errorf("failed to find missing sha256 values: %d", resp.StatusCode())
+		return internalapi.BulkMissingSHA256Response{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -221,7 +222,7 @@ func (s *IndexService) BulkDocuments(ctx context.Context, dids []string) ([]inte
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, fmt.Errorf("failed to bulk documents: %d", resp.StatusCode())
+		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -280,8 +281,7 @@ func (s *IndexService) Upsert(ctx context.Context, did, objectURL, recordPath st
 		return err
 	}
 
-	var statusErr *responseStatusError
-	if !errors.As(err, &statusErr) || statusErr.status != http.StatusNotFound {
+	if !errors.Is(err, errorapi.ErrNotFound) {
 		return err
 	}
 

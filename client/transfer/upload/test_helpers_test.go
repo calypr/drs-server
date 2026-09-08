@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -112,16 +112,4 @@ func createTempFileWithData(t *testing.T, data string) *os.File {
 		t.Fatalf("Seek returned error: %v", err)
 	}
 	return file
-}
-
-func createSparseFile(t *testing.T, path string, size int64) {
-	t.Helper()
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("Create returned error: %v", err)
-	}
-	defer f.Close()
-	if err := f.Truncate(size); err != nil {
-		t.Fatalf("Truncate returned error: %v", err)
-	}
 }

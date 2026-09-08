@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
-	drsapi "github.com/calypr/syfon/apigen/client/drs"
-	internalapi "github.com/calypr/syfon/apigen/client/internalapi"
+	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 func TestDRSServiceResolveAndList(t *testing.T) {
@@ -118,8 +120,8 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 	if err != nil || obj.Id != "obj-1" {
 		t.Fatalf("GetObject returned obj=%+v err=%v", obj, err)
 	}
-	if _, err := service.GetObject(ctx, "missing"); !errors.Is(err, ErrObjectNotFound) {
-		t.Fatalf("expected ErrObjectNotFound, got %v", err)
+	if _, err := service.GetObject(ctx, "missing"); !errors.Is(err, errorapi.ErrNotFound) {
+		t.Fatalf("expected errorapi.ErrNotFound, got %v", err)
 	}
 	if _, err := service.GetObject(ctx, "broken"); err == nil || !strings.Contains(err.Error(), "schema is stale") {
 		t.Fatalf("expected server error detail for broken object lookup, got %v", err)
@@ -197,7 +199,7 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 	if err != nil || len(hashPage.DrsObjects) != 1 || hashPage.DrsObjects[0].Id != "did-hash" {
 		t.Fatalf("BatchGetObjectsByHash returned page=%+v err=%v", hashPage, err)
 	}
-	if _, err := service.BatchGetObjectsByHash(ctx, []string{"abc", "fail"}); err == nil || !strings.Contains(err.Error(), "unexpected response: 502") {
+	if _, err := service.BatchGetObjectsByHash(ctx, []string{"abc", "fail"}); !errors.Is(err, errorapi.ErrUnavailable) {
 		t.Fatalf("expected batch checksum lookup to fail on backend error, got %v", err)
 	}
 
@@ -251,7 +253,8 @@ func TestDRSServiceDeleteObjectRejectsUnexpectedStatus(t *testing.T) {
 
 	service := NewDRSService(mustDRSClient(t, server.URL), nil)
 	err := service.DeleteObject(context.Background(), "obj-delete", true)
-	if err == nil || !strings.Contains(err.Error(), "unexpected response: 418") {
+	var apiErr *apierror.APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusTeapot {
 		t.Fatalf("expected unexpected-status error, got %v", err)
 	}
 }
@@ -321,6 +324,10 @@ func TestDRSServiceDeleteRecordsByHash(t *testing.T) {
 	emptyService := NewDRSService(mustDRSClientWithHTTPClient(emptyHTTPClient), emptyIndex)
 	if err := emptyService.DeleteRecordsByHash(ctx, "sha256:abc"); err == nil {
 		t.Fatal("expected no-records error from DeleteRecordsByHash")
+	} else if !errors.Is(err, ErrNoRecordsForHash) {
+		t.Fatalf("expected ErrNoRecordsForHash, got %v", err)
+	} else if errors.Is(err, errorapi.ErrObjectNotFound) {
+		t.Fatalf("no-records error must not match errorapi.ErrObjectNotFound: %v", err)
 	}
 }
 
