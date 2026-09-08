@@ -44,7 +44,7 @@ func TestHandleInternalList_ScopeFilteringByReadPrivilege(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?organization=org", nil)
+	req := httptest.NewRequest(http.MethodGet, "/index?organization=org", nil)
 	ctx := indexTestAuthContext(req.Context(), "gen3", true, map[string]map[string]bool{
 		"/programs/org/projects/p1": {"read": true},
 	})
@@ -598,7 +598,7 @@ func TestHandleInternalList_HashTypeFiltering(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?hash=sha256:samehash", nil)
+	req := httptest.NewRequest(http.MethodGet, "/index?hash=sha256:samehash", nil)
 	om := newInternalDRSObjectManager(mockDB)
 	rr := doInternalDRSTestRequest(req, om)
 	if rr.Code != http.StatusOK {
@@ -615,7 +615,7 @@ func TestHandleInternalList_HashTypeFiltering(t *testing.T) {
 		t.Fatalf("expected obj-sha, got %q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/?hash=samehash&hash_type=md5", nil)
+	req = httptest.NewRequest(http.MethodGet, "/index?hash=samehash&hash_type=md5", nil)
 	om2 := newInternalDRSObjectManager(mockDB)
 	rr = doInternalDRSTestRequest(req, om2)
 	if rr.Code != http.StatusOK {
@@ -1152,7 +1152,7 @@ func TestHandleInternalBulkOverwrite_ValidatesRequest(t *testing.T) {
 func TestHandleInternalDeleteByQuery(t *testing.T) {
 	t.Run("requires scope query", func(t *testing.T) {
 		mockDB := &internalRecordStore{}
-		req := httptest.NewRequest(http.MethodDelete, "/", nil)
+		req := httptest.NewRequest(http.MethodDelete, RouteIndex, nil)
 		om := newInternalDRSObjectManager(mockDB)
 		rr := doInternalDRSTestRequest(req, om)
 
@@ -1163,7 +1163,7 @@ func TestHandleInternalDeleteByQuery(t *testing.T) {
 
 	t.Run("requires auth header in gen3 mode", func(t *testing.T) {
 		mockDB := &internalRecordStore{}
-		req := httptest.NewRequest(http.MethodDelete, "/?organization=org", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/index?organization=org", nil)
 		ctx := indexTestAuthContext(req.Context(), "gen3", false, nil)
 		req = req.WithContext(ctx)
 		om := newInternalDRSObjectManager(mockDB)
@@ -1186,7 +1186,7 @@ func TestHandleInternalDeleteByQuery(t *testing.T) {
 				"obj-2": {"org": {"a"}},
 			},
 		}
-		req := httptest.NewRequest(http.MethodDelete, "/?organization=org&project=a", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/index?organization=org&project=a", nil)
 		ctx := indexTestAuthContext(req.Context(), "gen3", true, map[string]map[string]bool{
 			"/programs/org/projects/a": {"delete": true},
 		})
@@ -1228,7 +1228,7 @@ func TestHandleInternalDeleteByQuery_AuthzParity(t *testing.T) {
 				},
 			}
 
-			req := httptest.NewRequest(http.MethodDelete, "/?organization=org&project=a", nil)
+			req := httptest.NewRequest(http.MethodDelete, "/index?organization=org&project=a", nil)
 			req = withTestAuthzContext(req, mode, map[string]map[string]bool{
 				"/programs/org/projects/a": {"delete": true},
 			})

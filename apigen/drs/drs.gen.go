@@ -4471,7 +4471,7 @@ func (siw *ServerInterfaceWrapper) GetBulkObjects(c fiber.Ctx) error {
 	if paramValue := c.Query("expand"); paramValue != "" {
 
 		var value Expand
-		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
 		}
@@ -4501,7 +4501,7 @@ func (siw *ServerInterfaceWrapper) GetObjectsByChecksum(c fiber.Ctx) error {
 	// ------------- Path parameter "checksum" -------------
 	var checksumParameter ChecksumParameter
 
-	err = runtime.BindStyledParameterWithOptions("simple", "checksum", c.Params("checksum"), &checksumParameter, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "checksum", c.Params("checksum"), &checksumParameter, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter checksum: %w", err).Error())
 	}
@@ -4535,7 +4535,7 @@ func (siw *ServerInterfaceWrapper) GetObject(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4544,7 +4544,7 @@ func (siw *ServerInterfaceWrapper) GetObject(c fiber.Ctx) error {
 	if paramValue := c.Query("expand"); paramValue != "" {
 
 		var value Expand
-		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
 		}
@@ -4562,7 +4562,7 @@ func (siw *ServerInterfaceWrapper) OptionsObject(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4577,7 +4577,7 @@ func (siw *ServerInterfaceWrapper) PostObject(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4592,7 +4592,7 @@ func (siw *ServerInterfaceWrapper) UpdateObjectAccessMethods(c fiber.Ctx) error 
 	// ------------- Path parameter "object_id" -------------
 	var objectId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4607,7 +4607,7 @@ func (siw *ServerInterfaceWrapper) GetAccessURL(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4615,7 +4615,7 @@ func (siw *ServerInterfaceWrapper) GetAccessURL(c fiber.Ctx) error {
 	// ------------- Path parameter "access_id" -------------
 	var accessId AccessId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "access_id", c.Params("access_id"), &accessId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "access_id", c.Params("access_id"), &accessId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter access_id: %w", err).Error())
 	}
@@ -4630,7 +4630,7 @@ func (siw *ServerInterfaceWrapper) PostAccessURL(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4638,7 +4638,7 @@ func (siw *ServerInterfaceWrapper) PostAccessURL(c fiber.Ctx) error {
 	// ------------- Path parameter "access_id" -------------
 	var accessId AccessId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "access_id", c.Params("access_id"), &accessId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "access_id", c.Params("access_id"), &accessId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter access_id: %w", err).Error())
 	}
@@ -4653,7 +4653,7 @@ func (siw *ServerInterfaceWrapper) AddChecksums(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
@@ -4668,7 +4668,7 @@ func (siw *ServerInterfaceWrapper) DeleteObject(c fiber.Ctx) error {
 	// ------------- Path parameter "object_id" -------------
 	var objectId ObjectId
 
-	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "object_id", c.Params("object_id"), &objectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}

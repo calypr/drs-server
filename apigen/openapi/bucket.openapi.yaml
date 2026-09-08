@@ -249,6 +249,7 @@ paths:
         - name: path
           in: query
           required: true
+          allowEmptyValue: true
           schema:
             type: string
         - name: project_id

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	generated "github.com/calypr/syfon/apigen/drs"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
@@ -78,13 +79,9 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		metrics.RegisterMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
 	}
 	if options.Internal {
-		records.RegisterRoutes(api, deps.Objects)
-		maintenance.RegisterRepairRoutes(api, deps.ScopeRepair)
-		httptransfers.RegisterObjectRoutes(api, deps.Objects, deps.Transfers, deps.UsageIngest)
-		maintenance.RegisterInspectionRoutes(api, deps.ProjectInspector, deps.ProjectCleanup, deps.Buckets)
-		httptransfers.RegisterBulkAndMultipartRoutes(api, deps.Objects, deps.Transfers)
-		httpbuckets.RegisterRoutes(api, deps.Buckets)
-		maintenance.RegisterProjectCleanupRoute(api, deps.ProjectCleanup)
+		internalapi.RegisterHandlers(api, newInternalServer(deps))
+		maintenance.RegisterUndocumentedRoutes(api, deps.ScopeRepair, deps.ProjectInspector, deps.ProjectCleanup)
+		httpbuckets.RegisterRoutes(api, deps.Buckets, maintenance.ProjectCleanupHandler(deps.ProjectCleanup))
 	}
 	if options.LFS {
 		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
@@ -94,5 +91,21 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 			FileCounters:    deps.UsageIngest,
 			Credentials:     deps.Buckets,
 		}, options.LFSProtocol)
+	}
+}
+
+type internalServer struct {
+	*records.RecordsServer
+	*httptransfers.TransfersServer
+	*maintenance.MaintenanceServer
+}
+
+var _ internalapi.ServerInterface = (*internalServer)(nil)
+
+func newInternalServer(deps Dependencies) *internalServer {
+	return &internalServer{
+		RecordsServer:     records.NewRecordsServer(deps.Objects),
+		TransfersServer:   httptransfers.NewTransfersServer(deps.Objects, deps.Transfers, deps.UsageIngest),
+		MaintenanceServer: maintenance.NewMaintenanceServer(deps.ProjectInspector, deps.Buckets),
 	}
 }

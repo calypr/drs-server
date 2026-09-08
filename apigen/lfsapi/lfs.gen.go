@@ -1077,7 +1077,7 @@ func (siw *ServerInterfaceWrapper) LfsUploadProxy(c fiber.Ctx) error {
 	// ------------- Path parameter "oid" -------------
 	var oid string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "oid", c.Params("oid"), &oid, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "oid", c.Params("oid"), &oid, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter oid: %w", err).Error())
 	}

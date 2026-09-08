@@ -1409,7 +1409,7 @@ func (siw *ServerInterfaceWrapper) DeleteBucket(c fiber.Ctx) error {
 	// ------------- Path parameter "bucket" -------------
 	var bucket string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 	}
@@ -1425,7 +1425,7 @@ func (siw *ServerInterfaceWrapper) DeleteBucketScope(c fiber.Ctx) error {
 	// ------------- Path parameter "bucket" -------------
 	var bucket string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 	}
@@ -1434,7 +1434,7 @@ func (siw *ServerInterfaceWrapper) DeleteBucketScope(c fiber.Ctx) error {
 	if paramValue := c.Query("organization"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
@@ -1444,10 +1444,10 @@ func (siw *ServerInterfaceWrapper) DeleteBucketScope(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument organization is required, but not found").Error())
 	}
 	// ------------- Required query parameter "path" -------------
-	if paramValue := c.Query("path"); paramValue != "" {
+	if paramValue := c.Query("path"); c.Request().URI().QueryArgs().Has("path") {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
 		}
@@ -1460,7 +1460,7 @@ func (siw *ServerInterfaceWrapper) DeleteBucketScope(c fiber.Ctx) error {
 	if paramValue := c.Query("project_id"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project_id", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "project_id", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
 		}
@@ -1478,7 +1478,7 @@ func (siw *ServerInterfaceWrapper) ListBucketScopes(c fiber.Ctx) error {
 	// ------------- Path parameter "bucket" -------------
 	var bucket string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 	}
@@ -1493,7 +1493,7 @@ func (siw *ServerInterfaceWrapper) AddBucketScope(c fiber.Ctx) error {
 	// ------------- Path parameter "bucket" -------------
 	var bucket string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "bucket", c.Params("bucket"), &bucket, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 	}
@@ -1508,7 +1508,7 @@ func (siw *ServerInterfaceWrapper) DeleteProjectData(c fiber.Ctx) error {
 	// ------------- Path parameter "organization" -------------
 	var organization string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "organization", c.Params("organization"), &organization, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "organization", c.Params("organization"), &organization, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 	}
@@ -1516,7 +1516,7 @@ func (siw *ServerInterfaceWrapper) DeleteProjectData(c fiber.Ctx) error {
 	// ------------- Path parameter "project_id" -------------
 	var projectId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "project_id", c.Params("project_id"), &projectId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", c.Params("project_id"), &projectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
 	}

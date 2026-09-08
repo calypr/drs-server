@@ -25,7 +25,8 @@ func bucketStringValue(value *string) string {
 	return *value
 }
 
-func handleInternalBucketsFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
+func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
+	bucketService := s.bucketService
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
@@ -52,7 +53,8 @@ func handleInternalBucketsFiber(c fiber.Ctx, bucketService *domainbuckets.Servic
 	return c.JSON(resp)
 }
 
-func handleInternalPutBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
+func (s *bucketServer) PutBucket(c fiber.Ctx) error {
+	bucketService := s.bucketService
 	var req bucketapi.PutBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
@@ -189,8 +191,9 @@ func authorizeBucketDelete(ctx context.Context, bucketService *domainbuckets.Ser
 	return nil
 }
 
-func handleInternalDeleteBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
-	credentialID := strings.TrimSpace(c.Params("bucket"))
+func (s *bucketServer) DeleteBucket(c fiber.Ctx, bucket string) error {
+	bucketService := s.bucketService
+	credentialID := strings.TrimSpace(bucket)
 	if credentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "bucket name is required")
 	}
@@ -203,8 +206,9 @@ func handleInternalDeleteBucketFiber(c fiber.Ctx, bucketService *domainbuckets.S
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func handleInternalCreateBucketScopeFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
-	routeCredentialID := strings.TrimSpace(c.Params("bucket"))
+func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
+	bucketService := s.bucketService
+	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
@@ -245,16 +249,19 @@ func handleInternalCreateBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 	return c.SendStatus(fiber.StatusCreated)
 }
 
-func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
-	routeCredentialID := strings.TrimSpace(c.Params("bucket"))
+func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
+	bucketService := s.bucketService
+	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
-	hasPathQuery := c.Request().URI().QueryArgs().Has("path")
-	organization := strings.TrimSpace(c.Query("organization"))
-	scopePath := strings.TrimSpace(c.Query("path"))
-	projectID := strings.TrimSpace(c.Query("project_id"))
-	if organization == "" || !hasPathQuery {
+	organization := strings.TrimSpace(params.Organization)
+	scopePath := strings.TrimSpace(params.Path)
+	projectID := ""
+	if params.ProjectId != nil {
+		projectID = strings.TrimSpace(*params.ProjectId)
+	}
+	if organization == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "organization and path are required")
 	}
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
@@ -306,11 +313,12 @@ func handleInternalDeleteBucketScopeFiber(c fiber.Ctx, bucketService *domainbuck
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func handleInternalListBucketScopesFiber(c fiber.Ctx, bucketService *domainbuckets.Service) error {
+func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
+	bucketService := s.bucketService
 	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	routeCredentialID := strings.TrimSpace(c.Params("bucket"))
+	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}

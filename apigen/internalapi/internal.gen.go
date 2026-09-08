@@ -5277,7 +5277,7 @@ func (siw *ServerInterfaceWrapper) InternalDownload(c fiber.Ctx) error {
 	// ------------- Path parameter "file_id" -------------
 	var fileId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
@@ -5286,7 +5286,7 @@ func (siw *ServerInterfaceWrapper) InternalDownload(c fiber.Ctx) error {
 	if paramValue := c.Query("redirect"); paramValue != "" {
 
 		var value bool
-		err = runtime.BindStyledParameterWithOptions("form", "redirect", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "redirect", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter redirect: %w", err).Error())
 		}
@@ -5297,7 +5297,7 @@ func (siw *ServerInterfaceWrapper) InternalDownload(c fiber.Ctx) error {
 	if paramValue := c.Query("expires_in"); paramValue != "" {
 
 		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
 		}
@@ -5316,7 +5316,7 @@ func (siw *ServerInterfaceWrapper) InternalDownloadPart(c fiber.Ctx) error {
 	// ------------- Path parameter "file_id" -------------
 	var fileId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
@@ -5325,7 +5325,7 @@ func (siw *ServerInterfaceWrapper) InternalDownloadPart(c fiber.Ctx) error {
 	if paramValue := c.Query("start"); paramValue != "" {
 
 		var value int64
-		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
 		}
@@ -5338,7 +5338,7 @@ func (siw *ServerInterfaceWrapper) InternalDownloadPart(c fiber.Ctx) error {
 	if paramValue := c.Query("end"); paramValue != "" {
 
 		var value int64
-		err = runtime.BindStyledParameterWithOptions("form", "end", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "end", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter end: %w", err).Error())
 		}
@@ -5366,7 +5366,7 @@ func (siw *ServerInterfaceWrapper) InternalInspectProjectScopes(c fiber.Ctx) err
 	if paramValue := c.Query("organization"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
@@ -5379,7 +5379,7 @@ func (siw *ServerInterfaceWrapper) InternalInspectProjectScopes(c fiber.Ctx) err
 	if paramValue := c.Query("project"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true})
+		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
@@ -5436,7 +5436,7 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 	// ------------- Path parameter "file_id" -------------
 	var fileId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "file_id", c.Params("file_id"), &fileId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
@@ -5445,7 +5445,7 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 	if paramValue := c.Query("organization"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
@@ -5456,7 +5456,7 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 	if paramValue := c.Query("project"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
@@ -5467,7 +5467,7 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 	if paramValue := c.Query("key"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "key", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "key", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter key: %w", err).Error())
 		}
@@ -5478,7 +5478,7 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 	if paramValue := c.Query("expires_in"); paramValue != "" {
 
 		var value int32
-		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
 		}
@@ -5498,7 +5498,7 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	if paramValue := c.Query("organization"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
@@ -5509,7 +5509,7 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	if paramValue := c.Query("program"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
 		}
@@ -5520,7 +5520,7 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	if paramValue := c.Query("project"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
@@ -5531,7 +5531,7 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	if paramValue := c.Query("hash"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
 		}
@@ -5542,7 +5542,7 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	if paramValue := c.Query("hash_type"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash_type", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "hash_type", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash_type: %w", err).Error())
 		}
@@ -5562,7 +5562,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("hash"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
 		}
@@ -5573,7 +5573,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("url"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "url", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "url", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter url: %w", err).Error())
 		}
@@ -5584,7 +5584,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("organization"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
@@ -5595,7 +5595,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("program"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
 		}
@@ -5606,7 +5606,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("project"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
@@ -5617,7 +5617,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("path"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
 		}
@@ -5628,7 +5628,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("limit"); paramValue != "" {
 
 		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter limit: %w", err).Error())
 		}
@@ -5639,7 +5639,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("start"); paramValue != "" {
 
 		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
 		}
@@ -5650,7 +5650,7 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	if paramValue := c.Query("page"); paramValue != "" {
 
 		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "page", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false})
+		err = runtime.BindStyledParameterWithOptions("form", "page", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter page: %w", err).Error())
 		}
@@ -5716,7 +5716,7 @@ func (siw *ServerInterfaceWrapper) InternalDelete(c fiber.Ctx) error {
 	// ------------- Path parameter "id" -------------
 	var id string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
 	}
@@ -5731,7 +5731,7 @@ func (siw *ServerInterfaceWrapper) InternalGet(c fiber.Ctx) error {
 	// ------------- Path parameter "id" -------------
 	var id string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
 	}
@@ -5746,7 +5746,7 @@ func (siw *ServerInterfaceWrapper) InternalUpdate(c fiber.Ctx) error {
 	// ------------- Path parameter "id" -------------
 	var id string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
 	}
@@ -5761,7 +5761,7 @@ func (siw *ServerInterfaceWrapper) InternalRemoveControlledAccess(c fiber.Ctx) e
 	// ------------- Path parameter "id" -------------
 	var id string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Params("id"), &id, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter id: %w", err).Error())
 	}

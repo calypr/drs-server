@@ -23,6 +23,17 @@ type publicMessageError struct {
 	message string
 }
 
+type classifiedPublicMessageError struct {
+	cause   error
+	message string
+}
+
+func (e classifiedPublicMessageError) Error() string { return "private detail" }
+
+func (e classifiedPublicMessageError) Unwrap() error { return e.cause }
+
+func (e classifiedPublicMessageError) PublicMessage() string { return e.message }
+
 func (e publicMessageError) Error() string {
 	return "internal authorization detail"
 }
@@ -100,6 +111,56 @@ func TestClassifyErrorKeepsCauseOutOfServerPayload(t *testing.T) {
 	}
 	if payload.Message != "Internal Server Error" || payload.RequestId == nil || *payload.RequestId != "request-789" {
 		t.Fatalf("unexpected public payload: %+v", payload)
+	}
+}
+
+func TestClassifyErrorCoversPublicBranches(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		ctx        context.Context
+		wantStatus int
+		wantCode   errorapi.ErrorCode
+		wantMsg    string
+	}{
+		{name: "multipart not found", err: errorapi.ErrMultipartUploadNotFound, wantStatus: http.StatusNotFound, wantCode: errorapi.ErrorCodeMultipartUploadNotFound, wantMsg: "Upload ID not found"},
+		{name: "authenticated legacy unauthorized", err: errorapi.ErrUnauthorized, ctx: sessionContext("gen3", true), wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantMsg: "Unauthorized"},
+		{name: "public unauthorized", err: classifiedPublicMessageError{cause: errorapi.ErrUnauthorized, message: "authorization denied"}, ctx: sessionContext("gen3", true), wantStatus: http.StatusForbidden, wantCode: errorapi.ErrorCodeAccessDenied, wantMsg: "authorization denied"},
+		{name: "public invalid input", err: classifiedPublicMessageError{cause: errorapi.ErrInvalidInput, message: "invalid request"}, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeInvalidInput, wantMsg: "invalid request"},
+		{name: "public conflict", err: classifiedPublicMessageError{cause: errorapi.ErrConflict, message: "already exists"}, wantStatus: http.StatusConflict, wantCode: errorapi.ErrorCodeConflict, wantMsg: "already exists"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := tc.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			got := ClassifyError(ctx, tc.err)
+			if got.Status != tc.wantStatus || got.Code != tc.wantCode || got.Message != tc.wantMsg {
+				t.Fatalf("ClassifyError() = %+v, want status=%d code=%s message=%q", got, tc.wantStatus, tc.wantCode, tc.wantMsg)
+			}
+		})
+	}
+	if got := ClassifyError(context.Background(), nil); got != (errorapi.APIError{}) {
+		t.Fatalf("ClassifyError(nil) = %+v", got)
+	}
+}
+
+func TestFiberErrorHandlerAndNewAPIError(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", func(c fiber.Ctx) error {
+		return FiberErrorHandler(c, fiber.NewError(http.StatusTeapot, "short and stout"))
+	})
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusTeapot {
+		t.Fatalf("FiberErrorHandler status = %d", resp.StatusCode)
+	}
+	apiErr := NewAPIError(requestid.WithRequestID(context.Background(), "request-new-api"), errorapi.ErrorCodeConflict, http.StatusConflict, "conflict")
+	if apiErr.RequestId == nil || *apiErr.RequestId != "request-new-api" || apiErr.Message != "conflict" {
+		t.Fatalf("NewAPIError() = %+v", apiErr)
 	}
 }
 

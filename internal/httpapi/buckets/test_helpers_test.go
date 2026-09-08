@@ -38,7 +38,7 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 		c.SetContext(req.Context())
 		return c.Next()
 	})
-	RegisterRoutes(app, fixture.bucketService)
+	RegisterRoutes(app, fixture.bucketService, nil)
 
 	rr := httptest.NewRecorder()
 	resp, err := app.Test(req)

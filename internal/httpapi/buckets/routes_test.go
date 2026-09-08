@@ -101,7 +101,7 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 
 	app := fiber.New()
 	app.Put("/data/buckets", func(c fiber.Ctx) error {
-		return handleInternalPutBucketFiber(c, bucketService)
+		return (&bucketServer{bucketService: bucketService}).PutBucket(c)
 	})
 	resp, err := app.Test(req)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testi
 	app := fiber.New()
 	app.Put("/data/buckets", func(c fiber.Ctx) error {
 		c.SetContext(requestid.WithRequestID(c.Context(), "request-derived-lookup"))
-		return handleInternalPutBucketFiber(c, bucketService)
+		return (&bucketServer{bucketService: bucketService}).PutBucket(c)
 	})
 	resp, err := app.Test(req)
 	if err != nil {

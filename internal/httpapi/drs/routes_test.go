@@ -29,24 +29,21 @@ func TestRegisterDRSRoutesKeepsStaticRoutesBeforeDynamicRoutes(t *testing.T) {
 	}
 }
 
-func TestRegisterDRSRoutesPreservesAliasesAndOptions(t *testing.T) {
+func TestRegisterDRSRoutesRegistersCanonicalRoutesAndOptions(t *testing.T) {
 	app := fiber.New()
 	RegisterDRSRoutes(app, nil, nil, generated.Service{})
 
 	want := map[string]bool{
 		"POST /objects/register":                     false,
 		"POST /objects/access":                       false,
-		"POST /objects/delete":                       false,
 		"PUT /objects/delete":                        false,
-		"POST /objects/access-methods":               false,
 		"PUT /objects/access-methods":                false,
+		"POST /objects":                              false,
+		"GET /objects/:object_id":                    false,
 		"POST /objects/:object_id":                   false,
-		"DELETE /objects/:object_id":                 false,
-		"POST /objects/:object_id/delete":            false,
 		"PUT /objects/:object_id/delete":             false,
 		"GET /objects/:object_id/access/:access_id":  false,
 		"POST /objects/:object_id/access/:access_id": false,
-		"POST /objects/:object_id/access-methods":    false,
 		"PUT /objects/:object_id/access-methods":     false,
 		"OPTIONS /objects":                           false,
 		"OPTIONS /objects/:object_id":                false,
@@ -62,6 +59,22 @@ func TestRegisterDRSRoutesPreservesAliasesAndOptions(t *testing.T) {
 	for route, found := range want {
 		if !found {
 			t.Errorf("missing route %s", route)
+		}
+	}
+
+	for _, route := range []string{
+		"POST /objects/delete",
+		"POST /objects/access-methods",
+		"DELETE /objects/:object_id",
+		"POST /objects/:object_id/delete",
+		"POST /objects/:object_id/access-methods",
+	} {
+		for _, routes := range app.Stack() {
+			for _, registered := range routes {
+				if registered.Method+" "+registered.Path == route {
+					t.Errorf("legacy route %s is still registered", route)
+				}
+			}
 		}
 	}
 

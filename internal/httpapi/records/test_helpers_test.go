@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
@@ -405,6 +406,19 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 	})
 	RegisterRoutes(app, fixture.ObjectService)
 	return runInternalDRSTestRequest(app, req)
+}
+
+type unimplementedInternalServer struct {
+	internalapi.ServerInterface
+}
+
+type recordsTestServer struct {
+	*RecordsServer
+	unimplementedInternalServer
+}
+
+func RegisterRoutes(router fiber.Router, objectService *objectrecords.Service) {
+	internalapi.RegisterHandlers(router, &recordsTestServer{RecordsServer: NewRecordsServer(objectService)})
 }
 
 func doInternalDRSTestRequestWithAlias(req *http.Request, fixture internalDRSTestFixture, method string, pattern string, handler fiber.Handler) *httptest.ResponseRecorder {

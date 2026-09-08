@@ -4,7 +4,7 @@ go 1.26.6
 
 require (
 	github.com/gofiber/fiber/v3 v3.3.0
-	github.com/oapi-codegen/runtime v1.4.0
+	github.com/oapi-codegen/runtime v1.5.0
 )
 
 require (

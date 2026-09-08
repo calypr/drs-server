@@ -9,9 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
+	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -94,8 +97,7 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 		c.SetContext(req.Context())
 		return c.Next()
 	})
-	RegisterObjectRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
-	RegisterBulkAndMultipartRoutes(app, fixture.ObjectService, fixture.TransferService)
+	registerTransferRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
 
 	rr := httptest.NewRecorder()
 	resp, err := app.Test(req)
@@ -113,4 +115,19 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 	rr.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(rr, resp.Body)
 	return rr
+}
+
+type unimplementedInternalServer struct {
+	internalapi.ServerInterface
+}
+
+type transfersTestServer struct {
+	*TransfersServer
+	unimplementedInternalServer
+}
+
+func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
+	internalapi.RegisterHandlers(router, &transfersTestServer{
+		TransfersServer: NewTransfersServer(objectService, transferService, fileCounters),
+	})
 }

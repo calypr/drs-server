@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
@@ -137,6 +139,59 @@ func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
 	body2, _ := io.ReadAll(httpResp2.Body)
 	if httpResp2.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", httpResp2.StatusCode, string(body2))
+	}
+}
+
+func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
+	objectReader := newMetricsObjectReader(map[string]*objects.Record{
+		"outside": {Id: "outside"},
+	}, map[string]map[string][]string{
+		"outside": {"other": {"project"}},
+	})
+	reports := newMetricsReport(objectReader, nil, &metricsTransferState{})
+	server := NewMetricsServer(usage.NewService(usage.Dependencies{
+		Reports: reports,
+		Objects: objectReader,
+	}).Reports(), nil)
+
+	limit := 0
+	response, err := server.ListMetricsFiles(context.Background(), metricsapi.ListMetricsFilesRequestObject{
+		Params: metricsapi.ListMetricsFilesParams{Limit: &limit},
+	})
+	if err != nil {
+		t.Fatalf("invalid list request error: %v", err)
+	}
+	if _, ok := response.(metricsapi.ListMetricsFiles400JSONResponse); !ok {
+		t.Fatalf("invalid list response type = %T", response)
+	}
+
+	unauthorized := metricsTestContext(context.Background(), "gen3", false, false, nil)
+	summaryResponse, err := server.GetMetricsSummary(unauthorized, metricsapi.GetMetricsSummaryRequestObject{})
+	if err != nil {
+		t.Fatalf("unauthorized summary error: %v", err)
+	}
+	if _, ok := summaryResponse.(metricsapi.GetMetricsSummary401JSONResponse); !ok {
+		t.Fatalf("unauthorized summary response type = %T", summaryResponse)
+	}
+
+	scoped := metricsTestContext(context.Background(), "gen3", true, true, map[string]map[string]bool{
+		"/programs/org/projects/project": {"read": true},
+	})
+	scoped = context.WithValue(scoped, metricsQueryContextKey{}, metricsQueryParams{
+		organization: "org",
+		project:      "project",
+	})
+	fileResponse, err := server.GetMetricsFile(scoped, metricsapi.GetMetricsFileRequestObject{ObjectId: "outside"})
+	if err != nil {
+		t.Fatalf("out-of-scope file error: %v", err)
+	}
+	if _, ok := fileResponse.(metricsapi.GetMetricsFile404JSONResponse); !ok {
+		t.Fatalf("out-of-scope file response type = %T", fileResponse)
+	}
+
+	_, err = server.GetMetricsFile(context.Background(), metricsapi.GetMetricsFileRequestObject{ObjectId: "missing"})
+	if !errors.Is(err, errorapi.ErrNotFound) {
+		t.Fatalf("missing file error = %v", err)
 	}
 }
 
