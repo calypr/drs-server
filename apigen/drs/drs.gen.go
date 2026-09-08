@@ -4451,7 +4451,8 @@ type ServerInterface interface {
 
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -4467,15 +4468,18 @@ func (siw *ServerInterfaceWrapper) GetBulkObjects(c fiber.Ctx) error {
 	var err error
 	var params GetBulkObjectsParams
 
-	// ------------- Optional query parameter "expand" -------------
-	if paramValue := c.Query("expand"); paramValue != "" {
+	if !siw.RawQueryOperations["GetBulkObjects"] {
+		// ------------- Optional query parameter "expand" -------------
+		if paramValue := c.Query("expand"); paramValue != "" {
 
-		var value Expand
-		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
+			var value Expand
+			err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
+			}
+			params.Expand = &value
+
 		}
-		params.Expand = &value
 
 	}
 
@@ -4540,15 +4544,18 @@ func (siw *ServerInterfaceWrapper) GetObject(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
 
-	// ------------- Optional query parameter "expand" -------------
-	if paramValue := c.Query("expand"); paramValue != "" {
+	if !siw.RawQueryOperations["GetObject"] {
+		// ------------- Optional query parameter "expand" -------------
+		if paramValue := c.Query("expand"); paramValue != "" {
 
-		var value Expand
-		err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
+			var value Expand
+			err = runtime.BindStyledParameterWithOptions("form", "expand", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expand: %w", err).Error())
+			}
+			params.Expand = &value
+
 		}
-		params.Expand = &value
 
 	}
 
@@ -4690,8 +4697,9 @@ func (siw *ServerInterfaceWrapper) PostUploadRequest(c fiber.Ctx) error {
 
 // FiberServerOptions provides options for the Fiber server.
 type FiberServerOptions struct {
-	BaseURL     string
-	Middlewares []MiddlewareFunc
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	RawQueryOperations map[string]bool
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -4702,7 +4710,8 @@ func RegisterHandlers(router fiber.Router, si ServerInterface) {
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, options FiberServerOptions) {
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		RawQueryOperations: options.RawQueryOperations,
 	}
 
 	for _, m := range options.Middlewares {

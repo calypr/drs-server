@@ -2181,7 +2181,8 @@ type ServerInterface interface {
 
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -2191,59 +2192,62 @@ func (siw *ServerInterfaceWrapper) ListMetricsFiles(c fiber.Ctx) error {
 	var err error
 	var params ListMetricsFilesParams
 
-	// ------------- Optional query parameter "limit" -------------
-	if paramValue := c.Query("limit"); paramValue != "" {
+	if !siw.RawQueryOperations["ListMetricsFiles"] {
+		// ------------- Optional query parameter "limit" -------------
+		if paramValue := c.Query("limit"); paramValue != "" {
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter limit: %w", err).Error())
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter limit: %w", err).Error())
+			}
+			params.Limit = &value
+
 		}
-		params.Limit = &value
+		// ------------- Optional query parameter "offset" -------------
+		if paramValue := c.Query("offset"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "offset" -------------
-	if paramValue := c.Query("offset"); paramValue != "" {
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "offset", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter offset: %w", err).Error())
+			}
+			params.Offset = &value
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "offset", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter offset: %w", err).Error())
 		}
-		params.Offset = &value
+		// ------------- Optional query parameter "inactive_days" -------------
+		if paramValue := c.Query("inactive_days"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "inactive_days" -------------
-	if paramValue := c.Query("inactive_days"); paramValue != "" {
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "inactive_days", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter inactive_days: %w", err).Error())
+			}
+			params.InactiveDays = &value
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "inactive_days", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter inactive_days: %w", err).Error())
 		}
-		params.InactiveDays = &value
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
 
 	}
 
@@ -2255,26 +2259,29 @@ func (siw *ServerInterfaceWrapper) BulkMetricsFiles(c fiber.Ctx) error {
 	var err error
 	var params BulkMetricsFilesParams
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["BulkMetricsFiles"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
 
 	}
 
@@ -2294,26 +2301,29 @@ func (siw *ServerInterfaceWrapper) GetMetricsFile(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter object_id: %w", err).Error())
 	}
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["GetMetricsFile"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
 
 	}
 
@@ -2325,26 +2335,29 @@ func (siw *ServerInterfaceWrapper) RecordProviderTransferEvents(c fiber.Ctx) err
 	var err error
 	var params RecordProviderTransferEventsParams
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["RecordProviderTransferEvents"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
 
 	}
 
@@ -2356,37 +2369,40 @@ func (siw *ServerInterfaceWrapper) GetMetricsSummary(c fiber.Ctx) error {
 	var err error
 	var params GetMetricsSummaryParams
 
-	// ------------- Optional query parameter "inactive_days" -------------
-	if paramValue := c.Query("inactive_days"); paramValue != "" {
+	if !siw.RawQueryOperations["GetMetricsSummary"] {
+		// ------------- Optional query parameter "inactive_days" -------------
+		if paramValue := c.Query("inactive_days"); paramValue != "" {
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "inactive_days", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter inactive_days: %w", err).Error())
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "inactive_days", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter inactive_days: %w", err).Error())
+			}
+			params.InactiveDays = &value
+
 		}
-		params.InactiveDays = &value
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
 
 	}
 
@@ -2398,136 +2414,139 @@ func (siw *ServerInterfaceWrapper) GetTransferBreakdown(c fiber.Ctx) error {
 	var err error
 	var params GetTransferBreakdownParams
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["GetTransferBreakdown"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
+		// ------------- Optional query parameter "direction" -------------
+		if paramValue := c.Query("direction"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "direction" -------------
-	if paramValue := c.Query("direction"); paramValue != "" {
+			var value Direction
+			err = runtime.BindStyledParameterWithOptions("form", "direction", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter direction: %w", err).Error())
+			}
+			params.Direction = &value
 
-		var value Direction
-		err = runtime.BindStyledParameterWithOptions("form", "direction", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter direction: %w", err).Error())
 		}
-		params.Direction = &value
+		// ------------- Optional query parameter "reconciliation_status" -------------
+		if paramValue := c.Query("reconciliation_status"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "reconciliation_status" -------------
-	if paramValue := c.Query("reconciliation_status"); paramValue != "" {
+			var value ReconciliationStatus
+			err = runtime.BindStyledParameterWithOptions("form", "reconciliation_status", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter reconciliation_status: %w", err).Error())
+			}
+			params.ReconciliationStatus = &value
 
-		var value ReconciliationStatus
-		err = runtime.BindStyledParameterWithOptions("form", "reconciliation_status", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter reconciliation_status: %w", err).Error())
 		}
-		params.ReconciliationStatus = &value
+		// ------------- Optional query parameter "from" -------------
+		if paramValue := c.Query("from"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "from" -------------
-	if paramValue := c.Query("from"); paramValue != "" {
+			var value From
+			err = runtime.BindStyledParameterWithOptions("form", "from", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter from: %w", err).Error())
+			}
+			params.From = &value
 
-		var value From
-		err = runtime.BindStyledParameterWithOptions("form", "from", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter from: %w", err).Error())
 		}
-		params.From = &value
+		// ------------- Optional query parameter "to" -------------
+		if paramValue := c.Query("to"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "to" -------------
-	if paramValue := c.Query("to"); paramValue != "" {
+			var value To
+			err = runtime.BindStyledParameterWithOptions("form", "to", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter to: %w", err).Error())
+			}
+			params.To = &value
 
-		var value To
-		err = runtime.BindStyledParameterWithOptions("form", "to", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter to: %w", err).Error())
 		}
-		params.To = &value
+		// ------------- Optional query parameter "provider" -------------
+		if paramValue := c.Query("provider"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "provider" -------------
-	if paramValue := c.Query("provider"); paramValue != "" {
+			var value Provider
+			err = runtime.BindStyledParameterWithOptions("form", "provider", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter provider: %w", err).Error())
+			}
+			params.Provider = &value
 
-		var value Provider
-		err = runtime.BindStyledParameterWithOptions("form", "provider", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter provider: %w", err).Error())
 		}
-		params.Provider = &value
+		// ------------- Optional query parameter "bucket" -------------
+		if paramValue := c.Query("bucket"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "bucket" -------------
-	if paramValue := c.Query("bucket"); paramValue != "" {
+			var value Bucket
+			err = runtime.BindStyledParameterWithOptions("form", "bucket", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
+			}
+			params.Bucket = &value
 
-		var value Bucket
-		err = runtime.BindStyledParameterWithOptions("form", "bucket", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 		}
-		params.Bucket = &value
+		// ------------- Optional query parameter "sha256" -------------
+		if paramValue := c.Query("sha256"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "sha256" -------------
-	if paramValue := c.Query("sha256"); paramValue != "" {
+			var value SHA256
+			err = runtime.BindStyledParameterWithOptions("form", "sha256", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter sha256: %w", err).Error())
+			}
+			params.Sha256 = &value
 
-		var value SHA256
-		err = runtime.BindStyledParameterWithOptions("form", "sha256", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter sha256: %w", err).Error())
 		}
-		params.Sha256 = &value
+		// ------------- Optional query parameter "user" -------------
+		if paramValue := c.Query("user"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "user" -------------
-	if paramValue := c.Query("user"); paramValue != "" {
+			var value User
+			err = runtime.BindStyledParameterWithOptions("form", "user", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter user: %w", err).Error())
+			}
+			params.User = &value
 
-		var value User
-		err = runtime.BindStyledParameterWithOptions("form", "user", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter user: %w", err).Error())
 		}
-		params.User = &value
+		// ------------- Optional query parameter "allow_stale" -------------
+		if paramValue := c.Query("allow_stale"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "allow_stale" -------------
-	if paramValue := c.Query("allow_stale"); paramValue != "" {
+			var value AllowStale
+			err = runtime.BindStyledParameterWithOptions("form", "allow_stale", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter allow_stale: %w", err).Error())
+			}
+			params.AllowStale = &value
 
-		var value AllowStale
-		err = runtime.BindStyledParameterWithOptions("form", "allow_stale", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter allow_stale: %w", err).Error())
 		}
-		params.AllowStale = &value
+		// ------------- Optional query parameter "group_by" -------------
+		if paramValue := c.Query("group_by"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "group_by" -------------
-	if paramValue := c.Query("group_by"); paramValue != "" {
+			var value GetTransferBreakdownParamsGroupBy
+			err = runtime.BindStyledParameterWithOptions("form", "group_by", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter group_by: %w", err).Error())
+			}
+			params.GroupBy = &value
 
-		var value GetTransferBreakdownParamsGroupBy
-		err = runtime.BindStyledParameterWithOptions("form", "group_by", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter group_by: %w", err).Error())
 		}
-		params.GroupBy = &value
 
 	}
 
@@ -2539,125 +2558,128 @@ func (siw *ServerInterfaceWrapper) GetTransferSummary(c fiber.Ctx) error {
 	var err error
 	var params GetTransferSummaryParams
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["GetTransferSummary"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value Organization
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value Organization
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value Project
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value Project
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
+		// ------------- Optional query parameter "direction" -------------
+		if paramValue := c.Query("direction"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "direction" -------------
-	if paramValue := c.Query("direction"); paramValue != "" {
+			var value Direction
+			err = runtime.BindStyledParameterWithOptions("form", "direction", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter direction: %w", err).Error())
+			}
+			params.Direction = &value
 
-		var value Direction
-		err = runtime.BindStyledParameterWithOptions("form", "direction", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter direction: %w", err).Error())
 		}
-		params.Direction = &value
+		// ------------- Optional query parameter "reconciliation_status" -------------
+		if paramValue := c.Query("reconciliation_status"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "reconciliation_status" -------------
-	if paramValue := c.Query("reconciliation_status"); paramValue != "" {
+			var value ReconciliationStatus
+			err = runtime.BindStyledParameterWithOptions("form", "reconciliation_status", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter reconciliation_status: %w", err).Error())
+			}
+			params.ReconciliationStatus = &value
 
-		var value ReconciliationStatus
-		err = runtime.BindStyledParameterWithOptions("form", "reconciliation_status", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter reconciliation_status: %w", err).Error())
 		}
-		params.ReconciliationStatus = &value
+		// ------------- Optional query parameter "from" -------------
+		if paramValue := c.Query("from"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "from" -------------
-	if paramValue := c.Query("from"); paramValue != "" {
+			var value From
+			err = runtime.BindStyledParameterWithOptions("form", "from", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter from: %w", err).Error())
+			}
+			params.From = &value
 
-		var value From
-		err = runtime.BindStyledParameterWithOptions("form", "from", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter from: %w", err).Error())
 		}
-		params.From = &value
+		// ------------- Optional query parameter "to" -------------
+		if paramValue := c.Query("to"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "to" -------------
-	if paramValue := c.Query("to"); paramValue != "" {
+			var value To
+			err = runtime.BindStyledParameterWithOptions("form", "to", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter to: %w", err).Error())
+			}
+			params.To = &value
 
-		var value To
-		err = runtime.BindStyledParameterWithOptions("form", "to", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter to: %w", err).Error())
 		}
-		params.To = &value
+		// ------------- Optional query parameter "provider" -------------
+		if paramValue := c.Query("provider"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "provider" -------------
-	if paramValue := c.Query("provider"); paramValue != "" {
+			var value Provider
+			err = runtime.BindStyledParameterWithOptions("form", "provider", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter provider: %w", err).Error())
+			}
+			params.Provider = &value
 
-		var value Provider
-		err = runtime.BindStyledParameterWithOptions("form", "provider", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter provider: %w", err).Error())
 		}
-		params.Provider = &value
+		// ------------- Optional query parameter "bucket" -------------
+		if paramValue := c.Query("bucket"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "bucket" -------------
-	if paramValue := c.Query("bucket"); paramValue != "" {
+			var value Bucket
+			err = runtime.BindStyledParameterWithOptions("form", "bucket", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
+			}
+			params.Bucket = &value
 
-		var value Bucket
-		err = runtime.BindStyledParameterWithOptions("form", "bucket", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 		}
-		params.Bucket = &value
+		// ------------- Optional query parameter "sha256" -------------
+		if paramValue := c.Query("sha256"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "sha256" -------------
-	if paramValue := c.Query("sha256"); paramValue != "" {
+			var value SHA256
+			err = runtime.BindStyledParameterWithOptions("form", "sha256", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter sha256: %w", err).Error())
+			}
+			params.Sha256 = &value
 
-		var value SHA256
-		err = runtime.BindStyledParameterWithOptions("form", "sha256", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter sha256: %w", err).Error())
 		}
-		params.Sha256 = &value
+		// ------------- Optional query parameter "user" -------------
+		if paramValue := c.Query("user"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "user" -------------
-	if paramValue := c.Query("user"); paramValue != "" {
+			var value User
+			err = runtime.BindStyledParameterWithOptions("form", "user", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter user: %w", err).Error())
+			}
+			params.User = &value
 
-		var value User
-		err = runtime.BindStyledParameterWithOptions("form", "user", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter user: %w", err).Error())
 		}
-		params.User = &value
+		// ------------- Optional query parameter "allow_stale" -------------
+		if paramValue := c.Query("allow_stale"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "allow_stale" -------------
-	if paramValue := c.Query("allow_stale"); paramValue != "" {
+			var value AllowStale
+			err = runtime.BindStyledParameterWithOptions("form", "allow_stale", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter allow_stale: %w", err).Error())
+			}
+			params.AllowStale = &value
 
-		var value AllowStale
-		err = runtime.BindStyledParameterWithOptions("form", "allow_stale", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter allow_stale: %w", err).Error())
 		}
-		params.AllowStale = &value
 
 	}
 
@@ -2666,8 +2688,9 @@ func (siw *ServerInterfaceWrapper) GetTransferSummary(c fiber.Ctx) error {
 
 // FiberServerOptions provides options for the Fiber server.
 type FiberServerOptions struct {
-	BaseURL     string
-	Middlewares []MiddlewareFunc
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	RawQueryOperations map[string]bool
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -2678,7 +2701,8 @@ func RegisterHandlers(router fiber.Router, si ServerInterface) {
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, options FiberServerOptions) {
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		RawQueryOperations: options.RawQueryOperations,
 	}
 
 	for _, m := range options.Middlewares {

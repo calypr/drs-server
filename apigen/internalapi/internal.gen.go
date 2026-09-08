@@ -94,6 +94,173 @@ type DeleteByQueryResponse struct {
 // HashInfo Hash map, e.g. {"sha256":"..."}
 type HashInfo map[string]string
 
+// InternalDeleteProjectBucketObjectsItem defines model for InternalDeleteProjectBucketObjectsItem.
+type InternalDeleteProjectBucketObjectsItem struct {
+	Error     string `json:"error,omitempty"`
+	ObjectUrl string `json:"object_url"`
+	Status    string `json:"status"`
+}
+
+// InternalDeleteProjectBucketObjectsRequest defines model for InternalDeleteProjectBucketObjectsRequest.
+type InternalDeleteProjectBucketObjectsRequest struct {
+	ObjectUrls   []string `json:"object_urls"`
+	Organization string   `json:"organization,omitempty"`
+	Project      string   `json:"project,omitempty"`
+}
+
+// InternalDeleteProjectBucketObjectsResponse defines model for InternalDeleteProjectBucketObjectsResponse.
+type InternalDeleteProjectBucketObjectsResponse struct {
+	Items []InternalDeleteProjectBucketObjectsItem `json:"items"`
+}
+
+// InternalInspectObjectBulkItem defines model for InternalInspectObjectBulkItem.
+type InternalInspectObjectBulkItem struct {
+	Bucket               string   `json:"bucket,omitempty"`
+	Error                string   `json:"error,omitempty"`
+	ErrorKind            string   `json:"error_kind,omitempty"`
+	Etag                 string   `json:"etag,omitempty"`
+	Exists               bool     `json:"exists"`
+	Id                   string   `json:"id,omitempty"`
+	Key                  string   `json:"key,omitempty"`
+	LastModified         string   `json:"last_modified,omitempty"`
+	MetaSha256           string   `json:"meta_sha256,omitempty"`
+	NameMatch            *bool    `json:"name_match,omitempty"`
+	ObjectUrl            string   `json:"object_url,omitempty"`
+	Path                 string   `json:"path,omitempty"`
+	Provider             string   `json:"provider,omitempty"`
+	Sha256Match          *bool    `json:"sha256_match,omitempty"`
+	SizeBytes            *int64   `json:"size_bytes,omitempty"`
+	SizeMatch            *bool    `json:"size_match,omitempty"`
+	Status               string   `json:"status"`
+	ValidationMismatches []string `json:"validation_mismatches,omitempty"`
+	ValidationStatus     string   `json:"validation_status"`
+}
+
+// InternalInspectObjectBulkResponse defines model for InternalInspectObjectBulkResponse.
+type InternalInspectObjectBulkResponse struct {
+	Items []InternalInspectObjectBulkItem `json:"items"`
+}
+
+// InternalInspectObjectRequest defines model for InternalInspectObjectRequest.
+type InternalInspectObjectRequest struct {
+	ExpectedName      string `json:"expected_name,omitempty"`
+	ExpectedSha256    string `json:"expected_sha256,omitempty"`
+	ExpectedSizeBytes *int64 `json:"expected_size_bytes,omitempty"`
+	Id                string `json:"id,omitempty"`
+	Key               string `json:"key,omitempty"`
+	ObjectUrl         string `json:"object_url,omitempty"`
+	Organization      string `json:"organization,omitempty"`
+	Project           string `json:"project,omitempty"`
+	Scheme            string `json:"scheme,omitempty"`
+}
+
+// InternalInspectObjectResponse defines model for InternalInspectObjectResponse.
+type InternalInspectObjectResponse struct {
+	Bucket       string `json:"bucket"`
+	Etag         string `json:"etag,omitempty"`
+	Key          string `json:"key"`
+	LastModified string `json:"last_modified,omitempty"`
+	MetaSha256   string `json:"meta_sha256,omitempty"`
+	ObjectUrl    string `json:"object_url"`
+	Path         string `json:"path"`
+	Provider     string `json:"provider"`
+	SizeBytes    int64  `json:"size_bytes"`
+}
+
+// InternalInspectObjectsBulkRequest defines model for InternalInspectObjectsBulkRequest.
+type InternalInspectObjectsBulkRequest struct {
+	Items []InternalInspectObjectRequest `json:"items"`
+}
+
+// InternalInspectProjectBucketItem defines model for InternalInspectProjectBucketItem.
+type InternalInspectProjectBucketItem struct {
+	Bucket            string `json:"bucket"`
+	Etag              string `json:"etag,omitempty"`
+	InventoryComplete bool   `json:"inventory_complete,omitempty"`
+	Key               string `json:"key"`
+	LastModified      string `json:"last_modified,omitempty"`
+	MetaSha256        string `json:"meta_sha256,omitempty"`
+	ObjectUrl         string `json:"object_url"`
+	Path              string `json:"path"`
+	Provider          string `json:"provider"`
+	SizeBytes         int64  `json:"size_bytes"`
+}
+
+// InternalInspectProjectBucketRequest defines model for InternalInspectProjectBucketRequest.
+type InternalInspectProjectBucketRequest struct {
+	IncludeHead  bool   `json:"include_head,omitempty"`
+	Mode         string `json:"mode,omitempty"`
+	Organization string `json:"organization,omitempty"`
+	PathPrefix   string `json:"path_prefix,omitempty"`
+	Project      string `json:"project,omitempty"`
+}
+
+// InternalInspectProjectBucketResponse defines model for InternalInspectProjectBucketResponse.
+type InternalInspectProjectBucketResponse struct {
+	Items   []InternalInspectProjectBucketItem   `json:"items"`
+	Summary *InternalInspectProjectBucketSummary `json:"summary,omitempty"`
+}
+
+// InternalInspectProjectBucketSummary defines model for InternalInspectProjectBucketSummary.
+type InternalInspectProjectBucketSummary struct {
+	Bucket            string `json:"bucket"`
+	ComputedAt        string `json:"computed_at"`
+	Exists            bool   `json:"exists"`
+	InventoryComplete bool   `json:"inventory_complete"`
+	InventoryWarning  string `json:"inventory_warning,omitempty"`
+	Mode              string `json:"mode"`
+	ObjectCount       int    `json:"object_count"`
+	ObjectUrl         string `json:"object_url,omitempty"`
+	Prefix            string `json:"prefix,omitempty"`
+	Provider          string `json:"provider"`
+	TotalBytes        int64  `json:"total_bytes"`
+}
+
+// InternalInspectProjectRecordItem defines model for InternalInspectProjectRecordItem.
+type InternalInspectProjectRecordItem struct {
+	AccessMethods []InternalProjectAccessMethod `json:"access_methods"`
+	AccessUrls    []string                      `json:"access_urls"`
+	Checksum      string                        `json:"checksum"`
+	CreatedTime   string                        `json:"created_time,omitempty"`
+	Name          string                        `json:"name,omitempty"`
+	ObjectId      string                        `json:"object_id"`
+	Organization  string                        `json:"organization"`
+	Project       string                        `json:"project"`
+	Size          int64                         `json:"size"`
+	UpdatedTime   string                        `json:"updated_time,omitempty"`
+}
+
+// InternalInspectProjectRecordsRequest defines model for InternalInspectProjectRecordsRequest.
+type InternalInspectProjectRecordsRequest struct {
+	Organization string `json:"organization,omitempty"`
+	PathPrefix   string `json:"path_prefix,omitempty"`
+	Project      string `json:"project,omitempty"`
+}
+
+// InternalInspectProjectRecordsResponse defines model for InternalInspectProjectRecordsResponse.
+type InternalInspectProjectRecordsResponse struct {
+	Items []InternalInspectProjectRecordItem `json:"items"`
+}
+
+// InternalInspectProjectScopeItem defines model for InternalInspectProjectScopeItem.
+type InternalInspectProjectScopeItem struct {
+	Bucket       string `json:"bucket"`
+	Organization string `json:"organization"`
+	Path         string `json:"path,omitempty"`
+	ProjectId    string `json:"project_id,omitempty"`
+}
+
+// InternalInspectProjectScopesRequest defines model for InternalInspectProjectScopesRequest.
+type InternalInspectProjectScopesRequest struct {
+	Organization string `json:"organization,omitempty"`
+	Project      string `json:"project,omitempty"`
+}
+
+// InternalInspectProjectScopesResponse defines model for InternalInspectProjectScopesResponse.
+type InternalInspectProjectScopesResponse struct {
+	Items []InternalInspectProjectScopeItem `json:"items"`
+}
+
 // InternalMultipartCompleteRequest defines model for InternalMultipartCompleteRequest.
 type InternalMultipartCompleteRequest struct {
 	Bucket   *string                 `json:"bucket,omitempty"`
@@ -135,62 +302,12 @@ type InternalMultipartUploadRequest struct {
 	UploadId   string  `json:"uploadId"`
 }
 
-// InternalProjectBucketInventoryItem defines model for InternalProjectBucketInventoryItem.
-type InternalProjectBucketInventoryItem struct {
-	Bucket       *string `json:"bucket,omitempty"`
-	Etag         *string `json:"etag,omitempty"`
-	Key          *string `json:"key,omitempty"`
-	LastModified *string `json:"last_modified,omitempty"`
-	MetaSha256   *string `json:"meta_sha256,omitempty"`
-	ObjectUrl    *string `json:"object_url,omitempty"`
-	Path         *string `json:"path,omitempty"`
-	Provider     *string `json:"provider,omitempty"`
-	SizeBytes    *int64  `json:"size_bytes,omitempty"`
-}
-
-// InternalProjectBucketInventoryRequest defines model for InternalProjectBucketInventoryRequest.
-type InternalProjectBucketInventoryRequest struct {
-	Organization *string `json:"organization,omitempty"`
-	PathPrefix   *string `json:"path_prefix,omitempty"`
-	Project      *string `json:"project,omitempty"`
-}
-
-// InternalProjectBucketInventoryResponse defines model for InternalProjectBucketInventoryResponse.
-type InternalProjectBucketInventoryResponse struct {
-	Items   *[]InternalProjectBucketInventoryItem  `json:"items,omitempty"`
-	Summary *InternalProjectBucketInventorySummary `json:"summary,omitempty"`
-}
-
-// InternalProjectBucketInventorySummary defines model for InternalProjectBucketInventorySummary.
-type InternalProjectBucketInventorySummary struct {
-	Bucket      *string `json:"bucket,omitempty"`
-	ComputedAt  *string `json:"computed_at,omitempty"`
-	Exists      *bool   `json:"exists,omitempty"`
-	Mode        *string `json:"mode,omitempty"`
-	ObjectCount *int    `json:"object_count,omitempty"`
-	ObjectUrl   *string `json:"object_url,omitempty"`
-	Prefix      *string `json:"prefix,omitempty"`
-	Provider    *string `json:"provider,omitempty"`
-	TotalBytes  *int64  `json:"total_bytes,omitempty"`
-}
-
-// InternalProjectScopeItem defines model for InternalProjectScopeItem.
-type InternalProjectScopeItem struct {
-	Bucket       *string `json:"bucket,omitempty"`
-	Organization *string `json:"organization,omitempty"`
-	Path         *string `json:"path,omitempty"`
-	ProjectId    *string `json:"project_id,omitempty"`
-}
-
-// InternalProjectScopesRequest defines model for InternalProjectScopesRequest.
-type InternalProjectScopesRequest struct {
-	Organization string `json:"organization"`
-	Project      string `json:"project"`
-}
-
-// InternalProjectScopesResponse defines model for InternalProjectScopesResponse.
-type InternalProjectScopesResponse struct {
-	Items *[]InternalProjectScopeItem `json:"items,omitempty"`
+// InternalProjectAccessMethod defines model for InternalProjectAccessMethod.
+type InternalProjectAccessMethod struct {
+	AccessId string   `json:"access_id,omitempty"`
+	Headers  []string `json:"headers,omitempty"`
+	Type     string   `json:"type,omitempty"`
+	Url      string   `json:"url,omitempty"`
 }
 
 // InternalRecord defines model for InternalRecord.
@@ -289,6 +406,66 @@ type ListRecordsResponse struct {
 	Records *[]InternalRecord `json:"records,omitempty"`
 }
 
+// ProjectCleanupResponse defines model for ProjectCleanupResponse.
+type ProjectCleanupResponse struct {
+	DeletedBucketScopes int    `json:"deleted_bucket_scopes"`
+	DeletedObjects      int    `json:"deleted_objects"`
+	Organization        string `json:"organization"`
+	ProjectId           string `json:"project_id"`
+}
+
+// ScopeRepairApplyResult defines model for ScopeRepairApplyResult.
+type ScopeRepairApplyResult struct {
+	AutoFixable int               `json:"auto_fixable"`
+	Mutated     int               `json:"mutated"`
+	Report      ScopeRepairReport `json:"report"`
+	Skipped     int               `json:"skipped"`
+}
+
+// ScopeRepairFinding defines model for ScopeRepairFinding.
+type ScopeRepairFinding struct {
+	AutoFixable          bool     `json:"auto_fixable"`
+	CurrentAccessUrls    []string `json:"current_access_urls,omitempty"`
+	Kind                 string   `json:"kind"`
+	Message              string   `json:"message,omitempty"`
+	ObjectId             string   `json:"object_id"`
+	Organization         string   `json:"organization,omitempty"`
+	Project              string   `json:"project,omitempty"`
+	ProposedCanonicalUrl string   `json:"proposed_canonical_url,omitempty"`
+	Severity             string   `json:"severity"`
+	Sha256               string   `json:"sha256,omitempty"`
+}
+
+// ScopeRepairObjectReport defines model for ScopeRepairObjectReport.
+type ScopeRepairObjectReport struct {
+	AutoFixable          bool                 `json:"auto_fixable"`
+	CurrentAccessUrls    []string             `json:"current_access_urls,omitempty"`
+	Findings             []ScopeRepairFinding `json:"findings,omitempty"`
+	ObjectId             string               `json:"object_id"`
+	Organization         string               `json:"organization,omitempty"`
+	Project              string               `json:"project,omitempty"`
+	ProposedCanonicalUrl string               `json:"proposed_canonical_url,omitempty"`
+	Sha256               string               `json:"sha256,omitempty"`
+}
+
+// ScopeRepairOptions defines model for ScopeRepairOptions.
+type ScopeRepairOptions struct {
+	CheckStorage bool   `json:"CheckStorage"`
+	Format       string `json:"Format"`
+	Limit        int    `json:"Limit"`
+	Organization string `json:"Organization"`
+	PageSize     int    `json:"PageSize"`
+	Project      string `json:"Project"`
+}
+
+// ScopeRepairReport defines model for ScopeRepairReport.
+type ScopeRepairReport struct {
+	Objects      []ScopeRepairObjectReport `json:"objects,omitempty"`
+	Organization string                    `json:"organization,omitempty"`
+	Project      string                    `json:"project,omitempty"`
+	Scanned      int                       `json:"scanned"`
+}
+
 // InternalDownloadParams defines parameters for InternalDownload.
 type InternalDownloadParams struct {
 	Redirect  *bool `form:"redirect,omitempty" json:"redirect,omitempty"`
@@ -337,11 +514,29 @@ type InternalListParams struct {
 	Page         *int    `form:"page,omitempty" json:"page,omitempty"`
 }
 
+// InternalInspectObjectJSONRequestBody defines body for InternalInspectObject for application/json ContentType.
+type InternalInspectObjectJSONRequestBody = InternalInspectObjectRequest
+
+// InternalInspectObjectBulkJSONRequestBody defines body for InternalInspectObjectBulk for application/json ContentType.
+type InternalInspectObjectBulkJSONRequestBody = InternalInspectObjectsBulkRequest
+
+// InternalInspectObjectBulkListJSONRequestBody defines body for InternalInspectObjectBulkList for application/json ContentType.
+type InternalInspectObjectBulkListJSONRequestBody = InternalInspectObjectsBulkRequest
+
+// InternalInspectProjectBucketJSONRequestBody defines body for InternalInspectProjectBucket for application/json ContentType.
+type InternalInspectProjectBucketJSONRequestBody = InternalInspectProjectBucketRequest
+
+// InternalDeleteProjectBucketObjectsJSONRequestBody defines body for InternalDeleteProjectBucketObjects for application/json ContentType.
+type InternalDeleteProjectBucketObjectsJSONRequestBody = InternalDeleteProjectBucketObjectsRequest
+
 // InternalInspectProjectBucketInventoryJSONRequestBody defines body for InternalInspectProjectBucketInventory for application/json ContentType.
-type InternalInspectProjectBucketInventoryJSONRequestBody = InternalProjectBucketInventoryRequest
+type InternalInspectProjectBucketInventoryJSONRequestBody = InternalInspectProjectBucketRequest
+
+// InternalInspectProjectRecordsJSONRequestBody defines body for InternalInspectProjectRecords for application/json ContentType.
+type InternalInspectProjectRecordsJSONRequestBody = InternalInspectProjectRecordsRequest
 
 // InternalInspectProjectScopesPostJSONRequestBody defines body for InternalInspectProjectScopesPost for application/json ContentType.
-type InternalInspectProjectScopesPostJSONRequestBody = InternalProjectScopesRequest
+type InternalInspectProjectScopesPostJSONRequestBody = InternalInspectProjectScopesRequest
 
 // InternalMultipartCompleteJSONRequestBody defines body for InternalMultipartComplete for application/json ContentType.
 type InternalMultipartCompleteJSONRequestBody = InternalMultipartCompleteRequest
@@ -351,6 +546,12 @@ type InternalMultipartInitJSONRequestBody = InternalMultipartInitRequest
 
 // InternalMultipartUploadJSONRequestBody defines body for InternalMultipartUpload for application/json ContentType.
 type InternalMultipartUploadJSONRequestBody = InternalMultipartUploadRequest
+
+// InternalScopeRepairApplyJSONRequestBody defines body for InternalScopeRepairApply for application/json ContentType.
+type InternalScopeRepairApplyJSONRequestBody = ScopeRepairOptions
+
+// InternalScopeRepairAuditJSONRequestBody defines body for InternalScopeRepairAudit for application/json ContentType.
+type InternalScopeRepairAuditJSONRequestBody = ScopeRepairOptions
 
 // InternalUploadBlankJSONRequestBody defines body for InternalUploadBlank for application/json ContentType.
 type InternalUploadBlankJSONRequestBody = InternalUploadBlankRequest
@@ -529,10 +730,40 @@ type ClientInterface interface {
 	// InternalDownloadPart request
 	InternalDownloadPart(ctx context.Context, fileId string, params *InternalDownloadPartParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// InternalInspectObjectWithBody request with any body
+	InternalInspectObjectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalInspectObject(ctx context.Context, body InternalInspectObjectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalInspectObjectBulkWithBody request with any body
+	InternalInspectObjectBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalInspectObjectBulk(ctx context.Context, body InternalInspectObjectBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalInspectObjectBulkListWithBody request with any body
+	InternalInspectObjectBulkListWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalInspectObjectBulkList(ctx context.Context, body InternalInspectObjectBulkListJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalInspectProjectBucketWithBody request with any body
+	InternalInspectProjectBucketWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalInspectProjectBucket(ctx context.Context, body InternalInspectProjectBucketJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalDeleteProjectBucketObjectsWithBody request with any body
+	InternalDeleteProjectBucketObjectsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalDeleteProjectBucketObjects(ctx context.Context, body InternalDeleteProjectBucketObjectsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// InternalInspectProjectBucketInventoryWithBody request with any body
 	InternalInspectProjectBucketInventoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	InternalInspectProjectBucketInventory(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalInspectProjectRecordsWithBody request with any body
+	InternalInspectProjectRecordsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalInspectProjectRecords(ctx context.Context, body InternalInspectProjectRecordsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// InternalInspectProjectScopes request
 	InternalInspectProjectScopes(ctx context.Context, params *InternalInspectProjectScopesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -556,6 +787,19 @@ type ClientInterface interface {
 	InternalMultipartUploadWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	InternalMultipartUpload(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalDeleteProject request
+	InternalDeleteProject(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalScopeRepairApplyWithBody request with any body
+	InternalScopeRepairApplyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalScopeRepairApply(ctx context.Context, body InternalScopeRepairApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalScopeRepairAuditWithBody request with any body
+	InternalScopeRepairAuditWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	InternalScopeRepairAudit(ctx context.Context, body InternalScopeRepairAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// InternalUploadBlankWithBody request with any body
 	InternalUploadBlankWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -657,6 +901,126 @@ func (c *Client) InternalDownloadPart(ctx context.Context, fileId string, params
 	return c.Client.Do(req)
 }
 
+func (c *Client) InternalInspectObjectWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectObject(ctx context.Context, body InternalInspectObjectJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectObjectBulkWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectBulkRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectObjectBulk(ctx context.Context, body InternalInspectObjectBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectBulkRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectObjectBulkListWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectBulkListRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectObjectBulkList(ctx context.Context, body InternalInspectObjectBulkListJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectObjectBulkListRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectProjectBucketWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectProjectBucketRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectProjectBucket(ctx context.Context, body InternalInspectProjectBucketJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectProjectBucketRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalDeleteProjectBucketObjectsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalDeleteProjectBucketObjectsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalDeleteProjectBucketObjects(ctx context.Context, body InternalDeleteProjectBucketObjectsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalDeleteProjectBucketObjectsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) InternalInspectProjectBucketInventoryWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInternalInspectProjectBucketInventoryRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -671,6 +1035,30 @@ func (c *Client) InternalInspectProjectBucketInventoryWithBody(ctx context.Conte
 
 func (c *Client) InternalInspectProjectBucketInventory(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInternalInspectProjectBucketInventoryRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectProjectRecordsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectProjectRecordsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalInspectProjectRecords(ctx context.Context, body InternalInspectProjectRecordsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalInspectProjectRecordsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -779,6 +1167,66 @@ func (c *Client) InternalMultipartUploadWithBody(ctx context.Context, contentTyp
 
 func (c *Client) InternalMultipartUpload(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInternalMultipartUploadRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalDeleteProject(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalDeleteProjectRequest(c.Server, organization, projectId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalScopeRepairApplyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalScopeRepairApplyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalScopeRepairApply(ctx context.Context, body InternalScopeRepairApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalScopeRepairApplyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalScopeRepairAuditWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalScopeRepairAuditRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) InternalScopeRepairAudit(ctx context.Context, body InternalScopeRepairAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalScopeRepairAuditRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,6 +1721,206 @@ func NewInternalDownloadPartRequest(server string, fileId string, params *Intern
 	return req, nil
 }
 
+// NewInternalInspectObjectRequest calls the generic InternalInspectObject builder with application/json body
+func NewInternalInspectObjectRequest(server string, body InternalInspectObjectJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalInspectObjectRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalInspectObjectRequestWithBody generates requests for InternalInspectObject with any type of body
+func NewInternalInspectObjectRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalInspectObjectBulkRequest calls the generic InternalInspectObjectBulk builder with application/json body
+func NewInternalInspectObjectBulkRequest(server string, body InternalInspectObjectBulkJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalInspectObjectBulkRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalInspectObjectBulkRequestWithBody generates requests for InternalInspectObjectBulk with any type of body
+func NewInternalInspectObjectBulkRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect/bulk")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalInspectObjectBulkListRequest calls the generic InternalInspectObjectBulkList builder with application/json body
+func NewInternalInspectObjectBulkListRequest(server string, body InternalInspectObjectBulkListJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalInspectObjectBulkListRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalInspectObjectBulkListRequestWithBody generates requests for InternalInspectObjectBulkList with any type of body
+func NewInternalInspectObjectBulkListRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect/bulk-list")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalInspectProjectBucketRequest calls the generic InternalInspectProjectBucket builder with application/json body
+func NewInternalInspectProjectBucketRequest(server string, body InternalInspectProjectBucketJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalInspectProjectBucketRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalInspectProjectBucketRequestWithBody generates requests for InternalInspectProjectBucket with any type of body
+func NewInternalInspectProjectBucketRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect/project-bucket")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalDeleteProjectBucketObjectsRequest calls the generic InternalDeleteProjectBucketObjects builder with application/json body
+func NewInternalDeleteProjectBucketObjectsRequest(server string, body InternalDeleteProjectBucketObjectsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalDeleteProjectBucketObjectsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalDeleteProjectBucketObjectsRequestWithBody generates requests for InternalDeleteProjectBucketObjects with any type of body
+func NewInternalDeleteProjectBucketObjectsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect/project-bucket/delete")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewInternalInspectProjectBucketInventoryRequest calls the generic InternalInspectProjectBucketInventory builder with application/json body
 func NewInternalInspectProjectBucketInventoryRequest(server string, body InternalInspectProjectBucketInventoryJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1294,6 +1942,46 @@ func NewInternalInspectProjectBucketInventoryRequestWithBody(server string, cont
 	}
 
 	operationPath := fmt.Sprintf("/data/inspect/project-bucket/inventory")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalInspectProjectRecordsRequest calls the generic InternalInspectProjectRecords builder with application/json body
+func NewInternalInspectProjectRecordsRequest(server string, body InternalInspectProjectRecordsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalInspectProjectRecordsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalInspectProjectRecordsRequestWithBody generates requests for InternalInspectProjectRecords with any type of body
+func NewInternalInspectProjectRecordsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/inspect/project-records")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1511,6 +2199,127 @@ func NewInternalMultipartUploadRequestWithBody(server string, contentType string
 	}
 
 	operationPath := fmt.Sprintf("/data/multipart/upload")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalDeleteProjectRequest generates requests for InternalDeleteProject
+func NewInternalDeleteProjectRequest(server string, organization string, projectId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "organization", runtime.ParamLocationPath, organization)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "project_id", runtime.ParamLocationPath, projectId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/projects/%s/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewInternalScopeRepairApplyRequest calls the generic InternalScopeRepairApply builder with application/json body
+func NewInternalScopeRepairApplyRequest(server string, body InternalScopeRepairApplyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalScopeRepairApplyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalScopeRepairApplyRequestWithBody generates requests for InternalScopeRepairApply with any type of body
+func NewInternalScopeRepairApplyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/repair/project-scope/apply")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalScopeRepairAuditRequest calls the generic InternalScopeRepairAudit builder with application/json body
+func NewInternalScopeRepairAuditRequest(server string, body InternalScopeRepairAuditJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalScopeRepairAuditRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalScopeRepairAuditRequestWithBody generates requests for InternalScopeRepairAudit with any type of body
+func NewInternalScopeRepairAuditRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/repair/project-scope/audit")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2530,116 +3339,159 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 	// InternalDownloadWithResponse request
-	InternalDownloadWithResponse(ctx context.Context, fileId string, params *InternalDownloadParams, reqEditors ...RequestEditorFn) (*InternalDownloadResponse, error)
+	InternalDownloadWithResponse(ctx context.Context, fileId string, params *InternalDownloadParams, reqEditors ...RequestEditorFn) (*InternalDownloadResp, error)
 
 	// InternalDownloadPartWithResponse request
-	InternalDownloadPartWithResponse(ctx context.Context, fileId string, params *InternalDownloadPartParams, reqEditors ...RequestEditorFn) (*InternalDownloadPartResponse, error)
+	InternalDownloadPartWithResponse(ctx context.Context, fileId string, params *InternalDownloadPartParams, reqEditors ...RequestEditorFn) (*InternalDownloadPartResp, error)
+
+	// InternalInspectObjectWithBodyWithResponse request with any body
+	InternalInspectObjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectResp, error)
+
+	InternalInspectObjectWithResponse(ctx context.Context, body InternalInspectObjectJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectResp, error)
+
+	// InternalInspectObjectBulkWithBodyWithResponse request with any body
+	InternalInspectObjectBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkResp, error)
+
+	InternalInspectObjectBulkWithResponse(ctx context.Context, body InternalInspectObjectBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkResp, error)
+
+	// InternalInspectObjectBulkListWithBodyWithResponse request with any body
+	InternalInspectObjectBulkListWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkListResp, error)
+
+	InternalInspectObjectBulkListWithResponse(ctx context.Context, body InternalInspectObjectBulkListJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkListResp, error)
+
+	// InternalInspectProjectBucketWithBodyWithResponse request with any body
+	InternalInspectProjectBucketWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketResp, error)
+
+	InternalInspectProjectBucketWithResponse(ctx context.Context, body InternalInspectProjectBucketJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketResp, error)
+
+	// InternalDeleteProjectBucketObjectsWithBodyWithResponse request with any body
+	InternalDeleteProjectBucketObjectsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalDeleteProjectBucketObjectsResp, error)
+
+	InternalDeleteProjectBucketObjectsWithResponse(ctx context.Context, body InternalDeleteProjectBucketObjectsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalDeleteProjectBucketObjectsResp, error)
 
 	// InternalInspectProjectBucketInventoryWithBodyWithResponse request with any body
-	InternalInspectProjectBucketInventoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResponse, error)
+	InternalInspectProjectBucketInventoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResp, error)
 
-	InternalInspectProjectBucketInventoryWithResponse(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResponse, error)
+	InternalInspectProjectBucketInventoryWithResponse(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResp, error)
+
+	// InternalInspectProjectRecordsWithBodyWithResponse request with any body
+	InternalInspectProjectRecordsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectRecordsResp, error)
+
+	InternalInspectProjectRecordsWithResponse(ctx context.Context, body InternalInspectProjectRecordsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectRecordsResp, error)
 
 	// InternalInspectProjectScopesWithResponse request
-	InternalInspectProjectScopesWithResponse(ctx context.Context, params *InternalInspectProjectScopesParams, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesResponse, error)
+	InternalInspectProjectScopesWithResponse(ctx context.Context, params *InternalInspectProjectScopesParams, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesResp, error)
 
 	// InternalInspectProjectScopesPostWithBodyWithResponse request with any body
-	InternalInspectProjectScopesPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResponse, error)
+	InternalInspectProjectScopesPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResp, error)
 
-	InternalInspectProjectScopesPostWithResponse(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResponse, error)
+	InternalInspectProjectScopesPostWithResponse(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResp, error)
 
 	// InternalMultipartCompleteWithBodyWithResponse request with any body
-	InternalMultipartCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResponse, error)
+	InternalMultipartCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResp, error)
 
-	InternalMultipartCompleteWithResponse(ctx context.Context, body InternalMultipartCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResponse, error)
+	InternalMultipartCompleteWithResponse(ctx context.Context, body InternalMultipartCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResp, error)
 
 	// InternalMultipartInitWithBodyWithResponse request with any body
-	InternalMultipartInitWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartInitResponse, error)
+	InternalMultipartInitWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartInitResp, error)
 
-	InternalMultipartInitWithResponse(ctx context.Context, body InternalMultipartInitJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartInitResponse, error)
+	InternalMultipartInitWithResponse(ctx context.Context, body InternalMultipartInitJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartInitResp, error)
 
 	// InternalMultipartUploadWithBodyWithResponse request with any body
-	InternalMultipartUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResponse, error)
+	InternalMultipartUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResp, error)
 
-	InternalMultipartUploadWithResponse(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResponse, error)
+	InternalMultipartUploadWithResponse(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResp, error)
+
+	// InternalDeleteProjectWithResponse request
+	InternalDeleteProjectWithResponse(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*InternalDeleteProjectResp, error)
+
+	// InternalScopeRepairApplyWithBodyWithResponse request with any body
+	InternalScopeRepairApplyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalScopeRepairApplyResp, error)
+
+	InternalScopeRepairApplyWithResponse(ctx context.Context, body InternalScopeRepairApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalScopeRepairApplyResp, error)
+
+	// InternalScopeRepairAuditWithBodyWithResponse request with any body
+	InternalScopeRepairAuditWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalScopeRepairAuditResp, error)
+
+	InternalScopeRepairAuditWithResponse(ctx context.Context, body InternalScopeRepairAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalScopeRepairAuditResp, error)
 
 	// InternalUploadBlankWithBodyWithResponse request with any body
-	InternalUploadBlankWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBlankResponse, error)
+	InternalUploadBlankWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBlankResp, error)
 
-	InternalUploadBlankWithResponse(ctx context.Context, body InternalUploadBlankJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBlankResponse, error)
+	InternalUploadBlankWithResponse(ctx context.Context, body InternalUploadBlankJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBlankResp, error)
 
 	// InternalUploadBulkWithBodyWithResponse request with any body
-	InternalUploadBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBulkResponse, error)
+	InternalUploadBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBulkResp, error)
 
-	InternalUploadBulkWithResponse(ctx context.Context, body InternalUploadBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBulkResponse, error)
+	InternalUploadBulkWithResponse(ctx context.Context, body InternalUploadBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBulkResp, error)
 
 	// InternalUploadURLWithResponse request
-	InternalUploadURLWithResponse(ctx context.Context, fileId string, params *InternalUploadURLParams, reqEditors ...RequestEditorFn) (*InternalUploadURLResponse, error)
+	InternalUploadURLWithResponse(ctx context.Context, fileId string, params *InternalUploadURLParams, reqEditors ...RequestEditorFn) (*InternalUploadURLResp, error)
 
 	// InternalDeleteByQueryWithResponse request
-	InternalDeleteByQueryWithResponse(ctx context.Context, params *InternalDeleteByQueryParams, reqEditors ...RequestEditorFn) (*InternalDeleteByQueryResponse, error)
+	InternalDeleteByQueryWithResponse(ctx context.Context, params *InternalDeleteByQueryParams, reqEditors ...RequestEditorFn) (*InternalDeleteByQueryResp, error)
 
 	// InternalListWithResponse request
-	InternalListWithResponse(ctx context.Context, params *InternalListParams, reqEditors ...RequestEditorFn) (*InternalListResponse, error)
+	InternalListWithResponse(ctx context.Context, params *InternalListParams, reqEditors ...RequestEditorFn) (*InternalListResp, error)
 
 	// InternalCreateWithBodyWithResponse request with any body
-	InternalCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalCreateResponse, error)
+	InternalCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalCreateResp, error)
 
-	InternalCreateWithResponse(ctx context.Context, body InternalCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalCreateResponse, error)
+	InternalCreateWithResponse(ctx context.Context, body InternalCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalCreateResp, error)
 
 	// InternalBulkCreateWithBodyWithResponse request with any body
-	InternalBulkCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkCreateResponse, error)
+	InternalBulkCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkCreateResp, error)
 
-	InternalBulkCreateWithResponse(ctx context.Context, body InternalBulkCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkCreateResponse, error)
+	InternalBulkCreateWithResponse(ctx context.Context, body InternalBulkCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkCreateResp, error)
 
 	// InternalBulkDeleteHashesWithBodyWithResponse request with any body
-	InternalBulkDeleteHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResponse, error)
+	InternalBulkDeleteHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResp, error)
 
-	InternalBulkDeleteHashesWithResponse(ctx context.Context, body InternalBulkDeleteHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResponse, error)
+	InternalBulkDeleteHashesWithResponse(ctx context.Context, body InternalBulkDeleteHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResp, error)
 
 	// InternalBulkDocumentsWithBodyWithResponse request with any body
-	InternalBulkDocumentsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResponse, error)
+	InternalBulkDocumentsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResp, error)
 
-	InternalBulkDocumentsWithResponse(ctx context.Context, body InternalBulkDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResponse, error)
+	InternalBulkDocumentsWithResponse(ctx context.Context, body InternalBulkDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResp, error)
 
 	// InternalBulkHashesWithBodyWithResponse request with any body
-	InternalBulkHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkHashesResponse, error)
+	InternalBulkHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkHashesResp, error)
 
-	InternalBulkHashesWithResponse(ctx context.Context, body InternalBulkHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkHashesResponse, error)
+	InternalBulkHashesWithResponse(ctx context.Context, body InternalBulkHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkHashesResp, error)
 
 	// InternalBulkOverwriteWithBodyWithResponse request with any body
-	InternalBulkOverwriteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResponse, error)
+	InternalBulkOverwriteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResp, error)
 
-	InternalBulkOverwriteWithResponse(ctx context.Context, body InternalBulkOverwriteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResponse, error)
+	InternalBulkOverwriteWithResponse(ctx context.Context, body InternalBulkOverwriteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResp, error)
 
 	// InternalBulkMissingSHA256WithBodyWithResponse request with any body
-	InternalBulkMissingSHA256WithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Response, error)
+	InternalBulkMissingSHA256WithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Resp, error)
 
-	InternalBulkMissingSHA256WithResponse(ctx context.Context, body InternalBulkMissingSHA256JSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Response, error)
+	InternalBulkMissingSHA256WithResponse(ctx context.Context, body InternalBulkMissingSHA256JSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Resp, error)
 
 	// InternalBulkSHA256ValidityWithBodyWithResponse request with any body
-	InternalBulkSHA256ValidityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResponse, error)
+	InternalBulkSHA256ValidityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResp, error)
 
-	InternalBulkSHA256ValidityWithResponse(ctx context.Context, body InternalBulkSHA256ValidityJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResponse, error)
+	InternalBulkSHA256ValidityWithResponse(ctx context.Context, body InternalBulkSHA256ValidityJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResp, error)
 
 	// InternalDeleteWithResponse request
-	InternalDeleteWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalDeleteResponse, error)
+	InternalDeleteWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalDeleteResp, error)
 
 	// InternalGetWithResponse request
-	InternalGetWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalGetResponse, error)
+	InternalGetWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalGetResp, error)
 
 	// InternalUpdateWithBodyWithResponse request with any body
-	InternalUpdateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUpdateResponse, error)
+	InternalUpdateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUpdateResp, error)
 
-	InternalUpdateWithResponse(ctx context.Context, id string, body InternalUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUpdateResponse, error)
+	InternalUpdateWithResponse(ctx context.Context, id string, body InternalUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUpdateResp, error)
 
 	// InternalRemoveControlledAccessWithBodyWithResponse request with any body
-	InternalRemoveControlledAccessWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResponse, error)
+	InternalRemoveControlledAccessWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResp, error)
 
-	InternalRemoveControlledAccessWithResponse(ctx context.Context, id string, body InternalRemoveControlledAccessJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResponse, error)
+	InternalRemoveControlledAccessWithResponse(ctx context.Context, id string, body InternalRemoveControlledAccessJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResp, error)
 }
 
-type InternalDownloadResponse struct {
+type InternalDownloadResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalSignedURL
@@ -2651,7 +3503,7 @@ type InternalDownloadResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalDownloadResponse) Status() string {
+func (r InternalDownloadResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2659,14 +3511,14 @@ func (r InternalDownloadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalDownloadResponse) StatusCode() int {
+func (r InternalDownloadResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalDownloadPartResponse struct {
+type InternalDownloadPartResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalSignedURL
@@ -2678,7 +3530,7 @@ type InternalDownloadPartResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalDownloadPartResponse) Status() string {
+func (r InternalDownloadPartResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2686,17 +3538,145 @@ func (r InternalDownloadPartResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalDownloadPartResponse) StatusCode() int {
+func (r InternalDownloadPartResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalInspectProjectBucketInventoryResponse struct {
+type InternalInspectObjectResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *InternalProjectBucketInventoryResponse
+	JSON200      *InternalInspectObjectResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalInspectObjectResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalInspectObjectResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalInspectObjectBulkResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalInspectObjectBulkResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalInspectObjectBulkResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalInspectObjectBulkResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalInspectObjectBulkListResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalInspectObjectBulkResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalInspectObjectBulkListResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalInspectObjectBulkListResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalInspectProjectBucketResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalInspectProjectBucketResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalInspectProjectBucketResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalInspectProjectBucketResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalDeleteProjectBucketObjectsResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalDeleteProjectBucketObjectsResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalDeleteProjectBucketObjectsResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalDeleteProjectBucketObjectsResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalInspectProjectBucketInventoryResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalInspectProjectBucketResponse
 	JSON400      *APIError
 	JSON401      *APIError
 	JSON403      *APIError
@@ -2706,7 +3686,7 @@ type InternalInspectProjectBucketInventoryResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalInspectProjectBucketInventoryResponse) Status() string {
+func (r InternalInspectProjectBucketInventoryResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2714,17 +3694,42 @@ func (r InternalInspectProjectBucketInventoryResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalInspectProjectBucketInventoryResponse) StatusCode() int {
+func (r InternalInspectProjectBucketInventoryResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalInspectProjectScopesResponse struct {
+type InternalInspectProjectRecordsResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *InternalProjectScopesResponse
+	JSON200      *InternalInspectProjectRecordsResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalInspectProjectRecordsResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalInspectProjectRecordsResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalInspectProjectScopesResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalInspectProjectScopesResponse
 	JSON400      *APIError
 	JSON401      *APIError
 	JSON403      *APIError
@@ -2732,7 +3737,7 @@ type InternalInspectProjectScopesResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalInspectProjectScopesResponse) Status() string {
+func (r InternalInspectProjectScopesResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2740,17 +3745,17 @@ func (r InternalInspectProjectScopesResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalInspectProjectScopesResponse) StatusCode() int {
+func (r InternalInspectProjectScopesResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalInspectProjectScopesPostResponse struct {
+type InternalInspectProjectScopesPostResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *InternalProjectScopesResponse
+	JSON200      *InternalInspectProjectScopesResponse
 	JSON400      *APIError
 	JSON401      *APIError
 	JSON403      *APIError
@@ -2758,7 +3763,7 @@ type InternalInspectProjectScopesPostResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalInspectProjectScopesPostResponse) Status() string {
+func (r InternalInspectProjectScopesPostResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2766,14 +3771,14 @@ func (r InternalInspectProjectScopesPostResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalInspectProjectScopesPostResponse) StatusCode() int {
+func (r InternalInspectProjectScopesPostResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalMultipartCompleteResponse struct {
+type InternalMultipartCompleteResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON400      *APIError
@@ -2783,7 +3788,7 @@ type InternalMultipartCompleteResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalMultipartCompleteResponse) Status() string {
+func (r InternalMultipartCompleteResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2791,14 +3796,14 @@ func (r InternalMultipartCompleteResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalMultipartCompleteResponse) StatusCode() int {
+func (r InternalMultipartCompleteResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalMultipartInitResponse struct {
+type InternalMultipartInitResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalMultipartInitOutput
@@ -2809,7 +3814,7 @@ type InternalMultipartInitResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalMultipartInitResponse) Status() string {
+func (r InternalMultipartInitResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2817,14 +3822,14 @@ func (r InternalMultipartInitResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalMultipartInitResponse) StatusCode() int {
+func (r InternalMultipartInitResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalMultipartUploadResponse struct {
+type InternalMultipartUploadResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalMultipartUploadOutput
@@ -2835,7 +3840,7 @@ type InternalMultipartUploadResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalMultipartUploadResponse) Status() string {
+func (r InternalMultipartUploadResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2843,14 +3848,93 @@ func (r InternalMultipartUploadResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalMultipartUploadResponse) StatusCode() int {
+func (r InternalMultipartUploadResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalUploadBlankResponse struct {
+type InternalDeleteProjectResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ProjectCleanupResponse
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalDeleteProjectResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalDeleteProjectResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalScopeRepairApplyResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ScopeRepairApplyResult
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalScopeRepairApplyResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalScopeRepairApplyResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalScopeRepairAuditResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ScopeRepairReport
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalScopeRepairAuditResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalScopeRepairAuditResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalUploadBlankResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *InternalUploadBlankOutput
@@ -2861,7 +3945,7 @@ type InternalUploadBlankResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalUploadBlankResponse) Status() string {
+func (r InternalUploadBlankResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2869,14 +3953,14 @@ func (r InternalUploadBlankResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalUploadBlankResponse) StatusCode() int {
+func (r InternalUploadBlankResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalUploadBulkResponse struct {
+type InternalUploadBulkResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalUploadBulkOutput
@@ -2889,7 +3973,7 @@ type InternalUploadBulkResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalUploadBulkResponse) Status() string {
+func (r InternalUploadBulkResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2897,14 +3981,14 @@ func (r InternalUploadBulkResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalUploadBulkResponse) StatusCode() int {
+func (r InternalUploadBulkResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalUploadURLResponse struct {
+type InternalUploadURLResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalSignedURL
@@ -2916,7 +4000,7 @@ type InternalUploadURLResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalUploadURLResponse) Status() string {
+func (r InternalUploadURLResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2924,14 +4008,14 @@ func (r InternalUploadURLResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalUploadURLResponse) StatusCode() int {
+func (r InternalUploadURLResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalDeleteByQueryResponse struct {
+type InternalDeleteByQueryResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *DeleteByQueryResponse
@@ -2942,7 +4026,7 @@ type InternalDeleteByQueryResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalDeleteByQueryResponse) Status() string {
+func (r InternalDeleteByQueryResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2950,14 +4034,14 @@ func (r InternalDeleteByQueryResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalDeleteByQueryResponse) StatusCode() int {
+func (r InternalDeleteByQueryResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalListResponse struct {
+type InternalListResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ListRecordsResponse
@@ -2968,7 +4052,7 @@ type InternalListResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalListResponse) Status() string {
+func (r InternalListResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -2976,14 +4060,14 @@ func (r InternalListResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalListResponse) StatusCode() int {
+func (r InternalListResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalCreateResponse struct {
+type InternalCreateResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *InternalRecordResponse
@@ -2994,7 +4078,7 @@ type InternalCreateResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalCreateResponse) Status() string {
+func (r InternalCreateResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3002,14 +4086,14 @@ func (r InternalCreateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalCreateResponse) StatusCode() int {
+func (r InternalCreateResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkCreateResponse struct {
+type InternalBulkCreateResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *ListRecordsResponse
@@ -3021,7 +4105,7 @@ type InternalBulkCreateResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkCreateResponse) Status() string {
+func (r InternalBulkCreateResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3029,14 +4113,14 @@ func (r InternalBulkCreateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkCreateResponse) StatusCode() int {
+func (r InternalBulkCreateResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkDeleteHashesResponse struct {
+type InternalBulkDeleteHashesResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *DeleteByQueryResponse
@@ -3048,7 +4132,7 @@ type InternalBulkDeleteHashesResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkDeleteHashesResponse) Status() string {
+func (r InternalBulkDeleteHashesResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3056,14 +4140,14 @@ func (r InternalBulkDeleteHashesResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkDeleteHashesResponse) StatusCode() int {
+func (r InternalBulkDeleteHashesResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkDocumentsResponse struct {
+type InternalBulkDocumentsResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *[]InternalRecordResponse
@@ -3073,7 +4157,7 @@ type InternalBulkDocumentsResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkDocumentsResponse) Status() string {
+func (r InternalBulkDocumentsResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3081,14 +4165,14 @@ func (r InternalBulkDocumentsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkDocumentsResponse) StatusCode() int {
+func (r InternalBulkDocumentsResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkHashesResponse struct {
+type InternalBulkHashesResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ListRecordsResponse
@@ -3098,7 +4182,7 @@ type InternalBulkHashesResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkHashesResponse) Status() string {
+func (r InternalBulkHashesResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3106,14 +4190,14 @@ func (r InternalBulkHashesResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkHashesResponse) StatusCode() int {
+func (r InternalBulkHashesResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkOverwriteResponse struct {
+type InternalBulkOverwriteResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *BulkOverwriteResponse
@@ -3126,7 +4210,7 @@ type InternalBulkOverwriteResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkOverwriteResponse) Status() string {
+func (r InternalBulkOverwriteResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3134,14 +4218,14 @@ func (r InternalBulkOverwriteResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkOverwriteResponse) StatusCode() int {
+func (r InternalBulkOverwriteResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkMissingSHA256Response struct {
+type InternalBulkMissingSHA256Resp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *BulkMissingSHA256Response
@@ -3153,7 +4237,7 @@ type InternalBulkMissingSHA256Response struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkMissingSHA256Response) Status() string {
+func (r InternalBulkMissingSHA256Resp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3161,14 +4245,14 @@ func (r InternalBulkMissingSHA256Response) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkMissingSHA256Response) StatusCode() int {
+func (r InternalBulkMissingSHA256Resp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalBulkSHA256ValidityResponse struct {
+type InternalBulkSHA256ValidityResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *map[string]bool
@@ -3178,7 +4262,7 @@ type InternalBulkSHA256ValidityResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalBulkSHA256ValidityResponse) Status() string {
+func (r InternalBulkSHA256ValidityResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3186,14 +4270,14 @@ func (r InternalBulkSHA256ValidityResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalBulkSHA256ValidityResponse) StatusCode() int {
+func (r InternalBulkSHA256ValidityResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalDeleteResponse struct {
+type InternalDeleteResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON404      *APIError
@@ -3201,7 +4285,7 @@ type InternalDeleteResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalDeleteResponse) Status() string {
+func (r InternalDeleteResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3209,48 +4293,23 @@ func (r InternalDeleteResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalDeleteResponse) StatusCode() int {
+func (r InternalDeleteResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalGetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *InternalRecordResponse
-	JSON404      *APIError
-	JSON500      *APIError
-}
-
-// Status returns HTTPResponse.Status
-func (r InternalGetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r InternalGetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type InternalUpdateResponse struct {
+type InternalGetResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalRecordResponse
-	JSON400      *APIError
 	JSON404      *APIError
 	JSON500      *APIError
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalUpdateResponse) Status() string {
+func (r InternalGetResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3258,14 +4317,14 @@ func (r InternalUpdateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalUpdateResponse) StatusCode() int {
+func (r InternalGetResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type InternalRemoveControlledAccessResponse struct {
+type InternalUpdateResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InternalRecordResponse
@@ -3275,7 +4334,7 @@ type InternalRemoveControlledAccessResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r InternalRemoveControlledAccessResponse) Status() string {
+func (r InternalUpdateResp) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -3283,388 +4342,558 @@ func (r InternalRemoveControlledAccessResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r InternalRemoveControlledAccessResponse) StatusCode() int {
+func (r InternalUpdateResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// InternalDownloadWithResponse request returning *InternalDownloadResponse
-func (c *ClientWithResponses) InternalDownloadWithResponse(ctx context.Context, fileId string, params *InternalDownloadParams, reqEditors ...RequestEditorFn) (*InternalDownloadResponse, error) {
+type InternalRemoveControlledAccessResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InternalRecordResponse
+	JSON400      *APIError
+	JSON404      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalRemoveControlledAccessResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalRemoveControlledAccessResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// InternalDownloadWithResponse request returning *InternalDownloadResp
+func (c *ClientWithResponses) InternalDownloadWithResponse(ctx context.Context, fileId string, params *InternalDownloadParams, reqEditors ...RequestEditorFn) (*InternalDownloadResp, error) {
 	rsp, err := c.InternalDownload(ctx, fileId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalDownloadResponse(rsp)
+	return ParseInternalDownloadResp(rsp)
 }
 
-// InternalDownloadPartWithResponse request returning *InternalDownloadPartResponse
-func (c *ClientWithResponses) InternalDownloadPartWithResponse(ctx context.Context, fileId string, params *InternalDownloadPartParams, reqEditors ...RequestEditorFn) (*InternalDownloadPartResponse, error) {
+// InternalDownloadPartWithResponse request returning *InternalDownloadPartResp
+func (c *ClientWithResponses) InternalDownloadPartWithResponse(ctx context.Context, fileId string, params *InternalDownloadPartParams, reqEditors ...RequestEditorFn) (*InternalDownloadPartResp, error) {
 	rsp, err := c.InternalDownloadPart(ctx, fileId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalDownloadPartResponse(rsp)
+	return ParseInternalDownloadPartResp(rsp)
 }
 
-// InternalInspectProjectBucketInventoryWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectBucketInventoryResponse
-func (c *ClientWithResponses) InternalInspectProjectBucketInventoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResponse, error) {
+// InternalInspectObjectWithBodyWithResponse request with arbitrary body returning *InternalInspectObjectResp
+func (c *ClientWithResponses) InternalInspectObjectWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectResp, error) {
+	rsp, err := c.InternalInspectObjectWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalInspectObjectWithResponse(ctx context.Context, body InternalInspectObjectJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectResp, error) {
+	rsp, err := c.InternalInspectObject(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectResp(rsp)
+}
+
+// InternalInspectObjectBulkWithBodyWithResponse request with arbitrary body returning *InternalInspectObjectBulkResp
+func (c *ClientWithResponses) InternalInspectObjectBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkResp, error) {
+	rsp, err := c.InternalInspectObjectBulkWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectBulkResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalInspectObjectBulkWithResponse(ctx context.Context, body InternalInspectObjectBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkResp, error) {
+	rsp, err := c.InternalInspectObjectBulk(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectBulkResp(rsp)
+}
+
+// InternalInspectObjectBulkListWithBodyWithResponse request with arbitrary body returning *InternalInspectObjectBulkListResp
+func (c *ClientWithResponses) InternalInspectObjectBulkListWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkListResp, error) {
+	rsp, err := c.InternalInspectObjectBulkListWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectBulkListResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalInspectObjectBulkListWithResponse(ctx context.Context, body InternalInspectObjectBulkListJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectObjectBulkListResp, error) {
+	rsp, err := c.InternalInspectObjectBulkList(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectObjectBulkListResp(rsp)
+}
+
+// InternalInspectProjectBucketWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectBucketResp
+func (c *ClientWithResponses) InternalInspectProjectBucketWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketResp, error) {
+	rsp, err := c.InternalInspectProjectBucketWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectProjectBucketResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalInspectProjectBucketWithResponse(ctx context.Context, body InternalInspectProjectBucketJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketResp, error) {
+	rsp, err := c.InternalInspectProjectBucket(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectProjectBucketResp(rsp)
+}
+
+// InternalDeleteProjectBucketObjectsWithBodyWithResponse request with arbitrary body returning *InternalDeleteProjectBucketObjectsResp
+func (c *ClientWithResponses) InternalDeleteProjectBucketObjectsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalDeleteProjectBucketObjectsResp, error) {
+	rsp, err := c.InternalDeleteProjectBucketObjectsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalDeleteProjectBucketObjectsResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalDeleteProjectBucketObjectsWithResponse(ctx context.Context, body InternalDeleteProjectBucketObjectsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalDeleteProjectBucketObjectsResp, error) {
+	rsp, err := c.InternalDeleteProjectBucketObjects(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalDeleteProjectBucketObjectsResp(rsp)
+}
+
+// InternalInspectProjectBucketInventoryWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectBucketInventoryResp
+func (c *ClientWithResponses) InternalInspectProjectBucketInventoryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResp, error) {
 	rsp, err := c.InternalInspectProjectBucketInventoryWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalInspectProjectBucketInventoryResponse(rsp)
+	return ParseInternalInspectProjectBucketInventoryResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalInspectProjectBucketInventoryWithResponse(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResponse, error) {
+func (c *ClientWithResponses) InternalInspectProjectBucketInventoryWithResponse(ctx context.Context, body InternalInspectProjectBucketInventoryJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectBucketInventoryResp, error) {
 	rsp, err := c.InternalInspectProjectBucketInventory(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalInspectProjectBucketInventoryResponse(rsp)
+	return ParseInternalInspectProjectBucketInventoryResp(rsp)
 }
 
-// InternalInspectProjectScopesWithResponse request returning *InternalInspectProjectScopesResponse
-func (c *ClientWithResponses) InternalInspectProjectScopesWithResponse(ctx context.Context, params *InternalInspectProjectScopesParams, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesResponse, error) {
+// InternalInspectProjectRecordsWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectRecordsResp
+func (c *ClientWithResponses) InternalInspectProjectRecordsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectRecordsResp, error) {
+	rsp, err := c.InternalInspectProjectRecordsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectProjectRecordsResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalInspectProjectRecordsWithResponse(ctx context.Context, body InternalInspectProjectRecordsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectRecordsResp, error) {
+	rsp, err := c.InternalInspectProjectRecords(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalInspectProjectRecordsResp(rsp)
+}
+
+// InternalInspectProjectScopesWithResponse request returning *InternalInspectProjectScopesResp
+func (c *ClientWithResponses) InternalInspectProjectScopesWithResponse(ctx context.Context, params *InternalInspectProjectScopesParams, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesResp, error) {
 	rsp, err := c.InternalInspectProjectScopes(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalInspectProjectScopesResponse(rsp)
+	return ParseInternalInspectProjectScopesResp(rsp)
 }
 
-// InternalInspectProjectScopesPostWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectScopesPostResponse
-func (c *ClientWithResponses) InternalInspectProjectScopesPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResponse, error) {
+// InternalInspectProjectScopesPostWithBodyWithResponse request with arbitrary body returning *InternalInspectProjectScopesPostResp
+func (c *ClientWithResponses) InternalInspectProjectScopesPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResp, error) {
 	rsp, err := c.InternalInspectProjectScopesPostWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalInspectProjectScopesPostResponse(rsp)
+	return ParseInternalInspectProjectScopesPostResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalInspectProjectScopesPostWithResponse(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResponse, error) {
+func (c *ClientWithResponses) InternalInspectProjectScopesPostWithResponse(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResp, error) {
 	rsp, err := c.InternalInspectProjectScopesPost(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalInspectProjectScopesPostResponse(rsp)
+	return ParseInternalInspectProjectScopesPostResp(rsp)
 }
 
-// InternalMultipartCompleteWithBodyWithResponse request with arbitrary body returning *InternalMultipartCompleteResponse
-func (c *ClientWithResponses) InternalMultipartCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResponse, error) {
+// InternalMultipartCompleteWithBodyWithResponse request with arbitrary body returning *InternalMultipartCompleteResp
+func (c *ClientWithResponses) InternalMultipartCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResp, error) {
 	rsp, err := c.InternalMultipartCompleteWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartCompleteResponse(rsp)
+	return ParseInternalMultipartCompleteResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalMultipartCompleteWithResponse(ctx context.Context, body InternalMultipartCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResponse, error) {
+func (c *ClientWithResponses) InternalMultipartCompleteWithResponse(ctx context.Context, body InternalMultipartCompleteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResp, error) {
 	rsp, err := c.InternalMultipartComplete(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartCompleteResponse(rsp)
+	return ParseInternalMultipartCompleteResp(rsp)
 }
 
-// InternalMultipartInitWithBodyWithResponse request with arbitrary body returning *InternalMultipartInitResponse
-func (c *ClientWithResponses) InternalMultipartInitWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartInitResponse, error) {
+// InternalMultipartInitWithBodyWithResponse request with arbitrary body returning *InternalMultipartInitResp
+func (c *ClientWithResponses) InternalMultipartInitWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartInitResp, error) {
 	rsp, err := c.InternalMultipartInitWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartInitResponse(rsp)
+	return ParseInternalMultipartInitResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalMultipartInitWithResponse(ctx context.Context, body InternalMultipartInitJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartInitResponse, error) {
+func (c *ClientWithResponses) InternalMultipartInitWithResponse(ctx context.Context, body InternalMultipartInitJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartInitResp, error) {
 	rsp, err := c.InternalMultipartInit(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartInitResponse(rsp)
+	return ParseInternalMultipartInitResp(rsp)
 }
 
-// InternalMultipartUploadWithBodyWithResponse request with arbitrary body returning *InternalMultipartUploadResponse
-func (c *ClientWithResponses) InternalMultipartUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResponse, error) {
+// InternalMultipartUploadWithBodyWithResponse request with arbitrary body returning *InternalMultipartUploadResp
+func (c *ClientWithResponses) InternalMultipartUploadWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResp, error) {
 	rsp, err := c.InternalMultipartUploadWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartUploadResponse(rsp)
+	return ParseInternalMultipartUploadResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalMultipartUploadWithResponse(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResponse, error) {
+func (c *ClientWithResponses) InternalMultipartUploadWithResponse(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResp, error) {
 	rsp, err := c.InternalMultipartUpload(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalMultipartUploadResponse(rsp)
+	return ParseInternalMultipartUploadResp(rsp)
 }
 
-// InternalUploadBlankWithBodyWithResponse request with arbitrary body returning *InternalUploadBlankResponse
-func (c *ClientWithResponses) InternalUploadBlankWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBlankResponse, error) {
+// InternalDeleteProjectWithResponse request returning *InternalDeleteProjectResp
+func (c *ClientWithResponses) InternalDeleteProjectWithResponse(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*InternalDeleteProjectResp, error) {
+	rsp, err := c.InternalDeleteProject(ctx, organization, projectId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalDeleteProjectResp(rsp)
+}
+
+// InternalScopeRepairApplyWithBodyWithResponse request with arbitrary body returning *InternalScopeRepairApplyResp
+func (c *ClientWithResponses) InternalScopeRepairApplyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalScopeRepairApplyResp, error) {
+	rsp, err := c.InternalScopeRepairApplyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalScopeRepairApplyResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalScopeRepairApplyWithResponse(ctx context.Context, body InternalScopeRepairApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalScopeRepairApplyResp, error) {
+	rsp, err := c.InternalScopeRepairApply(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalScopeRepairApplyResp(rsp)
+}
+
+// InternalScopeRepairAuditWithBodyWithResponse request with arbitrary body returning *InternalScopeRepairAuditResp
+func (c *ClientWithResponses) InternalScopeRepairAuditWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalScopeRepairAuditResp, error) {
+	rsp, err := c.InternalScopeRepairAuditWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalScopeRepairAuditResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalScopeRepairAuditWithResponse(ctx context.Context, body InternalScopeRepairAuditJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalScopeRepairAuditResp, error) {
+	rsp, err := c.InternalScopeRepairAudit(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalScopeRepairAuditResp(rsp)
+}
+
+// InternalUploadBlankWithBodyWithResponse request with arbitrary body returning *InternalUploadBlankResp
+func (c *ClientWithResponses) InternalUploadBlankWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBlankResp, error) {
 	rsp, err := c.InternalUploadBlankWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUploadBlankResponse(rsp)
+	return ParseInternalUploadBlankResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalUploadBlankWithResponse(ctx context.Context, body InternalUploadBlankJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBlankResponse, error) {
+func (c *ClientWithResponses) InternalUploadBlankWithResponse(ctx context.Context, body InternalUploadBlankJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBlankResp, error) {
 	rsp, err := c.InternalUploadBlank(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUploadBlankResponse(rsp)
+	return ParseInternalUploadBlankResp(rsp)
 }
 
-// InternalUploadBulkWithBodyWithResponse request with arbitrary body returning *InternalUploadBulkResponse
-func (c *ClientWithResponses) InternalUploadBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBulkResponse, error) {
+// InternalUploadBulkWithBodyWithResponse request with arbitrary body returning *InternalUploadBulkResp
+func (c *ClientWithResponses) InternalUploadBulkWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUploadBulkResp, error) {
 	rsp, err := c.InternalUploadBulkWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUploadBulkResponse(rsp)
+	return ParseInternalUploadBulkResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalUploadBulkWithResponse(ctx context.Context, body InternalUploadBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBulkResponse, error) {
+func (c *ClientWithResponses) InternalUploadBulkWithResponse(ctx context.Context, body InternalUploadBulkJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUploadBulkResp, error) {
 	rsp, err := c.InternalUploadBulk(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUploadBulkResponse(rsp)
+	return ParseInternalUploadBulkResp(rsp)
 }
 
-// InternalUploadURLWithResponse request returning *InternalUploadURLResponse
-func (c *ClientWithResponses) InternalUploadURLWithResponse(ctx context.Context, fileId string, params *InternalUploadURLParams, reqEditors ...RequestEditorFn) (*InternalUploadURLResponse, error) {
+// InternalUploadURLWithResponse request returning *InternalUploadURLResp
+func (c *ClientWithResponses) InternalUploadURLWithResponse(ctx context.Context, fileId string, params *InternalUploadURLParams, reqEditors ...RequestEditorFn) (*InternalUploadURLResp, error) {
 	rsp, err := c.InternalUploadURL(ctx, fileId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUploadURLResponse(rsp)
+	return ParseInternalUploadURLResp(rsp)
 }
 
-// InternalDeleteByQueryWithResponse request returning *InternalDeleteByQueryResponse
-func (c *ClientWithResponses) InternalDeleteByQueryWithResponse(ctx context.Context, params *InternalDeleteByQueryParams, reqEditors ...RequestEditorFn) (*InternalDeleteByQueryResponse, error) {
+// InternalDeleteByQueryWithResponse request returning *InternalDeleteByQueryResp
+func (c *ClientWithResponses) InternalDeleteByQueryWithResponse(ctx context.Context, params *InternalDeleteByQueryParams, reqEditors ...RequestEditorFn) (*InternalDeleteByQueryResp, error) {
 	rsp, err := c.InternalDeleteByQuery(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalDeleteByQueryResponse(rsp)
+	return ParseInternalDeleteByQueryResp(rsp)
 }
 
-// InternalListWithResponse request returning *InternalListResponse
-func (c *ClientWithResponses) InternalListWithResponse(ctx context.Context, params *InternalListParams, reqEditors ...RequestEditorFn) (*InternalListResponse, error) {
+// InternalListWithResponse request returning *InternalListResp
+func (c *ClientWithResponses) InternalListWithResponse(ctx context.Context, params *InternalListParams, reqEditors ...RequestEditorFn) (*InternalListResp, error) {
 	rsp, err := c.InternalList(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalListResponse(rsp)
+	return ParseInternalListResp(rsp)
 }
 
-// InternalCreateWithBodyWithResponse request with arbitrary body returning *InternalCreateResponse
-func (c *ClientWithResponses) InternalCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalCreateResponse, error) {
+// InternalCreateWithBodyWithResponse request with arbitrary body returning *InternalCreateResp
+func (c *ClientWithResponses) InternalCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalCreateResp, error) {
 	rsp, err := c.InternalCreateWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalCreateResponse(rsp)
+	return ParseInternalCreateResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalCreateWithResponse(ctx context.Context, body InternalCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalCreateResponse, error) {
+func (c *ClientWithResponses) InternalCreateWithResponse(ctx context.Context, body InternalCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalCreateResp, error) {
 	rsp, err := c.InternalCreate(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalCreateResponse(rsp)
+	return ParseInternalCreateResp(rsp)
 }
 
-// InternalBulkCreateWithBodyWithResponse request with arbitrary body returning *InternalBulkCreateResponse
-func (c *ClientWithResponses) InternalBulkCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkCreateResponse, error) {
+// InternalBulkCreateWithBodyWithResponse request with arbitrary body returning *InternalBulkCreateResp
+func (c *ClientWithResponses) InternalBulkCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkCreateResp, error) {
 	rsp, err := c.InternalBulkCreateWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkCreateResponse(rsp)
+	return ParseInternalBulkCreateResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkCreateWithResponse(ctx context.Context, body InternalBulkCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkCreateResponse, error) {
+func (c *ClientWithResponses) InternalBulkCreateWithResponse(ctx context.Context, body InternalBulkCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkCreateResp, error) {
 	rsp, err := c.InternalBulkCreate(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkCreateResponse(rsp)
+	return ParseInternalBulkCreateResp(rsp)
 }
 
-// InternalBulkDeleteHashesWithBodyWithResponse request with arbitrary body returning *InternalBulkDeleteHashesResponse
-func (c *ClientWithResponses) InternalBulkDeleteHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResponse, error) {
+// InternalBulkDeleteHashesWithBodyWithResponse request with arbitrary body returning *InternalBulkDeleteHashesResp
+func (c *ClientWithResponses) InternalBulkDeleteHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResp, error) {
 	rsp, err := c.InternalBulkDeleteHashesWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkDeleteHashesResponse(rsp)
+	return ParseInternalBulkDeleteHashesResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkDeleteHashesWithResponse(ctx context.Context, body InternalBulkDeleteHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResponse, error) {
+func (c *ClientWithResponses) InternalBulkDeleteHashesWithResponse(ctx context.Context, body InternalBulkDeleteHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDeleteHashesResp, error) {
 	rsp, err := c.InternalBulkDeleteHashes(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkDeleteHashesResponse(rsp)
+	return ParseInternalBulkDeleteHashesResp(rsp)
 }
 
-// InternalBulkDocumentsWithBodyWithResponse request with arbitrary body returning *InternalBulkDocumentsResponse
-func (c *ClientWithResponses) InternalBulkDocumentsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResponse, error) {
+// InternalBulkDocumentsWithBodyWithResponse request with arbitrary body returning *InternalBulkDocumentsResp
+func (c *ClientWithResponses) InternalBulkDocumentsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResp, error) {
 	rsp, err := c.InternalBulkDocumentsWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkDocumentsResponse(rsp)
+	return ParseInternalBulkDocumentsResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkDocumentsWithResponse(ctx context.Context, body InternalBulkDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResponse, error) {
+func (c *ClientWithResponses) InternalBulkDocumentsWithResponse(ctx context.Context, body InternalBulkDocumentsJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkDocumentsResp, error) {
 	rsp, err := c.InternalBulkDocuments(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkDocumentsResponse(rsp)
+	return ParseInternalBulkDocumentsResp(rsp)
 }
 
-// InternalBulkHashesWithBodyWithResponse request with arbitrary body returning *InternalBulkHashesResponse
-func (c *ClientWithResponses) InternalBulkHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkHashesResponse, error) {
+// InternalBulkHashesWithBodyWithResponse request with arbitrary body returning *InternalBulkHashesResp
+func (c *ClientWithResponses) InternalBulkHashesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkHashesResp, error) {
 	rsp, err := c.InternalBulkHashesWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkHashesResponse(rsp)
+	return ParseInternalBulkHashesResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkHashesWithResponse(ctx context.Context, body InternalBulkHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkHashesResponse, error) {
+func (c *ClientWithResponses) InternalBulkHashesWithResponse(ctx context.Context, body InternalBulkHashesJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkHashesResp, error) {
 	rsp, err := c.InternalBulkHashes(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkHashesResponse(rsp)
+	return ParseInternalBulkHashesResp(rsp)
 }
 
-// InternalBulkOverwriteWithBodyWithResponse request with arbitrary body returning *InternalBulkOverwriteResponse
-func (c *ClientWithResponses) InternalBulkOverwriteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResponse, error) {
+// InternalBulkOverwriteWithBodyWithResponse request with arbitrary body returning *InternalBulkOverwriteResp
+func (c *ClientWithResponses) InternalBulkOverwriteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResp, error) {
 	rsp, err := c.InternalBulkOverwriteWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkOverwriteResponse(rsp)
+	return ParseInternalBulkOverwriteResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkOverwriteWithResponse(ctx context.Context, body InternalBulkOverwriteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResponse, error) {
+func (c *ClientWithResponses) InternalBulkOverwriteWithResponse(ctx context.Context, body InternalBulkOverwriteJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkOverwriteResp, error) {
 	rsp, err := c.InternalBulkOverwrite(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkOverwriteResponse(rsp)
+	return ParseInternalBulkOverwriteResp(rsp)
 }
 
-// InternalBulkMissingSHA256WithBodyWithResponse request with arbitrary body returning *InternalBulkMissingSHA256Response
-func (c *ClientWithResponses) InternalBulkMissingSHA256WithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Response, error) {
+// InternalBulkMissingSHA256WithBodyWithResponse request with arbitrary body returning *InternalBulkMissingSHA256Resp
+func (c *ClientWithResponses) InternalBulkMissingSHA256WithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Resp, error) {
 	rsp, err := c.InternalBulkMissingSHA256WithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkMissingSHA256Response(rsp)
+	return ParseInternalBulkMissingSHA256Resp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkMissingSHA256WithResponse(ctx context.Context, body InternalBulkMissingSHA256JSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Response, error) {
+func (c *ClientWithResponses) InternalBulkMissingSHA256WithResponse(ctx context.Context, body InternalBulkMissingSHA256JSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkMissingSHA256Resp, error) {
 	rsp, err := c.InternalBulkMissingSHA256(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkMissingSHA256Response(rsp)
+	return ParseInternalBulkMissingSHA256Resp(rsp)
 }
 
-// InternalBulkSHA256ValidityWithBodyWithResponse request with arbitrary body returning *InternalBulkSHA256ValidityResponse
-func (c *ClientWithResponses) InternalBulkSHA256ValidityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResponse, error) {
+// InternalBulkSHA256ValidityWithBodyWithResponse request with arbitrary body returning *InternalBulkSHA256ValidityResp
+func (c *ClientWithResponses) InternalBulkSHA256ValidityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResp, error) {
 	rsp, err := c.InternalBulkSHA256ValidityWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkSHA256ValidityResponse(rsp)
+	return ParseInternalBulkSHA256ValidityResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalBulkSHA256ValidityWithResponse(ctx context.Context, body InternalBulkSHA256ValidityJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResponse, error) {
+func (c *ClientWithResponses) InternalBulkSHA256ValidityWithResponse(ctx context.Context, body InternalBulkSHA256ValidityJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalBulkSHA256ValidityResp, error) {
 	rsp, err := c.InternalBulkSHA256Validity(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalBulkSHA256ValidityResponse(rsp)
+	return ParseInternalBulkSHA256ValidityResp(rsp)
 }
 
-// InternalDeleteWithResponse request returning *InternalDeleteResponse
-func (c *ClientWithResponses) InternalDeleteWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalDeleteResponse, error) {
+// InternalDeleteWithResponse request returning *InternalDeleteResp
+func (c *ClientWithResponses) InternalDeleteWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalDeleteResp, error) {
 	rsp, err := c.InternalDelete(ctx, id, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalDeleteResponse(rsp)
+	return ParseInternalDeleteResp(rsp)
 }
 
-// InternalGetWithResponse request returning *InternalGetResponse
-func (c *ClientWithResponses) InternalGetWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalGetResponse, error) {
+// InternalGetWithResponse request returning *InternalGetResp
+func (c *ClientWithResponses) InternalGetWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*InternalGetResp, error) {
 	rsp, err := c.InternalGet(ctx, id, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalGetResponse(rsp)
+	return ParseInternalGetResp(rsp)
 }
 
-// InternalUpdateWithBodyWithResponse request with arbitrary body returning *InternalUpdateResponse
-func (c *ClientWithResponses) InternalUpdateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUpdateResponse, error) {
+// InternalUpdateWithBodyWithResponse request with arbitrary body returning *InternalUpdateResp
+func (c *ClientWithResponses) InternalUpdateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalUpdateResp, error) {
 	rsp, err := c.InternalUpdateWithBody(ctx, id, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUpdateResponse(rsp)
+	return ParseInternalUpdateResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalUpdateWithResponse(ctx context.Context, id string, body InternalUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUpdateResponse, error) {
+func (c *ClientWithResponses) InternalUpdateWithResponse(ctx context.Context, id string, body InternalUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalUpdateResp, error) {
 	rsp, err := c.InternalUpdate(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalUpdateResponse(rsp)
+	return ParseInternalUpdateResp(rsp)
 }
 
-// InternalRemoveControlledAccessWithBodyWithResponse request with arbitrary body returning *InternalRemoveControlledAccessResponse
-func (c *ClientWithResponses) InternalRemoveControlledAccessWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResponse, error) {
+// InternalRemoveControlledAccessWithBodyWithResponse request with arbitrary body returning *InternalRemoveControlledAccessResp
+func (c *ClientWithResponses) InternalRemoveControlledAccessWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResp, error) {
 	rsp, err := c.InternalRemoveControlledAccessWithBody(ctx, id, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalRemoveControlledAccessResponse(rsp)
+	return ParseInternalRemoveControlledAccessResp(rsp)
 }
 
-func (c *ClientWithResponses) InternalRemoveControlledAccessWithResponse(ctx context.Context, id string, body InternalRemoveControlledAccessJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResponse, error) {
+func (c *ClientWithResponses) InternalRemoveControlledAccessWithResponse(ctx context.Context, id string, body InternalRemoveControlledAccessJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalRemoveControlledAccessResp, error) {
 	rsp, err := c.InternalRemoveControlledAccess(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseInternalRemoveControlledAccessResponse(rsp)
+	return ParseInternalRemoveControlledAccessResp(rsp)
 }
 
-// ParseInternalDownloadResponse parses an HTTP response from a InternalDownloadWithResponse call
-func ParseInternalDownloadResponse(rsp *http.Response) (*InternalDownloadResponse, error) {
+// ParseInternalDownloadResp parses an HTTP response from a InternalDownloadWithResponse call
+func ParseInternalDownloadResp(rsp *http.Response) (*InternalDownloadResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalDownloadResponse{
+	response := &InternalDownloadResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalDownloadResponse, error) {
+	decoded, decodeErr := func() (*InternalDownloadResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalSignedURL
@@ -3719,20 +4948,20 @@ func ParseInternalDownloadResponse(rsp *http.Response) (*InternalDownloadRespons
 	return decoded, decodeErr
 }
 
-// ParseInternalDownloadPartResponse parses an HTTP response from a InternalDownloadPartWithResponse call
-func ParseInternalDownloadPartResponse(rsp *http.Response) (*InternalDownloadPartResponse, error) {
+// ParseInternalDownloadPartResp parses an HTTP response from a InternalDownloadPartWithResponse call
+func ParseInternalDownloadPartResp(rsp *http.Response) (*InternalDownloadPartResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalDownloadPartResponse{
+	response := &InternalDownloadPartResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalDownloadPartResponse, error) {
+	decoded, decodeErr := func() (*InternalDownloadPartResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalSignedURL
@@ -3787,23 +5016,314 @@ func ParseInternalDownloadPartResponse(rsp *http.Response) (*InternalDownloadPar
 	return decoded, decodeErr
 }
 
-// ParseInternalInspectProjectBucketInventoryResponse parses an HTTP response from a InternalInspectProjectBucketInventoryWithResponse call
-func ParseInternalInspectProjectBucketInventoryResponse(rsp *http.Response) (*InternalInspectProjectBucketInventoryResponse, error) {
+// ParseInternalInspectObjectResp parses an HTTP response from a InternalInspectObjectWithResponse call
+func ParseInternalInspectObjectResp(rsp *http.Response) (*InternalInspectObjectResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalInspectProjectBucketInventoryResponse{
+	response := &InternalInspectObjectResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalInspectProjectBucketInventoryResponse, error) {
+	decoded, decodeErr := func() (*InternalInspectObjectResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-			var dest InternalProjectBucketInventoryResponse
+			var dest InternalInspectObjectResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON404 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalInspectObjectBulkResp parses an HTTP response from a InternalInspectObjectBulkWithResponse call
+func ParseInternalInspectObjectBulkResp(rsp *http.Response) (*InternalInspectObjectBulkResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalInspectObjectBulkResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalInspectObjectBulkResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalInspectObjectBulkResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalInspectObjectBulkListResp parses an HTTP response from a InternalInspectObjectBulkListWithResponse call
+func ParseInternalInspectObjectBulkListResp(rsp *http.Response) (*InternalInspectObjectBulkListResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalInspectObjectBulkListResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalInspectObjectBulkListResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalInspectObjectBulkResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalInspectProjectBucketResp parses an HTTP response from a InternalInspectProjectBucketWithResponse call
+func ParseInternalInspectProjectBucketResp(rsp *http.Response) (*InternalInspectProjectBucketResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalInspectProjectBucketResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalInspectProjectBucketResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalInspectProjectBucketResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON404 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalDeleteProjectBucketObjectsResp parses an HTTP response from a InternalDeleteProjectBucketObjectsWithResponse call
+func ParseInternalDeleteProjectBucketObjectsResp(rsp *http.Response) (*InternalDeleteProjectBucketObjectsResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalDeleteProjectBucketObjectsResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalDeleteProjectBucketObjectsResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalDeleteProjectBucketObjectsResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalInspectProjectBucketInventoryResp parses an HTTP response from a InternalInspectProjectBucketInventoryWithResponse call
+func ParseInternalInspectProjectBucketInventoryResp(rsp *http.Response) (*InternalInspectProjectBucketInventoryResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalInspectProjectBucketInventoryResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalInspectProjectBucketInventoryResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalInspectProjectBucketResponse
 			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 				return nil, err
 			}
@@ -3862,23 +5382,77 @@ func ParseInternalInspectProjectBucketInventoryResponse(rsp *http.Response) (*In
 	return decoded, decodeErr
 }
 
-// ParseInternalInspectProjectScopesResponse parses an HTTP response from a InternalInspectProjectScopesWithResponse call
-func ParseInternalInspectProjectScopesResponse(rsp *http.Response) (*InternalInspectProjectScopesResponse, error) {
+// ParseInternalInspectProjectRecordsResp parses an HTTP response from a InternalInspectProjectRecordsWithResponse call
+func ParseInternalInspectProjectRecordsResp(rsp *http.Response) (*InternalInspectProjectRecordsResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalInspectProjectScopesResponse{
+	response := &InternalInspectProjectRecordsResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalInspectProjectScopesResponse, error) {
+	decoded, decodeErr := func() (*InternalInspectProjectRecordsResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-			var dest InternalProjectScopesResponse
+			var dest InternalInspectProjectRecordsResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalInspectProjectScopesResp parses an HTTP response from a InternalInspectProjectScopesWithResponse call
+func ParseInternalInspectProjectScopesResp(rsp *http.Response) (*InternalInspectProjectScopesResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalInspectProjectScopesResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalInspectProjectScopesResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalInspectProjectScopesResponse
 			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 				return nil, err
 			}
@@ -3923,23 +5497,23 @@ func ParseInternalInspectProjectScopesResponse(rsp *http.Response) (*InternalIns
 	return decoded, decodeErr
 }
 
-// ParseInternalInspectProjectScopesPostResponse parses an HTTP response from a InternalInspectProjectScopesPostWithResponse call
-func ParseInternalInspectProjectScopesPostResponse(rsp *http.Response) (*InternalInspectProjectScopesPostResponse, error) {
+// ParseInternalInspectProjectScopesPostResp parses an HTTP response from a InternalInspectProjectScopesPostWithResponse call
+func ParseInternalInspectProjectScopesPostResp(rsp *http.Response) (*InternalInspectProjectScopesPostResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalInspectProjectScopesPostResponse{
+	response := &InternalInspectProjectScopesPostResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalInspectProjectScopesPostResponse, error) {
+	decoded, decodeErr := func() (*InternalInspectProjectScopesPostResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-			var dest InternalProjectScopesResponse
+			var dest InternalInspectProjectScopesResponse
 			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 				return nil, err
 			}
@@ -3984,20 +5558,20 @@ func ParseInternalInspectProjectScopesPostResponse(rsp *http.Response) (*Interna
 	return decoded, decodeErr
 }
 
-// ParseInternalMultipartCompleteResponse parses an HTTP response from a InternalMultipartCompleteWithResponse call
-func ParseInternalMultipartCompleteResponse(rsp *http.Response) (*InternalMultipartCompleteResponse, error) {
+// ParseInternalMultipartCompleteResp parses an HTTP response from a InternalMultipartCompleteWithResponse call
+func ParseInternalMultipartCompleteResp(rsp *http.Response) (*InternalMultipartCompleteResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalMultipartCompleteResponse{
+	response := &InternalMultipartCompleteResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalMultipartCompleteResponse, error) {
+	decoded, decodeErr := func() (*InternalMultipartCompleteResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 			var dest APIError
@@ -4038,20 +5612,20 @@ func ParseInternalMultipartCompleteResponse(rsp *http.Response) (*InternalMultip
 	return decoded, decodeErr
 }
 
-// ParseInternalMultipartInitResponse parses an HTTP response from a InternalMultipartInitWithResponse call
-func ParseInternalMultipartInitResponse(rsp *http.Response) (*InternalMultipartInitResponse, error) {
+// ParseInternalMultipartInitResp parses an HTTP response from a InternalMultipartInitWithResponse call
+func ParseInternalMultipartInitResp(rsp *http.Response) (*InternalMultipartInitResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalMultipartInitResponse{
+	response := &InternalMultipartInitResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalMultipartInitResponse, error) {
+	decoded, decodeErr := func() (*InternalMultipartInitResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalMultipartInitOutput
@@ -4099,20 +5673,20 @@ func ParseInternalMultipartInitResponse(rsp *http.Response) (*InternalMultipartI
 	return decoded, decodeErr
 }
 
-// ParseInternalMultipartUploadResponse parses an HTTP response from a InternalMultipartUploadWithResponse call
-func ParseInternalMultipartUploadResponse(rsp *http.Response) (*InternalMultipartUploadResponse, error) {
+// ParseInternalMultipartUploadResp parses an HTTP response from a InternalMultipartUploadWithResponse call
+func ParseInternalMultipartUploadResp(rsp *http.Response) (*InternalMultipartUploadResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalMultipartUploadResponse{
+	response := &InternalMultipartUploadResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalMultipartUploadResponse, error) {
+	decoded, decodeErr := func() (*InternalMultipartUploadResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalMultipartUploadOutput
@@ -4160,20 +5734,210 @@ func ParseInternalMultipartUploadResponse(rsp *http.Response) (*InternalMultipar
 	return decoded, decodeErr
 }
 
-// ParseInternalUploadBlankResponse parses an HTTP response from a InternalUploadBlankWithResponse call
-func ParseInternalUploadBlankResponse(rsp *http.Response) (*InternalUploadBlankResponse, error) {
+// ParseInternalDeleteProjectResp parses an HTTP response from a InternalDeleteProjectWithResponse call
+func ParseInternalDeleteProjectResp(rsp *http.Response) (*InternalDeleteProjectResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalUploadBlankResponse{
+	response := &InternalDeleteProjectResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalUploadBlankResponse, error) {
+	decoded, decodeErr := func() (*InternalDeleteProjectResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest ProjectCleanupResponse
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON404 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalScopeRepairApplyResp parses an HTTP response from a InternalScopeRepairApplyWithResponse call
+func ParseInternalScopeRepairApplyResp(rsp *http.Response) (*InternalScopeRepairApplyResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalScopeRepairApplyResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalScopeRepairApplyResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest ScopeRepairApplyResult
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalScopeRepairAuditResp parses an HTTP response from a InternalScopeRepairAuditWithResponse call
+func ParseInternalScopeRepairAuditResp(rsp *http.Response) (*InternalScopeRepairAuditResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalScopeRepairAuditResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalScopeRepairAuditResp, error) {
+		switch {
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest ScopeRepairReport
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalUploadBlankResp parses an HTTP response from a InternalUploadBlankWithResponse call
+func ParseInternalUploadBlankResp(rsp *http.Response) (*InternalUploadBlankResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalUploadBlankResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalUploadBlankResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 			var dest InternalUploadBlankOutput
@@ -4221,20 +5985,20 @@ func ParseInternalUploadBlankResponse(rsp *http.Response) (*InternalUploadBlankR
 	return decoded, decodeErr
 }
 
-// ParseInternalUploadBulkResponse parses an HTTP response from a InternalUploadBulkWithResponse call
-func ParseInternalUploadBulkResponse(rsp *http.Response) (*InternalUploadBulkResponse, error) {
+// ParseInternalUploadBulkResp parses an HTTP response from a InternalUploadBulkWithResponse call
+func ParseInternalUploadBulkResp(rsp *http.Response) (*InternalUploadBulkResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalUploadBulkResponse{
+	response := &InternalUploadBulkResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalUploadBulkResponse, error) {
+	decoded, decodeErr := func() (*InternalUploadBulkResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalUploadBulkOutput
@@ -4296,20 +6060,20 @@ func ParseInternalUploadBulkResponse(rsp *http.Response) (*InternalUploadBulkRes
 	return decoded, decodeErr
 }
 
-// ParseInternalUploadURLResponse parses an HTTP response from a InternalUploadURLWithResponse call
-func ParseInternalUploadURLResponse(rsp *http.Response) (*InternalUploadURLResponse, error) {
+// ParseInternalUploadURLResp parses an HTTP response from a InternalUploadURLWithResponse call
+func ParseInternalUploadURLResp(rsp *http.Response) (*InternalUploadURLResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalUploadURLResponse{
+	response := &InternalUploadURLResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalUploadURLResponse, error) {
+	decoded, decodeErr := func() (*InternalUploadURLResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalSignedURL
@@ -4364,20 +6128,20 @@ func ParseInternalUploadURLResponse(rsp *http.Response) (*InternalUploadURLRespo
 	return decoded, decodeErr
 }
 
-// ParseInternalDeleteByQueryResponse parses an HTTP response from a InternalDeleteByQueryWithResponse call
-func ParseInternalDeleteByQueryResponse(rsp *http.Response) (*InternalDeleteByQueryResponse, error) {
+// ParseInternalDeleteByQueryResp parses an HTTP response from a InternalDeleteByQueryWithResponse call
+func ParseInternalDeleteByQueryResp(rsp *http.Response) (*InternalDeleteByQueryResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalDeleteByQueryResponse{
+	response := &InternalDeleteByQueryResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalDeleteByQueryResponse, error) {
+	decoded, decodeErr := func() (*InternalDeleteByQueryResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest DeleteByQueryResponse
@@ -4425,20 +6189,20 @@ func ParseInternalDeleteByQueryResponse(rsp *http.Response) (*InternalDeleteByQu
 	return decoded, decodeErr
 }
 
-// ParseInternalListResponse parses an HTTP response from a InternalListWithResponse call
-func ParseInternalListResponse(rsp *http.Response) (*InternalListResponse, error) {
+// ParseInternalListResp parses an HTTP response from a InternalListWithResponse call
+func ParseInternalListResp(rsp *http.Response) (*InternalListResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalListResponse{
+	response := &InternalListResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalListResponse, error) {
+	decoded, decodeErr := func() (*InternalListResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest ListRecordsResponse
@@ -4486,20 +6250,20 @@ func ParseInternalListResponse(rsp *http.Response) (*InternalListResponse, error
 	return decoded, decodeErr
 }
 
-// ParseInternalCreateResponse parses an HTTP response from a InternalCreateWithResponse call
-func ParseInternalCreateResponse(rsp *http.Response) (*InternalCreateResponse, error) {
+// ParseInternalCreateResp parses an HTTP response from a InternalCreateWithResponse call
+func ParseInternalCreateResp(rsp *http.Response) (*InternalCreateResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalCreateResponse{
+	response := &InternalCreateResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalCreateResponse, error) {
+	decoded, decodeErr := func() (*InternalCreateResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 			var dest InternalRecordResponse
@@ -4547,20 +6311,20 @@ func ParseInternalCreateResponse(rsp *http.Response) (*InternalCreateResponse, e
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkCreateResponse parses an HTTP response from a InternalBulkCreateWithResponse call
-func ParseInternalBulkCreateResponse(rsp *http.Response) (*InternalBulkCreateResponse, error) {
+// ParseInternalBulkCreateResp parses an HTTP response from a InternalBulkCreateWithResponse call
+func ParseInternalBulkCreateResp(rsp *http.Response) (*InternalBulkCreateResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkCreateResponse{
+	response := &InternalBulkCreateResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkCreateResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkCreateResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 			var dest ListRecordsResponse
@@ -4615,20 +6379,20 @@ func ParseInternalBulkCreateResponse(rsp *http.Response) (*InternalBulkCreateRes
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkDeleteHashesResponse parses an HTTP response from a InternalBulkDeleteHashesWithResponse call
-func ParseInternalBulkDeleteHashesResponse(rsp *http.Response) (*InternalBulkDeleteHashesResponse, error) {
+// ParseInternalBulkDeleteHashesResp parses an HTTP response from a InternalBulkDeleteHashesWithResponse call
+func ParseInternalBulkDeleteHashesResp(rsp *http.Response) (*InternalBulkDeleteHashesResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkDeleteHashesResponse{
+	response := &InternalBulkDeleteHashesResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkDeleteHashesResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkDeleteHashesResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest DeleteByQueryResponse
@@ -4683,20 +6447,20 @@ func ParseInternalBulkDeleteHashesResponse(rsp *http.Response) (*InternalBulkDel
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkDocumentsResponse parses an HTTP response from a InternalBulkDocumentsWithResponse call
-func ParseInternalBulkDocumentsResponse(rsp *http.Response) (*InternalBulkDocumentsResponse, error) {
+// ParseInternalBulkDocumentsResp parses an HTTP response from a InternalBulkDocumentsWithResponse call
+func ParseInternalBulkDocumentsResp(rsp *http.Response) (*InternalBulkDocumentsResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkDocumentsResponse{
+	response := &InternalBulkDocumentsResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkDocumentsResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkDocumentsResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest []InternalRecordResponse
@@ -4737,20 +6501,20 @@ func ParseInternalBulkDocumentsResponse(rsp *http.Response) (*InternalBulkDocume
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkHashesResponse parses an HTTP response from a InternalBulkHashesWithResponse call
-func ParseInternalBulkHashesResponse(rsp *http.Response) (*InternalBulkHashesResponse, error) {
+// ParseInternalBulkHashesResp parses an HTTP response from a InternalBulkHashesWithResponse call
+func ParseInternalBulkHashesResp(rsp *http.Response) (*InternalBulkHashesResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkHashesResponse{
+	response := &InternalBulkHashesResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkHashesResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkHashesResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest ListRecordsResponse
@@ -4791,20 +6555,20 @@ func ParseInternalBulkHashesResponse(rsp *http.Response) (*InternalBulkHashesRes
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkOverwriteResponse parses an HTTP response from a InternalBulkOverwriteWithResponse call
-func ParseInternalBulkOverwriteResponse(rsp *http.Response) (*InternalBulkOverwriteResponse, error) {
+// ParseInternalBulkOverwriteResp parses an HTTP response from a InternalBulkOverwriteWithResponse call
+func ParseInternalBulkOverwriteResp(rsp *http.Response) (*InternalBulkOverwriteResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkOverwriteResponse{
+	response := &InternalBulkOverwriteResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkOverwriteResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkOverwriteResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest BulkOverwriteResponse
@@ -4866,20 +6630,20 @@ func ParseInternalBulkOverwriteResponse(rsp *http.Response) (*InternalBulkOverwr
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkMissingSHA256Response parses an HTTP response from a InternalBulkMissingSHA256WithResponse call
-func ParseInternalBulkMissingSHA256Response(rsp *http.Response) (*InternalBulkMissingSHA256Response, error) {
+// ParseInternalBulkMissingSHA256Resp parses an HTTP response from a InternalBulkMissingSHA256WithResponse call
+func ParseInternalBulkMissingSHA256Resp(rsp *http.Response) (*InternalBulkMissingSHA256Resp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkMissingSHA256Response{
+	response := &InternalBulkMissingSHA256Resp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkMissingSHA256Response, error) {
+	decoded, decodeErr := func() (*InternalBulkMissingSHA256Resp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest BulkMissingSHA256Response
@@ -4934,20 +6698,20 @@ func ParseInternalBulkMissingSHA256Response(rsp *http.Response) (*InternalBulkMi
 	return decoded, decodeErr
 }
 
-// ParseInternalBulkSHA256ValidityResponse parses an HTTP response from a InternalBulkSHA256ValidityWithResponse call
-func ParseInternalBulkSHA256ValidityResponse(rsp *http.Response) (*InternalBulkSHA256ValidityResponse, error) {
+// ParseInternalBulkSHA256ValidityResp parses an HTTP response from a InternalBulkSHA256ValidityWithResponse call
+func ParseInternalBulkSHA256ValidityResp(rsp *http.Response) (*InternalBulkSHA256ValidityResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalBulkSHA256ValidityResponse{
+	response := &InternalBulkSHA256ValidityResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalBulkSHA256ValidityResponse, error) {
+	decoded, decodeErr := func() (*InternalBulkSHA256ValidityResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest map[string]bool
@@ -4988,20 +6752,20 @@ func ParseInternalBulkSHA256ValidityResponse(rsp *http.Response) (*InternalBulkS
 	return decoded, decodeErr
 }
 
-// ParseInternalDeleteResponse parses an HTTP response from a InternalDeleteWithResponse call
-func ParseInternalDeleteResponse(rsp *http.Response) (*InternalDeleteResponse, error) {
+// ParseInternalDeleteResp parses an HTTP response from a InternalDeleteWithResponse call
+func ParseInternalDeleteResp(rsp *http.Response) (*InternalDeleteResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalDeleteResponse{
+	response := &InternalDeleteResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalDeleteResponse, error) {
+	decoded, decodeErr := func() (*InternalDeleteResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 			var dest APIError
@@ -5028,20 +6792,20 @@ func ParseInternalDeleteResponse(rsp *http.Response) (*InternalDeleteResponse, e
 	return decoded, decodeErr
 }
 
-// ParseInternalGetResponse parses an HTTP response from a InternalGetWithResponse call
-func ParseInternalGetResponse(rsp *http.Response) (*InternalGetResponse, error) {
+// ParseInternalGetResp parses an HTTP response from a InternalGetWithResponse call
+func ParseInternalGetResp(rsp *http.Response) (*InternalGetResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalGetResponse{
+	response := &InternalGetResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalGetResponse, error) {
+	decoded, decodeErr := func() (*InternalGetResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalRecordResponse
@@ -5075,20 +6839,20 @@ func ParseInternalGetResponse(rsp *http.Response) (*InternalGetResponse, error) 
 	return decoded, decodeErr
 }
 
-// ParseInternalUpdateResponse parses an HTTP response from a InternalUpdateWithResponse call
-func ParseInternalUpdateResponse(rsp *http.Response) (*InternalUpdateResponse, error) {
+// ParseInternalUpdateResp parses an HTTP response from a InternalUpdateWithResponse call
+func ParseInternalUpdateResp(rsp *http.Response) (*InternalUpdateResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalUpdateResponse{
+	response := &InternalUpdateResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalUpdateResponse, error) {
+	decoded, decodeErr := func() (*InternalUpdateResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalRecordResponse
@@ -5129,20 +6893,20 @@ func ParseInternalUpdateResponse(rsp *http.Response) (*InternalUpdateResponse, e
 	return decoded, decodeErr
 }
 
-// ParseInternalRemoveControlledAccessResponse parses an HTTP response from a InternalRemoveControlledAccessWithResponse call
-func ParseInternalRemoveControlledAccessResponse(rsp *http.Response) (*InternalRemoveControlledAccessResponse, error) {
+// ParseInternalRemoveControlledAccessResp parses an HTTP response from a InternalRemoveControlledAccessWithResponse call
+func ParseInternalRemoveControlledAccessResp(rsp *http.Response) (*InternalRemoveControlledAccessResp, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &InternalRemoveControlledAccessResponse{
+	response := &InternalRemoveControlledAccessResp{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
-	decoded, decodeErr := func() (*InternalRemoveControlledAccessResponse, error) {
+	decoded, decodeErr := func() (*InternalRemoveControlledAccessResp, error) {
 		switch {
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 			var dest InternalRecordResponse
@@ -5192,8 +6956,26 @@ type ServerInterface interface {
 	// (GET /data/download/{file_id}/part)
 	InternalDownloadPart(c fiber.Ctx, fileId string, params InternalDownloadPartParams) error
 
+	// (POST /data/inspect)
+	InternalInspectObject(c fiber.Ctx) error
+
+	// (POST /data/inspect/bulk)
+	InternalInspectObjectBulk(c fiber.Ctx) error
+
+	// (POST /data/inspect/bulk-list)
+	InternalInspectObjectBulkList(c fiber.Ctx) error
+
+	// (POST /data/inspect/project-bucket)
+	InternalInspectProjectBucket(c fiber.Ctx) error
+
+	// (POST /data/inspect/project-bucket/delete)
+	InternalDeleteProjectBucketObjects(c fiber.Ctx) error
+
 	// (POST /data/inspect/project-bucket/inventory)
 	InternalInspectProjectBucketInventory(c fiber.Ctx) error
+
+	// (POST /data/inspect/project-records)
+	InternalInspectProjectRecords(c fiber.Ctx) error
 
 	// (GET /data/inspect/project-scopes)
 	InternalInspectProjectScopes(c fiber.Ctx, params InternalInspectProjectScopesParams) error
@@ -5209,6 +6991,15 @@ type ServerInterface interface {
 
 	// (POST /data/multipart/upload)
 	InternalMultipartUpload(c fiber.Ctx) error
+
+	// (DELETE /data/projects/{organization}/{project_id})
+	InternalDeleteProject(c fiber.Ctx, organization string, projectId string) error
+
+	// (POST /data/repair/project-scope/apply)
+	InternalScopeRepairApply(c fiber.Ctx) error
+
+	// (POST /data/repair/project-scope/audit)
+	InternalScopeRepairAudit(c fiber.Ctx) error
 
 	// (POST /data/upload)
 	InternalUploadBlank(c fiber.Ctx) error
@@ -5264,7 +7055,8 @@ type ServerInterface interface {
 
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -5282,26 +7074,29 @@ func (siw *ServerInterfaceWrapper) InternalDownload(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
 
-	// ------------- Optional query parameter "redirect" -------------
-	if paramValue := c.Query("redirect"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalDownload"] {
+		// ------------- Optional query parameter "redirect" -------------
+		if paramValue := c.Query("redirect"); paramValue != "" {
 
-		var value bool
-		err = runtime.BindStyledParameterWithOptions("form", "redirect", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter redirect: %w", err).Error())
+			var value bool
+			err = runtime.BindStyledParameterWithOptions("form", "redirect", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter redirect: %w", err).Error())
+			}
+			params.Redirect = &value
+
 		}
-		params.Redirect = &value
+		// ------------- Optional query parameter "expires_in" -------------
+		if paramValue := c.Query("expires_in"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "expires_in" -------------
-	if paramValue := c.Query("expires_in"); paramValue != "" {
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
+			}
+			params.ExpiresIn = &value
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
 		}
-		params.ExpiresIn = &value
 
 	}
 
@@ -5321,34 +7116,67 @@ func (siw *ServerInterfaceWrapper) InternalDownloadPart(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
 
-	// ------------- Required query parameter "start" -------------
-	if paramValue := c.Query("start"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalDownloadPart"] {
+		// ------------- Required query parameter "start" -------------
+		if paramValue := c.Query("start"); paramValue != "" {
 
-		var value int64
-		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
+			var value int64
+			err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
+			}
+			params.Start = value
+
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument start is required, but not found").Error())
 		}
-		params.Start = value
+		// ------------- Required query parameter "end" -------------
+		if paramValue := c.Query("end"); paramValue != "" {
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument start is required, but not found").Error())
-	}
-	// ------------- Required query parameter "end" -------------
-	if paramValue := c.Query("end"); paramValue != "" {
+			var value int64
+			err = runtime.BindStyledParameterWithOptions("form", "end", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter end: %w", err).Error())
+			}
+			params.End = value
 
-		var value int64
-		err = runtime.BindStyledParameterWithOptions("form", "end", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter end: %w", err).Error())
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument end is required, but not found").Error())
 		}
-		params.End = value
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument end is required, but not found").Error())
 	}
 
 	return siw.Handler.InternalDownloadPart(c, fileId, params)
+}
+
+// InternalInspectObject operation middleware
+func (siw *ServerInterfaceWrapper) InternalInspectObject(c fiber.Ctx) error {
+
+	return siw.Handler.InternalInspectObject(c)
+}
+
+// InternalInspectObjectBulk operation middleware
+func (siw *ServerInterfaceWrapper) InternalInspectObjectBulk(c fiber.Ctx) error {
+
+	return siw.Handler.InternalInspectObjectBulk(c)
+}
+
+// InternalInspectObjectBulkList operation middleware
+func (siw *ServerInterfaceWrapper) InternalInspectObjectBulkList(c fiber.Ctx) error {
+
+	return siw.Handler.InternalInspectObjectBulkList(c)
+}
+
+// InternalInspectProjectBucket operation middleware
+func (siw *ServerInterfaceWrapper) InternalInspectProjectBucket(c fiber.Ctx) error {
+
+	return siw.Handler.InternalInspectProjectBucket(c)
+}
+
+// InternalDeleteProjectBucketObjects operation middleware
+func (siw *ServerInterfaceWrapper) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
+
+	return siw.Handler.InternalDeleteProjectBucketObjects(c)
 }
 
 // InternalInspectProjectBucketInventory operation middleware
@@ -5357,36 +7185,45 @@ func (siw *ServerInterfaceWrapper) InternalInspectProjectBucketInventory(c fiber
 	return siw.Handler.InternalInspectProjectBucketInventory(c)
 }
 
+// InternalInspectProjectRecords operation middleware
+func (siw *ServerInterfaceWrapper) InternalInspectProjectRecords(c fiber.Ctx) error {
+
+	return siw.Handler.InternalInspectProjectRecords(c)
+}
+
 // InternalInspectProjectScopes operation middleware
 func (siw *ServerInterfaceWrapper) InternalInspectProjectScopes(c fiber.Ctx) error {
 	var err error
 	var params InternalInspectProjectScopesParams
 
-	// ------------- Required query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalInspectProjectScopes"] {
+		// ------------- Required query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = value
+
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument organization is required, but not found").Error())
 		}
-		params.Organization = value
+		// ------------- Required query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument organization is required, but not found").Error())
-	}
-	// ------------- Required query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument project is required, but not found").Error())
 		}
-		params.Project = value
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument project is required, but not found").Error())
 	}
 
 	return siw.Handler.InternalInspectProjectScopes(c, params)
@@ -5416,6 +7253,41 @@ func (siw *ServerInterfaceWrapper) InternalMultipartUpload(c fiber.Ctx) error {
 	return siw.Handler.InternalMultipartUpload(c)
 }
 
+// InternalDeleteProject operation middleware
+func (siw *ServerInterfaceWrapper) InternalDeleteProject(c fiber.Ctx) error {
+	var err error
+
+	// ------------- Path parameter "organization" -------------
+	var organization string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "organization", c.Params("organization"), &organization, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+	}
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", c.Params("project_id"), &projectId, runtime.BindStyledParameterOptions{Explode: false, Required: true, ValueIsUnescaped: true})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
+	}
+
+	return siw.Handler.InternalDeleteProject(c, organization, projectId)
+}
+
+// InternalScopeRepairApply operation middleware
+func (siw *ServerInterfaceWrapper) InternalScopeRepairApply(c fiber.Ctx) error {
+
+	return siw.Handler.InternalScopeRepairApply(c)
+}
+
+// InternalScopeRepairAudit operation middleware
+func (siw *ServerInterfaceWrapper) InternalScopeRepairAudit(c fiber.Ctx) error {
+
+	return siw.Handler.InternalScopeRepairAudit(c)
+}
+
 // InternalUploadBlank operation middleware
 func (siw *ServerInterfaceWrapper) InternalUploadBlank(c fiber.Ctx) error {
 
@@ -5441,48 +7313,51 @@ func (siw *ServerInterfaceWrapper) InternalUploadURL(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter file_id: %w", err).Error())
 	}
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalUploadURL"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
+		// ------------- Optional query parameter "key" -------------
+		if paramValue := c.Query("key"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "key" -------------
-	if paramValue := c.Query("key"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "key", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter key: %w", err).Error())
+			}
+			params.Key = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "key", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter key: %w", err).Error())
 		}
-		params.Key = &value
+		// ------------- Optional query parameter "expires_in" -------------
+		if paramValue := c.Query("expires_in"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "expires_in" -------------
-	if paramValue := c.Query("expires_in"); paramValue != "" {
+			var value int32
+			err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
+			}
+			params.ExpiresIn = &value
 
-		var value int32
-		err = runtime.BindStyledParameterWithOptions("form", "expires_in", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter expires_in: %w", err).Error())
 		}
-		params.ExpiresIn = &value
 
 	}
 
@@ -5494,59 +7369,62 @@ func (siw *ServerInterfaceWrapper) InternalDeleteByQuery(c fiber.Ctx) error {
 	var err error
 	var params InternalDeleteByQueryParams
 
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalDeleteByQuery"] {
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
+
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "program" -------------
+		if paramValue := c.Query("program"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "program" -------------
-	if paramValue := c.Query("program"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
+			}
+			params.Program = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
 		}
-		params.Program = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
+		// ------------- Optional query parameter "hash" -------------
+		if paramValue := c.Query("hash"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "hash" -------------
-	if paramValue := c.Query("hash"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
+			}
+			params.Hash = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
 		}
-		params.Hash = &value
+		// ------------- Optional query parameter "hash_type" -------------
+		if paramValue := c.Query("hash_type"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "hash_type" -------------
-	if paramValue := c.Query("hash_type"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "hash_type", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash_type: %w", err).Error())
+			}
+			params.HashType = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash_type", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash_type: %w", err).Error())
 		}
-		params.HashType = &value
 
 	}
 
@@ -5558,103 +7436,106 @@ func (siw *ServerInterfaceWrapper) InternalList(c fiber.Ctx) error {
 	var err error
 	var params InternalListParams
 
-	// ------------- Optional query parameter "hash" -------------
-	if paramValue := c.Query("hash"); paramValue != "" {
+	if !siw.RawQueryOperations["InternalList"] {
+		// ------------- Optional query parameter "hash" -------------
+		if paramValue := c.Query("hash"); paramValue != "" {
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "hash", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter hash: %w", err).Error())
+			}
+			params.Hash = &value
+
 		}
-		params.Hash = &value
+		// ------------- Optional query parameter "url" -------------
+		if paramValue := c.Query("url"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "url" -------------
-	if paramValue := c.Query("url"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "url", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter url: %w", err).Error())
+			}
+			params.Url = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "url", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter url: %w", err).Error())
 		}
-		params.Url = &value
+		// ------------- Optional query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
 		}
-		params.Organization = &value
+		// ------------- Optional query parameter "program" -------------
+		if paramValue := c.Query("program"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "program" -------------
-	if paramValue := c.Query("program"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
+			}
+			params.Program = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "program", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter program: %w", err).Error())
 		}
-		params.Program = &value
+		// ------------- Optional query parameter "project" -------------
+		if paramValue := c.Query("project"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "project" -------------
-	if paramValue := c.Query("project"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
+			}
+			params.Project = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project: %w", err).Error())
 		}
-		params.Project = &value
+		// ------------- Optional query parameter "path" -------------
+		if paramValue := c.Query("path"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "path" -------------
-	if paramValue := c.Query("path"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
+			}
+			params.Path = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
 		}
-		params.Path = &value
+		// ------------- Optional query parameter "limit" -------------
+		if paramValue := c.Query("limit"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "limit" -------------
-	if paramValue := c.Query("limit"); paramValue != "" {
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter limit: %w", err).Error())
+			}
+			params.Limit = &value
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "limit", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter limit: %w", err).Error())
 		}
-		params.Limit = &value
+		// ------------- Optional query parameter "start" -------------
+		if paramValue := c.Query("start"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "start" -------------
-	if paramValue := c.Query("start"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
+			}
+			params.Start = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "start", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter start: %w", err).Error())
 		}
-		params.Start = &value
+		// ------------- Optional query parameter "page" -------------
+		if paramValue := c.Query("page"); paramValue != "" {
 
-	}
-	// ------------- Optional query parameter "page" -------------
-	if paramValue := c.Query("page"); paramValue != "" {
+			var value int
+			err = runtime.BindStyledParameterWithOptions("form", "page", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter page: %w", err).Error())
+			}
+			params.Page = &value
 
-		var value int
-		err = runtime.BindStyledParameterWithOptions("form", "page", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter page: %w", err).Error())
 		}
-		params.Page = &value
 
 	}
 
@@ -5771,8 +7652,9 @@ func (siw *ServerInterfaceWrapper) InternalRemoveControlledAccess(c fiber.Ctx) e
 
 // FiberServerOptions provides options for the Fiber server.
 type FiberServerOptions struct {
-	BaseURL     string
-	Middlewares []MiddlewareFunc
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	RawQueryOperations map[string]bool
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -5783,7 +7665,8 @@ func RegisterHandlers(router fiber.Router, si ServerInterface) {
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, options FiberServerOptions) {
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		RawQueryOperations: options.RawQueryOperations,
 	}
 
 	for _, m := range options.Middlewares {
@@ -5794,7 +7677,19 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Get(options.BaseURL+"/data/download/:file_id/part", wrapper.InternalDownloadPart)
 
+	router.Post(options.BaseURL+"/data/inspect", wrapper.InternalInspectObject)
+
+	router.Post(options.BaseURL+"/data/inspect/bulk", wrapper.InternalInspectObjectBulk)
+
+	router.Post(options.BaseURL+"/data/inspect/bulk-list", wrapper.InternalInspectObjectBulkList)
+
+	router.Post(options.BaseURL+"/data/inspect/project-bucket", wrapper.InternalInspectProjectBucket)
+
+	router.Post(options.BaseURL+"/data/inspect/project-bucket/delete", wrapper.InternalDeleteProjectBucketObjects)
+
 	router.Post(options.BaseURL+"/data/inspect/project-bucket/inventory", wrapper.InternalInspectProjectBucketInventory)
+
+	router.Post(options.BaseURL+"/data/inspect/project-records", wrapper.InternalInspectProjectRecords)
 
 	router.Get(options.BaseURL+"/data/inspect/project-scopes", wrapper.InternalInspectProjectScopes)
 
@@ -5805,6 +7700,12 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/data/multipart/init", wrapper.InternalMultipartInit)
 
 	router.Post(options.BaseURL+"/data/multipart/upload", wrapper.InternalMultipartUpload)
+
+	router.Delete(options.BaseURL+"/data/projects/:organization/:project_id", wrapper.InternalDeleteProject)
+
+	router.Post(options.BaseURL+"/data/repair/project-scope/apply", wrapper.InternalScopeRepairApply)
+
+	router.Post(options.BaseURL+"/data/repair/project-scope/audit", wrapper.InternalScopeRepairAudit)
 
 	router.Post(options.BaseURL+"/data/upload", wrapper.InternalUploadBlank)
 
@@ -5976,6 +7877,253 @@ func (response InternalDownloadPart500JSONResponse) VisitInternalDownloadPartRes
 	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
+type InternalInspectObjectRequestObject struct {
+	Body *InternalInspectObjectJSONRequestBody
+}
+
+type InternalInspectObjectResponseObject interface {
+	VisitInternalInspectObjectResponse(ctx fiber.Ctx) error
+}
+
+type InternalInspectObject200JSONResponse InternalInspectObjectResponse
+
+func (response InternalInspectObject200JSONResponse) VisitInternalInspectObjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObject400JSONResponse APIError
+
+func (response InternalInspectObject400JSONResponse) VisitInternalInspectObjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObject401JSONResponse APIError
+
+func (response InternalInspectObject401JSONResponse) VisitInternalInspectObjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObject404JSONResponse APIError
+
+func (response InternalInspectObject404JSONResponse) VisitInternalInspectObjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(404)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObject500JSONResponse APIError
+
+func (response InternalInspectObject500JSONResponse) VisitInternalInspectObjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulkRequestObject struct {
+	Body *InternalInspectObjectBulkJSONRequestBody
+}
+
+type InternalInspectObjectBulkResponseObject interface {
+	VisitInternalInspectObjectBulkResponse(ctx fiber.Ctx) error
+}
+
+type InternalInspectObjectBulk200JSONResponse InternalInspectObjectBulkResponse
+
+func (response InternalInspectObjectBulk200JSONResponse) VisitInternalInspectObjectBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulk400JSONResponse APIError
+
+func (response InternalInspectObjectBulk400JSONResponse) VisitInternalInspectObjectBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulk401JSONResponse APIError
+
+func (response InternalInspectObjectBulk401JSONResponse) VisitInternalInspectObjectBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulk500JSONResponse APIError
+
+func (response InternalInspectObjectBulk500JSONResponse) VisitInternalInspectObjectBulkResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulkListRequestObject struct {
+	Body *InternalInspectObjectBulkListJSONRequestBody
+}
+
+type InternalInspectObjectBulkListResponseObject interface {
+	VisitInternalInspectObjectBulkListResponse(ctx fiber.Ctx) error
+}
+
+type InternalInspectObjectBulkList200JSONResponse InternalInspectObjectBulkResponse
+
+func (response InternalInspectObjectBulkList200JSONResponse) VisitInternalInspectObjectBulkListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulkList400JSONResponse APIError
+
+func (response InternalInspectObjectBulkList400JSONResponse) VisitInternalInspectObjectBulkListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulkList401JSONResponse APIError
+
+func (response InternalInspectObjectBulkList401JSONResponse) VisitInternalInspectObjectBulkListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectObjectBulkList500JSONResponse APIError
+
+func (response InternalInspectObjectBulkList500JSONResponse) VisitInternalInspectObjectBulkListResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectBucketRequestObject struct {
+	Body *InternalInspectProjectBucketJSONRequestBody
+}
+
+type InternalInspectProjectBucketResponseObject interface {
+	VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error
+}
+
+type InternalInspectProjectBucket200JSONResponse InternalInspectProjectBucketResponse
+
+func (response InternalInspectProjectBucket200JSONResponse) VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectBucket400JSONResponse APIError
+
+func (response InternalInspectProjectBucket400JSONResponse) VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectBucket401JSONResponse APIError
+
+func (response InternalInspectProjectBucket401JSONResponse) VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectBucket404JSONResponse APIError
+
+func (response InternalInspectProjectBucket404JSONResponse) VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(404)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectBucket500JSONResponse APIError
+
+func (response InternalInspectProjectBucket500JSONResponse) VisitInternalInspectProjectBucketResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectBucketObjectsRequestObject struct {
+	Body *InternalDeleteProjectBucketObjectsJSONRequestBody
+}
+
+type InternalDeleteProjectBucketObjectsResponseObject interface {
+	VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error
+}
+
+type InternalDeleteProjectBucketObjects200JSONResponse InternalDeleteProjectBucketObjectsResponse
+
+func (response InternalDeleteProjectBucketObjects200JSONResponse) VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectBucketObjects400JSONResponse APIError
+
+func (response InternalDeleteProjectBucketObjects400JSONResponse) VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectBucketObjects401JSONResponse APIError
+
+func (response InternalDeleteProjectBucketObjects401JSONResponse) VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectBucketObjects403JSONResponse APIError
+
+func (response InternalDeleteProjectBucketObjects403JSONResponse) VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(403)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectBucketObjects500JSONResponse APIError
+
+func (response InternalDeleteProjectBucketObjects500JSONResponse) VisitInternalDeleteProjectBucketObjectsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
 type InternalInspectProjectBucketInventoryRequestObject struct {
 	Body *InternalInspectProjectBucketInventoryJSONRequestBody
 }
@@ -5984,7 +8132,7 @@ type InternalInspectProjectBucketInventoryResponseObject interface {
 	VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error
 }
 
-type InternalInspectProjectBucketInventory200JSONResponse InternalProjectBucketInventoryResponse
+type InternalInspectProjectBucketInventory200JSONResponse InternalInspectProjectBucketResponse
 
 func (response InternalInspectProjectBucketInventory200JSONResponse) VisitInternalInspectProjectBucketInventoryResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
@@ -6047,6 +8195,50 @@ func (response InternalInspectProjectBucketInventory500JSONResponse) VisitIntern
 	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
+type InternalInspectProjectRecordsRequestObject struct {
+	Body *InternalInspectProjectRecordsJSONRequestBody
+}
+
+type InternalInspectProjectRecordsResponseObject interface {
+	VisitInternalInspectProjectRecordsResponse(ctx fiber.Ctx) error
+}
+
+type InternalInspectProjectRecords200JSONResponse InternalInspectProjectRecordsResponse
+
+func (response InternalInspectProjectRecords200JSONResponse) VisitInternalInspectProjectRecordsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectRecords400JSONResponse APIError
+
+func (response InternalInspectProjectRecords400JSONResponse) VisitInternalInspectProjectRecordsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectRecords401JSONResponse APIError
+
+func (response InternalInspectProjectRecords401JSONResponse) VisitInternalInspectProjectRecordsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalInspectProjectRecords500JSONResponse APIError
+
+func (response InternalInspectProjectRecords500JSONResponse) VisitInternalInspectProjectRecordsResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
 type InternalInspectProjectScopesRequestObject struct {
 	Params InternalInspectProjectScopesParams
 }
@@ -6055,7 +8247,7 @@ type InternalInspectProjectScopesResponseObject interface {
 	VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error
 }
 
-type InternalInspectProjectScopes200JSONResponse InternalProjectScopesResponse
+type InternalInspectProjectScopes200JSONResponse InternalInspectProjectScopesResponse
 
 func (response InternalInspectProjectScopes200JSONResponse) VisitInternalInspectProjectScopesResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
@@ -6108,7 +8300,7 @@ type InternalInspectProjectScopesPostResponseObject interface {
 	VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error
 }
 
-type InternalInspectProjectScopesPost200JSONResponse InternalProjectScopesResponse
+type InternalInspectProjectScopesPost200JSONResponse InternalInspectProjectScopesResponse
 
 func (response InternalInspectProjectScopesPost200JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
@@ -6305,6 +8497,175 @@ func (response InternalMultipartUpload403JSONResponse) VisitInternalMultipartUpl
 type InternalMultipartUpload500JSONResponse APIError
 
 func (response InternalMultipartUpload500JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProjectRequestObject struct {
+	Organization string `json:"organization"`
+	ProjectId    string `json:"project_id"`
+}
+
+type InternalDeleteProjectResponseObject interface {
+	VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error
+}
+
+type InternalDeleteProject200JSONResponse ProjectCleanupResponse
+
+func (response InternalDeleteProject200JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProject400JSONResponse APIError
+
+func (response InternalDeleteProject400JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProject401JSONResponse APIError
+
+func (response InternalDeleteProject401JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProject403JSONResponse APIError
+
+func (response InternalDeleteProject403JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(403)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProject404JSONResponse APIError
+
+func (response InternalDeleteProject404JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(404)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalDeleteProject500JSONResponse APIError
+
+func (response InternalDeleteProject500JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairApplyRequestObject struct {
+	Body *InternalScopeRepairApplyJSONRequestBody
+}
+
+type InternalScopeRepairApplyResponseObject interface {
+	VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error
+}
+
+type InternalScopeRepairApply200JSONResponse ScopeRepairApplyResult
+
+func (response InternalScopeRepairApply200JSONResponse) VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairApply400JSONResponse APIError
+
+func (response InternalScopeRepairApply400JSONResponse) VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairApply401JSONResponse APIError
+
+func (response InternalScopeRepairApply401JSONResponse) VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairApply403JSONResponse APIError
+
+func (response InternalScopeRepairApply403JSONResponse) VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(403)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairApply500JSONResponse APIError
+
+func (response InternalScopeRepairApply500JSONResponse) VisitInternalScopeRepairApplyResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairAuditRequestObject struct {
+	Body *InternalScopeRepairAuditJSONRequestBody
+}
+
+type InternalScopeRepairAuditResponseObject interface {
+	VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error
+}
+
+type InternalScopeRepairAudit200JSONResponse ScopeRepairReport
+
+func (response InternalScopeRepairAudit200JSONResponse) VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairAudit400JSONResponse APIError
+
+func (response InternalScopeRepairAudit400JSONResponse) VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairAudit401JSONResponse APIError
+
+func (response InternalScopeRepairAudit401JSONResponse) VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairAudit403JSONResponse APIError
+
+func (response InternalScopeRepairAudit403JSONResponse) VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(403)
+
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
+}
+
+type InternalScopeRepairAudit500JSONResponse APIError
+
+func (response InternalScopeRepairAudit500JSONResponse) VisitInternalScopeRepairAuditResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
@@ -7214,8 +9575,26 @@ type StrictServerInterface interface {
 	// (GET /data/download/{file_id}/part)
 	InternalDownloadPart(ctx context.Context, request InternalDownloadPartRequestObject) (InternalDownloadPartResponseObject, error)
 
+	// (POST /data/inspect)
+	InternalInspectObject(ctx context.Context, request InternalInspectObjectRequestObject) (InternalInspectObjectResponseObject, error)
+
+	// (POST /data/inspect/bulk)
+	InternalInspectObjectBulk(ctx context.Context, request InternalInspectObjectBulkRequestObject) (InternalInspectObjectBulkResponseObject, error)
+
+	// (POST /data/inspect/bulk-list)
+	InternalInspectObjectBulkList(ctx context.Context, request InternalInspectObjectBulkListRequestObject) (InternalInspectObjectBulkListResponseObject, error)
+
+	// (POST /data/inspect/project-bucket)
+	InternalInspectProjectBucket(ctx context.Context, request InternalInspectProjectBucketRequestObject) (InternalInspectProjectBucketResponseObject, error)
+
+	// (POST /data/inspect/project-bucket/delete)
+	InternalDeleteProjectBucketObjects(ctx context.Context, request InternalDeleteProjectBucketObjectsRequestObject) (InternalDeleteProjectBucketObjectsResponseObject, error)
+
 	// (POST /data/inspect/project-bucket/inventory)
 	InternalInspectProjectBucketInventory(ctx context.Context, request InternalInspectProjectBucketInventoryRequestObject) (InternalInspectProjectBucketInventoryResponseObject, error)
+
+	// (POST /data/inspect/project-records)
+	InternalInspectProjectRecords(ctx context.Context, request InternalInspectProjectRecordsRequestObject) (InternalInspectProjectRecordsResponseObject, error)
 
 	// (GET /data/inspect/project-scopes)
 	InternalInspectProjectScopes(ctx context.Context, request InternalInspectProjectScopesRequestObject) (InternalInspectProjectScopesResponseObject, error)
@@ -7231,6 +9610,15 @@ type StrictServerInterface interface {
 
 	// (POST /data/multipart/upload)
 	InternalMultipartUpload(ctx context.Context, request InternalMultipartUploadRequestObject) (InternalMultipartUploadResponseObject, error)
+
+	// (DELETE /data/projects/{organization}/{project_id})
+	InternalDeleteProject(ctx context.Context, request InternalDeleteProjectRequestObject) (InternalDeleteProjectResponseObject, error)
+
+	// (POST /data/repair/project-scope/apply)
+	InternalScopeRepairApply(ctx context.Context, request InternalScopeRepairApplyRequestObject) (InternalScopeRepairApplyResponseObject, error)
+
+	// (POST /data/repair/project-scope/audit)
+	InternalScopeRepairAudit(ctx context.Context, request InternalScopeRepairAuditRequestObject) (InternalScopeRepairAuditResponseObject, error)
 
 	// (POST /data/upload)
 	InternalUploadBlank(ctx context.Context, request InternalUploadBlankRequestObject) (InternalUploadBlankResponseObject, error)
@@ -7353,6 +9741,161 @@ func (sh *strictHandler) InternalDownloadPart(ctx fiber.Ctx, fileId string, para
 	return nil
 }
 
+// InternalInspectObject operation middleware
+func (sh *strictHandler) InternalInspectObject(ctx fiber.Ctx) error {
+	var request InternalInspectObjectRequestObject
+
+	var body InternalInspectObjectJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalInspectObject(ctx.Context(), request.(InternalInspectObjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalInspectObject")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalInspectObjectResponseObject); ok {
+		if err := validResponse.VisitInternalInspectObjectResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalInspectObjectBulk operation middleware
+func (sh *strictHandler) InternalInspectObjectBulk(ctx fiber.Ctx) error {
+	var request InternalInspectObjectBulkRequestObject
+
+	var body InternalInspectObjectBulkJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalInspectObjectBulk(ctx.Context(), request.(InternalInspectObjectBulkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalInspectObjectBulk")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalInspectObjectBulkResponseObject); ok {
+		if err := validResponse.VisitInternalInspectObjectBulkResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalInspectObjectBulkList operation middleware
+func (sh *strictHandler) InternalInspectObjectBulkList(ctx fiber.Ctx) error {
+	var request InternalInspectObjectBulkListRequestObject
+
+	var body InternalInspectObjectBulkListJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalInspectObjectBulkList(ctx.Context(), request.(InternalInspectObjectBulkListRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalInspectObjectBulkList")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalInspectObjectBulkListResponseObject); ok {
+		if err := validResponse.VisitInternalInspectObjectBulkListResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalInspectProjectBucket operation middleware
+func (sh *strictHandler) InternalInspectProjectBucket(ctx fiber.Ctx) error {
+	var request InternalInspectProjectBucketRequestObject
+
+	var body InternalInspectProjectBucketJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalInspectProjectBucket(ctx.Context(), request.(InternalInspectProjectBucketRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalInspectProjectBucket")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalInspectProjectBucketResponseObject); ok {
+		if err := validResponse.VisitInternalInspectProjectBucketResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalDeleteProjectBucketObjects operation middleware
+func (sh *strictHandler) InternalDeleteProjectBucketObjects(ctx fiber.Ctx) error {
+	var request InternalDeleteProjectBucketObjectsRequestObject
+
+	var body InternalDeleteProjectBucketObjectsJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalDeleteProjectBucketObjects(ctx.Context(), request.(InternalDeleteProjectBucketObjectsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalDeleteProjectBucketObjects")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalDeleteProjectBucketObjectsResponseObject); ok {
+		if err := validResponse.VisitInternalDeleteProjectBucketObjectsResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // InternalInspectProjectBucketInventory operation middleware
 func (sh *strictHandler) InternalInspectProjectBucketInventory(ctx fiber.Ctx) error {
 	var request InternalInspectProjectBucketInventoryRequestObject
@@ -7376,6 +9919,37 @@ func (sh *strictHandler) InternalInspectProjectBucketInventory(ctx fiber.Ctx) er
 		return err
 	} else if validResponse, ok := response.(InternalInspectProjectBucketInventoryResponseObject); ok {
 		if err := validResponse.VisitInternalInspectProjectBucketInventoryResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalInspectProjectRecords operation middleware
+func (sh *strictHandler) InternalInspectProjectRecords(ctx fiber.Ctx) error {
+	var request InternalInspectProjectRecordsRequestObject
+
+	var body InternalInspectProjectRecordsJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalInspectProjectRecords(ctx.Context(), request.(InternalInspectProjectRecordsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalInspectProjectRecords")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalInspectProjectRecordsResponseObject); ok {
+		if err := validResponse.VisitInternalInspectProjectRecordsResponse(ctx); err != nil {
 			return err
 		}
 	} else if response != nil {
@@ -7527,6 +10101,96 @@ func (sh *strictHandler) InternalMultipartUpload(ctx fiber.Ctx) error {
 		return err
 	} else if validResponse, ok := response.(InternalMultipartUploadResponseObject); ok {
 		if err := validResponse.VisitInternalMultipartUploadResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalDeleteProject operation middleware
+func (sh *strictHandler) InternalDeleteProject(ctx fiber.Ctx, organization string, projectId string) error {
+	var request InternalDeleteProjectRequestObject
+
+	request.Organization = organization
+	request.ProjectId = projectId
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalDeleteProject(ctx.Context(), request.(InternalDeleteProjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalDeleteProject")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalDeleteProjectResponseObject); ok {
+		if err := validResponse.VisitInternalDeleteProjectResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalScopeRepairApply operation middleware
+func (sh *strictHandler) InternalScopeRepairApply(ctx fiber.Ctx) error {
+	var request InternalScopeRepairApplyRequestObject
+
+	var body InternalScopeRepairApplyJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalScopeRepairApply(ctx.Context(), request.(InternalScopeRepairApplyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalScopeRepairApply")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalScopeRepairApplyResponseObject); ok {
+		if err := validResponse.VisitInternalScopeRepairApplyResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalScopeRepairAudit operation middleware
+func (sh *strictHandler) InternalScopeRepairAudit(ctx fiber.Ctx) error {
+	var request InternalScopeRepairAuditRequestObject
+
+	var body InternalScopeRepairAuditJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalScopeRepairAudit(ctx.Context(), request.(InternalScopeRepairAuditRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalScopeRepairAudit")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalScopeRepairAuditResponseObject); ok {
+		if err := validResponse.VisitInternalScopeRepairAuditResponse(ctx); err != nil {
 			return err
 		}
 	} else if response != nil {

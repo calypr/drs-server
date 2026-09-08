@@ -1,6 +1,7 @@
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
     Handler ServerInterface
+    RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -35,6 +36,8 @@ func (siw *ServerInterfaceWrapper) {{$opid}}(c fiber.Ctx) error {
   {{end}}
   {{end}}
 
+  {{if .QueryParams -}}
+  if !siw.RawQueryOperations["{{.OperationId}}"] {
   {{range .QueryParams -}}
   // ------------- {{if .Required}}Required{{else}}Optional{{end}} query parameter "{{.ParamName}}" -------------
   if paramValue := c.Query("{{.ParamName}}"); {{if .Spec.AllowEmptyValue}}c.Request().URI().QueryArgs().Has("{{.ParamName}}"){{else}}paramValue != ""{{end}} {
@@ -60,6 +63,8 @@ func (siw *ServerInterfaceWrapper) {{$opid}}(c fiber.Ctx) error {
   } {{if .Required}}else {
     return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument {{.ParamName}} is required, but not found").Error())
   }{{end}}
+  {{end}}
+  }
   {{end}}
 
   {{range .HeaderParams -}}

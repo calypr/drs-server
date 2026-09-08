@@ -1053,7 +1053,8 @@ type ServerInterface interface {
 
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -1093,8 +1094,9 @@ func (siw *ServerInterfaceWrapper) LfsVerify(c fiber.Ctx) error {
 
 // FiberServerOptions provides options for the Fiber server.
 type FiberServerOptions struct {
-	BaseURL     string
-	Middlewares []MiddlewareFunc
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	RawQueryOperations map[string]bool
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -1105,7 +1107,8 @@ func RegisterHandlers(router fiber.Router, si ServerInterface) {
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, options FiberServerOptions) {
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		RawQueryOperations: options.RawQueryOperations,
 	}
 
 	for _, m := range options.Middlewares {

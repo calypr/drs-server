@@ -1385,7 +1385,8 @@ type ServerInterface interface {
 
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	RawQueryOperations map[string]bool
 }
 
 type MiddlewareFunc fiber.Handler
@@ -1430,41 +1431,44 @@ func (siw *ServerInterfaceWrapper) DeleteBucketScope(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter bucket: %w", err).Error())
 	}
 
-	// ------------- Required query parameter "organization" -------------
-	if paramValue := c.Query("organization"); paramValue != "" {
+	if !siw.RawQueryOperations["DeleteBucketScope"] {
+		// ------------- Required query parameter "organization" -------------
+		if paramValue := c.Query("organization"); paramValue != "" {
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "organization", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: true, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
+			}
+			params.Organization = value
+
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument organization is required, but not found").Error())
 		}
-		params.Organization = value
+		// ------------- Required query parameter "path" -------------
+		if paramValue := c.Query("path"); c.Request().URI().QueryArgs().Has("path") {
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument organization is required, but not found").Error())
-	}
-	// ------------- Required query parameter "path" -------------
-	if paramValue := c.Query("path"); c.Request().URI().QueryArgs().Has("path") {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
+			}
+			params.Path = value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "path", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter path: %w", err).Error())
+		} else {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument path is required, but not found").Error())
 		}
-		params.Path = value
+		// ------------- Optional query parameter "project_id" -------------
+		if paramValue := c.Query("project_id"); paramValue != "" {
 
-	} else {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Query argument path is required, but not found").Error())
-	}
-	// ------------- Optional query parameter "project_id" -------------
-	if paramValue := c.Query("project_id"); paramValue != "" {
+			var value string
+			err = runtime.BindStyledParameterWithOptions("form", "project_id", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
+			if err != nil {
+				return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
+			}
+			params.ProjectId = &value
 
-		var value string
-		err = runtime.BindStyledParameterWithOptions("form", "project_id", paramValue, &value, runtime.BindStyledParameterOptions{Explode: true, Required: false, ValueIsUnescaped: true})
-		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
 		}
-		params.ProjectId = &value
 
 	}
 
@@ -1526,8 +1530,9 @@ func (siw *ServerInterfaceWrapper) DeleteProjectData(c fiber.Ctx) error {
 
 // FiberServerOptions provides options for the Fiber server.
 type FiberServerOptions struct {
-	BaseURL     string
-	Middlewares []MiddlewareFunc
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	RawQueryOperations map[string]bool
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -1538,7 +1543,8 @@ func RegisterHandlers(router fiber.Router, si ServerInterface) {
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, options FiberServerOptions) {
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		RawQueryOperations: options.RawQueryOperations,
 	}
 
 	for _, m := range options.Middlewares {

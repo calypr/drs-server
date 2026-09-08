@@ -8,6 +8,7 @@ import-mapping:
   ./openapi.yaml: github.com/calypr/syfon/apigen/drs
   ./error.openapi.yaml: github.com/calypr/syfon/apigen/errorapi
 output-options:
+  response-type-suffix: Resp
   skip-prune: false
   user-templates:
     client-with-responses.tmpl: apigen/templates/client-with-responses.tmpl
