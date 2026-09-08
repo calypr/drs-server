@@ -81,19 +81,3 @@ func TestProviderTransferHelpers(t *testing.T) {
 		t.Fatalf("expected unknown => download, got %q", got)
 	}
 }
-
-func TestRecordTransferAttributionEvents_EmptyInput(t *testing.T) {
-	pg, _, rawDB := newMockPostgresDB(t)
-	defer rawDB.Close()
-	if err := pg.RecordTransferAttributionEvents(context.Background(), nil); err != nil {
-		t.Fatalf("expected nil for empty transfer attribution events, got %v", err)
-	}
-}
-
-func TestRecordProviderTransferEvents_EmptyInput(t *testing.T) {
-	pg, _, rawDB := newMockPostgresDB(t)
-	defer rawDB.Close()
-	if err := pg.RecordProviderTransferEvents(context.Background(), nil); err != nil {
-		t.Fatalf("expected nil for empty provider transfer events, got %v", err)
-	}
-}

@@ -9,19 +9,6 @@ import (
 )
 
 func TestListBucketVisibilityRows_RestrictsAndHydratesRows(t *testing.T) {
-	t.Run("empty restricted resources are a no-op", func(t *testing.T) {
-		pg, _, rawDB := newMockPostgresDB(t)
-		defer rawDB.Close()
-
-		rows, err := pg.ListBucketVisibilityRows(context.Background(), nil, false, true)
-		if err != nil {
-			t.Fatalf("ListBucketVisibilityRows returned error: %v", err)
-		}
-		if len(rows) != 0 {
-			t.Fatalf("expected no rows, got %+v", rows)
-		}
-	})
-
 	pg, mock, rawDB := newMockPostgresDB(t)
 	defer rawDB.Close()
 	mock.ExpectQuery("SELECT DISTINCT am.url, am.type, COALESCE\\(ca.resource, ''\\)").

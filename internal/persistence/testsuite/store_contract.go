@@ -4,9 +4,11 @@ package testsuite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/store"
@@ -53,6 +55,40 @@ func BasicStoreCases() []StoreCase {
 			}
 			if credentials == nil {
 				t.Fatal("ListS3Credentials returned nil slice")
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			if _, err := shared.GetS3Credential(context.Background(), "missing"); !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+				t.Fatalf("GetS3Credential error=%v, want storage credential missing", err)
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			if err := shared.DeleteS3Credential(context.Background(), "missing"); !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+				t.Fatalf("DeleteS3Credential error=%v, want storage credential missing", err)
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			rows, err := shared.ListBucketVisibilityRows(context.Background(), nil, false, true)
+			if err != nil {
+				t.Fatalf("ListBucketVisibilityRows: %v", err)
+			}
+			if len(rows) != 0 {
+				t.Fatalf("ListBucketVisibilityRows returned %+v for an empty restricted resource set", rows)
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			if err := shared.RecordTransferAttributionEvents(context.Background(), nil); err != nil {
+				t.Fatalf("RecordTransferAttributionEvents(nil): %v", err)
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			if err := shared.RecordProviderTransferEvents(context.Background(), nil); err != nil {
+				t.Fatalf("RecordProviderTransferEvents(nil): %v", err)
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			if err := shared.BulkDeleteObjects(context.Background(), nil); err != nil {
+				t.Fatalf("BulkDeleteObjects(nil): %v", err)
 			}
 		},
 	}

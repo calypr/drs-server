@@ -408,14 +408,6 @@ func TestPostgresScopeResourceCondition(t *testing.T) {
 }
 
 func TestBulkDeleteObjects(t *testing.T) {
-	t.Run("empty ids is noop", func(t *testing.T) {
-		pg, _, rawDB := newMockPostgresDB(t)
-		defer rawDB.Close()
-		if err := pg.BulkDeleteObjects(context.Background(), nil); err != nil {
-			t.Fatalf("expected nil on empty ids, got %v", err)
-		}
-	})
-
 	t.Run("deletes provided ids", func(t *testing.T) {
 		pg, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
