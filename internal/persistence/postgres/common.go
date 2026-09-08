@@ -1,99 +1,18 @@
 package postgres
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
-
-// postgresContentRow and postgresMergeContentRowTx keep the metadata-focused
-// regression test independent of the shared Store implementation. Runtime
-// writes live in internal/persistence/store.
-type postgresContentRow struct {
-	id      string
-	name    string
-	updated time.Time
-}
-
-func postgresMergeContentRowTx(ctx context.Context, tx *sql.Tx, row postgresContentRow, obj *objects.Record, _ []string, _ []string) error {
-	name := objects.CleanToBasename(postgresStringVal(obj.Name))
-	if name == "" {
-		name = row.name
-	}
-	if row.name != "" && name != "" && row.name != name {
-		if _, err := tx.ExecContext(ctx, `
-		INSERT INTO drs_object_name_alias (object_id, name_alias) VALUES ($1, $2)
-		ON CONFLICT (object_id, name_alias) DO NOTHING`, row.id, row.name); err != nil {
-			return err
-		}
-	}
-	version, description := postgresStringVal(obj.Version), postgresStringVal(obj.Description)
-	size := obj.Size
-	updated := row.updated
-	if obj.UpdatedTime != nil && obj.UpdatedTime.After(updated) {
-		updated = *obj.UpdatedTime
-	}
-	_, err := tx.ExecContext(ctx, `
-		UPDATE drs_object SET size = $1, updated_time = $2, name = $3,
-		version = $4, description = $5 WHERE id = $6`, size, updated, name, version, description, row.id)
-	return err
-}
-
-func defaultProvider(provider string) string {
-	if strings.TrimSpace(provider) == "" {
-		return "s3"
-	}
-	return provider
-}
-
-func postgresPtr[T any](value T) *T {
-	return &value
-}
 
 func postgresStringVal(value *string) string {
 	if value == nil {
 		return ""
 	}
 	return *value
-}
-
-func postgresTimeVal(value *time.Time) time.Time {
-	if value == nil {
-		return time.Time{}
-	}
-	return *value
-}
-
-func uniqueObjectsByID(objs []objects.Record) []objects.Record {
-	seen := make(map[string]struct{}, len(objs))
-	out := make([]objects.Record, 0, len(objs))
-	for _, o := range objs {
-		if _, ok := seen[string(o.Id)]; ok {
-			continue
-		}
-		seen[string(o.Id)] = struct{}{}
-		out = append(out, o)
-	}
-	return out
-}
-
-func latestUsageTime(ts ...*time.Time) *time.Time {
-	var latest *time.Time
-	for _, t := range ts {
-		if t == nil {
-			continue
-		}
-		if latest == nil || t.After(*latest) {
-			copyT := *t
-			latest = &copyT
-		}
-	}
-	return latest
 }
 
 // postgresScopeResourceCondition remains a dialect test helper. Shared Store
