@@ -434,8 +434,9 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *testing.T) {
 	fake := &internalDRSStorageFake{}
 	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{}, fake)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
-	uploadID, err := lifecycle.Begin(t.Context(), "bucket-a", "path/object.bin")
+	target := storage.Target{PhysicalBucket: "bucket-a", Key: "path/object.bin"}
+	upload, err := om.TransferService.BeginMultipart(t.Context(), domaintransfers.MultipartInitRequest{Target: &target})
+	uploadID := upload.UploadID
 	if err != nil || uploadID != "mock-upload-id" {
 		t.Fatalf("begin multipart upload = (%q, %v)", uploadID, err)
 	}
@@ -459,8 +460,9 @@ func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *test
 func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *testing.T) {
 	fake := &internalDRSStorageFake{completeErr: errors.New("provider completion failed")}
 	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{}, fake)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
-	uploadID, err := lifecycle.Begin(t.Context(), "bucket-a", "path/object.bin")
+	target := storage.Target{PhysicalBucket: "bucket-a", Key: "path/object.bin"}
+	upload, err := om.TransferService.BeginMultipart(t.Context(), domaintransfers.MultipartInitRequest{Target: &target})
+	uploadID := upload.UploadID
 	if err != nil || uploadID != "mock-upload-id" {
 		t.Fatalf("begin multipart upload = (%q, %v)", uploadID, err)
 	}
@@ -475,7 +477,7 @@ func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *test
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected successful retry after provider recovery, got %d", rr.Code)
 	}
-	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+	if err := om.TransferService.CompleteMultipart(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("expected consumed upload ID after successful completion, got %v", err)
 	}
 }
@@ -764,8 +766,8 @@ func uploadCaseMultipartInitExistingScopedObjectUsesMappedLocation(t *testing.T)
 func uploadCaseMultipartUpload(t *testing.T) {
 	fake := &internalDRSStorageFake{}
 	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
-	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	if _, err := om.TransferService.BeginMultipart(context.Background(), domaintransfers.MultipartInitRequest{Target: &target}); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
 	body, _ := json.Marshal(internalapi.InternalMultipartUploadRequest{Key: "hash-key", UploadId: "mock-upload-id", PartNumber: 1})
@@ -778,8 +780,8 @@ func uploadCaseMultipartUpload(t *testing.T) {
 func uploadCaseMultipartComplete(t *testing.T) {
 	fake := &internalDRSStorageFake{}
 	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
-	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	if _, err := om.TransferService.BeginMultipart(context.Background(), domaintransfers.MultipartInitRequest{Target: &target}); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
 	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{Key: "hash-key", UploadId: "mock-upload-id", Parts: []internalapi.InternalMultipartPart{{PartNumber: 1, ETag: "etag1"}}})
