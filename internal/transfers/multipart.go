@@ -24,6 +24,13 @@ type MultipartInitResult struct {
 	GUID     string
 }
 
+// CompletedPart carries multipart completion metadata across the transfer
+// boundary. Provider-specific part values are created only by Service.
+type CompletedPart struct {
+	ETag       string
+	PartNumber int32
+}
+
 type multipartSession struct {
 	target   storage.Target
 	complete chan struct{}
@@ -121,7 +128,7 @@ func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNu
 	return signed.Location, nil
 }
 
-func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts []storage.CompletedPart) error {
+func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts []CompletedPart) error {
 	session, err := s.multipartSession(uploadID)
 	if err != nil {
 		return err
@@ -130,7 +137,11 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 		return err
 	}
 	defer session.release()
-	if err := s.completeMultipartTarget(ctx, session.target, storage.UploadID(uploadID), parts); err != nil {
+	providerParts := make([]storage.CompletedPart, len(parts))
+	for i, part := range parts {
+		providerParts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
+	}
+	if err := s.completeMultipartTarget(ctx, session.target, storage.UploadID(uploadID), providerParts); err != nil {
 		return err
 	}
 	s.multipartMu.Lock()

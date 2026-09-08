@@ -660,17 +660,6 @@ func transfersDoInternalDRSTestRequest(req *http.Request, fixture transfersInter
 	return rr
 }
 
-type transfersUnimplementedInternalServer struct {
-	internalapi.ServerInterface
-}
-
-type transfersTestServer struct {
-	*TransfersServer
-	transfersUnimplementedInternalServer
-}
-
 func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
-	internalapi.RegisterHandlers(router, &transfersTestServer{
-		TransfersServer: NewTransfersServer(transferService),
-	})
+	internalapi.RegisterHandlers(router, &internalServer{objects: objectService, transfers: transferService})
 }

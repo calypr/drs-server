@@ -23,11 +23,19 @@ const (
 	AccountingEventOnly           AccountingMode = "event_only"
 )
 
+// ByteRange is the inclusive byte range requested by a transfer operation.
+// Storage providers receive the translated storage.ByteRange only inside the
+// transfer service boundary.
+type ByteRange struct {
+	Start int64
+	End   int64
+}
+
 type DownloadRequest struct {
 	ObjectID           string
 	AccessID           string
 	ExpiresIn          time.Duration
-	Range              *storage.ByteRange
+	Range              *ByteRange
 	Accounting         AccountingMode
 	AccountingObjectID string
 }
@@ -117,7 +125,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 	if obj.Name != nil {
 		filename = objects.CleanToBasename(strings.TrimSpace(*obj.Name))
 	}
-	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: expires, DownloadFilename: filename, Range: req.Range})
+	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: expires, DownloadFilename: filename, Range: storageRange(req.Range)})
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -237,14 +245,21 @@ func isNotFound(err error) bool {
 }
 
 func defaultSigningExpiry() time.Duration { return 15 * time.Minute }
-func rangeStart(r *storage.ByteRange) *int64 {
+func storageRange(r *ByteRange) *storage.ByteRange {
+	if r == nil {
+		return nil
+	}
+	return &storage.ByteRange{Start: r.Start, End: r.End}
+}
+
+func rangeStart(r *ByteRange) *int64 {
 	if r == nil {
 		return nil
 	}
 	v := r.Start
 	return &v
 }
-func rangeEnd(r *storage.ByteRange) *int64 {
+func rangeEnd(r *ByteRange) *int64 {
 	if r == nil {
 		return nil
 	}

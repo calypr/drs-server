@@ -60,7 +60,11 @@ func (l *MultipartLifecycle) Complete(ctx context.Context, id string, parts []st
 	if _, err := l.service.multipartSession(id); err != nil {
 		return err
 	}
-	if err := l.service.CompleteMultipart(ctx, id, parts); err != nil {
+	domainParts := make([]CompletedPart, len(parts))
+	for i, part := range parts {
+		domainParts[i] = CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
+	}
+	if err := l.service.CompleteMultipart(ctx, id, domainParts); err != nil {
 		return err
 	}
 	l.mu.Lock()

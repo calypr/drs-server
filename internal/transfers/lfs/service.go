@@ -171,7 +171,7 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 		return fmt.Errorf("failed to initialize multipart upload: %w", err)
 	}
 	_ = target
-	parts := make([]storage.CompletedPart, 0, 16)
+	parts := make([]transfers.CompletedPart, 0, 16)
 	partNumber := int32(1)
 	buffer := make([]byte, multipartPartSize)
 	for {
@@ -190,7 +190,7 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 		if err != nil {
 			return fmt.Errorf("failed uploading multipart part: %w", err)
 		}
-		parts = append(parts, storage.CompletedPart{PartNumber: partNumber, ETag: etag})
+		parts = append(parts, transfers.CompletedPart{PartNumber: partNumber, ETag: etag})
 		partNumber++
 		if readErr == io.ErrUnexpectedEOF {
 			break

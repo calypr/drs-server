@@ -156,15 +156,15 @@ func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 	if err != nil || part != "part-signed" {
 		t.Fatalf("SignMultipartPart()=(%q,%v)", part, err)
 	}
-	parts := []storage.CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
-	if err := service.completeMultipartTarget(ctx, target, id, parts); err != nil {
+	providerParts := []storage.CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
+	if err := service.completeMultipartTarget(ctx, target, id, providerParts); err != nil {
 		t.Fatalf("CompleteMultipartUpload() error = %v", err)
 	}
 	if port.partRequest.UploadID != storage.UploadID(id) || port.partRequest.PartNumber != 7 {
 		t.Fatalf("unexpected part request: %+v", port.partRequest)
 	}
-	if !reflect.DeepEqual(port.complete.Parts, parts) {
-		t.Fatalf("multipart parts reordered: got=%+v want=%+v", port.complete.Parts, parts)
+	if !reflect.DeepEqual(port.complete.Parts, providerParts) {
+		t.Fatalf("multipart parts reordered: got=%+v want=%+v", port.complete.Parts, providerParts)
 	}
 }
 

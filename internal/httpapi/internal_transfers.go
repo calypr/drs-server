@@ -15,7 +15,6 @@ import (
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
@@ -65,7 +64,7 @@ func handleInternalDownloadPartFiber(c fiber.Ctx, objectService *objectrecords.S
 	if err != nil || end < start {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
 	}
-	result, err := transferService.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: time.Duration(config.DefaultSigningExpirySeconds) * time.Second, Range: &storage.ByteRange{Start: start, End: end}, Accounting: domaintransfers.AccountingEventOnly})
+	result, err := transferService.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: time.Duration(config.DefaultSigningExpirySeconds) * time.Second, Range: &domaintransfers.ByteRange{Start: start, End: end}, Accounting: domaintransfers.AccountingEventOnly})
 	if err != nil {
 		return mapDownloadError(c, err)
 	}
@@ -128,9 +127,9 @@ func handleInternalMultipartCompleteFiber(transferService *domaintransfers.Servi
 		if req.UploadId == "" {
 			return middleware.Reject(c, fiber.StatusBadRequest, "uploadId is required")
 		}
-		parts := make([]storage.CompletedPart, len(req.Parts))
+		parts := make([]domaintransfers.CompletedPart, len(req.Parts))
 		for i, part := range req.Parts {
-			parts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
+			parts[i] = domaintransfers.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
 		}
 		if err := transferService.CompleteMultipart(c.Context(), req.UploadId, parts); err != nil {
 			return middleware.HandleError(c, err)
@@ -237,38 +236,6 @@ func handleInternalUploadBulkFiber(objectService interface{}, transferService *d
 		}
 		return c.Status(status).JSON(internalapi.InternalUploadBulkOutput{Results: &out})
 	}
-}
-
-// TransfersServer is retained as a small generated-test adapter. Production
-// routes bind the same operations on internalServer.
-type TransfersServer struct{ transfers *domaintransfers.Service }
-
-func NewTransfersServer(transfers *domaintransfers.Service) *TransfersServer {
-	return &TransfersServer{transfers: transfers}
-}
-func (s *TransfersServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.InternalDownloadParams) error {
-	return handleInternalDownloadFiber(c, nil, s.transfers, nil)
-}
-func (s *TransfersServer) InternalDownloadPart(c fiber.Ctx, _ string, _ internalapi.InternalDownloadPartParams) error {
-	return handleInternalDownloadPartFiber(c, nil, s.transfers)
-}
-func (s *TransfersServer) InternalMultipartComplete(c fiber.Ctx) error {
-	return handleInternalMultipartCompleteFiber(s.transfers)(c)
-}
-func (s *TransfersServer) InternalMultipartInit(c fiber.Ctx) error {
-	return handleInternalMultipartInitFiber(s.transfers)(c)
-}
-func (s *TransfersServer) InternalMultipartUpload(c fiber.Ctx) error {
-	return handleInternalMultipartUploadFiber(s.transfers)(c)
-}
-func (s *TransfersServer) InternalUploadBlank(c fiber.Ctx) error {
-	return handleInternalUploadBlankFiber(s.transfers)(c)
-}
-func (s *TransfersServer) InternalUploadBulk(c fiber.Ctx) error {
-	return handleInternalUploadBulkFiber(nil, s.transfers)(c)
-}
-func (s *TransfersServer) InternalUploadURL(c fiber.Ctx, _ string, _ internalapi.InternalUploadURLParams) error {
-	return handleInternalUploadURLFiber(nil, s.transfers)(c)
 }
 
 func stringValue(value *string) string {
