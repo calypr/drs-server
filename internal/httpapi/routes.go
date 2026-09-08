@@ -77,6 +77,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	}
 	if options.Internal {
 		internalapi.RegisterHandlers(api, newInternalServer(deps))
+		RegisterUndocumentedRoutes(api, deps.ScopeRepair, deps.ProjectInspector, deps.ProjectCleanup)
 		httpbuckets.RegisterRoutes(api, deps.Buckets, ProjectCleanupHandler(deps.ProjectCleanup))
 	}
 	if options.LFS {
