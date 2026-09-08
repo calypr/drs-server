@@ -61,6 +61,15 @@ type serverBackend struct {
 	usageReports       usage.ReportStore
 }
 
+type projectStorageCatalog struct {
+	projectstorage.ScopeReader
+	projectstorage.CredentialReader
+	projectstorage.VisibilityReader
+	projectstorage.PhysicalScopeReader
+	projectstorage.ObjectScopeDeleter
+	projectstorage.ScopeCatalog
+}
+
 var (
 	errBucketVisibilityScopeQuery   = fmt.Errorf("bucket visibility fallback requires an object scope query")
 	errBucketVisibilityRecordReader = fmt.Errorf("bucket visibility fallback requires an object record reader")
@@ -284,19 +293,17 @@ var Cmd = &cobra.Command{
 			Credentials: bucketService,
 			Events:      backend.usageIngest,
 		})
-		projectStorageService := projectstorage.NewService(
-			projectstorage.Dependencies{
-				Scopes:         bucketService,
-				Credentials:    bucketService,
-				Visibility:     bucketService,
-				Inventory:      storageManager,
-				Probe:          storageManager,
-				Delete:         storageManager,
-				Physical:       objectService,
-				CleanupObjects: objectService,
-				CleanupScopes:  bucketService,
+		projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+			Catalog: projectStorageCatalog{
+				ScopeReader:         bucketService,
+				CredentialReader:    bucketService,
+				VisibilityReader:    bucketService,
+				PhysicalScopeReader: objectService,
+				ObjectScopeDeleter:  objectService,
+				ScopeCatalog:        bucketService,
 			},
-		)
+			Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
+		})
 		scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
 
 		// Build Fiber runtime and middleware pipeline.

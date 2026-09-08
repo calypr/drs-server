@@ -112,6 +112,15 @@ type fakeCleanupScopes struct {
 	err     error
 }
 
+type testCatalog struct {
+	ScopeReader
+	CredentialReader
+	VisibilityReader
+	PhysicalScopeReader
+	ObjectScopeDeleter
+	ScopeCatalog
+}
+
 func (f *fakeCleanupScopes) ListBucketScopes(context.Context) ([]buckets.Scope, error) {
 	return f.scopes, f.err
 }
@@ -138,11 +147,12 @@ func projectServiceWithScopes(inventory *fakeInventory, deletePort DeletePort, s
 		"cred": {Credential: credential},
 	}}
 	service := NewService(Dependencies{
-		Scopes:      fakeScopes{values: scopes},
-		Credentials: fakeCredentials{values: map[string]buckets.Credential{"cred": credential}},
-		Visibility:  visibility,
-		Inventory:   inventory,
-		Delete:      deletePort,
+		Catalog: testCatalog{
+			ScopeReader:      fakeScopes{values: scopes},
+			CredentialReader: fakeCredentials{values: map[string]buckets.Credential{"cred": credential}},
+			VisibilityReader: visibility,
+		},
+		Providers: Providers{Inventory: inventory, Delete: deletePort},
 	})
 	return service, visibility
 }
@@ -279,7 +289,7 @@ func TestDeleteProjectDataDeletesObjectsBeforeMatchingScopes(t *testing.T) {
 		{Organization: "other", ProjectID: "project", CredentialID: "cred-b"},
 		{Organization: "org", ProjectID: "project", Bucket: "bucket-c"},
 	}}
-	service := NewService(Dependencies{CleanupObjects: objects, CleanupScopes: scopes})
+	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
 	result, err := service.DeleteProjectData(context.Background(), " org ", " project ")
 	if err != nil {
 		t.Fatalf("DeleteProjectData() error = %v", err)

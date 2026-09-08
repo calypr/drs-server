@@ -296,6 +296,15 @@ type cliFileStorageAccess struct {
 	root string
 }
 
+type cliProjectStorageCatalog struct {
+	projectstorage.ScopeReader
+	projectstorage.CredentialReader
+	projectstorage.VisibilityReader
+	projectstorage.PhysicalScopeReader
+	projectstorage.ObjectScopeDeleter
+	projectstorage.ScopeCatalog
+}
+
 func (a cliFileStorageAccess) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
 	parsed, err := url.Parse(strings.TrimSpace(request.Target.Location))
 	if err != nil {
@@ -371,7 +380,17 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 		Environment: &environment,
 		Version:     "1.0.0",
 	}
-	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{Scopes: bucketService, Credentials: bucketService, Visibility: bucketService, Physical: objectService, CleanupObjects: objectService, CleanupScopes: bucketService})
+	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+		Catalog: cliProjectStorageCatalog{
+			ScopeReader:         bucketService,
+			CredentialReader:    bucketService,
+			VisibilityReader:    bucketService,
+			PhysicalScopeReader: objectService,
+			ObjectScopeDeleter:  objectService,
+			ScopeCatalog:        bucketService,
+		},
+		Providers: projectstorage.Providers{},
+	})
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
 		LFSPending:       database,
 		ServiceInfo:      serviceInfo,

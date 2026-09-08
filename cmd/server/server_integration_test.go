@@ -29,6 +29,15 @@ var (
 	testConfigPath = flag.String("testConfig", "", "Path to config file for integration test")
 )
 
+type integrationProjectStorageCatalog struct {
+	projectstorage.ScopeReader
+	projectstorage.CredentialReader
+	projectstorage.VisibilityReader
+	projectstorage.PhysicalScopeReader
+	projectstorage.ObjectScopeDeleter
+	projectstorage.ScopeCatalog
+}
+
 func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
@@ -146,7 +155,17 @@ s3_credentials:
 		Access: storageManager, Multipart: storageManager, Scopes: bucketService, Credentials: bucketService,
 		Events: backend.usageIngest,
 	})
-	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{Scopes: bucketService, Credentials: bucketService, Visibility: bucketService, Inventory: storageManager, Probe: storageManager, Delete: storageManager, Physical: objectService, CleanupObjects: objectService, CleanupScopes: bucketService})
+	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+		Catalog: integrationProjectStorageCatalog{
+			ScopeReader:         bucketService,
+			CredentialReader:    bucketService,
+			VisibilityReader:    bucketService,
+			PhysicalScopeReader: objectService,
+			ObjectScopeDeleter:  objectService,
+			ScopeCatalog:        bucketService,
+		},
+		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
+	})
 	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
 		LFSPending:       backend.pending,

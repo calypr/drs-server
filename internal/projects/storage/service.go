@@ -47,20 +47,20 @@ type Service struct {
 
 func NewService(deps Dependencies) *Service {
 	inspector := &Inspector{
-		scopes:      deps.Scopes,
-		credentials: deps.Credentials,
-		visibility:  deps.Visibility,
-		inventory:   deps.Inventory,
-		probe:       deps.Probe,
-		physical:    deps.Physical,
+		scopes:      deps.Catalog,
+		credentials: deps.Catalog,
+		visibility:  deps.Catalog,
+		inventory:   deps.Providers.Inventory,
+		probe:       deps.Providers.Probe,
+		physical:    deps.Catalog,
 	}
 	return &Service{
 		Inspector: inspector,
 		ProjectCleanup: &ProjectCleanup{
 			inspector:      inspector,
-			delete:         deps.Delete,
-			cleanupObjects: deps.CleanupObjects,
-			cleanupScopes:  deps.CleanupScopes,
+			delete:         deps.Providers.Delete,
+			cleanupObjects: deps.Catalog,
+			cleanupScopes:  deps.Catalog,
 		},
 	}
 }

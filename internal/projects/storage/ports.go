@@ -41,14 +41,22 @@ type ScopeCatalog interface {
 	DeleteBucketScope(context.Context, string, string, string, string) error
 }
 
+type Catalog interface {
+	ScopeReader
+	CredentialReader
+	VisibilityReader
+	PhysicalScopeReader
+	ObjectScopeDeleter
+	ScopeCatalog
+}
+
+type Providers struct {
+	Inventory InventoryPort
+	Probe     ProbePort
+	Delete    DeletePort
+}
+
 type Dependencies struct {
-	Scopes         ScopeReader
-	Credentials    CredentialReader
-	Visibility     VisibilityReader
-	Inventory      InventoryPort
-	Probe          ProbePort
-	Delete         DeletePort
-	Physical       PhysicalScopeReader
-	CleanupObjects ObjectScopeDeleter
-	CleanupScopes  ScopeCatalog
+	Catalog   Catalog
+	Providers Providers
 }
