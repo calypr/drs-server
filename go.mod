@@ -13,8 +13,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.54.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.1
 	github.com/aws/smithy-go v1.27.3
-	github.com/calypr/syfon/apigen v0.3.1-0.20260908013428-ee163f42c4b4
-	github.com/calypr/syfon/client v0.3.4-0.20260908003208-0e5f20b1c151
+	github.com/calypr/syfon/apigen v0.3.2
+	github.com/calypr/syfon/client v0.3.5
 	github.com/getkin/kin-openapi v0.144.0
 	github.com/gofiber/fiber/v3 v3.4.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
