@@ -7,24 +7,19 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
 
-type authenticationEvaluator interface {
-	Evaluate(authentication.EvaluationRequest) authentication.EvaluationResult
-}
-
 type Options struct {
 	Mode      string
-	Evaluator authenticationEvaluator
+	Evaluator access.Evaluator
 }
 
 type AuthzMiddleware struct {
 	logger    *slog.Logger
 	mode      string
-	evaluator authenticationEvaluator
+	evaluator access.Evaluator
 }
 
 func NewAuthzMiddleware(logger *slog.Logger, options Options) *AuthzMiddleware {
@@ -50,7 +45,7 @@ func (m *AuthzMiddleware) FiberMiddleware() fiber.Handler {
 		if m.evaluator == nil {
 			return m.applySession(c, ctx, session)
 		}
-		result := m.evaluator.Evaluate(authentication.EvaluationRequest{
+		result := m.evaluator.Evaluate(access.EvaluationRequest{
 			Context:    ctx,
 			RequestID:  requestid.GetRequestID(ctx),
 			Mode:       m.mode,
@@ -111,22 +106,22 @@ func (m *AuthzMiddleware) applySession(c fiber.Ctx, ctx context.Context, session
 	return c.Next()
 }
 
-func (m *AuthzMiddleware) applyResult(c fiber.Ctx, ctx context.Context, fallback *access.Session, result authentication.EvaluationResult) error {
+func (m *AuthzMiddleware) applyResult(c fiber.Ctx, ctx context.Context, fallback *access.Session, result access.EvaluationResult) error {
 	session := result.Session
 	if session == nil {
 		session = fallback
 	}
 	switch result.Decision {
-	case authentication.DecisionContinue:
+	case access.DecisionContinue:
 		return m.applySession(c, ctx, session)
-	case authentication.DecisionUnauthorized:
+	case access.DecisionUnauthorized:
 		if result.BasicChallenge {
 			c.Set(fiber.HeaderWWWAuthenticate, `Basic realm="syfon"`)
 		}
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
-	case authentication.DecisionForbidden:
+	case access.DecisionForbidden:
 		return Reject(c, fiber.StatusForbidden, "Forbidden")
-	case authentication.DecisionInternalError:
+	case access.DecisionInternalError:
 		return Reject(c, fiber.StatusInternalServerError, "Internal Server Error")
 	default:
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")

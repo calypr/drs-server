@@ -12,38 +12,55 @@ import (
 
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/access/authentication"
+	"github.com/calypr/syfon/internal/config"
 	"github.com/gofiber/fiber/v3"
 )
 
 func newTestAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass string) *AuthzMiddleware {
-	authRuntime := authentication.NewRuntime(logger, mode, basicUser, basicPass)
+	auth := config.AuthConfig{
+		Mode: mode,
+		Basic: config.BasicAuthConfig{
+			Username: basicUser,
+			Password: basicPass,
+		},
+		LocalAuthzCSV: strings.TrimSpace(os.Getenv("DRS_LOCAL_AUTHZ_CSV")),
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("DRS_AUTH_MOCK_ENABLED")), "true") {
+		auth.Mock = config.MockAuthConfig{
+			Enabled:           true,
+			RequireAuthHeader: strings.EqualFold(strings.TrimSpace(os.Getenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER")), "true"),
+			Resources:         strings.Split(os.Getenv("DRS_AUTH_MOCK_RESOURCES"), ","),
+			Methods:           strings.Split(os.Getenv("DRS_AUTH_MOCK_METHODS"), ","),
+		}
+	}
+	authRuntime := authentication.NewRuntime(logger, auth)
 	return NewAuthzMiddleware(logger, Options{Mode: mode, Evaluator: authRuntime})
 }
 
 func injectDummyAuthorizationEvaluator(m *AuthzMiddleware) {
-	m.evaluator = &fixedEvaluator{decision: authentication.DecisionContinue}
+	m.evaluator = &fixedEvaluator{decision: access.DecisionContinue}
 }
 
 func injectDummyAuthenticationEvaluator(m *AuthzMiddleware, authenticated bool) {
-	decision := authentication.DecisionUnauthorized
+	decision := access.DecisionUnauthorized
 	if authenticated {
-		decision = authentication.DecisionContinue
+		decision = access.DecisionContinue
 	}
 	m.evaluator = &fixedEvaluator{decision: decision, basicChallenge: m.mode == "local"}
 }
 
 type fixedEvaluator struct {
-	decision       authentication.Decision
+	decision       access.Decision
 	basicChallenge bool
 }
 
-func (e *fixedEvaluator) Evaluate(req authentication.EvaluationRequest) authentication.EvaluationResult {
+func (e *fixedEvaluator) Evaluate(req access.EvaluationRequest) access.EvaluationResult {
 	session := access.NewSession(req.Mode)
 	if strings.EqualFold(req.Mode, "gen3") {
 		session.AuthHeaderPresent = strings.TrimSpace(req.AuthHeader) != ""
 		session.AuthzEnforced = true
 	}
-	return authentication.EvaluationResult{
+	return access.EvaluationResult{
 		Session:        session,
 		Decision:       e.decision,
 		BasicChallenge: e.basicChallenge,
@@ -137,12 +154,12 @@ func TestMiddlewareInstallsEvaluatorSession(t *testing.T) {
 }
 
 type recordingEvaluator struct {
-	request authentication.EvaluationRequest
+	request access.EvaluationRequest
 }
 
-func (e *recordingEvaluator) Evaluate(request authentication.EvaluationRequest) authentication.EvaluationResult {
+func (e *recordingEvaluator) Evaluate(request access.EvaluationRequest) access.EvaluationResult {
 	e.request = request
-	return authentication.EvaluationResult{Session: access.NewSession(request.Mode), Decision: authentication.DecisionContinue}
+	return access.EvaluationResult{Session: access.NewSession(request.Mode), Decision: access.DecisionContinue}
 }
 
 func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
@@ -332,7 +349,7 @@ func TestLocalAuthzCSVDeniesAuthenticatedSubjectMissingFromCSV(t *testing.T) {
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
 	m := newTestAuthzMiddleware(slog.Default(), "local", "", "")
-	m.evaluator = &fixedEvaluator{decision: authentication.DecisionForbidden}
+	m.evaluator = &fixedEvaluator{decision: access.DecisionForbidden}
 	app := fiber.New()
 	app.Use(m.FiberMiddleware())
 	app.Get("/", func(c fiber.Ctx) error {

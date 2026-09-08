@@ -198,7 +198,7 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 		tokenResolver:  newTokenAuthResolver(slog.Default(), ""),
 	}
 
-	result := runtime.Evaluate(EvaluationRequest{
+	result := runtime.Evaluate(access.EvaluationRequest{
 		Context:    context.Background(),
 		RequestID:  "request-id",
 		Mode:       "gen3",
@@ -206,7 +206,7 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 		Method:     "GET",
 		Path:       "/objects/object-id",
 	})
-	if result.Decision != DecisionContinue {
+	if result.Decision != access.DecisionContinue {
 		t.Fatalf("expected evaluator to continue, got %v", result.Decision)
 	}
 	if authn.input == nil || authn.input.RequestID != "request-id" {
@@ -220,8 +220,8 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 	t.Run("missing csv is an internal error", func(t *testing.T) {
 		runtime := &Runtime{localAuthzError: errors.New("csv failed")}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionInternalError {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionInternalError {
 			t.Fatalf("expected internal error, got %v", result.Decision)
 		}
 	})
@@ -232,8 +232,8 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				output: &plugin.AuthenticationOutput{Authenticated: false},
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionUnauthorized || !result.BasicChallenge {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionUnauthorized || !result.BasicChallenge {
 			t.Fatalf("expected challenged unauthorized result, got %+v", result)
 		}
 	})
@@ -248,8 +248,8 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				return []string{"/data"}, map[string]map[string]bool{"/data": {"read": true}}, true
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionContinue || result.Session.Source != access.SourceLocalCSV || len(result.Session.Resources) != 1 {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionContinue || result.Session.Source != access.SourceLocalCSV || len(result.Session.Resources) != 1 {
 			t.Fatalf("expected csv authorization, got %+v", result)
 		}
 	})
@@ -261,8 +261,8 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				return nil, nil, false
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionForbidden {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionForbidden {
 			t.Fatalf("expected forbidden result, got %+v", result)
 		}
 	})
@@ -275,14 +275,14 @@ func TestRuntimeEvaluatorMockDecisions(t *testing.T) {
 		Resources:         []string{"/data"},
 		Methods:           []string{"read"},
 	}}
-	withoutHeader := runtime.Evaluate(EvaluationRequest{Mode: "gen3"})
-	if withoutHeader.Decision != DecisionContinue || len(withoutHeader.Session.Resources) != 0 {
+	withoutHeader := runtime.Evaluate(access.EvaluationRequest{Mode: "gen3"})
+	if withoutHeader.Decision != access.DecisionContinue || len(withoutHeader.Session.Resources) != 0 {
 		t.Fatalf("expected unauthenticated mock request to continue without privileges: %+v", withoutHeader)
 	}
 
 	runtime.mock.RequireAuthHeader = false
-	withMock := runtime.Evaluate(EvaluationRequest{Mode: "gen3"})
-	if withMock.Decision != DecisionContinue || withMock.Session.Source != access.SourceGen3Mock || !withMock.Session.Privileges["/data"]["read"] {
+	withMock := runtime.Evaluate(access.EvaluationRequest{Mode: "gen3"})
+	if withMock.Decision != access.DecisionContinue || withMock.Session.Source != access.SourceGen3Mock || !withMock.Session.Privileges["/data"]["read"] {
 		t.Fatalf("expected mock privileges, got %+v", withMock)
 	}
 }
@@ -298,14 +298,14 @@ func TestRuntimeEvaluatorAuthorizationDecisions(t *testing.T) {
 				authentication: &recordingAuthenticationPlugin{},
 				authorization:  authz,
 			}
-			result := runtime.Evaluate(EvaluationRequest{
+			result := runtime.Evaluate(access.EvaluationRequest{
 				Context:    context.Background(),
 				Mode:       "gen3",
 				AuthHeader: "Bearer token",
 			})
-			want := DecisionUnauthorized
+			want := access.DecisionUnauthorized
 			if name == "authorization denied" {
-				want = DecisionForbidden
+				want = access.DecisionForbidden
 			}
 			if result.Decision != want {
 				t.Fatalf("expected %v, got %+v", want, result)
@@ -323,7 +323,7 @@ func (*nilOutputAuthenticationPlugin) Authenticate(context.Context, *plugin.Auth
 func TestRuntimeNilPluginOutputPreservesPanic(t *testing.T) {
 	if os.Getenv("SYFON_NIL_AUTH_OUTPUT_CHILD") == "1" {
 		runtime := &Runtime{logger: slog.Default(), authentication: &nilOutputAuthenticationPlugin{}}
-		runtime.Evaluate(EvaluationRequest{
+		runtime.Evaluate(access.EvaluationRequest{
 			Context:    context.Background(),
 			Mode:       "gen3",
 			AuthHeader: "Bearer token",
