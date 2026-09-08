@@ -102,6 +102,8 @@ github.com/calypr/syfon/apigen v0.3.1-0.20260907235550-052b4b6b010d h1:14RFiM2qy
 github.com/calypr/syfon/apigen v0.3.1-0.20260907235550-052b4b6b010d/go.mod h1:ZStSoj40FBRN18rm/KyFtd+g8o5Nga9TXqaEGqVL4s0=
 github.com/calypr/syfon/apigen v0.3.1-0.20260908001007-8743d81d59e5 h1:ZLxGZ14NHdUyroC7/OuCh4lZSKgTggmnKZcpuKz0LHQ=
 github.com/calypr/syfon/apigen v0.3.1-0.20260908001007-8743d81d59e5/go.mod h1:ZStSoj40FBRN18rm/KyFtd+g8o5Nga9TXqaEGqVL4s0=
+github.com/calypr/syfon/apigen v0.3.1-0.20260908013428-ee163f42c4b4 h1:QzsuYMJ1e6uiKYbxd2XvzEQ8TzR+d+GzJ75UaqZyyqQ=
+github.com/calypr/syfon/apigen v0.3.1-0.20260908013428-ee163f42c4b4/go.mod h1:hIs9EXxADonoAlwMdmn7gUq+fQn1YdCR6snqIZSIdv4=
 github.com/calypr/syfon/client v0.3.4-0.20260908000039-840c5637a4ee h1:OnrjZh8b4L0sQf6x2DA638T1PF4fTOSeJHA55nDAaaU=
 github.com/calypr/syfon/client v0.3.4-0.20260908000039-840c5637a4ee/go.mod h1:KzBkzdl2vYmMG3W5gAjWBnAc5Ck7Fh7jIgU5xMKLUQQ=
 github.com/calypr/syfon/client v0.3.4-0.20260908001736-8dddd89799e3 h1:lUnYWnZ2EMtxH0JZxVOiP2v2wL1T/afTpfqKdOzCaGQ=
