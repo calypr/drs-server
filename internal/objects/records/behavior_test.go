@@ -1,13 +1,11 @@
 package records
 
 import (
-	"context"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/access"
 	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
@@ -54,22 +52,5 @@ func TestObjectMatchesScope(t *testing.T) {
 	}
 	if !objectMatchesScope(obj, "org1", "") {
 		t.Fatalf("expected org-wide org1 to match")
-	}
-}
-
-func TestReadableChecksumFilter(t *testing.T) {
-	service := NewService(nil)
-	res, includeUnscoped, restrict, ok := service.readableChecksumFilter(context.Background(), "", "")
-	if !ok || includeUnscoped || restrict || res != nil {
-		t.Fatalf("unexpected unenforced filter: res=%+v includeUnscoped=%v restrict=%v ok=%v", res, includeUnscoped, restrict, ok)
-	}
-
-	session := access.NewSession("gen3")
-	session.AuthHeaderPresent = true
-	session.SetAuthorizations(nil, map[string]map[string]bool{}, true)
-	forbiddenCtx := access.WithSession(context.Background(), session)
-	res, includeUnscoped, restrict, ok = service.readableChecksumFilter(forbiddenCtx, "", "")
-	if !ok || !includeUnscoped || !restrict {
-		t.Fatalf("expected restricted filter under enforced authz, got res=%+v includeUnscoped=%v restrict=%v ok=%v", res, includeUnscoped, restrict, ok)
 	}
 }

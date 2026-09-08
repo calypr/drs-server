@@ -249,13 +249,6 @@ func batchErrToObjectError(ctx context.Context, err error, download bool) *lfsap
 	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}
 }
 
-func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	return batchErrToObjectError(ctx, err, false)
-}
-func downloadErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	return batchErrToObjectError(ctx, err, true)
-}
-
 func lfsInternalError(ctx context.Context, operation string, status int, err error) string {
 	slog.Error("lfs request failed", "request_id", requestid.GetRequestID(ctx), "operation", operation, "status", status, "err", err)
 	return http.StatusText(status)

@@ -148,14 +148,6 @@ func ToGeneratedAccessMethods(methods *[]objects.AccessMethod) *[]generated.Acce
 	return &out
 }
 
-func FromGeneratedAccessMethodMap(updates map[string][]generated.AccessMethod) map[string][]objects.AccessMethod {
-	out := make(map[string][]objects.AccessMethod, len(updates))
-	for id, methods := range updates {
-		out[id] = FromGeneratedAccessMethods(methods)
-	}
-	return out
-}
-
 func toGeneratedAccessMethod(method objects.AccessMethod) generated.AccessMethod {
 	out := generated.AccessMethod{AccessId: method.AccessId, Available: method.Available, Cloud: method.Cloud, Region: method.Region, Type: generated.AccessMethodType(method.Type)}
 	if method.AccessUrl != nil {

@@ -226,15 +226,3 @@ func (s *Service) GetBulkObjects(ctx context.Context, ids []string, requiredMeth
 	}
 	return filterObjectsByMethod(ctx, canonical, requiredMethod), nil
 }
-
-func objectHasAccessURL(obj *objectmodel.Record, objectURL string) bool {
-	if obj == nil || obj.AccessMethods == nil {
-		return false
-	}
-	for _, method := range *obj.AccessMethods {
-		if method.AccessUrl != nil && strings.TrimSpace(method.AccessUrl.Url) == objectURL {
-			return true
-		}
-	}
-	return false
-}

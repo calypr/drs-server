@@ -505,35 +505,8 @@ func (s *Service) listReadableObjectIDs(ctx context.Context) ([]string, bool, er
 	return ids, true, err
 }
 
-func (s *Service) canPageScopeRead(ctx context.Context, organization, project string) bool {
-	if !access.IsAuthzEnforced(ctx) {
-		return true
-	}
-	resource, err := clientaccess.ResourcePath(organization, project)
-	if err != nil {
-		return false
-	}
-	return access.HasMethodAccess(ctx, objectMethodRead, []string{resource})
-}
-
 func readableResources(ctx context.Context) []string {
 	return authorizedResources(ctx, objectMethodRead)
-}
-
-func (s *Service) readableChecksumFilter(ctx context.Context, organization, project string) ([]string, bool, bool, bool) {
-	if !access.IsAuthzEnforced(ctx) {
-		return nil, false, false, true
-	}
-	if access.IsGen3Mode(ctx) && !access.HasAuthHeader(ctx) {
-		return nil, false, true, true
-	}
-	if access.HasMethodAccess(ctx, objectMethodRead, []string{"/programs"}) || access.HasMethodAccess(ctx, objectMethodRead, []string{"/data_file"}) {
-		return nil, false, false, true
-	}
-	if strings.TrimSpace(organization) != "" && s.canPageScopeRead(ctx, organization, project) {
-		return nil, false, false, true
-	}
-	return readableResources(ctx), true, true, true
 }
 
 func objectMethodResourceFilter(ctx context.Context, method string) ([]string, bool, bool) {

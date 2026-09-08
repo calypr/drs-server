@@ -169,11 +169,11 @@ func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
 
 func TestLFSBatchInternalErrorsDoNotExposeDetails(t *testing.T) {
 	const detail = "credential secret leaked"
-	internal := dbErrToBatchError(context.Background(), errors.New(detail))
+	internal := batchErrToObjectError(context.Background(), errors.New(detail), false)
 	if internal.Code != http.StatusInternalServerError || internal.Message != http.StatusText(http.StatusInternalServerError) || strings.Contains(internal.Message, detail) {
 		t.Fatalf("unexpected batch error: %+v", internal)
 	}
-	insufficient := dbErrToBatchError(context.Background(), errorapi.ErrBucketNotConfigured)
+	insufficient := batchErrToObjectError(context.Background(), errorapi.ErrBucketNotConfigured, false)
 	if insufficient.Code != http.StatusInsufficientStorage || insufficient.Message != http.StatusText(http.StatusInsufficientStorage) {
 		t.Fatalf("unexpected no-bucket error: %+v", insufficient)
 	}

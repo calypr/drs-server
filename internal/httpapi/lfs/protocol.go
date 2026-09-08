@@ -45,14 +45,6 @@ var (
 	bandwidthWindowMap = map[string]windowBytes{}
 )
 
-// ResetLFSLimitersForTest clears the process-global limiter windows.
-func ResetLFSLimitersForTest() {
-	limitMu.Lock()
-	defer limitMu.Unlock()
-	requestWindowMap = map[string]windowCounter{}
-	bandwidthWindowMap = map[string]windowBytes{}
-}
-
 // LFSRequestMiddleware applies the legacy per-operation media and limiter
 // checks before generated strict decoding invokes the handler.
 func LFSRequestMiddleware(opts Options) lfsapi.StrictMiddlewareFunc {
