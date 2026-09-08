@@ -530,10 +530,31 @@ func (serverUsageStore) ListFileUsage(context.Context, int, int, *time.Time) ([]
 func (serverUsageStore) GetFileUsageSummary(context.Context, *time.Time) (usage.FileUsageSummary, error) {
 	return usage.FileUsageSummary{}, nil
 }
+func (serverUsageStore) ListFileUsagePageByScope(context.Context, string, string, int, int, *time.Time) ([]usage.FileUsage, error) {
+	return []usage.FileUsage{}, nil
+}
+func (serverUsageStore) ListFileUsagePageByResources(context.Context, []string, bool, int, int, *time.Time) ([]usage.FileUsage, error) {
+	return []usage.FileUsage{}, nil
+}
+func (serverUsageStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (usage.FileUsageSummary, error) {
+	return usage.FileUsageSummary{}, nil
+}
+func (serverUsageStore) GetFileUsageSummaryByResources(context.Context, []string, bool, *time.Time) (usage.FileUsageSummary, error) {
+	return usage.FileUsageSummary{}, nil
+}
+func (serverUsageStore) GetProjectRecordSummaryByScope(context.Context, string, string) (usage.FileUsageSummary, error) {
+	return usage.FileUsageSummary{}, nil
+}
 func (serverUsageStore) GetTransferAttributionSummary(context.Context, usage.Filter) (usage.Summary, error) {
 	return usage.Summary{}, nil
 }
 func (serverUsageStore) GetTransferAttributionBreakdown(context.Context, usage.Filter, string) ([]usage.Breakdown, error) {
+	return []usage.Breakdown{}, nil
+}
+func (serverUsageStore) GetTransferAttributionSummaryByResources(context.Context, usage.Filter, []string) (usage.Summary, error) {
+	return usage.Summary{}, nil
+}
+func (serverUsageStore) GetTransferAttributionBreakdownByResources(context.Context, usage.Filter, string, []string) ([]usage.Breakdown, error) {
 	return []usage.Breakdown{}, nil
 }
 

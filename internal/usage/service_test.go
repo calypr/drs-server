@@ -60,6 +60,30 @@ func (s *reportStoreSpy) GetFileUsageSummary(_ context.Context, _ *time.Time) (F
 	return s.summaries, nil
 }
 
+func (s *reportStoreSpy) ListFileUsagePageByScope(ctx context.Context, _ string, _ string, limit, offset int, inactiveSince *time.Time) ([]FileUsage, error) {
+	return s.ListFileUsage(ctx, limit, offset, inactiveSince)
+}
+
+func (s *reportStoreSpy) ListFileUsagePageByResources(ctx context.Context, _ []string, _ bool, limit, offset int, inactiveSince *time.Time) ([]FileUsage, error) {
+	return s.ListFileUsage(ctx, limit, offset, inactiveSince)
+}
+
+func (s *reportStoreSpy) GetFileUsageSummaryByScope(ctx context.Context, _ string, _ string, inactiveSince *time.Time) (FileUsageSummary, error) {
+	return s.GetFileUsageSummary(ctx, inactiveSince)
+}
+
+func (s *reportStoreSpy) GetFileUsageSummaryByResources(ctx context.Context, _ []string, _ bool, inactiveSince *time.Time) (FileUsageSummary, error) {
+	return s.GetFileUsageSummary(ctx, inactiveSince)
+}
+
+func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ string, _ string) (FileUsageSummary, error) {
+	result := s.summaries
+	if result.RecordCount == 0 {
+		result.RecordCount = result.TotalFiles
+	}
+	return result, nil
+}
+
 func (s *reportStoreSpy) GetTransferAttributionSummary(_ context.Context, filter Filter) (Summary, error) {
 	s.transferCalls++
 	return s.transfer[filter.Organization], nil
@@ -68,6 +92,14 @@ func (s *reportStoreSpy) GetTransferAttributionSummary(_ context.Context, filter
 func (s *reportStoreSpy) GetTransferAttributionBreakdown(_ context.Context, filter Filter, _ string) ([]Breakdown, error) {
 	s.breakdownCalls++
 	return append([]Breakdown(nil), s.breakdowns[filter.Organization]...), nil
+}
+
+func (s *reportStoreSpy) GetTransferAttributionSummaryByResources(ctx context.Context, filter Filter, _ []string) (Summary, error) {
+	return s.GetTransferAttributionSummary(ctx, filter)
+}
+
+func (s *reportStoreSpy) GetTransferAttributionBreakdownByResources(ctx context.Context, filter Filter, groupBy string, _ []string) ([]Breakdown, error) {
+	return s.GetTransferAttributionBreakdown(ctx, filter, groupBy)
 }
 
 type optimizedReportStore struct {
@@ -141,7 +173,7 @@ func (s *objectReaderSpy) ListObjectIDsByScope(_ context.Context, organization, 
 	return append([]string(nil), s.ids[organization+"/"+project]...), nil
 }
 
-func TestServiceUsesScopedReportOptimizations(t *testing.T) {
+func TestServiceUsesScopedReportCapabilities(t *testing.T) {
 	store := &optimizedReportStore{reportStoreSpy: &reportStoreSpy{}}
 	service := NewService(Dependencies{Reports: store})
 	ctx := context.Background()
@@ -164,37 +196,6 @@ func TestServiceUsesScopedReportOptimizations(t *testing.T) {
 	}
 	if _, err := service.GetTransferAttributionBreakdown(ctx, TransferBreakdownQuery{Scope: query, GroupBy: "provider"}); err != nil || store.breakdownByResources != 1 {
 		t.Fatalf("transfer breakdown optimization: err=%v calls=%d", err, store.breakdownByResources)
-	}
-}
-
-func TestServiceFallbackAggregatesScopedFileUsage(t *testing.T) {
-	name := "B"
-	store := &reportStoreSpy{files: []FileUsage{{ObjectID: "a", UploadCount: 2, DownloadCount: 3}}}
-	objects := &objectReaderSpy{
-		ids: map[string][]string{
-			"org-1/p-1": {"b", "a"},
-			"org-2/p-2": {"a", "c"},
-		},
-		objects: map[string]*objects.Record{
-			"b": {Id: "b", Name: &name, Size: 12},
-			"c": {Id: "c", Size: 13},
-		},
-	}
-	service := NewService(Dependencies{Reports: store, Objects: objects})
-	query := FileUsageQuery{Scope: ScopeQuery{Scopes: []Scope{{Organization: "org-1", Project: "p-1"}, {Organization: "org-2", Project: "p-2"}}}, Limit: 2}
-	items, err := service.ListFileUsage(context.Background(), query)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := []string{items[0].ObjectID, items[1].ObjectID}; !reflect.DeepEqual(got, []string{"a", "b"}) {
-		t.Fatalf("unexpected sorted/deduplicated page: %v", got)
-	}
-	summary, err := service.GetFileUsageSummary(context.Background(), FileUsageSummaryQuery{Scope: query.Scope})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if summary.TotalFiles != 4 || summary.TotalUploads != 4 || summary.TotalDownloads != 6 {
-		t.Fatalf("unexpected aggregate summary: %+v", summary)
 	}
 }
 
@@ -221,40 +222,6 @@ func TestServiceListsReadableObjectIDsByScopeInRequestOrder(t *testing.T) {
 	}
 	if !reflect.DeepEqual(unscoped, requested) {
 		t.Fatalf("unscoped readable IDs = %v, want %v", unscoped, requested)
-	}
-}
-
-func TestServiceFallbackMergesTransferBreakdownAndFreshness(t *testing.T) {
-	first := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	second := first.Add(time.Hour)
-	store := &reportStoreSpy{
-		transfer: map[string]Summary{
-			"org-1": {EventCount: 2, BytesDownloaded: 5},
-			"org-2": {EventCount: 3, BytesUploaded: 7},
-		},
-		breakdowns: map[string][]Breakdown{
-			"org-1": {{Key: "same", EventCount: 1, BytesDownloaded: 5, LastTransferTime: &first}},
-			"org-2": {{Key: "same", EventCount: 2, BytesUploaded: 7, LastTransferTime: &second}},
-		},
-	}
-	service := NewService(Dependencies{Reports: store})
-	query := ScopeQuery{Scopes: []Scope{{Organization: "org-1"}, {Organization: "org-2"}}}
-	summary, err := service.GetTransferAttributionSummary(context.Background(), TransferSummaryQuery{Scope: query})
-	if err != nil || summary.EventCount != 5 || summary.BytesDownloaded != 5 || summary.BytesUploaded != 7 {
-		t.Fatalf("unexpected merged summary: %+v err=%v", summary, err)
-	}
-	items, err := service.GetTransferAttributionBreakdown(context.Background(), TransferBreakdownQuery{Scope: query, GroupBy: "user"})
-	if err != nil || len(items) != 1 || items[0].EventCount != 3 || items[0].BytesDownloaded != 5 || items[0].BytesUploaded != 7 || !items[0].LastTransferTime.Equal(second) {
-		t.Fatalf("unexpected merged breakdown: %+v err=%v", items, err)
-	}
-	if _, err := service.GetTransferAttributionBreakdown(context.Background(), TransferBreakdownQuery{GroupBy: "invalid"}); !errors.Is(err, ErrInvalidGroupBy) {
-		t.Fatalf("invalid group_by error = %v", err)
-	}
-	from := first.Add(-time.Hour)
-	to := second.Add(time.Hour)
-	freshness, err := service.GetTransferFreshness(context.Background(), Filter{From: &from, To: &to})
-	if err != nil || freshness.IsStale || len(freshness.MissingBuckets) != 0 || !freshness.RequiredFrom.Equal(from) || !freshness.RequiredTo.Equal(to) {
-		t.Fatalf("unexpected placeholder freshness: %+v err=%v", freshness, err)
 	}
 }
 
@@ -305,46 +272,5 @@ func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	}
 	if _, err := NewService(Dependencies{}).GetFileUsageSummary(ctx, FileUsageSummaryQuery{}); !errors.Is(err, ErrReportsUnavailable) {
 		t.Fatalf("missing reports summary error = %v", err)
-	}
-}
-
-func TestServiceFallbackHonorsInactiveSinceAndObjectMetadata(t *testing.T) {
-	name := "named-object"
-	cutoff := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
-	old := cutoff.Add(-time.Hour)
-	fresh := cutoff.Add(time.Hour)
-	store := &reportStoreSpy{files: []FileUsage{
-		{ObjectID: "old", UploadCount: 2, DownloadCount: 4, LastDownloadTime: &old},
-		{ObjectID: "fresh", UploadCount: 3, DownloadCount: 5, LastDownloadTime: &fresh},
-	}}
-	objects := &objectReaderSpy{
-		ids: map[string][]string{"org/project": {"fresh", "old", "missing"}},
-		objects: map[string]*objects.Record{
-			"missing": {Id: "missing", Name: &name, Size: 23},
-		},
-	}
-	service := NewService(Dependencies{Reports: store, Objects: objects})
-	items, err := service.ListFileUsage(context.Background(), FileUsageQuery{
-		Scope:         ScopeQuery{Organization: "org", Project: "project"},
-		InactiveSince: &cutoff,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := []string{items[0].ObjectID, items[1].ObjectID}; !reflect.DeepEqual(got, []string{"missing", "old"}) {
-		t.Fatalf("inactive fallback items = %v", got)
-	}
-	if items[0].Name != name || items[0].Size != 23 {
-		t.Fatalf("missing-object metadata = %+v", items[0])
-	}
-	summary, err := service.GetFileUsageSummary(context.Background(), FileUsageSummaryQuery{
-		Scope:         ScopeQuery{Organization: "org", Project: "project"},
-		InactiveSince: &cutoff,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if summary.TotalFiles != 3 || summary.TotalUploads != 5 || summary.TotalDownloads != 9 || summary.InactiveFileCount != 2 || summary.RecordCount != 3 {
-		t.Fatalf("inactive fallback summary = %+v", summary)
 	}
 }

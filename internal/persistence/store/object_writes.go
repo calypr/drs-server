@@ -34,14 +34,23 @@ func (db *Store) flushObjectUsageEventsForIDsTx(ctx context.Context, tx *sql.Tx,
 	}
 	now := time.Now().UTC()
 	condition, idArgs := db.dialect.ListArgs("e.object_id", ids)
+	isPostgres := strings.HasPrefix(db.dialect.Rebind("?"), "$")
+	if isPostgres {
+		condition = strings.Replace(condition, "?", "$1", 1)
+	}
 	args := append([]any{now}, idArgs...)
+	timestampPlaceholder := "?"
+	if isPostgres {
+		args = append(idArgs, now)
+		timestampPlaceholder = "$2"
+	}
 	query := fmt.Sprintf(`
 		INSERT INTO object_usage (object_id, upload_count, download_count, last_upload_time, last_download_time, updated_time)
 		SELECT e.object_id,
 			COALESCE(SUM(CASE WHEN e.event_type = 'upload' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN e.event_type = 'download' THEN 1 ELSE 0 END), 0),
 			MAX(CASE WHEN e.event_type = 'upload' THEN e.event_time END),
-			MAX(CASE WHEN e.event_type = 'download' THEN e.event_time END), ?
+			MAX(CASE WHEN e.event_type = 'download' THEN e.event_time END), %s
 		FROM object_usage_event e
 		JOIN drs_object o ON o.id = e.object_id
 		WHERE %s
@@ -51,11 +60,17 @@ func (db *Store) flushObjectUsageEventsForIDsTx(ctx context.Context, tx *sql.Tx,
 			download_count = object_usage.download_count + excluded.download_count,
 			last_upload_time = CASE WHEN excluded.last_upload_time IS NULL THEN object_usage.last_upload_time WHEN object_usage.last_upload_time IS NULL THEN excluded.last_upload_time WHEN excluded.last_upload_time > object_usage.last_upload_time THEN excluded.last_upload_time ELSE object_usage.last_upload_time END,
 			last_download_time = CASE WHEN excluded.last_download_time IS NULL THEN object_usage.last_download_time WHEN object_usage.last_download_time IS NULL THEN excluded.last_download_time WHEN excluded.last_download_time > object_usage.last_download_time THEN excluded.last_download_time ELSE object_usage.last_download_time END,
-			updated_time = excluded.updated_time`, condition)
+			updated_time = excluded.updated_time`, timestampPlaceholder, condition)
 	if _, err := db.txExecContext(ctx, tx, query, args...); err != nil {
 		return err
 	}
 	deleteCondition, deleteArgs := db.dialect.ListArgs("object_usage_event.object_id", ids)
+	if isPostgres {
+		deleteCondition = strings.Replace(deleteCondition, "object_usage_event.object_id", "e.object_id", 1)
+		deleteCondition = strings.Replace(deleteCondition, "?", "$1", 1)
+		_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event e USING drs_object o WHERE e.object_id = o.id AND "+deleteCondition, deleteArgs...)
+		return err
+	}
 	_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event WHERE "+deleteCondition+" AND EXISTS (SELECT 1 FROM drs_object WHERE drs_object.id = object_usage_event.object_id)", deleteArgs...)
 	return err
 }

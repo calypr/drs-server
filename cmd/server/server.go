@@ -151,8 +151,8 @@ func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
 			Credentials: database.Store, CredentialAdmin: database.Store, Scopes: database.Store, Visibility: database.Store,
 		},
 		pending:      database.Store,
-		usageIngest:  database,
-		usageReports: database,
+		usageIngest:  database.Store,
+		usageReports: database.Store,
 	}
 }
 
@@ -163,8 +163,8 @@ func postgresServerBackend(database *postgres.PostgresDB) serverBackend {
 			Credentials: database.Store, CredentialAdmin: database.Store, Scopes: database.Store, Visibility: database.Store,
 		},
 		pending:      database.Store,
-		usageIngest:  database,
-		usageReports: database,
+		usageIngest:  database.Store,
+		usageReports: database.Store,
 	}
 }
 
