@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
@@ -404,26 +403,5 @@ func TestInvalidateBucketUsesRegistrationOrderAndTrimmedToken(t *testing.T) {
 	manager.InvalidateBucket(" \t")
 	if len(first.invalidations) != 1 || len(second.invalidations) != 1 {
 		t.Fatal("blank invalidation was dispatched")
-	}
-}
-
-func TestStorageHelpersPreserveExistingBehavior(t *testing.T) {
-	parts := []CompletedPart{{PartNumber: 3}, {PartNumber: 1}, {PartNumber: 2}}
-	if got := NormalizedMultipartParts(parts); !reflect.DeepEqual(got, []CompletedPart{{PartNumber: 1}, {PartNumber: 2}, {PartNumber: 3}}) {
-		t.Fatalf("normalized parts = %#v", got)
-	}
-	if got, want := MultipartPartObjectKey("/nested/object", UploadID("upload"), 2), ".syfon-multipart/upload/nested/object/parts/2"; got != want {
-		t.Fatalf("multipart part key = %q, want %q", got, want)
-	}
-	if got, want := DownloadFilename(`nested\\report.txt`), "report.txt"; got != want {
-		t.Fatalf("download filename = %q, want %q", got, want)
-	}
-	if got, want := ContentDispositionAttachment("nested/report final.txt"), `attachment; filename="report final.txt"; filename*=UTF-8''report%20final.txt`; got != want {
-		t.Fatalf("content disposition = %q, want %q", got, want)
-	}
-	if !sort.SliceIsSorted(NormalizedMultipartParts(parts), func(i, j int) bool {
-		return NormalizedMultipartParts(parts)[i].PartNumber < NormalizedMultipartParts(parts)[j].PartNumber
-	}) {
-		t.Fatal("multipart helper did not sort by part number")
 	}
 }

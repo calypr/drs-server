@@ -225,12 +225,11 @@ func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *test
 	}
 
 	service, credentials, _ = newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
-	if err := service.Put(context.Background(), PutRequest{Bucket: "s3-bucket", Provider: stringPtr("s3")}); err == nil {
+	provider = "s3"
+	if err := service.Put(context.Background(), PutRequest{Bucket: "s3-bucket", Provider: &provider}); err == nil {
 		t.Fatal("S3 credential without secrets unexpectedly succeeded")
 	}
 	if credentials.saveCalls != 0 {
 		t.Fatalf("invalid S3 credential saved %d times", credentials.saveCalls)
 	}
 }
-
-func stringPtr(value string) *string { return &value }

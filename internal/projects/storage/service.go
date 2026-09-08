@@ -100,14 +100,6 @@ func (s *Inspector) InspectProjectStorage(ctx context.Context, organization, pro
 	return &InspectionResult{Summary: summary, Items: normalized}, nil
 }
 
-func (s *Inspector) ListObjects(ctx context.Context, organization, project string, includeHead bool) ([]StorageObject, error) {
-	result, err := s.InspectProjectStorage(ctx, organization, project, InspectionOptions{Mode: ModeItems, IncludeHead: includeHead})
-	if err != nil {
-		return nil, err
-	}
-	return result.Items, nil
-}
-
 func (s *Inspector) ResolvePathPrefix(ctx context.Context, organization, project, requestPrefix string) (string, error) {
 	target, err := s.resolveScope(withRequestCache(ctx), organization, project, readMethod)
 	if err != nil {

@@ -263,9 +263,3 @@ func TestGetClientsNormalizesEndpointWhitespace(t *testing.T) {
 		t.Fatal("UsePathStyle = false, want true for custom endpoint")
 	}
 }
-
-type credentialLookupFunc func(context.Context, string) (*buckets.Credential, error)
-
-func (f credentialLookupFunc) GetS3Credential(ctx context.Context, bucket string) (*buckets.Credential, error) {
-	return f(ctx, bucket)
-}

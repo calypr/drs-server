@@ -231,8 +231,9 @@ func TestProbeObjectNormalizesLegacyOrganizationPrefixAgainstComposedScope(t *te
 func TestValidateInventoryDeduplicatesAndRestoresRequestOrder(t *testing.T) {
 	inventory := &fakeInventory{result: storage.InventoryResult{Items: []storage.ObjectMetadata{{Key: "prefix/a.txt", SizeBytes: 10}}, Complete: true}}
 	service, visibility := projectService(inventory, nil)
+	expectedSize := int64(10)
 	requests := []ListValidationRequest{
-		{ID: "first", ObjectURL: "s3://bucket/prefix/a.txt", ExpectedSizeBytes: int64Ptr(10)},
+		{ID: "first", ObjectURL: "s3://bucket/prefix/a.txt", ExpectedSizeBytes: &expectedSize},
 		{ID: "duplicate", ObjectURL: "s3://bucket/prefix/a.txt", ExpectedName: "wrong.txt"},
 		{ID: "invalid", ObjectURL: "https://bucket/prefix/a.txt"},
 	}
@@ -350,5 +351,3 @@ func TestDeleteProjectDataAuthorizedPreservesTrustedCleanupOrder(t *testing.T) {
 		t.Fatalf("cleanup writes = objects:%v scopes:%v", objects.deleted, scopes.deleted)
 	}
 }
-
-func int64Ptr(value int64) *int64 { return &value }
