@@ -252,6 +252,71 @@ func TestListObjectIDsPageByChecksum_ReturnsCanonicalContentID(t *testing.T) {
 	}
 }
 
+func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := newTestService(database, nil)
+	registerScopedCandidate(t, service, "prepared-a", "7777777777777777777777777777777777777777777777777777777777777777", "org", "proj")
+	registerScopedCandidate(t, service, "prepared-b", "8888888888888888888888888888888888888888888888888888888888888888", "org", "proj")
+
+	scope, err := objects.NewScope(" org ", " proj ")
+	if err != nil {
+		t.Fatalf("NewScope failed: %v", err)
+	}
+	page, err := service.ListPreparedPage(context.Background(), objects.RecordListQuery{
+		Scope:          scope,
+		Limit:          1,
+		Page:           1,
+		RequiredMethod: "read",
+	})
+	if err != nil {
+		t.Fatalf("ListPreparedPage failed: %v", err)
+	}
+	if len(page) != 1 || page[0].Id != "prepared-b" {
+		t.Fatalf("unexpected typed page: %+v", page)
+	}
+}
+
+func TestLookupChecksumQueries_PreservesInputOrderAndDuplicates(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := newTestService(database, nil)
+	checksum := "9999999999999999999999999999999999999999999999999999999999999999"
+	registerScopedCandidate(t, service, "checksum-a", checksum, "org", "proj")
+
+	queries := []objects.ChecksumQuery{
+		{Type: "sha256", Value: checksum},
+		{Type: "sha256", Value: checksum},
+		{Type: "md5", Value: checksum},
+	}
+	matches, err := service.LookupChecksumQueries(context.Background(), queries, "")
+	if err != nil {
+		t.Fatalf("LookupChecksumQueries failed: %v", err)
+	}
+	if len(matches) != len(queries) {
+		t.Fatalf("match count = %d, want %d", len(matches), len(queries))
+	}
+	for i := 0; i < 2; i++ {
+		if matches[i].Query != queries[i] || len(matches[i].Records) != 1 || matches[i].Records[0].Id != "checksum-a" {
+			t.Fatalf("duplicate query %d mismatch: %+v", i, matches[i])
+		}
+	}
+	if matches[2].Query != queries[2] || len(matches[2].Records) != 0 {
+		t.Fatalf("typed mismatch should be empty: %+v", matches[2])
+	}
+}
+
+func TestNewScope_RejectsProjectWithoutOrganization(t *testing.T) {
+	if _, err := objects.NewScope("", "project"); err == nil {
+		t.Fatal("expected project-only scope to be rejected")
+	}
+	scope, err := objects.NewScope("", "")
+	if err != nil {
+		t.Fatalf("empty scope failed: %v", err)
+	}
+	if scope != (objects.Scope{}) {
+		t.Fatalf("empty scope = %+v, want zero scope", scope)
+	}
+}
+
 func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	om := newTestService(database, nil)

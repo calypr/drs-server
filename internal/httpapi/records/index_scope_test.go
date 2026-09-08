@@ -1,8 +1,10 @@
 package records
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestParseScopeQueryParts(t *testing.T) {
+func TestScopeFromQuery(t *testing.T) {
 	tests := []struct {
 		name         string
 		organization string
@@ -21,24 +23,21 @@ func TestParseScopeQueryParts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotOrg, gotProject, ok, err := parseScopeQueryParts(tt.organization, tt.program, tt.project)
+			got, err := scopeFromQuery(tt.organization, tt.program, tt.project)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error")
-				}
-				if ok {
-					t.Fatal("expected ok=false on error")
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if ok != tt.wantOK {
-				t.Fatalf("unexpected ok: got %v want %v", ok, tt.wantOK)
+			if gotOK := got.Organization != ""; gotOK != tt.wantOK {
+				t.Fatalf("unexpected ok: got %v want %v", gotOK, tt.wantOK)
 			}
-			if gotOrg != tt.wantOrg || gotProject != tt.wantProject {
-				t.Fatalf("unexpected scope: got org=%q project=%q want org=%q project=%q", gotOrg, gotProject, tt.wantOrg, tt.wantProject)
+			if got.Organization != tt.wantOrg || got.Project != tt.wantProject {
+				t.Fatalf("unexpected scope: got org=%q project=%q want org=%q project=%q", got.Organization, got.Project, tt.wantOrg, tt.wantProject)
 			}
 		})
 	}

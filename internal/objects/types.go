@@ -3,7 +3,62 @@
 // generated HTTP contract: adapters translate at the boundary.
 package objects
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Scope identifies the optional organization/project boundary for a record
+// query or mutation. An empty Scope represents an unscoped operation.
+type Scope struct {
+	Organization string
+	Project      string
+}
+
+// ChecksumQuery is an algorithm-qualified checksum lookup.
+type ChecksumQuery struct {
+	Type  string
+	Value string
+}
+
+// ChecksumMatches keeps one checksum query's result separate from the other
+// queries in an ordered batch.
+type ChecksumMatches struct {
+	Query   ChecksumQuery
+	Records []Record
+}
+
+// RecordListQuery describes the selection and pagination policy for a record
+// listing. Only domain values cross into the records service.
+type RecordListQuery struct {
+	Scope          Scope
+	Checksum       *ChecksumQuery
+	ObjectURL      string
+	StartAfter     string
+	Limit          int
+	Page           int
+	RequiredMethod string
+}
+
+// ScopedRecord pairs a record with the scope supplied by its caller.
+type ScopedRecord struct {
+	Record Record
+	Scope  Scope
+}
+
+// NewScope validates and normalizes an organization/project scope. A project
+// cannot be supplied without an organization; an omitted scope is valid.
+func NewScope(organization, project string) (Scope, error) {
+	scope := Scope{
+		Organization: strings.TrimSpace(organization),
+		Project:      strings.TrimSpace(project),
+	}
+	if scope.Project != "" && scope.Organization == "" {
+		return Scope{}, fmt.Errorf("organization is required when project is set")
+	}
+	return scope, nil
+}
 
 // RecordID identifies one physical persisted record.  Two records may refer
 // to the same content while retaining distinct record IDs.

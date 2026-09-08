@@ -72,30 +72,24 @@ func handleInternalBulkHashesFiber(objectService *objectrecords.Service) fiber.H
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 
-		normalized := normalizeBulkHashes(req.Hashes)
-		res, err := objectService.GetObjectsByChecksums(c.Context(), normalized, "read")
+		queries := make([]objects.ChecksumQuery, 0, len(req.Hashes))
+		for _, raw := range req.Hashes {
+			typ, value := objects.ParseHashQuery(raw, "")
+			queries = append(queries, objects.ChecksumQuery{Type: typ, Value: value})
+		}
+		matches, err := objectService.LookupChecksumQueries(c.Context(), queries, "read")
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
 
 		finalRes := make(map[string][]internalapi.InternalRecord, len(req.Hashes))
 		for i, h := range req.Hashes {
-			typ, val := objects.ParseHashQuery(h, "")
-			matches := []objects.Record{}
-			if i < len(normalized) {
-				matches = res[normalized[i]]
+			var records []objects.Record
+			if i < len(matches) {
+				records = matches[i].Records
 			}
-			if typ != "" {
-				filtered := make([]objects.Record, 0, len(matches))
-				for _, m := range matches {
-					if objects.RecordHasChecksumTypeAndValue(m, typ, val) {
-						filtered = append(filtered, m)
-					}
-				}
-				matches = filtered
-			}
-			compatibilityMatches := make([]internalapi.InternalRecord, 0, len(matches))
-			for _, match := range matches {
+			compatibilityMatches := make([]internalapi.InternalRecord, 0, len(records))
+			for _, match := range records {
 				compatibilityMatches = append(compatibilityMatches, ToInternalRecord(match))
 			}
 			finalRes[h] = compatibilityMatches
@@ -145,15 +139,6 @@ func handleInternalBulkSHA256ValidityFiber(objectService *objectrecords.Service)
 		}
 		return c.JSON(out)
 	}
-}
-
-func normalizeBulkHashes(hashes []string) []string {
-	normalized := make([]string, 0, len(hashes))
-	for _, h := range hashes {
-		_, val := objects.ParseHashQuery(h, "")
-		normalized = append(normalized, val)
-	}
-	return normalized
 }
 
 func normalizeNonEmptyBulkHashes(hashes []string) []string {

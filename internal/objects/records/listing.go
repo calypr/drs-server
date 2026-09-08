@@ -2,6 +2,7 @@ package records
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -13,6 +14,111 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 )
+
+const maxRecordListLimit = 10000
+
+// normalizeListQuery validates and normalizes the typed list policy before a
+// query is dispatched to one of the storage-backed listing paths.
+func normalizeListQuery(query objectmodel.RecordListQuery) (objectmodel.RecordListQuery, error) {
+	scope, err := objectmodel.NewScope(query.Scope.Organization, query.Scope.Project)
+	if err != nil {
+		return objectmodel.RecordListQuery{}, err
+	}
+	query.Scope = scope
+	query.ObjectURL = strings.TrimSpace(query.ObjectURL)
+	query.StartAfter = strings.TrimSpace(query.StartAfter)
+	if query.Limit < 0 {
+		return objectmodel.RecordListQuery{}, fmt.Errorf("limit must be >= 0")
+	}
+	if query.Limit > maxRecordListLimit {
+		query.Limit = maxRecordListLimit
+	}
+	if query.StartAfter != "" {
+		query.Page = 0
+		return query, nil
+	}
+	if query.Page < 0 {
+		return objectmodel.RecordListQuery{}, fmt.Errorf("page must be >= 0")
+	}
+	if _, err := recordListPageOffset(query.Page, query.Limit); err != nil {
+		return objectmodel.RecordListQuery{}, err
+	}
+	return query, nil
+}
+
+func recordListPageOffset(page, limit int) (int, error) {
+	if page == 0 || limit == 0 {
+		return 0, nil
+	}
+	maxInt := int(^uint(0) >> 1)
+	if page > maxInt/limit {
+		return 0, fmt.Errorf("page offset is too large")
+	}
+	return page * limit, nil
+}
+
+// ListPreparedPage owns branch selection, ID pagination, scoped hydration,
+// canonicalization, URL filtering, and authorization-dependent scans for one
+// record listing.
+func (s *Service) ListPreparedPage(ctx context.Context, query objectmodel.RecordListQuery) ([]objectmodel.Record, error) {
+	query, err := normalizeListQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	offset, err := recordListPageOffset(query.Page, query.Limit)
+	if err != nil {
+		return nil, err
+	}
+	scope := query.Scope
+	if query.Checksum != nil {
+		checksumType, checksum := objectmodel.ParseHashQuery(query.Checksum.Value, query.Checksum.Type)
+		ids, err := s.ListObjectIDsPageByChecksum(ctx, checksum, checksumType, scope.Organization, scope.Project, query.RequiredMethod, query.StartAfter, query.Limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPreparedScopedObjects(ctx, ids, scope.Organization, scope.Project, query.RequiredMethod)
+	}
+	if query.ObjectURL != "" {
+		ids, err := s.ListObjectIDsPageByURL(ctx, query.ObjectURL, scope.Organization, scope.Project, query.RequiredMethod, query.StartAfter, query.Limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPreparedScopedObjects(ctx, ids, scope.Organization, scope.Project, query.RequiredMethod)
+	}
+	return s.ListPreparedObjectsPageByScope(ctx, scope.Organization, scope.Project, query.RequiredMethod, query.StartAfter, query.Limit, offset)
+}
+
+// LookupChecksumQueries resolves a checksum batch in input order. Each input
+// query receives its own result, including duplicate queries.
+func (s *Service) LookupChecksumQueries(ctx context.Context, queries []objectmodel.ChecksumQuery, requiredMethod string) ([]objectmodel.ChecksumMatches, error) {
+	values := make([]string, 0, len(queries))
+	for _, query := range queries {
+		_, value := objectmodel.ParseHashQuery(query.Value, query.Type)
+		values = append(values, value)
+	}
+	objectsByChecksum, err := s.store.GetObjectsByChecksums(ctx, values)
+	if err != nil {
+		return nil, err
+	}
+
+	matches := make([]objectmodel.ChecksumMatches, 0, len(queries))
+	for _, query := range queries {
+		checksumType, checksum := objectmodel.ParseHashQuery(query.Value, query.Type)
+		objects := objectsWithSHA256(objectsByChecksum[checksum], checksum)
+		objects = filterObjectsByMethod(ctx, canonicalizeContentObjects(objects), requiredMethod)
+		if checksumType != "" {
+			filtered := make([]objectmodel.Record, 0, len(objects))
+			for _, obj := range objects {
+				if objectmodel.RecordHasChecksumTypeAndValue(obj, checksumType, checksum) {
+					filtered = append(filtered, obj)
+				}
+			}
+			objects = filtered
+		}
+		matches = append(matches, objectmodel.ChecksumMatches{Query: query, Records: objects})
+	}
+	return matches, nil
+}
 
 func (s *Service) GetObjectsByChecksums(ctx context.Context, hashes []string, requiredMethod string) (map[string][]objectmodel.Record, error) {
 	objectsByChecksum, err := s.store.GetObjectsByChecksums(ctx, hashes)

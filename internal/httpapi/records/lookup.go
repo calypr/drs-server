@@ -3,10 +3,8 @@ package records
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
@@ -41,68 +39,51 @@ func handleInternalGetFiber(objectService *objectrecords.Service) fiber.Handler 
 
 func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
+		var (
+			limit int
+			start string
+			page  int
+			err   error
+		)
 		hash := c.Query("hash")
-		hashType := c.Query("hash_type")
-		objectURL := strings.TrimSpace(c.Query("url"))
 		if hash != "" {
-			hashType, hash = objects.ParseHashQuery(hash, hashType)
-			filterOrg := strings.TrimSpace(c.Query("organization"))
-			filterProject := strings.TrimSpace(c.Query("project"))
-			limit, start, offset, err := parseInternalListPaginationFiber(c)
+			// Preserve the checksum branch's existing error precedence: raw
+			// integer syntax is rejected before the typed scope is validated.
+			limit, start, page, err = parseInternalListPageFiber(c)
 			if err != nil {
 				return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
 			}
-			ids, err := objectService.ListObjectIDsPageByChecksum(c.Context(), hash, hashType, filterOrg, filterProject, "read", start, limit, offset)
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			objs, err := objectService.GetPreparedScopedObjects(c.Context(), ids, filterOrg, filterProject, "read")
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			records := make([]internalapi.InternalRecord, 0, len(objs))
-			for _, o := range objs {
-				records = append(records, ToInternalRecord(o))
-			}
-			return c.JSON(internalapi.ListRecordsResponse{Records: &records})
 		}
 
-		filterOrg, filterProject, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
-		if err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
-		}
-		if !hasScope {
-			filterOrg, filterProject = "", ""
-		}
-		limit, start, offset, err := parseInternalListPaginationFiber(c)
-		if err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
-		}
-
-		requestStart := time.Now()
-		listStart := time.Now()
-		var objs []objects.Record
-		if objectURL != "" {
-			var ids []string
-			ids, err = objectService.ListObjectIDsPageByURL(c.Context(), objectURL, filterOrg, filterProject, "read", start, limit, offset)
+		var scope objects.Scope
+		if hash == "" {
+			scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 			if err != nil {
-				return middleware.HandleError(c, err)
+				return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
 			}
-			prepareStart := time.Now()
-			objs, err = objectService.GetPreparedScopedObjects(c.Context(), ids, filterOrg, filterProject, "read")
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			listDuration := time.Since(listStart)
-			prepareDuration := time.Since(prepareStart)
-			log.Printf("INFO: syfon_internal_index_list organization=%s project=%s url_filter=%t start_after=%t limit=%d offset=%d ids=%d records=%d list_ids_ms=%d prepare_scoped_ms=%d duration_ms=%d", filterOrg, filterProject, true, strings.TrimSpace(start) != "", limit, offset, len(ids), len(objs), listDuration.Milliseconds(), prepareDuration.Milliseconds(), time.Since(requestStart).Milliseconds())
+			limit, start, page, err = parseInternalListPageFiber(c)
 		} else {
-			objs, err = objectService.ListPreparedObjectsPageByScope(c.Context(), filterOrg, filterProject, "read", start, limit, offset)
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			listDuration := time.Since(listStart)
-			log.Printf("INFO: syfon_internal_index_list organization=%s project=%s url_filter=%t start_after=%t limit=%d offset=%d records=%d list_prepared_ms=%d duration_ms=%d", filterOrg, filterProject, false, strings.TrimSpace(start) != "", limit, offset, len(objs), listDuration.Milliseconds(), time.Since(requestStart).Milliseconds())
+			scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
+		}
+		if err != nil {
+			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+		}
+
+		query := objects.RecordListQuery{
+			Scope:          scope,
+			ObjectURL:      strings.TrimSpace(c.Query("url")),
+			StartAfter:     start,
+			Limit:          limit,
+			Page:           page,
+			RequiredMethod: "read",
+		}
+		if hash != "" {
+			hashType, hashValue := objects.ParseHashQuery(hash, c.Query("hash_type"))
+			query.Checksum = &objects.ChecksumQuery{Type: hashType, Value: hashValue}
+		}
+		objs, err := objectService.ListPreparedPage(c.Context(), query)
+		if err != nil {
+			return middleware.HandleError(c, err)
 		}
 		records := make([]internalapi.InternalRecord, 0, len(objs))
 		for _, obj := range objs {
@@ -110,6 +91,14 @@ func handleInternalListFiber(objectService *objectrecords.Service) fiber.Handler
 		}
 		return c.JSON(internalapi.ListRecordsResponse{Records: &records})
 	}
+}
+
+func scopeFromQuery(organization, program, project string) (objects.Scope, error) {
+	org := strings.TrimSpace(organization)
+	if org == "" {
+		org = strings.TrimSpace(program)
+	}
+	return objects.NewScope(org, project)
 }
 
 func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fiber.Handler {
@@ -143,22 +132,23 @@ func handleInternalBulkDocumentsFiber(objectService *objectrecords.Service) fibe
 	}
 }
 
-func parseScopeQueryParts(organization, program, project string) (string, string, bool, error) {
-	org := strings.TrimSpace(organization)
-	if org == "" {
-		org = strings.TrimSpace(program)
+func parseInternalListPaginationFiber(c fiber.Ctx) (int, string, int, error) {
+	limit, start, page, err := parseInternalListPageFiber(c)
+	if err != nil {
+		return 0, "", 0, err
 	}
-	project = strings.TrimSpace(project)
-	if project != "" && org == "" {
-		return "", "", false, fmt.Errorf("organization is required when project is set")
+	offset := 0
+	if page != 0 && limit != 0 {
+		maxInt := int(^uint(0) >> 1)
+		if page > maxInt/limit {
+			return 0, "", 0, fmt.Errorf("page offset is too large")
+		}
+		offset = page * limit
 	}
-	if org != "" {
-		return org, project, true, nil
-	}
-	return "", "", false, nil
+	return limit, start, offset, nil
 }
 
-func parseInternalListPaginationFiber(c fiber.Ctx) (int, string, int, error) {
+func parseInternalListPageFiber(c fiber.Ctx) (int, string, int, error) {
 	limit := defaultInternalListLimit
 	rawLimit := strings.TrimSpace(c.Query("limit"))
 	if rawLimit != "" {
@@ -176,19 +166,19 @@ func parseInternalListPaginationFiber(c fiber.Ctx) (int, string, int, error) {
 	}
 
 	start := strings.TrimSpace(c.Query("start"))
-	offset := 0
+	page := 0
 	if start == "" {
 		rawPage := strings.TrimSpace(c.Query("page"))
 		if rawPage != "" {
-			page, err := strconv.Atoi(rawPage)
+			parsedPage, err := strconv.Atoi(rawPage)
 			if err != nil {
 				return 0, "", 0, fmt.Errorf("page must be an integer")
 			}
-			if page < 0 {
+			if parsedPage < 0 {
 				return 0, "", 0, fmt.Errorf("page must be >= 0")
 			}
-			offset = page * limit
+			page = parsedPage
 		}
 	}
-	return limit, start, offset, nil
+	return limit, start, page, nil
 }

@@ -22,15 +22,15 @@ func handleInternalDeleteByQueryFiber(objectService *objectrecords.Service) fibe
 		if apimiddleware.MissingGen3AuthHeader(c.Context()) {
 			return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 		}
-		org, project, hasScope, err := parseScopeQueryParts(c.Query("organization"), c.Query("program"), c.Query("project"))
+		scope, err := scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
 			return apimiddleware.Reject(c, fiber.StatusBadRequest, err.Error())
 		}
-		if !hasScope {
+		if scope.Organization == "" {
 			return apimiddleware.Reject(c, fiber.StatusBadRequest, "No scope specified")
 		}
 
-		count, err := objectService.DeleteBulkByScope(c.Context(), org, project)
+		count, err := objectService.DeleteBulkByScope(c.Context(), scope.Organization, scope.Project)
 		if err != nil {
 			return apimiddleware.HandleError(c, err)
 		}
