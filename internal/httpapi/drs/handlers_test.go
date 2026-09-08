@@ -16,14 +16,24 @@ import (
 )
 
 type captureStorageAccess struct {
-	lastOptions storage.AccessOptions
+	lastOptions storage.SignRequest
 	lastURL     string
 }
 
-func (m *captureStorageAccess) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
-	m.lastOptions = request.Options
-	m.lastURL = request.Target.Location
-	return storage.Access{Location: request.Target.Location + "?signed=true"}, nil
+func (m *captureStorageAccess) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	m.lastOptions = request
+	m.lastURL = request.Target.OriginalURL
+	return storage.SignedAccess{Location: request.Target.OriginalURL + "?signed=true"}, nil
+}
+
+func (m *captureStorageAccess) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", nil
+}
+func (m *captureStorageAccess) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+func (m *captureStorageAccess) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
 }
 
 func TestGetObjectAndAccessURLAliases(t *testing.T) {

@@ -59,8 +59,6 @@ type UploadResult struct {
 type Service struct {
 	objects           ObjectPort
 	storage           StoragePort
-	access            AccessPort
-	multipart         MultipartPort
 	fileCounters      usage.FileCounterRecorder
 	scopes            ScopeReader
 	credentials       CredentialReader
@@ -70,9 +68,8 @@ type Service struct {
 	multipartSessions map[string]*multipartSession
 }
 
-// BindLegacyDependencies keeps the old HTTP fixture composition executable
-// while callers migrate to Dependencies.Objects/FileCounters. It only fills
-// missing capabilities and is harmless for the canonical composition.
+// BindLegacyDependencies keeps older HTTP fixture composition executable while
+// callers migrate to Dependencies.Objects/FileCounters.
 func (s *Service) BindLegacyDependencies(objects ObjectPort, counters usage.FileCounterRecorder) {
 	if s == nil {
 		return
@@ -90,11 +87,11 @@ func NewService(deps Dependencies) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{objects: deps.Objects, storage: deps.Storage, access: deps.Access, multipart: deps.Multipart, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now}
+	return &Service{objects: deps.Objects, storage: deps.Storage, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now}
 }
 
 func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadResult, error) {
-	if s == nil || (s.objects == nil && strings.TrimSpace(req.ObjectID) != "") || (s.storage == nil && s.access == nil) {
+	if s == nil || (s.objects == nil && strings.TrimSpace(req.ObjectID) != "") || s.storage == nil {
 		return DownloadResult{}, fmt.Errorf("transfer service is not configured")
 	}
 	obj, err := s.objects.GetObject(ctx, strings.TrimSpace(req.ObjectID), "read")
@@ -146,7 +143,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 }
 
 func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResult, error) {
-	if s == nil || s.objects == nil || (s.storage == nil && s.access == nil) {
+	if s == nil || s.objects == nil || s.storage == nil {
 		return UploadResult{}, fmt.Errorf("transfer service is not configured")
 	}
 	objectID := strings.TrimSpace(req.ObjectID)
@@ -229,21 +226,10 @@ func (s *Service) recordAccessIssued(ctx context.Context, req AccessRequest) err
 }
 
 func (s *Service) sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
-	if s.storage != nil {
-		return s.storage.Sign(ctx, request)
-	}
-	if s.access == nil {
+	if s == nil || s.storage == nil {
 		return storage.SignedAccess{}, fmt.Errorf("storage access is not configured")
 	}
-	location := request.Target.OriginalURL
-	if location == "" {
-		location = request.Target.CanonicalURL
-	}
-	access, err := s.access.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{AccessID: request.Target.LookupKey, Location: location}, Options: storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}, Range: request.Range})
-	if err != nil {
-		return storage.SignedAccess{}, err
-	}
-	return storage.SignedAccess{Location: access.Location}, nil
+	return s.storage.Sign(ctx, request)
 }
 
 func isNotFound(err error) bool {

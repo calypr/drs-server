@@ -18,8 +18,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-var _ domaintransfers.AccessPort = (*internalDRSStorageFake)(nil)
-var _ domaintransfers.MultipartPort = (*internalDRSStorageFake)(nil)
+var _ domaintransfers.StoragePort = (*internalDRSStorageFake)(nil)
 
 type internalDRSStorageFake struct {
 	mu sync.Mutex
@@ -28,7 +27,7 @@ type internalDRSStorageFake struct {
 	key           string
 	signURL       string
 	signID        string
-	signOpts      storage.AccessOptions
+	signOpts      storage.SignRequest
 	completeErr   error
 	completeParts []storage.CompletedPart
 }
@@ -49,25 +48,20 @@ func dataTestAuthContext(base context.Context, mode string, authHeader bool, pri
 	return access.WithSession(base, session)
 }
 
-func (m *internalDRSStorageFake) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
+func (m *internalDRSStorageFake) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
 	m.mu.Lock()
-	m.signID = request.Target.AccessID
-	m.signURL = request.Target.Location
-	m.signOpts = request.Options
+	m.signID = request.Target.LookupKey
+	m.signURL = request.Target.OriginalURL
+	m.signOpts = request
 	m.mu.Unlock()
 	suffix := "?signed=true"
-	if strings.EqualFold(strings.TrimSpace(request.Options.Method), http.MethodPut) || strings.EqualFold(strings.TrimSpace(request.Options.Method), http.MethodPost) {
+	if strings.EqualFold(strings.TrimSpace(request.Method), http.MethodPut) || strings.EqualFold(strings.TrimSpace(request.Method), http.MethodPost) {
 		suffix += "&upload=true"
 	}
 	if request.Range != nil {
 		suffix += fmt.Sprintf("&range=%d-%d", request.Range.Start, request.Range.End)
 	}
-	return storage.Access{Location: request.Target.Location + suffix}, nil
-}
-
-func (m *internalDRSStorageFake) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
-	access, err := m.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{AccessID: request.Target.LookupKey, Location: request.Target.OriginalURL}, Options: storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}, Range: request.Range})
-	return storage.SignedAccess{Location: access.Location}, err
+	return storage.SignedAccess{Location: request.Target.OriginalURL + suffix}, nil
 }
 
 func (m *internalDRSStorageFake) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {

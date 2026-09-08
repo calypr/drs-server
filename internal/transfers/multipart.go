@@ -75,7 +75,7 @@ func (s *Service) completeMultipartTarget(ctx context.Context, target storage.Ta
 }
 
 func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) (MultipartInitResult, error) {
-	if s == nil || s.objects == nil || s.storage == nil {
+	if s == nil || s.objects == nil {
 		return MultipartInitResult{}, fmt.Errorf("transfer multipart is not configured")
 	}
 	var target storage.Target
@@ -92,6 +92,9 @@ func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) 
 	}
 	if err != nil {
 		return MultipartInitResult{}, err
+	}
+	if s.storage == nil {
+		return MultipartInitResult{}, fmt.Errorf("transfer multipart is not configured")
 	}
 	uploadID, err := s.beginMultipartTarget(ctx, target)
 	if err != nil {

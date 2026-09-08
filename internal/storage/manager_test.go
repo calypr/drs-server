@@ -165,19 +165,19 @@ func TestNewRegistrationSnapshotsCapabilitiesAndManagerHasNoMutationPath(t *test
 	}
 }
 
-func TestAccessUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
+func TestSignUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
 	lookup := &fakeLookup{
 		credentials: map[string]*buckets.Credential{"logical": credential("gcs", "physical")},
 		errors:      map[string]error{"url-bucket": errors.New("stale URL lookup")},
 	}
 	backend := &fakeBackend{provider: "gcs"}
 	manager := managerWithBackends(t, lookup, backend)
-	access, err := manager.Access(context.Background(), AccessRequest{
-		Target:  AccessTarget{AccessID: "logical", Location: "s3://url-bucket/object"},
-		Options: AccessOptions{Method: "GET"},
+	access, err := manager.Sign(context.Background(), SignRequest{
+		Target: Target{LookupKey: "logical", OriginalURL: "s3://url-bucket/object"},
+		Method: "GET",
 	})
 	if err != nil {
-		t.Fatalf("Access returned error: %v", err)
+		t.Fatalf("Sign returned error: %v", err)
 	}
 	if got, want := lookup.queries, []string{"url-bucket", "logical"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credential lookup order = %#v, want %#v", got, want)
@@ -190,19 +190,19 @@ func TestAccessUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
 	}
 }
 
-func TestAccessFallsBackToSchemeAndDefaultProvider(t *testing.T) {
+func TestSignFallsBackToSchemeAndDefaultProvider(t *testing.T) {
 	lookup := &fakeLookup{errors: map[string]error{"bucket": errors.New("missing"), "access": errors.New("missing")}}
 	gcs := &fakeBackend{provider: "gcs"}
 	s3 := &fakeBackend{provider: "s3"}
 	manager := managerWithBackends(t, lookup, gcs, s3)
-	if _, err := manager.Access(context.Background(), AccessRequest{Target: AccessTarget{AccessID: "access", Location: "gs://bucket/key"}}); err != nil {
+	if _, err := manager.Sign(context.Background(), SignRequest{Target: Target{LookupKey: "access", OriginalURL: "gs://bucket/key"}}); err != nil {
 		t.Fatalf("scheme fallback returned error: %v", err)
 	}
 	if len(gcs.accessRequests) != 1 {
 		t.Fatalf("scheme fallback selected %d gcs calls, want 1", len(gcs.accessRequests))
 	}
 	lookup.errors = map[string]error{"bucket": errors.New("missing")}
-	if _, err := manager.Access(context.Background(), AccessRequest{Target: AccessTarget{Location: "https://bucket/key"}}); err != nil {
+	if _, err := manager.Sign(context.Background(), SignRequest{Target: Target{OriginalURL: "https://bucket/key"}}); err != nil {
 		t.Fatalf("default fallback returned error: %v", err)
 	}
 	if len(s3.accessRequests) != 1 {

@@ -100,11 +100,21 @@ type bulkAccessFailure struct {
 	err    error
 }
 
-func (a bulkAccessFailure) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
-	if strings.Contains(request.Target.Location, "/"+a.failID) {
-		return storage.Access{}, a.err
+func (a bulkAccessFailure) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	if strings.Contains(request.Target.OriginalURL, "/"+a.failID) {
+		return storage.SignedAccess{}, a.err
 	}
-	return storage.Access{Location: request.Target.Location + "?signed=true"}, nil
+	return storage.SignedAccess{Location: request.Target.OriginalURL + "?signed=true"}, nil
+}
+
+func (a bulkAccessFailure) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", nil
+}
+func (a bulkAccessFailure) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+func (a bulkAccessFailure) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
 }
 
 type bulkEventFailure struct {
@@ -173,7 +183,7 @@ func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
 			if tc.scopeErr != nil {
 				scopes = bulkScopeFailure{err: tc.scopeErr}
 			}
-			var access domaintransfers.AccessPort
+			var access domaintransfers.StoragePort
 			if tc.accessErr != nil {
 				access = bulkAccessFailure{failID: failID, err: tc.accessErr}
 			} else {
@@ -186,7 +196,7 @@ func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
 				events = bulkEventFailure{failID: "never", err: errors.New("unused")}
 			}
 			objectService := objectrecords.NewService(reader)
-			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Access: access, Scopes: scopes, Events: events})
+			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Storage: access, Scopes: scopes, Events: events})
 			app := fiber.New()
 			app.Post("/bulk", handleInternalUploadBulkFiber(objectService, transferService))
 			body := strings.NewReader(`{"requests":[{"file_id":"` + failID + `"},{"file_id":"success"}]}`)

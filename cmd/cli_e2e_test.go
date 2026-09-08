@@ -307,19 +307,23 @@ type cliProjectStorageCatalog struct {
 	projectstorage.ScopeCatalog
 }
 
-func (a cliFileStorageAccess) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
-	parsed, err := url.Parse(strings.TrimSpace(request.Target.Location))
+func (a cliFileStorageAccess) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	location := request.Target.OriginalURL
+	if location == "" {
+		location = request.Target.CanonicalURL
+	}
+	parsed, err := url.Parse(strings.TrimSpace(location))
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 	key := strings.TrimPrefix(parsed.Path, "/")
 	if key == "" {
 		key = parsed.Path
 	}
 	if key == "" {
-		return storage.Access{}, fmt.Errorf("storage access target has no object key: %q", request.Target.Location)
+		return storage.SignedAccess{}, fmt.Errorf("storage access target has no object key: %q", location)
 	}
-	return storage.Access{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
+	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
 }
 
 func (s *fiberTestServer) Close() {
@@ -365,7 +369,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	objectService := objectrecords.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Access: cliFileStorageAccess{root: storageDir}, Scopes: bucketService, Credentials: bucketService,
+		Storage: cliFileStorageAccess{root: storageDir}, Scopes: bucketService, Credentials: bucketService,
 		Events: database,
 	})
 	description := "Calypr test DRS server"

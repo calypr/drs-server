@@ -13,13 +13,13 @@ import (
 )
 
 func TestMultipartLifecycleSessionsAreInstanceLocal(t *testing.T) {
-	service := NewService(Dependencies{Multipart: &multipartFake{beginID: "opaque-upload"}})
+	service := NewService(Dependencies{Storage: &multipartFake{beginID: "opaque-upload"}})
 	assertMultipartLifecycleIsolated(t, NewMultipartLifecycle(service), NewMultipartLifecycle(service))
 }
 
 func TestMultipartLifecycleSessionsAreIsolatedAcrossServices(t *testing.T) {
-	firstService := NewService(Dependencies{Multipart: &multipartFake{beginID: "opaque-upload"}})
-	secondService := NewService(Dependencies{Multipart: &multipartFake{beginID: "opaque-upload"}})
+	firstService := NewService(Dependencies{Storage: &multipartFake{beginID: "opaque-upload"}})
+	secondService := NewService(Dependencies{Storage: &multipartFake{beginID: "opaque-upload"}})
 	assertMultipartLifecycleIsolated(t, NewMultipartLifecycle(firstService), NewMultipartLifecycle(secondService))
 }
 
@@ -36,7 +36,7 @@ func assertMultipartLifecycleIsolated(t *testing.T, first, second *MultipartLife
 
 func TestMultipartLifecycleBeginDoesNotStoreFailedProviderUpload(t *testing.T) {
 	providerErr := errors.New("provider begin failed")
-	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Multipart: &multipartFake{
+	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Storage: &multipartFake{
 		beginID:  "opaque-upload",
 		beginErr: providerErr,
 	}}))
@@ -52,7 +52,7 @@ func TestMultipartLifecycleBeginDoesNotStoreFailedProviderUpload(t *testing.T) {
 func TestMultipartLifecycleCompleteRetainsSessionAfterProviderFailure(t *testing.T) {
 	providerErr := errors.New("provider completion failed")
 	provider := &lifecycleMultipartFake{beginIDs: []storage.UploadID{"opaque-upload"}, completeErrs: []error{providerErr, nil}}
-	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Multipart: provider}))
+	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Storage: provider}))
 	uploadID, err := lifecycle.Begin(context.Background(), "bucket", "key")
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
@@ -78,6 +78,10 @@ type lifecycleMultipartFake struct {
 	maxActive     int
 	started       chan<- struct{}
 	release       <-chan struct{}
+}
+
+func (f *lifecycleMultipartFake) Sign(context.Context, storage.SignRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
 }
 
 func (f *lifecycleMultipartFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
@@ -155,7 +159,7 @@ func TestMultipartLifecycleCompleteSerializesSameUpload(t *testing.T) {
 		started:      started,
 		release:      release,
 	}
-	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Multipart: provider}))
+	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Storage: provider}))
 	uploadID, err := lifecycle.Begin(context.Background(), "bucket", "key")
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
@@ -192,7 +196,7 @@ func TestMultipartLifecycleCompleteAllowsDistinctUploadsConcurrently(t *testing.
 		started:  started,
 		release:  release,
 	}
-	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Multipart: provider}))
+	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Storage: provider}))
 	firstID, err := lifecycle.Begin(context.Background(), "bucket", "key-1")
 	if err != nil {
 		t.Fatalf("first Begin() error = %v", err)
@@ -222,7 +226,7 @@ func TestMultipartLifecycleCompleteWaitsPerUploadAndAllowsCancellation(t *testin
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 	provider := &lifecycleMultipartFake{beginIDs: []storage.UploadID{"opaque-upload"}, started: started, release: release}
-	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Multipart: provider}))
+	lifecycle := NewMultipartLifecycle(NewService(Dependencies{Storage: provider}))
 	uploadID, err := lifecycle.Begin(context.Background(), "bucket", "key")
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)

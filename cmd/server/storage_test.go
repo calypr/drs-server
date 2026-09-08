@@ -19,8 +19,8 @@ func TestStorageCompositionSharesOneManagerAcrossConsumerPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newStorageManager: %v", err)
 	}
-	access, err := manager.Access(context.Background(), storage.AccessRequest{
-		Target: storage.AccessTarget{Location: "s3://bucket/object"},
+	access, err := manager.Sign(context.Background(), storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://bucket/object"},
 	})
 	if err != nil {
 		t.Fatalf("file-backed access through composed manager: %v", err)

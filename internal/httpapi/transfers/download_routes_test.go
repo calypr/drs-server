@@ -15,20 +15,14 @@ import (
 
 type captureURLManager struct {
 	internalDRSStorageFake
-	lastOptions storage.AccessOptions
+	lastOptions storage.SignRequest
 }
 
 func stringPtr(s string) *string { return &s }
 
-func (m *captureURLManager) Access(ctx context.Context, request storage.AccessRequest) (storage.Access, error) {
-	m.lastOptions = request.Options
-	return m.internalDRSStorageFake.Access(ctx, request)
-}
-
 func (m *captureURLManager) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
-	m.lastOptions = storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}
-	access, err := m.internalDRSStorageFake.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{Location: request.Target.OriginalURL}, Options: m.lastOptions, Range: request.Range})
-	return storage.SignedAccess{Location: access.Location}, err
+	m.lastOptions = request
+	return m.internalDRSStorageFake.Sign(ctx, request)
 }
 
 func TestHandleInternalDownload(t *testing.T) {

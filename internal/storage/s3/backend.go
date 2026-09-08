@@ -107,9 +107,9 @@ func (s *backend) getClients(ctx context.Context, binding storage.ProviderBindin
 	return result, nil
 }
 
-func expiry(options storage.AccessOptions) time.Duration {
-	if options.ExpiresIn > 0 {
-		return options.ExpiresIn
+func expiry(expiresIn time.Duration) time.Duration {
+	if expiresIn > 0 {
+		return expiresIn
 	}
 	return defaultExpiry
 }
@@ -122,6 +122,6 @@ func responseContentDisposition(name string) *string {
 	return aws.String(disposition)
 }
 
-func methodIsPut(options storage.AccessOptions) bool {
-	return options.Method == http.MethodPut
+func methodIsPut(method string) bool {
+	return method == http.MethodPut
 }

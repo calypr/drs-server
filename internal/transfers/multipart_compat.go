@@ -20,16 +20,7 @@ type MultipartLifecycle struct {
 }
 
 func NewMultipartLifecycle(service *Service) *MultipartLifecycle {
-	if service.storage == nil {
-		service.storage = multipartStorageCompat{MultipartPort: service.multipart}
-	}
 	return &MultipartLifecycle{service: service, sessions: map[string]storage.Target{}}
-}
-
-type multipartStorageCompat struct{ MultipartPort }
-
-func (multipartStorageCompat) Sign(context.Context, storage.SignRequest) (storage.SignedAccess, error) {
-	return storage.SignedAccess{}, fmt.Errorf("access signing is not configured")
 }
 
 func (l *MultipartLifecycle) Begin(ctx context.Context, bucket, key string) (string, error) {

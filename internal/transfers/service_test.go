@@ -14,14 +14,24 @@ import (
 )
 
 type accessFake struct {
-	requests []storage.AccessRequest
-	result   storage.Access
+	requests []storage.SignRequest
+	result   storage.SignedAccess
 	err      error
 }
 
-func (f *accessFake) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
+func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
 	f.requests = append(f.requests, request)
 	return f.result, f.err
+}
+
+func (f *accessFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", nil
+}
+func (f *accessFake) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+func (f *accessFake) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
 }
 
 type multipartFake struct {
@@ -111,15 +121,15 @@ func TestResolveCanonicalStorageTargetComposesScopesAndPrefixes(t *testing.T) {
 }
 
 func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
-	accessPort := &accessFake{result: storage.Access{Location: "signed"}}
+	accessPort := &accessFake{result: storage.SignedAccess{Location: "signed"}}
 	service := NewService(Dependencies{
-		Access: accessPort,
+		Storage: accessPort,
 		Scopes: scopeFake{scopes: map[string]buckets.Scope{
 			"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "legacy"},
 		}},
 		Credentials: credentialFake{},
 	})
-	got, err := service.SignObjectURL(context.Background(), testRecord(), "s3://legacy/object", storage.AccessOptions{})
+	got, err := service.SignObjectURL(context.Background(), testRecord(), "s3://legacy/object", SignOptions{})
 	if err != nil {
 		t.Fatalf("SignObjectURL() error = %v", err)
 	}
@@ -127,7 +137,7 @@ func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
 		t.Fatalf("unexpected signed result or calls: got=%q requests=%+v", got, accessPort.requests)
 	}
 	request := accessPort.requests[0]
-	if request.Target.AccessID != "physical" || request.Target.Location != "s3://physical/legacy/object" {
+	if request.Target.LookupKey != "physical" || request.Target.OriginalURL != "s3://physical/legacy/object" {
 		t.Fatalf("unexpected storage request: %+v", request)
 	}
 }
@@ -187,7 +197,7 @@ func TestEventFromObjectPreservesContextAndRangeProjection(t *testing.T) {
 
 func TestUnconfiguredWorkflowsReturnConfigurationErrors(t *testing.T) {
 	service := NewService(Dependencies{})
-	if _, err := service.SignURL(context.Background(), "s3://bucket/key", storage.AccessOptions{}); err == nil {
+	if _, err := service.SignURL(context.Background(), "s3://bucket/key", SignOptions{}); err == nil {
 		t.Fatal("SignURL() unexpectedly succeeded without access port")
 	}
 	if _, err := service.beginMultipartTarget(context.Background(), storage.Target{PhysicalBucket: "bucket", Key: "key"}); err == nil {

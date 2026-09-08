@@ -65,31 +65,6 @@ func (m *Manager) Sign(ctx context.Context, request SignRequest) (SignedAccess, 
 	return registration.complete.Sign(ctx, binding, request)
 }
 
-// Access remains the legacy adapter until storage-retire-access migrates the
-// final signing callers.
-func (m *Manager) Access(ctx context.Context, request AccessRequest) (Access, error) {
-	requestTarget := Target{OriginalURL: request.Target.Location, LookupKey: request.Target.AccessID}
-	binding, target, err := m.resolveTarget(ctx, requestTarget, "access", true)
-	if err != nil {
-		return Access{}, err
-	}
-	registration, err := m.registration(binding.Provider, "access")
-	if err != nil {
-		return Access{}, err
-	}
-	signed, err := registration.complete.Sign(ctx, binding, SignRequest{
-		Target:           target,
-		Method:           request.Options.Method,
-		ExpiresIn:        request.Options.ExpiresIn,
-		DownloadFilename: request.Options.DownloadFilename,
-		Range:            request.Range,
-	})
-	if err != nil {
-		return Access{}, err
-	}
-	return Access{Location: signed.Location}, nil
-}
-
 func (m *Manager) BeginMultipart(ctx context.Context, target Target) (UploadID, error) {
 	binding, target, err := m.resolveTarget(ctx, target, "multipart", false)
 	if err != nil {

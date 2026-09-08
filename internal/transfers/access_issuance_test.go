@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/storage"
 )
 
 type accessWorkflowReader struct {
@@ -26,13 +25,13 @@ func (r *accessWorkflowReader) GetObject(_ context.Context, id, method string) (
 
 type accessWorkflowTransfer struct {
 	calls       []string
-	options     []storage.AccessOptions
+	options     []SignOptions
 	events      []AccessRequest
 	signErrors  map[string]error
 	eventErrors map[string]error
 }
 
-func (t *accessWorkflowTransfer) SignObjectURL(_ context.Context, _ *objects.Record, accessURL string, options storage.AccessOptions) (string, error) {
+func (t *accessWorkflowTransfer) SignObjectURL(_ context.Context, _ *objects.Record, accessURL string, options SignOptions) (string, error) {
 	t.calls = append(t.calls, "sign:"+accessURL)
 	t.options = append(t.options, options)
 	if err := t.signErrors[accessURL]; err != nil {

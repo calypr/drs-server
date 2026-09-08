@@ -19,11 +19,7 @@ func TestAccessReturnsRawSlashNormalizedPathAndIgnoresCloudOptions(t *testing.T)
 		t.Fatalf("newBackend failed: %v", err)
 	}
 
-	options := storage.AccessOptions{
-		ExpiresIn:        37,
-		Method:           "POST",
-		DownloadFilename: "ignored.txt",
-	}
+	options := storage.SignRequest{ExpiresIn: 37, Method: "POST", DownloadFilename: "ignored.txt"}
 	target := storage.Target{PhysicalBucket: "ignored-bucket", Key: "nested/object.bin"}
 	want := filepath.ToSlash(filepath.Join(b.rootPath, target.Key))
 

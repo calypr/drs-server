@@ -27,18 +27,6 @@ type StoragePort interface {
 	CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error
 }
 
-// Deprecated compatibility seams remain until the multipart/LFS consumer
-// migration lands. New transfer operations use StoragePort directly.
-type AccessPort interface {
-	Access(context.Context, storage.AccessRequest) (storage.Access, error)
-}
-
-type MultipartPort interface {
-	BeginMultipart(context.Context, storage.Target) (storage.UploadID, error)
-	SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error)
-	CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error
-}
-
 type ScopeReader interface {
 	LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error)
 }
@@ -59,6 +47,4 @@ type Dependencies struct {
 	Credentials  CredentialReader
 	Events       EventRecorder
 	Now          func() time.Time
-	Access       AccessPort
-	Multipart    MultipartPort
 }

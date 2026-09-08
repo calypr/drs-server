@@ -13,22 +13,32 @@ import (
 )
 
 type targetAccessSpy struct {
-	requests []storage.AccessRequest
+	requests []storage.SignRequest
 }
 
-func (s *targetAccessSpy) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
+func (s *targetAccessSpy) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
 	s.requests = append(s.requests, request)
 	if request.Range != nil {
-		return storage.Access{Location: "download:" + request.Target.Location}, nil
+		return storage.SignedAccess{Location: "download:" + request.Target.OriginalURL}, nil
 	}
-	return storage.Access{Location: "signed:" + request.Target.Location}, nil
+	return storage.SignedAccess{Location: "signed:" + request.Target.OriginalURL}, nil
+}
+
+func (s *targetAccessSpy) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", nil
+}
+func (s *targetAccessSpy) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+func (s *targetAccessSpy) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
 }
 
 func targetService(scopes map[string]buckets.Scope, credentials []buckets.Credential) (*Service, *targetAccessSpy) {
 	access := &targetAccessSpy{}
 	scopeReader := scopeFake{scopes: scopes}
 	return NewService(Dependencies{
-		Access:      access,
+		Storage:     access,
 		Scopes:      scopeReader,
 		Credentials: credentialFake{credentials: credentials},
 	}), access
@@ -49,22 +59,22 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 	t.Run("maps full and ranged downloads", func(t *testing.T) {
 		service, access := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": scope}, nil)
 		obj := targetObject(resource)
-		signed, err := service.SignObjectURL(context.Background(), obj, legacy, storage.AccessOptions{})
+		signed, err := service.SignObjectURL(context.Background(), obj, legacy, SignOptions{})
 		if err != nil || signed != "signed:"+physical {
 			t.Fatalf("unexpected full download: signed=%q err=%v", signed, err)
 		}
-		part, err := service.SignObjectDownloadPart(context.Background(), obj, "bforepc-prod", legacy, 0, 1023, storage.AccessOptions{})
+		part, err := service.SignObjectDownloadPart(context.Background(), obj, "bforepc-prod", legacy, 0, 1023, SignOptions{})
 		if err != nil || part != "download:"+physical {
 			t.Fatalf("unexpected ranged download: signed=%q err=%v", part, err)
 		}
-		if len(access.requests) != 2 || access.requests[0].Target.AccessID != "bforepc" || access.requests[1].Target.AccessID != "bforepc" {
+		if len(access.requests) != 2 || access.requests[0].Target.LookupKey != "bforepc" || access.requests[1].Target.LookupKey != "bforepc" {
 			t.Fatalf("unexpected access requests: %+v", access.requests)
 		}
 	})
 
 	t.Run("preserves exact configured physical bucket", func(t *testing.T) {
 		service, _ := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": scope}, []buckets.Credential{{CredentialID: "bforepc-prod", Bucket: "bforepc-prod", Provider: "s3"}})
-		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, storage.AccessOptions{})
+		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, SignOptions{})
 		if err != nil || signed != "signed:"+legacy {
 			t.Fatalf("configured physical bucket must remain unchanged: signed=%q err=%v", signed, err)
 		}
@@ -72,7 +82,7 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 
 	t.Run("maps credential identifier that is not physical bucket", func(t *testing.T) {
 		service, _ := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": scope}, []buckets.Credential{{CredentialID: "bforepc-prod", Bucket: "bforepc", Provider: "s3"}})
-		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, storage.AccessOptions{})
+		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, SignOptions{})
 		if err != nil || signed != "signed:"+physical {
 			t.Fatalf("credential identifier mapping changed: signed=%q err=%v", signed, err)
 		}
@@ -82,7 +92,7 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 		physicalScope := buckets.Scope{Organization: "HTAN_INT", ProjectID: "BForePC", Bucket: "bforepc", PathPrefix: "bforepc"}
 		physicalURL := "s3://bforepc/OHSU/koei_chin/slide.ome.tiff"
 		service, _ := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": physicalScope}, []buckets.Credential{{CredentialID: "physical", Bucket: "bforepc", Provider: "s3"}})
-		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), physicalURL, storage.AccessOptions{})
+		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), physicalURL, SignOptions{})
 		if err != nil || signed != "signed:"+physicalURL {
 			t.Fatalf("physical URL changed: signed=%q err=%v", signed, err)
 		}
@@ -101,7 +111,7 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			service, _ := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": tc.scope}, nil)
-			signed, err := service.SignObjectURL(context.Background(), targetObject(resource), tc.url, storage.AccessOptions{})
+			signed, err := service.SignObjectURL(context.Background(), targetObject(resource), tc.url, SignOptions{})
 			if err != nil || signed != "signed:"+tc.want {
 				t.Fatalf("unexpected download: signed=%q err=%v want=%q", signed, err, "signed:"+tc.want)
 			}
@@ -113,14 +123,14 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 			"HTAN_INT|one": {Organization: "HTAN_INT", ProjectID: "one", Bucket: "bforepc-a", PathPrefix: "bforepc-prod"},
 			"HTAN_INT|two": {Organization: "HTAN_INT", ProjectID: "two", Bucket: "bforepc-b", PathPrefix: "bforepc-prod"},
 		}, nil)
-		if _, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/one", "/organization/HTAN_INT/project/two"), legacy, storage.AccessOptions{}); !errors.Is(err, errorapi.ErrConflict) {
+		if _, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/one", "/organization/HTAN_INT/project/two"), legacy, SignOptions{}); !errors.Is(err, errorapi.ErrConflict) {
 			t.Fatalf("expected conflicting legacy mapping error, got %v", err)
 		}
 	})
 
 	t.Run("leaves PUT behavior on canonical target path", func(t *testing.T) {
 		service, _ := targetService(map[string]buckets.Scope{"HTAN_INT|BForePC": scope}, nil)
-		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, storage.AccessOptions{Method: "PUT"})
+		signed, err := service.SignObjectURL(context.Background(), targetObject(resource), legacy, SignOptions{Method: "PUT"})
 		if err != nil || signed != "signed:"+physical {
 			t.Fatalf("unexpected PUT target: signed=%q err=%v", signed, err)
 		}
@@ -129,11 +139,11 @@ func TestLegacyS3DownloadCompatibility(t *testing.T) {
 
 func TestLegacyS3DownloadCredentialErrorsPropagate(t *testing.T) {
 	service := NewService(Dependencies{
-		Access:      &targetAccessSpy{},
+		Storage:     &targetAccessSpy{},
 		Scopes:      scopeFake{scopes: map[string]buckets.Scope{"HTAN_INT|BForePC": {Organization: "HTAN_INT", ProjectID: "BForePC", Bucket: "physical", PathPrefix: "legacy"}}},
 		Credentials: credentialErrorFake{err: errors.New("credential list unavailable")},
 	})
-	_, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/BForePC"), "s3://legacy/key", storage.AccessOptions{})
+	_, err := service.SignObjectURL(context.Background(), targetObject("/organization/HTAN_INT/project/BForePC"), "s3://legacy/key", SignOptions{})
 	if err == nil || err.Error() != "credential list unavailable" {
 		t.Fatalf("expected credential lookup error to propagate, got %v", err)
 	}
@@ -151,25 +161,25 @@ func TestScopedLogicalDownloadSigning(t *testing.T) {
 	physical := "s3://syfon-ci/project-a/" + sha
 	obj := &objects.Record{Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{"/organization/ci/project/a"}}
 	service, access := targetService(map[string]buckets.Scope{"ci|a": {Organization: "ci", ProjectID: "a", Bucket: "syfon-ci", PathPrefix: "project-a"}}, nil)
-	if _, err := service.SignObjectURL(context.Background(), obj, logical, storage.AccessOptions{}); err != nil {
+	if _, err := service.SignObjectURL(context.Background(), obj, logical, SignOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if access.requests[0].Target.Location != physical || access.requests[0].Target.AccessID != "syfon-ci" {
+	if access.requests[0].Target.OriginalURL != physical || access.requests[0].Target.LookupKey != "syfon-ci" {
 		t.Fatalf("logical URL did not resolve: %+v", access.requests[0])
 	}
-	if _, err := service.SignObjectDownloadPart(context.Background(), obj, "syfon-ci", logical, 0, 1023, storage.AccessOptions{}); err != nil {
+	if _, err := service.SignObjectDownloadPart(context.Background(), obj, "syfon-ci", logical, 0, 1023, SignOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if access.requests[1].Target.Location != physical || access.requests[1].Target.AccessID != "syfon-ci" {
+	if access.requests[1].Target.OriginalURL != physical || access.requests[1].Target.LookupKey != "syfon-ci" {
 		t.Fatalf("logical ranged URL did not resolve: %+v", access.requests[1])
 	}
 	for _, raw := range []string{"s3://syfon-ci/imported/legacy-object", physical} {
 		service, access = targetService(map[string]buckets.Scope{"ci|a": {Organization: "ci", ProjectID: "a", Bucket: "syfon-ci", PathPrefix: "project-a"}}, nil)
-		if _, err := service.SignObjectURL(context.Background(), obj, raw, storage.AccessOptions{}); err != nil {
+		if _, err := service.SignObjectURL(context.Background(), obj, raw, SignOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		if access.requests[0].Target.Location != raw {
-			t.Fatalf("imported/scoped URL changed from %q to %q", raw, access.requests[0].Target.Location)
+		if access.requests[0].Target.OriginalURL != raw {
+			t.Fatalf("imported/scoped URL changed from %q to %q", raw, access.requests[0].Target.OriginalURL)
 		}
 	}
 }
@@ -230,7 +240,7 @@ func TestMergedContentPreservesReplicaLocation(t *testing.T) {
 	}
 	original := "s3://bucket-a/a/file"
 	service, _ := targetService(scopes, nil)
-	single, err := service.SignObjectURL(context.Background(), &objs[0], original, storage.AccessOptions{})
+	single, err := service.SignObjectURL(context.Background(), &objs[0], original, SignOptions{})
 	if err != nil || single != "signed:"+original {
 		t.Fatalf("single project changed replica: %q (%v)", single, err)
 	}
@@ -239,7 +249,7 @@ func TestMergedContentPreservesReplicaLocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signed, err := service.SignObjectURL(context.Background(), &view.Record, original, storage.AccessOptions{})
+	signed, err := service.SignObjectURL(context.Background(), &view.Record, original, SignOptions{})
 	if err != nil || signed != "signed:"+original {
 		t.Fatalf("merged read changed replica: got %q (%v)", signed, err)
 	}

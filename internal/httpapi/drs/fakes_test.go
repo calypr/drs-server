@@ -17,12 +17,12 @@ type testDRSServicesFixture struct {
 	transferService *transfers.Service
 }
 
-func testDRSServices(store *drsObjectFixture, storageAccess transfers.AccessPort) *testDRSServicesFixture {
+func testDRSServices(store *drsObjectFixture, storageAccess transfers.StoragePort) *testDRSServicesFixture {
 	return &testDRSServicesFixture{
 		objectService: objectrecords.NewService(store),
 		transferService: transfers.NewService(transfers.Dependencies{
-			Access: storageAccess,
-			Events: testTransferEvents{},
+			Storage: storageAccess,
+			Events:  testTransferEvents{},
 		}),
 	}
 }

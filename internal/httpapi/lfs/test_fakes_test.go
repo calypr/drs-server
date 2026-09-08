@@ -297,5 +297,4 @@ func newLFSTransferService(storageFake *lfsTestStorage, ports *lfsTestServicePor
 	})
 }
 
-var _ transfers.AccessPort = (*lfsTestStorage)(nil)
-var _ transfers.MultipartPort = (*lfsTestStorage)(nil)
+var _ transfers.StoragePort = (*lfsTestStorage)(nil)

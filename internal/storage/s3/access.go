@@ -19,12 +19,12 @@ func (s *backend) Sign(ctx context.Context, binding storage.ProviderBinding, req
 		return storage.SignedAccess{}, err
 	}
 
-	if methodIsPut(storage.AccessOptions{Method: request.Method}) {
+	if methodIsPut(request.Method) {
 		presigned, err := clients.presigner.PresignPutObject(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(request.Target.PhysicalBucket),
 			Key:    aws.String(request.Target.Key),
 		}, func(presign *awss3.PresignOptions) {
-			presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
+			presign.Expires = expiry(request.ExpiresIn)
 		})
 		if err != nil {
 			return storage.SignedAccess{}, err
@@ -37,7 +37,7 @@ func (s *backend) Sign(ctx context.Context, binding storage.ProviderBinding, req
 		Key:                        aws.String(request.Target.Key),
 		ResponseContentDisposition: responseContentDisposition(request.DownloadFilename),
 	}, func(presign *awss3.PresignOptions) {
-		presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
+		presign.Expires = expiry(request.ExpiresIn)
 	})
 	if err != nil {
 		return storage.SignedAccess{}, err
@@ -57,7 +57,7 @@ func (s *backend) signDownloadPart(ctx context.Context, binding storage.Provider
 		Range:                      aws.String(fmt.Sprintf("bytes=%d-%d", request.Range.Start, request.Range.End)),
 		ResponseContentDisposition: responseContentDisposition(request.DownloadFilename),
 	}, func(presign *awss3.PresignOptions) {
-		presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
+		presign.Expires = expiry(request.ExpiresIn)
 	})
 	if err != nil {
 		return storage.SignedAccess{}, err

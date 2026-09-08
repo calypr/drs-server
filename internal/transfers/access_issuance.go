@@ -16,7 +16,7 @@ type AccessObjectReader interface {
 }
 
 type AccessTransfer interface {
-	SignObjectURL(context.Context, *objects.Record, string, storage.AccessOptions) (string, error)
+	SignObjectURL(context.Context, *objects.Record, string, SignOptions) (string, error)
 	RecordAccessIssued(context.Context, AccessRequest) error
 }
 
@@ -55,7 +55,7 @@ type BulkAccessLookupResult struct {
 }
 
 func (s *Service) IssueAccess(ctx context.Context, request AccessLookupRequest) (AccessLookupResult, error) {
-	if s == nil || s.objects == nil || (s.storage == nil && s.access == nil) {
+	if s == nil || s.objects == nil || s.storage == nil {
 		return AccessLookupResult{}, fmt.Errorf("transfer service is not configured")
 	}
 	obj, err := s.objects.GetObject(ctx, strings.TrimSpace(request.ObjectID), "read")
@@ -162,9 +162,9 @@ func (w *AccessWorkflow) issueObject(ctx context.Context, obj *objects.Record, a
 		return AccessLookupResult{}, nil
 	}
 
-	options := storage.AccessOptions{Method: http.MethodGet}
+	options := SignOptions{Method: http.MethodGet}
 	if obj.Name != nil {
-		options.DownloadFilename = storage.DownloadFilename(*obj.Name)
+		options.DownloadFilename = objects.CleanToBasename(*obj.Name)
 	}
 	signed, err := w.transfer.SignObjectURL(ctx, obj, targetURL, options)
 	if err != nil {

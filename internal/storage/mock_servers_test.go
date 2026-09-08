@@ -105,9 +105,9 @@ func testFakeGCSStorageProvider(t *testing.T) {
 
 	const object = "smoke/object.txt"
 	payload := []byte("fake-gcs-server-storage-mvp")
-	upload, err := manager.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{Location: "s3://" + bucket + "/" + object},
-		Options: storage.AccessOptions{Method: http.MethodPut},
+	upload, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + bucket + "/" + object},
+		Method: http.MethodPut,
 	})
 	if err != nil {
 		t.Fatalf("sign fake-gcs upload URL: %v", err)
@@ -116,8 +116,8 @@ func testFakeGCSStorageProvider(t *testing.T) {
 		t.Fatalf("upload fake-gcs object: %v", err)
 	}
 
-	download, err := manager.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{Location: "s3://" + bucket + "/" + object},
+	download, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + bucket + "/" + object},
 	})
 	if err != nil {
 		t.Fatalf("sign fake-gcs download URL: %v", err)
@@ -197,9 +197,9 @@ func testAzuriteStorageProvider(t *testing.T) {
 	}
 
 	payload := []byte("azurite-storage-mvp")
-	upload, err := manager.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{Location: "s3://" + containerName + "/" + object},
-		Options: storage.AccessOptions{Method: http.MethodPut},
+	upload, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + containerName + "/" + object},
+		Method: http.MethodPut,
 	})
 	if err != nil {
 		t.Fatalf("sign Azurite upload URL: %v", err)
@@ -208,8 +208,8 @@ func testAzuriteStorageProvider(t *testing.T) {
 		t.Fatalf("upload Azurite object: %v", err)
 	}
 
-	download, err := manager.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{Location: "s3://" + containerName + "/" + object},
+	download, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + containerName + "/" + object},
 	})
 	if err != nil {
 		t.Fatalf("sign Azurite download URL: %v", err)

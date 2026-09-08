@@ -41,17 +41,12 @@ type lfsTestStorage struct {
 	complete       storage.CompleteMultipartRequest
 }
 
-func (f *lfsTestStorage) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
-	location := request.Target.Location
+func (f *lfsTestStorage) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	location := request.Target.OriginalURL
 	if f.accessLocation != "" {
 		location = f.accessLocation
 	}
-	return storage.Access{Location: location + "?signed=true"}, nil
-}
-
-func (f *lfsTestStorage) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
-	access, err := f.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{Location: request.Target.OriginalURL}, Options: storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}, Range: request.Range})
-	return storage.SignedAccess{Location: access.Location}, err
+	return storage.SignedAccess{Location: location + "?signed=true"}, nil
 }
 
 func (f *lfsTestStorage) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {

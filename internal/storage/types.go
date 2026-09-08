@@ -36,30 +36,9 @@ type SignedAccess struct {
 	Location string
 }
 
-type AccessTarget struct {
-	AccessID string
-	Location string
-}
-
 type ByteRange struct {
 	Start int64
 	End   int64
-}
-
-type AccessOptions struct {
-	ExpiresIn        time.Duration
-	Method           string
-	DownloadFilename string
-}
-
-type AccessRequest struct {
-	Target  AccessTarget
-	Options AccessOptions
-	Range   *ByteRange
-}
-
-type Access struct {
-	Location string
 }
 
 type UploadID string
