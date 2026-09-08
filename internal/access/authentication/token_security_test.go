@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -19,10 +18,6 @@ import (
 
 // Test CRIT-1 fix: Issuer allowlist validation
 func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
-	verifier := newTokenVerifierWithHTTPClient(&http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-	})
-
 	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate rsa key: %v", err)
@@ -116,15 +111,9 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			oldEnv := os.Getenv("DRS_FENCE_URL")
-			defer func() {
-				if oldEnv == "" {
-					_ = os.Unsetenv("DRS_FENCE_URL")
-					return
-				}
-				_ = os.Setenv("DRS_FENCE_URL", oldEnv)
-			}()
-			_ = os.Setenv("DRS_FENCE_URL", tt.allowedIssuers)
+			verifier := newTokenVerifierWithHTTPClient(&http.Client{
+				Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+			}, tt.allowedIssuers)
 
 			tokenString := buildTokenWithClaims(jwt.MapClaims{
 				"iss": tt.issuerClaim,
@@ -155,15 +144,9 @@ func TestParseToken_IssuerAllowlistValidation(t *testing.T) {
 	}
 
 	t.Run("malformed iss claim rejects token", func(t *testing.T) {
-		oldEnv := os.Getenv("DRS_FENCE_URL")
-		defer func() {
-			if oldEnv == "" {
-				_ = os.Unsetenv("DRS_FENCE_URL")
-				return
-			}
-			_ = os.Setenv("DRS_FENCE_URL", oldEnv)
-		}()
-		_ = os.Setenv("DRS_FENCE_URL", httpsOrigin)
+		verifier := newTokenVerifierWithHTTPClient(&http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		}, httpsOrigin)
 
 		tokenString := buildTokenWithClaims(jwt.MapClaims{
 			"iss": 12345,
@@ -251,22 +234,7 @@ func TestIsIssuerAllowed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			oldEnv := os.Getenv("DRS_FENCE_URL")
-			if err := os.Setenv("DRS_FENCE_URL", tt.allowedIssuer); err != nil {
-				t.Fatalf("Setenv failed: %v", err)
-			}
-			defer func() {
-				if oldEnv != "" {
-					if err := os.Setenv("DRS_FENCE_URL", oldEnv); err != nil {
-						t.Fatalf("Setenv restore failed: %v", err)
-					}
-				} else {
-					if err := os.Unsetenv("DRS_FENCE_URL"); err != nil {
-						t.Fatalf("Unsetenv failed: %v", err)
-					}
-				}
-			}()
-			got := isIssuerAllowed(tt.testIssuer)
+			got := newTokenVerifier(tt.allowedIssuer).isIssuerAllowed(tt.testIssuer)
 			if got != tt.want {
 				t.Errorf("isIssuerAllowed(%q) = %v, want %v", tt.testIssuer, got, tt.want)
 			}

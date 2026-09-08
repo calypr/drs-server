@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -167,7 +168,7 @@ func (r *Runtime) authorize(req EvaluationRequest, session *access.Session) Eval
 	return EvaluationResult{Session: session, Decision: DecisionContinue}
 }
 
-func mockAuthorizations(config mockConfig) ([]string, map[string]map[string]bool) {
+func mockAuthorizations(config config.MockAuthConfig) ([]string, map[string]map[string]bool) {
 	resources := append([]string(nil), config.Resources...)
 	privileges := make(map[string]map[string]bool, len(resources))
 	for _, resource := range resources {

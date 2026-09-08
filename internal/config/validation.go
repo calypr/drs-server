@@ -154,7 +154,7 @@ func validateConfig(cfg *Config) error {
 	if cfg.Auth.Mode != AuthModeLocal && cfg.Auth.Mode != AuthModeGen3 {
 		return fmt.Errorf("invalid auth.mode %q: expected %q or %q", cfg.Auth.Mode, AuthModeLocal, AuthModeGen3)
 	}
-	if cfg.Auth.Mode == AuthModeGen3 && cfg.Database.Postgres == nil && !isMockAuthEnabledFromEnv() {
+	if cfg.Auth.Mode == AuthModeGen3 && cfg.Database.Postgres == nil && !inheritedMockAuthEnabled() {
 		return fmt.Errorf("auth.mode %q requires postgres database", cfg.Auth.Mode)
 	}
 	if (cfg.Auth.Basic.Username == "") != (cfg.Auth.Basic.Password == "") {
@@ -166,7 +166,7 @@ func validateConfig(cfg *Config) error {
 	}
 
 	// Gen3 mock auth is the supported local integration-testing path for Gen3 mode.
-	if isMockAuthEnabledFromEnv() && cfg.Auth.Mode != AuthModeGen3 {
+	if inheritedMockAuthEnabled() && cfg.Auth.Mode != AuthModeGen3 {
 		return fmt.Errorf("mock auth (DRS_AUTH_MOCK_ENABLED) is only allowed in gen3 auth mode, not in %q", cfg.Auth.Mode)
 	}
 	if cfg.LFS.MaxBatchObjects < 0 {

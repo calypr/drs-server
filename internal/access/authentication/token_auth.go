@@ -25,11 +25,11 @@ type tokenAuthResolver struct {
 	verifier *tokenVerifier
 }
 
-func newTokenAuthResolver(logger *slog.Logger) *tokenAuthResolver {
+func newTokenAuthResolver(logger *slog.Logger, fenceURL string) *tokenAuthResolver {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &tokenAuthResolver{logger: logger, verifier: newTokenVerifier()}
+	return &tokenAuthResolver{logger: logger, verifier: newTokenVerifier(fenceURL)}
 }
 
 func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tokenAuthResult {

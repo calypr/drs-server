@@ -88,14 +88,13 @@ func authToken(t *testing.T, issuer, kid string, key *rsa.PrivateKey) string {
 	return value
 }
 
-func newCountingTokenVerifier(transport *countingAuthTransport) *tokenVerifier {
-	verifier := newTokenVerifierWithHTTPClient(&http.Client{Transport: transport})
+func newCountingTokenVerifier(transport *countingAuthTransport, fenceURL string) *tokenVerifier {
+	verifier := newTokenVerifierWithHTTPClient(&http.Client{Transport: transport}, fenceURL)
 	return verifier
 }
 
 func TestTokenVerifierReusesDiscoveryAndKeysConcurrently(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -104,7 +103,7 @@ func TestTokenVerifierReusesDiscoveryAndKeysConcurrently(t *testing.T) {
 		discoveryBody: []byte(`{"jwks_uri":"https://keys.example/jwks"}`),
 		jwksBody:      authJWKSBody(t, "key-1", key),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	token := authToken(t, issuer, "key-1", key)
 
 	const requests = 20
@@ -134,7 +133,6 @@ func TestTokenVerifierReusesDiscoveryAndKeysConcurrently(t *testing.T) {
 
 func TestTokenVerifierRefreshesExpiredKeysAndRejectsStaleKeys(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -143,7 +141,7 @@ func TestTokenVerifierRefreshesExpiredKeysAndRejectsStaleKeys(t *testing.T) {
 		discoveryBody: []byte(`{"jwks_uri":"https://keys.example/jwks"}`),
 		jwksBody:      authJWKSBody(t, "key-1", key),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	clock := time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 	verifier.now = func() time.Time { return clock }
 	validToken := authToken(t, issuer, "key-1", key)
@@ -184,7 +182,6 @@ func TestTokenVerifierRefreshesExpiredKeysAndRejectsStaleKeys(t *testing.T) {
 
 func TestTokenVerifierFailedInitialFetchCooldownBoundsRandomKIDs(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -194,7 +191,7 @@ func TestTokenVerifierFailedInitialFetchCooldownBoundsRandomKIDs(t *testing.T) {
 		jwksStatus:    http.StatusBadGateway,
 		jwksBody:      authJWKSBody(t, "key-1", key),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	clock := time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 	verifier.now = func() time.Time { return clock }
 	for _, kid := range []string{"random-1", "random-2", "random-3"} {
@@ -222,7 +219,6 @@ func TestTokenVerifierFailedInitialFetchCooldownBoundsRandomKIDs(t *testing.T) {
 
 func TestTokenVerifierUnknownKIDRotationAndCooldownRecovery(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	keyOne, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate first key: %v", err)
@@ -235,7 +231,7 @@ func TestTokenVerifierUnknownKIDRotationAndCooldownRecovery(t *testing.T) {
 		discoveryBody: []byte(`{"jwks_uri":"https://keys.example/jwks"}`),
 		jwksBody:      authJWKSBody(t, "key-1", keyOne),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	clock := time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 	verifier.now = func() time.Time { return clock }
 	if _, _, err := verifier.parseToken(context.Background(), authToken(t, issuer, "key-1", keyOne)); err != nil {
@@ -334,36 +330,36 @@ func TestTokenVerifierSeparatesIssuerCachesAndRechecksAllowlist(t *testing.T) {
 			"keys-b.example": authJWKSBody(t, "shared-kid", keyB),
 		},
 	}
-	verifier := newCountingTokenVerifier(transport)
-	t.Setenv("DRS_FENCE_URL", issuerA)
+	verifier := newCountingTokenVerifier(transport, issuerA)
 	tokenA := authToken(t, issuerA, "shared-kid", keyA)
 	if _, _, err := verifier.parseToken(context.Background(), tokenA); err != nil {
 		t.Fatalf("issuer A verification failed: %v", err)
 	}
 
+	// The fence is immutable for the lifetime of a verifier. Ambient changes
+	// must not alter its configured issuer allowlist.
 	t.Setenv("DRS_FENCE_URL", issuerB)
 	wrongB := authToken(t, issuerB, "shared-kid", keyA)
 	if _, _, err := verifier.parseToken(context.Background(), wrongB); err == nil {
 		t.Fatal("issuer B accepted issuer A key for shared KID")
 	}
 	validB := authToken(t, issuerB, "shared-kid", keyB)
-	if _, _, err := verifier.parseToken(context.Background(), validB); err != nil {
-		t.Fatalf("issuer B verification failed with its own key: %v", err)
+	if _, _, err := verifier.parseToken(context.Background(), validB); err == nil {
+		t.Fatal("issuer B passed after ambient fence changed")
 	}
-	if _, _, err := verifier.parseToken(context.Background(), tokenA); err == nil {
-		t.Fatal("cached issuer A token passed after allowlist moved to issuer B")
+	if _, _, err := verifier.parseToken(context.Background(), tokenA); err != nil {
+		t.Fatalf("configured issuer A failed after ambient fence changed: %v", err)
 	}
 
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
-	if transport.discovery != 2 || transport.jwks != 2 {
-		t.Fatalf("issuer-isolated request counts = discovery %d, JWKS %d; want 2, 2", transport.discovery, transport.jwks)
+	if transport.discovery != 1 || transport.jwks != 1 {
+		t.Fatalf("immutable issuer request counts = discovery %d, JWKS %d; want 1, 1", transport.discovery, transport.jwks)
 	}
 }
 
 func TestTokenVerifierRejectsInsecureDiscoveredJWKS(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -374,7 +370,7 @@ func TestTokenVerifierRejectsInsecureDiscoveredJWKS(t *testing.T) {
 		},
 		jwksBody: authJWKSBody(t, "key-1", key),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	if _, _, err := verifier.parseToken(context.Background(), authToken(t, issuer, "key-1", key)); err == nil {
 		t.Fatal("token unexpectedly verified through insecure discovered JWKS")
 	}
@@ -387,7 +383,6 @@ func TestTokenVerifierRejectsInsecureDiscoveredJWKS(t *testing.T) {
 
 func TestTokenVerifierRejectsInvalidSignatureWithCachedKey(t *testing.T) {
 	issuer := "https://issuer.example"
-	t.Setenv("DRS_FENCE_URL", issuer)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -400,7 +395,7 @@ func TestTokenVerifierRejectsInvalidSignatureWithCachedKey(t *testing.T) {
 		discoveryBody: []byte(`{"jwks_uri":"https://keys.example/jwks"}`),
 		jwksBody:      authJWKSBody(t, "key-1", key),
 	}
-	verifier := newCountingTokenVerifier(transport)
+	verifier := newCountingTokenVerifier(transport, issuer)
 	valid := authToken(t, issuer, "key-1", key)
 	if _, _, err := verifier.parseToken(context.Background(), valid); err != nil {
 		t.Fatalf("valid token verification failed: %v", err)

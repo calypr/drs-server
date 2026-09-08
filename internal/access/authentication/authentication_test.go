@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -53,13 +55,13 @@ func TestBuiltInAuthenticationPlugins(t *testing.T) {
 	})
 }
 
-func TestLoadMockAuthConfigFromEnv(t *testing.T) {
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "true")
-	t.Setenv("DRS_AUTH_MOCK_RESOURCES", " /data_file, /programs/demo ")
-	t.Setenv("DRS_AUTH_MOCK_METHODS", "read, create")
-	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "yes")
-
-	got := loadMockAuthConfigFromEnv()
+func TestNormalizeMockAuth(t *testing.T) {
+	got := normalizeMockAuth(config.MockAuthConfig{
+		Enabled:           true,
+		RequireAuthHeader: true,
+		Resources:         []string{" /data_file", "", "/programs/demo "},
+		Methods:           []string{"read", "", " create "},
+	})
 	if !got.Enabled || !got.RequireAuthHeader {
 		t.Fatalf("unexpected mock auth flags: %+v", got)
 	}
@@ -69,6 +71,13 @@ func TestLoadMockAuthConfigFromEnv(t *testing.T) {
 	if len(got.Methods) != 2 || got.Methods[0] != "read" || got.Methods[1] != "create" {
 		t.Fatalf("unexpected mock methods: %v", got.Methods)
 	}
+	defaults := normalizeMockAuth(config.MockAuthConfig{Enabled: true})
+	if len(defaults.Resources) != 1 || defaults.Resources[0] != "/data_file" || len(defaults.Methods) != 1 || defaults.Methods[0] != "*" {
+		t.Fatalf("unexpected mock defaults: %+v", defaults)
+	}
+	if got := normalizeMockAuth(config.MockAuthConfig{RequireAuthHeader: true}); got.Enabled || got.RequireAuthHeader || len(got.Resources) != 0 || len(got.Methods) != 0 {
+		t.Fatalf("disabled mock should normalize to zero config: %+v", got)
+	}
 }
 
 func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
@@ -77,9 +86,13 @@ func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
 	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", missingPlugin)
 	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", missingPlugin)
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", missingCSV)
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
 
-	runtime := NewRuntime(slog.Default(), "local", "user", "pass")
+	runtime := NewRuntime(slog.Default(), config.AuthConfig{
+		Mode:          config.AuthModeLocal,
+		Basic:         config.BasicAuthConfig{Username: "user", Password: "pass"},
+		LocalAuthzCSV: missingCSV,
+		PluginPaths:   config.PluginPaths{Authn: missingPlugin, Authz: missingPlugin},
+	})
 	if runtime.authorization != nil {
 		t.Fatalf("expected failed authorization plugin startup to be swallowed")
 	}
@@ -89,6 +102,62 @@ func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
 	if runtime.localAuthzError == nil {
 		t.Fatalf("expected local CSV startup error to remain available to request wiring")
 	}
+}
+
+func TestPluginEnvironmentPreservesUnrelatedKeysAndAvoidsDefaults(t *testing.T) {
+	t.Setenv("PATH", "/test/path")
+	t.Setenv("SYFON_UNRELATED_PLUGIN_SETTING", "keep-me")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "inherited-resource")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", "inherited-method")
+	child := pluginEnvironment(config.AuthConfig{
+		Mock: config.MockAuthConfig{
+			Enabled:   true,
+			Resources: []string{"/configured-resource"},
+		},
+		FenceURL: "https://fence.example",
+	})
+	if got := environmentValue(child, "PATH"); got != "/test/path" {
+		t.Fatalf("PATH = %q, want inherited value", got)
+	}
+	if got := environmentValue(child, "SYFON_UNRELATED_PLUGIN_SETTING"); got != "keep-me" {
+		t.Fatalf("unrelated plugin setting = %q, want keep-me", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_ENABLED"); got != "true" {
+		t.Fatalf("mock enabled = %q, want true", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_RESOURCES"); got != "/configured-resource" {
+		t.Fatalf("mock resources = %q, want configured value", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_METHODS"); got != "inherited-method" {
+		t.Fatalf("mock methods = %q, want inherited value", got)
+	}
+	if got := environmentValue(child, "DRS_FENCE_URL"); got != "https://fence.example" {
+		t.Fatalf("fence = %q, want configured value", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER"); got != "" {
+		t.Fatalf("unexpected runtime default for require header: %q", got)
+	}
+	for _, key := range documentedAuthEnvironmentKeys {
+		count := 0
+		for _, entry := range child {
+			if strings.HasPrefix(entry, key+"=") {
+				count++
+			}
+		}
+		if count > 1 {
+			t.Fatalf("%s appears %d times in child environment", key, count)
+		}
+	}
+}
+
+func environmentValue(env []string, key string) string {
+	for _, entry := range env {
+		if strings.HasPrefix(entry, key+"=") {
+			return strings.TrimPrefix(entry, key+"=")
+		}
+	}
+	return ""
 }
 
 type recordingAuthenticationPlugin struct {
@@ -126,7 +195,7 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 		logger:         slog.Default(),
 		authentication: authn,
 		authorization:  authz,
-		tokenResolver:  newTokenAuthResolver(slog.Default()),
+		tokenResolver:  newTokenAuthResolver(slog.Default(), ""),
 	}
 
 	result := runtime.Evaluate(EvaluationRequest{
@@ -200,7 +269,7 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 }
 
 func TestRuntimeEvaluatorMockDecisions(t *testing.T) {
-	runtime := &Runtime{mock: mockConfig{
+	runtime := &Runtime{mock: config.MockAuthConfig{
 		Enabled:           true,
 		RequireAuthHeader: true,
 		Resources:         []string{"/data"},
@@ -355,7 +424,7 @@ func TestTokenHelpersAndResolver(t *testing.T) {
 		t.Fatalf("unexpected extracted privileges: resources=%v privileges=%v", resources, privileges)
 	}
 
-	resolver := newTokenAuthResolver(nil)
+	resolver := newTokenAuthResolver(nil, "")
 	if result := resolver.Resolve(context.Background(), "invalid"); !result.Negative {
 		t.Fatalf("expected invalid token resolution to be negative: %+v", result)
 	}

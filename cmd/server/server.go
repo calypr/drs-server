@@ -183,7 +183,7 @@ var Cmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		if cfg.Auth.Mode == config.AuthModeGen3 && cfg.Database.Postgres == nil && !isMockAuthEnabled() {
+		if cfg.Auth.Mode == config.AuthModeGen3 && cfg.Database.Postgres == nil && !cfg.Auth.Mock.Enabled {
 			return fmt.Errorf("auth.mode=gen3 requires postgres database")
 		}
 		applyCredentialEncryptionConfig(cfg)
@@ -327,12 +327,7 @@ var Cmd = &cobra.Command{
 		// Init AuthZ Middleware
 		// We use a standard slog.Logger for data-client compatibility
 		slogLogger := logger
-		authRuntime := authentication.NewRuntime(
-			slogLogger,
-			cfg.Auth.Mode,
-			cfg.Auth.Basic.Username,
-			cfg.Auth.Basic.Password,
-		)
+		authRuntime := authentication.NewRuntime(slogLogger, cfg.Auth)
 		authzMiddleware := middleware.NewAuthzMiddleware(slogLogger, middleware.Options{
 			Mode:      cfg.Auth.Mode,
 			Evaluator: authRuntime,
@@ -451,14 +446,4 @@ func applyCredentialEncryptionConfig(cfg *config.Config) {
 
 func init() {
 	Cmd.Flags().StringVar(&configFile, "config", "", "Path to configuration file (json/yaml)")
-}
-
-func isMockAuthEnabled() bool {
-	raw := strings.TrimSpace(os.Getenv("DRS_AUTH_MOCK_ENABLED"))
-	switch strings.ToLower(raw) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }

@@ -188,7 +188,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	authRuntime := authentication.NewRuntime(logger, "local", "", "")
+	authRuntime := authentication.NewRuntime(logger, config.AuthConfig{Mode: config.AuthModeLocal})
 	authzMiddleware := middleware.NewAuthzMiddleware(logger, middleware.Options{Mode: "local", Evaluator: authRuntime})
 	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
 	cfg := &config.Config{Routes: routes}

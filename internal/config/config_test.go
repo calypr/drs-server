@@ -130,7 +130,7 @@ func TestCredentialEncryptionConfigMarshalJSONRedactsMasterKey(t *testing.T) {
 }
 
 func TestLoadConfig_LocalAuthzCSV(t *testing.T) {
-	t.Cleanup(func() { os.Unsetenv("DRS_LOCAL_AUTHZ_CSV") })
+	t.Setenv("DRS_LOCAL_AUTHZ_CSV", "")
 	content := `
 auth:
   mode: local
@@ -158,9 +158,177 @@ database:
 	if cfg.Auth.LocalAuthzCSV != "/tmp/local-authz.csv" {
 		t.Fatalf("expected local authz csv path, got %q", cfg.Auth.LocalAuthzCSV)
 	}
-	if got := os.Getenv("DRS_LOCAL_AUTHZ_CSV"); got != "/tmp/local-authz.csv" {
-		t.Fatalf("expected DRS_LOCAL_AUTHZ_CSV to be set, got %q", got)
+	if got := os.Getenv("DRS_LOCAL_AUTHZ_CSV"); got != "" {
+		t.Fatalf("LoadConfig must not export DRS_LOCAL_AUTHZ_CSV, got %q", got)
 	}
+}
+
+func TestLoadConfig_AuthPrecedenceAndNoExport(t *testing.T) {
+	t.Setenv("DRS_AUTH_MODE", "local")
+	t.Setenv("DRS_BASIC_AUTH_USER", "env-user")
+	t.Setenv("DRS_BASIC_AUTH_PASSWORD", "env-pass")
+	t.Setenv("DRS_LOCAL_AUTHZ_CSV", "env.csv")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
+	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "false")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/env-resource")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", "env-method")
+	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", "/env/authz")
+	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", "/env/authn")
+	t.Setenv("DRS_FENCE_URL", "https://env-fence.example")
+	t.Setenv("DRS_DB_SQLITE_FILE", ":memory:")
+
+	content := `
+auth:
+  mode: gen3
+  basic:
+    username: file-user
+    password: file-pass
+  local_authz_csv: file.csv
+  mock:
+    enabled: true
+    require_auth_header: true
+    resources: ["/file-resource"]
+    methods: ["file-method"]
+  plugin_paths:
+    authz: /file/authz
+    authn: /file/authn
+  fence_url: https://file-fence.example
+database:
+  sqlite:
+    file: ":memory:"
+`
+	cfg, err := LoadConfig(writeAuthTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Auth.Mode != AuthModeLocal {
+		t.Fatalf("mode = %q, want environment override local", cfg.Auth.Mode)
+	}
+	if cfg.Auth.Basic.Username != "env-user" || cfg.Auth.Basic.Password != "env-pass" {
+		t.Fatalf("basic credentials did not retain environment precedence: %+v", cfg.Auth.Basic)
+	}
+	if cfg.Auth.LocalAuthzCSV != "env.csv" {
+		t.Fatalf("local CSV = %q, want env.csv", cfg.Auth.LocalAuthzCSV)
+	}
+	if !cfg.Auth.Mock.Enabled || !cfg.Auth.Mock.RequireAuthHeader || strings.Join(cfg.Auth.Mock.Resources, ",") != "/file-resource" || strings.Join(cfg.Auth.Mock.Methods, ",") != "file-method" {
+		t.Fatalf("config mock values did not win: %+v", cfg.Auth.Mock)
+	}
+	if cfg.Auth.PluginPaths.Authz != "/file/authz" || cfg.Auth.PluginPaths.Authn != "/file/authn" || cfg.Auth.FenceURL != "https://file-fence.example" {
+		t.Fatalf("config plugin/fence values did not win: %+v fence=%q", cfg.Auth.PluginPaths, cfg.Auth.FenceURL)
+	}
+	wantEnv := map[string]string{
+		"DRS_AUTH_MOCK_ENABLED":             "false",
+		"DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER": "false",
+		"DRS_AUTH_MOCK_RESOURCES":           "/env-resource",
+		"DRS_AUTH_MOCK_METHODS":             "env-method",
+		"DRS_LOCAL_AUTHZ_CSV":               "env.csv",
+		"SYFON_AUTHZ_PLUGIN_PATH":           "/env/authz",
+		"SYFON_AUTHN_PLUGIN_PATH":           "/env/authn",
+		"DRS_FENCE_URL":                     "https://env-fence.example",
+	}
+	for key, want := range wantEnv {
+		if got := os.Getenv(key); got != want {
+			t.Errorf("LoadConfig changed %s: got %q want %q", key, got, want)
+		}
+	}
+}
+
+func TestLoadConfig_InheritedAuthValuesStayTyped(t *testing.T) {
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "yes")
+	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "on")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", " /inherited-resource, , /second ")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", " read, ,write ")
+	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", "/inherited/authz")
+	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", "/inherited/authn")
+	t.Setenv("DRS_FENCE_URL", "https://inherited-fence.example")
+	t.Setenv("DRS_DB_HOST", "localhost")
+	t.Setenv("DRS_DB_DATABASE", "testdb")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !cfg.Auth.Mock.Enabled || !cfg.Auth.Mock.RequireAuthHeader {
+		t.Fatalf("inherited mock booleans not resolved: %+v", cfg.Auth.Mock)
+	}
+	if got := strings.Join(cfg.Auth.Mock.Resources, ","); got != "/inherited-resource,/second" {
+		t.Fatalf("resources = %q", got)
+	}
+	if got := strings.Join(cfg.Auth.Mock.Methods, ","); got != "read,write" {
+		t.Fatalf("methods = %q", got)
+	}
+	if cfg.Auth.PluginPaths.Authz != "/inherited/authz" || cfg.Auth.PluginPaths.Authn != "/inherited/authn" || cfg.Auth.FenceURL != "https://inherited-fence.example" {
+		t.Fatalf("inherited paths/fence not resolved: %+v fence=%q", cfg.Auth.PluginPaths, cfg.Auth.FenceURL)
+	}
+}
+
+func TestLoadConfig_ConfigOnlyMockDoesNotAffectSQLiteEligibility(t *testing.T) {
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "")
+	content := `
+auth:
+  mode: gen3
+  mock:
+    enabled: true
+database:
+  sqlite:
+    file: ":memory:"
+`
+	_, err := LoadConfig(writeAuthTestFile(t, content))
+	if err == nil || !strings.Contains(err.Error(), `auth.mode "gen3" requires postgres database`) {
+		t.Fatalf("expected inherited-mock validation failure, got %v", err)
+	}
+}
+
+func TestLoadConfig_DoesNotRetainAuthFromPreviousLoad(t *testing.T) {
+	for _, key := range []string{"DRS_AUTH_MOCK_ENABLED", "DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "DRS_AUTH_MOCK_RESOURCES", "DRS_AUTH_MOCK_METHODS", "SYFON_AUTHZ_PLUGIN_PATH", "SYFON_AUTHN_PLUGIN_PATH", "DRS_FENCE_URL"} {
+		t.Setenv(key, "")
+	}
+	first := writeAuthTestFile(t, `
+auth:
+  mode: local
+  allow_unauthenticated: true
+  fence_url: https://first-fence.example
+  mock:
+    enabled: true
+    resources: ["/first"]
+database:
+  sqlite:
+    file: ":memory:"
+`)
+	second := writeAuthTestFile(t, `
+auth:
+  mode: local
+  allow_unauthenticated: true
+database:
+  sqlite:
+    file: ":memory:"
+`)
+	if _, err := LoadConfig(first); err != nil {
+		t.Fatalf("first LoadConfig failed: %v", err)
+	}
+	cfg, err := LoadConfig(second)
+	if err != nil {
+		t.Fatalf("second LoadConfig failed: %v", err)
+	}
+	if cfg.Auth.Mock.Enabled || cfg.Auth.FenceURL != "" || cfg.Auth.PluginPaths.Authz != "" || cfg.Auth.PluginPaths.Authn != "" {
+		t.Fatalf("second config retained first auth values: %+v", cfg.Auth)
+	}
+}
+
+func writeAuthTestFile(t *testing.T, content string) string {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "config-auth-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return file.Name()
 }
 
 func TestLoadConfig_BucketScopes(t *testing.T) {

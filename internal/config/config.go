@@ -11,6 +11,6 @@ func LoadConfig(configFile string) (*Config, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
-	exportAuthEnvironment(cfg)
+	resolveAuthEnvironment(cfg)
 	return cfg, nil
 }

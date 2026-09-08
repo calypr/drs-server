@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -15,22 +14,24 @@ import (
 )
 
 type tokenVerifier struct {
-	mu     sync.Mutex
-	caches map[string]*jwksCache
-	client *http.Client
-	now    func() time.Time
+	mu            sync.Mutex
+	caches        map[string]*jwksCache
+	client        *http.Client
+	now           func() time.Time
+	allowedOrigin string
 }
 
-func newTokenVerifier() *tokenVerifier {
+func newTokenVerifier(fenceURL string) *tokenVerifier {
 	return &tokenVerifier{
-		caches: make(map[string]*jwksCache),
-		client: &http.Client{Timeout: defaultAuthenticationTimeout},
-		now:    time.Now,
+		caches:        make(map[string]*jwksCache),
+		client:        &http.Client{Timeout: defaultAuthenticationTimeout},
+		now:           time.Now,
+		allowedOrigin: normalizeFenceOrigin(fenceURL),
 	}
 }
 
-func newTokenVerifierWithHTTPClient(client *http.Client) *tokenVerifier {
-	verifier := newTokenVerifier()
+func newTokenVerifierWithHTTPClient(client *http.Client, fenceURL string) *tokenVerifier {
+	verifier := newTokenVerifier(fenceURL)
 	if client != nil {
 		verifier.client = client
 	}
@@ -75,7 +76,7 @@ func (v *tokenVerifier) parseToken(ctx context.Context, tokenString string) (end
 			return nil, fmt.Errorf("invalid issuer URL: %w", err)
 		}
 
-		if !isIssuerAllowed(origin) {
+		if !v.isIssuerAllowed(origin) {
 			return nil, fmt.Errorf("issuer %q not in allowed list", iss)
 		}
 
@@ -115,26 +116,28 @@ func (v *tokenVerifier) parseToken(ctx context.Context, tokenString string) (end
 	return endpoint, exp, nil
 }
 
-// isIssuerAllowed checks if an issuer URL matches the configured fence URL.
-func isIssuerAllowed(iss string) bool {
-	fenceURL := strings.TrimSpace(os.Getenv("DRS_FENCE_URL"))
-	if fenceURL == "" {
-		return false
-	}
-	// Must be a valid https:// URL
-	u, err := url.Parse(fenceURL)
-	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return false
-	}
-	allowedOrigin, err := normalizeIssuerOrigin(fenceURL)
-	if err != nil {
+// isIssuerAllowed checks if an issuer URL matches the startup-configured fence.
+func (v *tokenVerifier) isIssuerAllowed(iss string) bool {
+	if v.allowedOrigin == "" {
 		return false
 	}
 	issuerOrigin, err := normalizeIssuerOrigin(iss)
 	if err != nil {
 		return false
 	}
-	return issuerOrigin == allowedOrigin
+	return issuerOrigin == v.allowedOrigin
+}
+
+func normalizeFenceOrigin(fenceURL string) string {
+	u, err := url.Parse(strings.TrimSpace(fenceURL))
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return ""
+	}
+	origin, err := normalizeIssuerOrigin(fenceURL)
+	if err != nil {
+		return ""
+	}
+	return origin
 }
 
 func normalizeIssuerOrigin(raw string) (string, error) {
