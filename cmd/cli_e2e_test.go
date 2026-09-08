@@ -326,6 +326,18 @@ func (a cliFileStorageAccess) Sign(_ context.Context, request storage.SignReques
 	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
 }
 
+func (cliFileStorageAccess) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", fmt.Errorf("multipart storage is not configured in the CLI fixture")
+}
+
+func (cliFileStorageAccess) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, fmt.Errorf("multipart storage is not configured in the CLI fixture")
+}
+
+func (cliFileStorageAccess) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return fmt.Errorf("multipart storage is not configured in the CLI fixture")
+}
+
 func (s *fiberTestServer) Close() {
 	_ = s.app.Shutdown()
 	if s.ln != nil {

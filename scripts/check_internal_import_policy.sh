@@ -169,6 +169,7 @@ check_edge() {
 			# forbidden here.
 			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
+				github.com/calypr/syfon/internal/persistence/store) ;;
 				github.com/calypr/syfon/internal/persistence/credentialcipher) ;;
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/persistence/*) forbidden=1 ;;
 			esac
@@ -209,6 +210,7 @@ run_self_tests() {
 	expect_forbidden github.com/calypr/syfon/client/services github.com/calypr/syfon/common
 	expect_allowed github.com/calypr/syfon/internal/storage/s3 github.com/aws/aws-sdk-go-v2/aws
 	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/mattn/go-sqlite3
+	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/calypr/syfon/internal/persistence/store
 	expect_allowed github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/storage/address
 	expect_allowed github.com/calypr/syfon/internal/storage/address net/url
 	expect_allowed github.com/calypr/syfon/cmd/server github.com/calypr/syfon/internal/persistence/credentialcipher

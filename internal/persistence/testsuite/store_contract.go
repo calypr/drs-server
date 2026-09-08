@@ -66,6 +66,30 @@ type SQLMockDialect struct{ store.Dialect }
 
 func (SQLMockDialect) Bootstrap(context.Context, *sql.DB) error { return nil }
 
+// BulkObjectCondition preserves optional backend SQL capabilities through the
+// bootstrap-suppressing test wrapper. The shared Store discovers these
+// capabilities by interface, so embedding only store.Dialect would otherwise
+// silently select its generic SQL path.
+func (d SQLMockDialect) BulkObjectCondition(ids, checksums, shaQueries, genericQueries []string, start int) (string, []any) {
+	if dialect, ok := d.Dialect.(interface {
+		BulkObjectCondition([]string, []string, []string, []string, int) (string, []any)
+	}); ok {
+		return dialect.BulkObjectCondition(ids, checksums, shaQueries, genericQueries, start)
+	}
+	return "", nil
+}
+
+// ResourceFilter preserves optional backend SQL capabilities through the same
+// wrapper for scoped URL queries.
+func (d SQLMockDialect) ResourceFilter(column string, resources []string, includeUnscoped bool, start int) (string, []any) {
+	if dialect, ok := d.Dialect.(interface {
+		ResourceFilter(string, []string, bool, int) (string, []any)
+	}); ok {
+		return dialect.ResourceFilter(column, resources, includeUnscoped, start)
+	}
+	return "", nil
+}
+
 // OpenSQLMockStore is the explicit constructor for PostgreSQL sqlmock cases.
 func OpenSQLMockStore(db *sql.DB, dialect store.Dialect, codec store.CredentialCodec) (*store.Store, error) {
 	return store.Open(db, SQLMockDialect{Dialect: dialect}, codec)

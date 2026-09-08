@@ -207,7 +207,7 @@ func (db *Store) ListS3Credentials(ctx context.Context) ([]buckets.Credential, e
 	}
 	defer rows.Close()
 
-	var creds []buckets.Credential
+	creds := make([]buckets.Credential, 0)
 	for rows.Next() {
 		var c buckets.Credential
 		if err := rows.Scan(&c.CredentialID, &c.Bucket, &c.Provider, &c.Region, &c.AccessKey, &c.SecretKey, &c.Endpoint); err != nil {
