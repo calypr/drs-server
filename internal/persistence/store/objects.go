@@ -436,6 +436,13 @@ func objectAccessResources(obj *objects.Record) []string {
 	return nil
 }
 
+func normalizeObjectNameAliases(obj *objects.Record) []string {
+	if obj == nil {
+		return nil
+	}
+	return objects.NormalizeNameAliases(stringVal(obj.Name), obj.NameAliases)
+}
+
 func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
 	ids := make([]string, 0, len(objectsByID))
 	for id := range objectsByID {

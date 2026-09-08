@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math"
@@ -11,6 +12,35 @@ import (
 )
 
 const sqliteMaxParams = 900
+
+// sqliteContentRow and mergeContentRowTx keep the metadata-focused regression
+// test independent of the shared Store implementation. Runtime writes live in
+// internal/persistence/store.
+type sqliteContentRow struct {
+	id      string
+	name    string
+	updated time.Time
+}
+
+func mergeContentRowTx(ctx context.Context, tx *sql.Tx, row sqliteContentRow, obj *objects.Record, _ []string, _ []string) error {
+	name := objects.CleanToBasename(sqliteStringVal(obj.Name))
+	if name == "" {
+		name = row.name
+	}
+	if row.name != "" && name != "" && row.name != name {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO drs_object_name_alias (object_id, name_alias) VALUES (?, ?) ON CONFLICT (object_id, name_alias) DO NOTHING`, row.id, row.name); err != nil {
+			return err
+		}
+	}
+	version, description := sqliteStringVal(obj.Version), sqliteStringVal(obj.Description)
+	size := obj.Size
+	updated := row.updated
+	if obj.UpdatedTime != nil && obj.UpdatedTime.After(updated) {
+		updated = *obj.UpdatedTime
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE drs_object SET size = ?, updated_time = ?, name = ?, version = ?, description = ? WHERE id = ?`, size, updated, name, version, description, row.id)
+	return err
+}
 
 func defaultProvider(provider string) string {
 	if strings.TrimSpace(provider) == "" {

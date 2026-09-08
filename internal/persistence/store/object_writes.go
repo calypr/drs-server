@@ -1,4 +1,4 @@
-package sqlite
+package store
 
 import (
 	"context"
@@ -16,7 +16,51 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-type sqliteContentRow struct {
+func (db *Store) txExecContext(ctx context.Context, tx *sql.Tx, query string, args ...any) (sql.Result, error) {
+	return tx.ExecContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+func (db *Store) txQueryContext(ctx context.Context, tx *sql.Tx, query string, args ...any) (*sql.Rows, error) {
+	return tx.QueryContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+func (db *Store) txQueryRowContext(ctx context.Context, tx *sql.Tx, query string, args ...any) *sql.Row {
+	return tx.QueryRowContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+func (db *Store) flushObjectUsageEventsForIDsTx(ctx context.Context, tx *sql.Tx, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	condition, idArgs := db.dialect.ListArgs("e.object_id", ids)
+	args := append([]any{now}, idArgs...)
+	query := fmt.Sprintf(`
+		INSERT INTO object_usage (object_id, upload_count, download_count, last_upload_time, last_download_time, updated_time)
+		SELECT e.object_id,
+			COALESCE(SUM(CASE WHEN e.event_type = 'upload' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN e.event_type = 'download' THEN 1 ELSE 0 END), 0),
+			MAX(CASE WHEN e.event_type = 'upload' THEN e.event_time END),
+			MAX(CASE WHEN e.event_type = 'download' THEN e.event_time END), ?
+		FROM object_usage_event e
+		JOIN drs_object o ON o.id = e.object_id
+		WHERE %s
+		GROUP BY e.object_id
+		ON CONFLICT (object_id) DO UPDATE SET
+			upload_count = object_usage.upload_count + excluded.upload_count,
+			download_count = object_usage.download_count + excluded.download_count,
+			last_upload_time = CASE WHEN excluded.last_upload_time IS NULL THEN object_usage.last_upload_time WHEN object_usage.last_upload_time IS NULL THEN excluded.last_upload_time WHEN excluded.last_upload_time > object_usage.last_upload_time THEN excluded.last_upload_time ELSE object_usage.last_upload_time END,
+			last_download_time = CASE WHEN excluded.last_download_time IS NULL THEN object_usage.last_download_time WHEN object_usage.last_download_time IS NULL THEN excluded.last_download_time WHEN excluded.last_download_time > object_usage.last_download_time THEN excluded.last_download_time ELSE object_usage.last_download_time END,
+			updated_time = excluded.updated_time`, condition)
+	if _, err := db.txExecContext(ctx, tx, query, args...); err != nil {
+		return err
+	}
+	deleteCondition, deleteArgs := db.dialect.ListArgs("object_usage_event.object_id", ids)
+	_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event WHERE "+deleteCondition+" AND EXISTS (SELECT 1 FROM drs_object WHERE drs_object.id = object_usage_event.object_id)", deleteArgs...)
+	return err
+}
+
+type contentRow struct {
 	id, name, version, description string
 	size                           int64
 	created, updated               time.Time
@@ -25,45 +69,37 @@ type sqliteContentRow struct {
 // RegisterObjects is the content identity write boundary. Every SHA-bearing
 // registration is merged while the SQLite writer lock is held, so the parent
 // row, children, aliases, and public policy commit together.
-func (db *SqliteDB) RegisterObjects(ctx context.Context, objects []objects.Record) error {
+func (db *Store) RegisterObjects(ctx context.Context, objects []objects.Record) error {
 	if len(objects) == 0 {
 		return nil
 	}
-	tx, err := db.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin content registration: %w", err)
-	}
-	defer tx.Rollback()
-
-	canonicalIDs := make([]string, 0, len(objects))
-	seenIDs := make(map[string]struct{}, len(objects))
-	for i := range objects {
-		canonicalID, err := db.registerContentTx(ctx, tx, &objects[i])
-		if err != nil {
-			return fmt.Errorf("register object[%d]: %w", i, err)
+	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
+		canonicalIDs := make([]string, 0, len(objects))
+		seenIDs := make(map[string]struct{})
+		for i := range objects {
+			canonicalID, err := db.registerContentTx(ctx, tx, &objects[i])
+			if err != nil {
+				return fmt.Errorf("register object[%d]: %w", i, err)
+			}
+			if _, seen := seenIDs[canonicalID]; !seen {
+				seenIDs[canonicalID] = struct{}{}
+				canonicalIDs = append(canonicalIDs, canonicalID)
+			}
 		}
-		if _, seen := seenIDs[canonicalID]; !seen {
-			seenIDs[canonicalID] = struct{}{}
-			canonicalIDs = append(canonicalIDs, canonicalID)
+		if err := db.flushObjectUsageEventsForIDsTx(ctx, tx, canonicalIDs); err != nil {
+			return fmt.Errorf("apply object usage events: %w", err)
 		}
-	}
-	if err := db.flushObjectUsageEventsForIDsTx(ctx, tx, canonicalIDs); err != nil {
-		return fmt.Errorf("apply object usage events: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit content registration: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
-
-func (db *SqliteDB) CreateObject(ctx context.Context, obj *objects.Record) error {
+func (db *Store) CreateObject(ctx context.Context, obj *objects.Record) error {
 	if obj == nil {
 		return fmt.Errorf("object is required")
 	}
 	return db.RegisterObjects(ctx, []objects.Record{*obj})
 }
 
-func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (string, error) {
+func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (string, error) {
 	id := strings.TrimSpace(string(obj.Id))
 	if id == "" {
 		return "", fmt.Errorf("object id is required")
@@ -72,12 +108,12 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 	if err != nil {
 		return "", err
 	}
-	canonicalID, foundByID, err := sqliteObjectIDTx(ctx, tx, id)
+	canonicalID, foundByID, err := db.objectIDTx(ctx, tx, id)
 	if err != nil {
 		return "", err
 	}
 	if hasSHA {
-		ids, err := sqliteObjectIDsBySHATx(ctx, tx, sha)
+		ids, err := db.objectIDsBySHATx(ctx, tx, sha)
 		if err != nil {
 			return "", err
 		}
@@ -92,7 +128,7 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 		} else if !foundByID {
 			canonicalID = id
 		} else {
-			stored, err := sqliteObjectSHAsTx(ctx, tx, canonicalID)
+			stored, err := db.objectSHAsTx(ctx, tx, canonicalID)
 			if err != nil {
 				return "", err
 			}
@@ -108,27 +144,27 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 	if canonicalID == "" {
 		return "", identityConflict("empty canonical object id for %q", id)
 	}
-	if err := checkUUIDClaimTx(ctx, tx, id, canonicalID); err != nil {
+	if err := db.checkUUIDClaimTx(ctx, tx, id, canonicalID); err != nil {
 		return "", err
 	}
 
-	row, exists, err := sqliteLoadContentRowTx(ctx, tx, canonicalID)
+	row, exists, err := db.loadContentRowTx(ctx, tx, canonicalID)
 	if err != nil {
 		return "", err
 	}
 	wasExisting := exists
 	if !exists {
-		if err := insertContentRowTx(ctx, tx, canonicalID, obj); err != nil {
+		if err := db.insertContentRowTx(ctx, tx, canonicalID, obj); err != nil {
 			return "", err
 		}
-		row = sqliteContentRow{id: canonicalID, size: obj.Size, created: obj.CreatedTime, updated: valueTime(obj.UpdatedTime)}
+		row = contentRow{id: canonicalID, size: obj.Size, created: obj.CreatedTime, updated: valueTime(obj.UpdatedTime)}
 		exists = true
 	}
 	if hasSHA && row.size != 0 && obj.Size != 0 && row.size != obj.Size {
 		return "", identityConflict("SHA %q has conflicting sizes %d and %d", sha, row.size, obj.Size)
 	}
-	resources := sqliteObjectResources(obj)
-	currentResources, err := sqliteResourcesTx(ctx, tx, canonicalID)
+	resources := objectResources(obj)
+	currentResources, err := db.resourcesTx(ctx, tx, canonicalID)
 	if err != nil {
 		return "", err
 	}
@@ -136,27 +172,27 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 	if wasExisting {
 		inferredPublic = len(currentResources) == 0
 	}
-	publicRead, err := sqlitePublicReadTx(ctx, tx, canonicalID, inferredPublic)
+	publicRead, err := db.publicReadTx(ctx, tx, canonicalID, inferredPublic)
 	if err != nil {
 		return "", err
 	}
-	if wasExisting && !publicRead && (sqliteHasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !sqliteCanReadContent(ctx, currentResources) {
+	if wasExisting && !publicRead && (hasNewResource(resources, currentResources) || len(currentResources) == 0 || obj.AccessMethods != nil) && !canReadContent(ctx, currentResources) {
 		return "", errorapi.ErrAccessDenied
 	}
-	if !sqliteCanCreateResources(ctx, resources, currentResources) {
+	if !canCreateResources(ctx, resources, currentResources) {
 		return "", errorapi.ErrAccessDenied
 	}
-	if err := mergeContentRowTx(ctx, tx, row, obj, resources, currentResources); err != nil {
+	if err := db.mergeContentRowTx(ctx, tx, row, obj, resources, currentResources); err != nil {
 		return "", err
 	}
-	if err := mergeContentChildrenTx(ctx, tx, canonicalID, sha, hasSHA, resources, obj); err != nil {
+	if err := db.mergeContentChildrenTx(ctx, tx, canonicalID, sha, hasSHA, resources, obj); err != nil {
 		return "", err
 	}
-	if err := setPublicReadTx(ctx, tx, canonicalID, publicRead); err != nil {
+	if err := db.setPublicReadTx(ctx, tx, canonicalID, publicRead); err != nil {
 		return "", err
 	}
 	if id != canonicalID {
-		if err := insertObjectAliasTx(ctx, tx, id, canonicalID); err != nil {
+		if err := db.insertObjectAliasTx(ctx, tx, id, canonicalID); err != nil {
 			return "", err
 		}
 	}
@@ -164,23 +200,23 @@ func (db *SqliteDB) registerContentTx(ctx context.Context, tx *sql.Tx, obj *obje
 		if alias == canonicalID {
 			continue
 		}
-		if err := insertObjectAliasTx(ctx, tx, alias, canonicalID); err != nil {
+		if err := db.insertObjectAliasTx(ctx, tx, alias, canonicalID); err != nil {
 			return "", err
 		}
 	}
 	return canonicalID, nil
 }
 
-func sqliteObjectIDTx(ctx context.Context, tx *sql.Tx, id string) (string, bool, error) {
+func (db *Store) objectIDTx(ctx context.Context, tx *sql.Tx, id string) (string, bool, error) {
 	var found string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM drs_object WHERE id = ?`, id).Scan(&found)
+	err := db.txQueryRowContext(ctx, tx, `SELECT id FROM drs_object WHERE id = ?`, id).Scan(&found)
 	if err == nil {
 		return found, true, nil
 	}
 	if err != sql.ErrNoRows {
 		return "", false, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, id).Scan(&found)
+	err = db.txQueryRowContext(ctx, tx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, id).Scan(&found)
 	if err == nil {
 		return found, true, nil
 	}
@@ -190,8 +226,8 @@ func sqliteObjectIDTx(ctx context.Context, tx *sql.Tx, id string) (string, bool,
 	return "", false, err
 }
 
-func sqliteObjectIDsBySHATx(ctx context.Context, tx *sql.Tx, sha string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `
+func (db *Store) objectIDsBySHATx(ctx context.Context, tx *sql.Tx, sha string) ([]string, error) {
+	rows, err := db.txQueryContext(ctx, tx, `
 		SELECT DISTINCT c.object_id
 		FROM drs_object_checksum c
 		WHERE replace(lower(trim(c.type)), '-', '') = 'sha256'
@@ -212,56 +248,56 @@ func sqliteObjectIDsBySHATx(ctx context.Context, tx *sql.Tx, sha string) ([]stri
 	return ids, rows.Err()
 }
 
-func sqliteLoadContentRowTx(ctx context.Context, tx *sql.Tx, id string) (sqliteContentRow, bool, error) {
-	var row sqliteContentRow
-	err := tx.QueryRowContext(ctx, `
+func (db *Store) loadContentRowTx(ctx context.Context, tx *sql.Tx, id string) (contentRow, bool, error) {
+	var row contentRow
+	err := db.txQueryRowContext(ctx, tx, `
 		SELECT id, COALESCE(size, 0), COALESCE(name, ''), COALESCE(version, ''),
 		       COALESCE(description, ''), created_time, updated_time
 		FROM drs_object WHERE id = ?`, id).Scan(
 		&row.id, &row.size, &row.name, &row.version, &row.description, &row.created, &row.updated,
 	)
 	if err == sql.ErrNoRows {
-		return sqliteContentRow{}, false, nil
+		return contentRow{}, false, nil
 	}
 	if err != nil {
-		return sqliteContentRow{}, false, err
+		return contentRow{}, false, err
 	}
 	return row, true, nil
 }
 
-func insertContentRowTx(ctx context.Context, tx *sql.Tx, id string, obj *objects.Record) error {
-	_, err := tx.ExecContext(ctx, `
+func (db *Store) insertContentRowTx(ctx context.Context, tx *sql.Tx, id string, obj *objects.Record) error {
+	_, err := db.txExecContext(ctx, tx, `
 		INSERT INTO drs_object (id, size, created_time, updated_time, name, version, description)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, id, obj.Size, obj.CreatedTime, sqliteTimeVal(obj.UpdatedTime),
-		objects.CleanToBasename(sqliteStringVal(obj.Name)), sqliteStringVal(obj.Version), sqliteStringVal(obj.Description))
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, id, obj.Size, obj.CreatedTime, timeVal(obj.UpdatedTime),
+		objects.CleanToBasename(stringVal(obj.Name)), stringVal(obj.Version), stringVal(obj.Description))
 	if err != nil {
 		return fmt.Errorf("insert canonical object: %w", err)
 	}
 	return nil
 }
 
-func mergeContentRowTx(ctx context.Context, tx *sql.Tx, row sqliteContentRow, obj *objects.Record, resources, currentResources []string) error {
+func (db *Store) mergeContentRowTx(ctx context.Context, tx *sql.Tx, row contentRow, obj *objects.Record, resources, currentResources []string) error {
 	merged := objects.MergeRegistrationMetadata(objects.RegistrationMergeInput{
 		ExistingName:        row.name,
 		ExistingVersion:     row.version,
 		ExistingDescription: row.description,
 		ExistingSize:        row.size,
 		ExistingUpdated:     row.updated,
-		IncomingName:        sqliteStringVal(obj.Name),
-		IncomingVersion:     sqliteStringVal(obj.Version),
-		IncomingDescription: sqliteStringVal(obj.Description),
+		IncomingName:        stringVal(obj.Name),
+		IncomingVersion:     stringVal(obj.Version),
+		IncomingDescription: stringVal(obj.Description),
 		IncomingSize:        obj.Size,
 		IncomingUpdated:     valueTime(obj.UpdatedTime),
 		IncomingResources:   resources,
 		CurrentResources:    currentResources,
 	})
 	if merged.NameAlias != "" {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO drs_object_name_alias (object_id, name_alias) VALUES (?, ?)`, row.id, merged.NameAlias); err != nil {
+		if _, err := db.txExecContext(ctx, tx, `
+			INSERT INTO drs_object_name_alias (object_id, name_alias) VALUES (?, ?) ON CONFLICT (object_id, name_alias) DO NOTHING`, row.id, merged.NameAlias); err != nil {
 			return fmt.Errorf("preserve object name alias: %w", err)
 		}
 	}
-	_, err := tx.ExecContext(ctx, `
+	_, err := db.txExecContext(ctx, tx, `
 		UPDATE drs_object
 		SET size = ?, updated_time = ?, name = ?, version = ?, description = ?
 		WHERE id = ?`, merged.Size, merged.Updated, merged.Name, merged.Version, merged.Description, row.id)
@@ -271,9 +307,9 @@ func mergeContentRowTx(ctx context.Context, tx *sql.Tx, row sqliteContentRow, ob
 	return nil
 }
 
-func mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, hasSHA bool, resources []string, obj *objects.Record) error {
+func (db *Store) mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, hasSHA bool, resources []string, obj *objects.Record) error {
 	for _, resource := range resources {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO drs_object_controlled_access (object_id, resource)
 			SELECT ?, ? WHERE NOT EXISTS (
 				SELECT 1 FROM drs_object_controlled_access WHERE object_id = ? AND resource = ?
@@ -287,7 +323,7 @@ func mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, has
 				continue
 			}
 			typ, rawURL := strings.TrimSpace(string(method.Type)), strings.TrimSpace(method.AccessUrl.Url)
-			if _, err := tx.ExecContext(ctx, `
+			if _, err := db.txExecContext(ctx, tx, `
 				INSERT INTO drs_object_access_method (object_id, url, type)
 				SELECT ?, ?, ? WHERE NOT EXISTS (
 					SELECT 1 FROM drs_object_access_method
@@ -298,13 +334,13 @@ func mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, has
 		}
 	}
 	for _, alias := range normalizeObjectNameAliases(obj) {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO drs_object_name_alias (object_id, name_alias) VALUES (?, ?)`, id, alias); err != nil {
+		if _, err := db.txExecContext(ctx, tx, `
+			INSERT INTO drs_object_name_alias (object_id, name_alias) VALUES (?, ?) ON CONFLICT (object_id, name_alias) DO NOTHING`, id, alias); err != nil {
 			return fmt.Errorf("merge name alias: %w", err)
 		}
 	}
 	if hasSHA {
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO drs_object_checksum (object_id, type, checksum)
 			SELECT ?, 'sha256', ? WHERE NOT EXISTS (
 				SELECT 1 FROM drs_object_checksum
@@ -319,7 +355,7 @@ func mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, has
 		if typ == "" || value == "" || (objects.NormalizeChecksumType(typ) == "sha256" && clienthash.NormalizeOid(value) != "") {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `
+		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO drs_object_checksum (object_id, type, checksum)
 			SELECT ?, ?, ? WHERE NOT EXISTS (
 				SELECT 1 FROM drs_object_checksum WHERE object_id = ? AND type = ? AND checksum = ?
@@ -330,8 +366,8 @@ func mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, has
 	return nil
 }
 
-func sqliteResourcesTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT resource FROM drs_object_controlled_access WHERE object_id = ?`, id)
+func (db *Store) resourcesTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
+	rows, err := db.txQueryContext(ctx, tx, `SELECT resource FROM drs_object_controlled_access WHERE object_id = ?`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -347,9 +383,9 @@ func sqliteResourcesTx(ctx context.Context, tx *sql.Tx, id string) ([]string, er
 	return clientaccess.NormalizeAccessResources(resources), rows.Err()
 }
 
-func sqlitePublicReadTx(ctx context.Context, tx *sql.Tx, id string, inferred bool) (bool, error) {
+func (db *Store) publicReadTx(ctx context.Context, tx *sql.Tx, id string, inferred bool) (bool, error) {
 	var public bool
-	err := tx.QueryRowContext(ctx, `SELECT public_read FROM drs_object_read_policy WHERE object_id = ?`, id).Scan(&public)
+	err := db.txQueryRowContext(ctx, tx, `SELECT public_read FROM drs_object_read_policy WHERE object_id = ?`, id).Scan(&public)
 	if err == sql.ErrNoRows {
 		return inferred, nil
 	}
@@ -359,20 +395,8 @@ func sqlitePublicReadTx(ctx context.Context, tx *sql.Tx, id string, inferred boo
 	return public, nil
 }
 
-func (db *SqliteDB) publicReadForObject(ctx context.Context, id string, inferred bool) (bool, bool, error) {
-	var public bool
-	err := db.db.QueryRowContext(ctx, `SELECT public_read FROM drs_object_read_policy WHERE object_id = ?`, id).Scan(&public)
-	if err == sql.ErrNoRows {
-		return inferred, false, nil
-	}
-	if err != nil {
-		return false, false, err
-	}
-	return public, true, nil
-}
-
-func setPublicReadTx(ctx context.Context, tx *sql.Tx, id string, public bool) error {
-	_, err := tx.ExecContext(ctx, `
+func (db *Store) setPublicReadTx(ctx context.Context, tx *sql.Tx, id string, public bool) error {
+	_, err := db.txExecContext(ctx, tx, `
 		INSERT INTO drs_object_read_policy (object_id, public_read) VALUES (?, ?)
 		ON CONFLICT(object_id) DO UPDATE SET public_read = excluded.public_read OR drs_object_read_policy.public_read`, id, public)
 	if err != nil {
@@ -381,10 +405,10 @@ func setPublicReadTx(ctx context.Context, tx *sql.Tx, id string, public bool) er
 	return nil
 }
 
-func checkUUIDClaimTx(ctx context.Context, tx *sql.Tx, requested, canonical string) error {
+func (db *Store) checkUUIDClaimTx(ctx context.Context, tx *sql.Tx, requested, canonical string) error {
 	if requested == canonical {
 		var aliasTarget string
-		err := tx.QueryRowContext(ctx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, requested).Scan(&aliasTarget)
+		err := db.txQueryRowContext(ctx, tx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, requested).Scan(&aliasTarget)
 		if err == nil && aliasTarget != canonical {
 			return identityConflict("UUID %q is already an alias for %q", requested, aliasTarget)
 		}
@@ -394,7 +418,7 @@ func checkUUIDClaimTx(ctx context.Context, tx *sql.Tx, requested, canonical stri
 		return nil
 	}
 	var aliasTarget string
-	err := tx.QueryRowContext(ctx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, requested).Scan(&aliasTarget)
+	err := db.txQueryRowContext(ctx, tx, `SELECT object_id FROM drs_object_alias WHERE alias_id = ?`, requested).Scan(&aliasTarget)
 	if err == nil && aliasTarget != canonical {
 		return identityConflict("UUID %q is already an alias for %q", requested, aliasTarget)
 	}
@@ -404,21 +428,21 @@ func checkUUIDClaimTx(ctx context.Context, tx *sql.Tx, requested, canonical stri
 	return nil
 }
 
-func insertObjectAliasTx(ctx context.Context, tx *sql.Tx, alias, canonical string) error {
+func (db *Store) insertObjectAliasTx(ctx context.Context, tx *sql.Tx, alias, canonical string) error {
 	if alias == canonical {
 		return nil
 	}
-	if err := checkUUIDClaimTx(ctx, tx, alias, canonical); err != nil {
+	if err := db.checkUUIDClaimTx(ctx, tx, alias, canonical); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO drs_object_alias (alias_id, object_id) VALUES (?, ?)`, alias, canonical); err != nil {
+	if _, err := db.txExecContext(ctx, tx, `INSERT INTO drs_object_alias (alias_id, object_id) VALUES (?, ?) ON CONFLICT (alias_id) DO NOTHING`, alias, canonical); err != nil {
 		return fmt.Errorf("insert object alias %q: %w", alias, err)
 	}
 	return nil
 }
 
-func sqliteObjectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `
+func (db *Store) objectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
+	rows, err := db.txQueryContext(ctx, tx, `
 		SELECT DISTINCT replace(lower(trim(checksum)), 'sha256:', '')
 		FROM drs_object_checksum
 		WHERE object_id = ? AND replace(lower(trim(type)), '-', '') = 'sha256'`, id)
@@ -439,7 +463,7 @@ func sqliteObjectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]string, e
 	return values, rows.Err()
 }
 
-func sqliteObjectResources(obj *objects.Record) []string {
+func objectResources(obj *objects.Record) []string {
 	if obj == nil {
 		return nil
 	}
@@ -473,7 +497,7 @@ func identityAliases(obj *objects.Record) []string {
 	return aliases
 }
 
-func sqliteCanReadContent(ctx context.Context, resources []string) bool {
+func canReadContent(ctx context.Context, resources []string) bool {
 	if !access.IsAuthzEnforced(ctx) {
 		return true
 	}
@@ -483,7 +507,7 @@ func sqliteCanReadContent(ctx context.Context, resources []string) bool {
 	return access.HasObjectMethodAccess(ctx, "read", resources)
 }
 
-func sqliteCanCreateResources(ctx context.Context, resources, current []string) bool {
+func canCreateResources(ctx context.Context, resources, current []string) bool {
 	currentSet := make(map[string]struct{}, len(current))
 	for _, resource := range current {
 		currentSet[resource] = struct{}{}
@@ -499,8 +523,8 @@ func sqliteCanCreateResources(ctx context.Context, resources, current []string) 
 	return true
 }
 
-func sqliteRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method string) error {
-	resources, err := sqliteResourcesTx(ctx, tx, id)
+func (db *Store) requireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method string) error {
+	resources, err := db.resourcesTx(ctx, tx, id)
 	if err != nil {
 		return err
 	}
@@ -510,13 +534,13 @@ func sqliteRequireContentMethodTx(ctx context.Context, tx *sql.Tx, id, method st
 	return nil
 }
 
-func sqliteEnsureNoLegacyDuplicateTx(ctx context.Context, tx *sql.Tx, id string) error {
-	shas, err := sqliteObjectSHAsTx(ctx, tx, id)
+func (db *Store) ensureNoLegacyDuplicateTx(ctx context.Context, tx *sql.Tx, id string) error {
+	shas, err := db.objectSHAsTx(ctx, tx, id)
 	if err != nil {
 		return err
 	}
 	for _, sha := range shas {
-		ids, err := sqliteObjectIDsBySHATx(ctx, tx, sha)
+		ids, err := db.objectIDsBySHATx(ctx, tx, sha)
 		if err != nil {
 			return err
 		}
@@ -527,7 +551,7 @@ func sqliteEnsureNoLegacyDuplicateTx(ctx context.Context, tx *sql.Tx, id string)
 	return nil
 }
 
-func sqliteHasNewResource(resources, current []string) bool {
+func hasNewResource(resources, current []string) bool {
 	set := make(map[string]struct{}, len(current))
 	for _, resource := range current {
 		set[resource] = struct{}{}
@@ -540,15 +564,18 @@ func sqliteHasNewResource(resources, current []string) bool {
 	return false
 }
 
+func timeVal(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
+}
+
 func valueTime(value *time.Time) time.Time {
 	if value == nil || value.IsZero() {
 		return time.Time{}
 	}
 	return value.UTC()
-}
-
-func normalizeChecksumLookup(value string) string {
-	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "sha256:")
 }
 
 func identityConflict(format string, args ...interface{}) error {
