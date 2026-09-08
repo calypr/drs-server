@@ -14,7 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.1
 	github.com/aws/smithy-go v1.27.3
 	github.com/calypr/syfon/apigen v0.3.1-0.20260908001007-8743d81d59e5
-	github.com/calypr/syfon/client v0.3.4-0.20260908001736-8dddd89799e3
+	github.com/calypr/syfon/client v0.3.4-0.20260908003208-0e5f20b1c151
 	github.com/getkin/kin-openapi v0.144.0
 	github.com/gofiber/fiber/v3 v3.4.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
