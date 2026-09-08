@@ -90,7 +90,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_binary_endpoint_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -104,7 +104,7 @@ jobs:
       - name: Upload binary endpoint coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_binary_endpoint_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -186,7 +186,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_root_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -200,7 +200,7 @@ jobs:
       - name: Upload root coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_root_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -215,7 +215,7 @@ jobs:
         if: github.actor != 'nektos/act'
         id: codecov_client_oidc
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
@@ -229,7 +229,7 @@ jobs:
       - name: Upload client coverage to Codecov (token fallback)
         if: github.actor != 'nektos/act' && steps.codecov_client_oidc.outcome == 'failure'
         continue-on-error: true
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         env:
           CODECOV_SLUG: calypr/syfon
         with:
