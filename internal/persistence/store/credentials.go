@@ -1,4 +1,4 @@
-package postgres
+package store
 
 import (
 	"context"
@@ -12,11 +12,22 @@ import (
 	"github.com/calypr/syfon/internal/requestid"
 )
 
-func (db *PostgresDB) GetS3Credential(ctx context.Context, credentialID string) (*buckets.Credential, error) {
+func (db *Store) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.db.ExecContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+func defaultProvider(provider string) string {
+	if strings.TrimSpace(provider) == "" {
+		return "s3"
+	}
+	return provider
+}
+
+func (db *Store) GetS3Credential(ctx context.Context, credentialID string) (*buckets.Credential, error) {
 	var c buckets.Credential
-	err := db.db.QueryRowContext(ctx, `
+	err := db.queryRowContext(ctx, `
 		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
-		FROM s3_credential WHERE credential_id = $1`, credentialID).Scan(
+		FROM s3_credential WHERE credential_id = ?`, credentialID).Scan(
 		&c.CredentialID, &c.Bucket, &c.Provider, &c.Region, &c.AccessKey, &c.SecretKey, &c.Endpoint,
 	)
 	if err == sql.ErrNoRows {
@@ -43,10 +54,10 @@ func (db *PostgresDB) GetS3Credential(ctx context.Context, credentialID string) 
 	return parsed, nil
 }
 
-func (db *PostgresDB) getS3CredentialByPhysicalBucket(ctx context.Context, bucket string) (*buckets.Credential, error) {
-	rows, err := db.db.QueryContext(ctx, `
+func (db *Store) getS3CredentialByPhysicalBucket(ctx context.Context, bucket string) (*buckets.Credential, error) {
+	rows, err := db.queryContext(ctx, `
 		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
-		FROM s3_credential WHERE bucket = $1`, bucket)
+		FROM s3_credential WHERE bucket = ?`, bucket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch credential by bucket: %w", err)
 	}
@@ -77,7 +88,7 @@ func (db *PostgresDB) getS3CredentialByPhysicalBucket(ctx context.Context, bucke
 	}
 }
 
-func (db *PostgresDB) SaveS3Credential(ctx context.Context, cred *buckets.Credential) error {
+func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential) error {
 	bucket := ""
 	if cred != nil {
 		bucket = cred.Bucket
@@ -96,9 +107,10 @@ func (db *PostgresDB) SaveS3Credential(ctx context.Context, cred *buckets.Creden
 		return err
 	}
 
-	_, err = db.db.ExecContext(ctx, `
+	// SQLite UPSERT syntax: INSERT INTO ... ON CONFLICT (...) DO UPDATE SET ...
+	_, err = db.execContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (credential_id) DO UPDATE SET
 			bucket = EXCLUDED.bucket,
 			provider = EXCLUDED.provider,
@@ -117,7 +129,7 @@ func (db *PostgresDB) SaveS3Credential(ctx context.Context, cred *buckets.Creden
 	return nil
 }
 
-func (db *PostgresDB) ensureUniquePhysicalBucket(ctx context.Context, credentialID, bucket string) error {
+func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, credentialID, bucket string) error {
 	credentialID = strings.TrimSpace(credentialID)
 	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
@@ -125,10 +137,10 @@ func (db *PostgresDB) ensureUniquePhysicalBucket(ctx context.Context, credential
 	}
 
 	var existingCredentialID string
-	err := db.db.QueryRowContext(ctx, `
+	err := db.queryRowContext(ctx, `
 		SELECT credential_id
 		FROM s3_credential
-		WHERE bucket = $1 AND credential_id <> $2
+		WHERE bucket = ? AND credential_id <> ?
 		LIMIT 1
 	`, bucket, credentialID).Scan(&existingCredentialID)
 	if err == nil {
@@ -140,24 +152,22 @@ func (db *PostgresDB) ensureUniquePhysicalBucket(ctx context.Context, credential
 	return fmt.Errorf("failed to validate physical bucket uniqueness: %w", err)
 }
 
-func (db *PostgresDB) DeleteS3Credential(ctx context.Context, credentialID string) error {
+func (db *Store) DeleteS3Credential(ctx context.Context, credentialID string) error {
 	resolvedID, err := db.resolveCredentialID(ctx, credentialID)
 	if err != nil {
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
 	}
-	// 1. Delete bucket scopes first (cascade delete is on object_id, but bucket_scope is manual link)
-	if _, err := db.db.ExecContext(ctx, "DELETE FROM bucket_scope WHERE credential_id = $1", resolvedID); err != nil {
+	if _, err := db.execContext(ctx, "DELETE FROM bucket_scope WHERE credential_id = ?", resolvedID); err != nil {
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return fmt.Errorf("failed to delete bucket scopes for %s: %w", credentialID, err)
 	}
-
-	result, err := db.db.ExecContext(ctx, "DELETE FROM s3_credential WHERE credential_id = $1", resolvedID)
+	res, err := db.execContext(ctx, "DELETE FROM s3_credential WHERE credential_id = ?", resolvedID)
 	if err != nil {
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
 	}
-	rows, err := result.RowsAffected()
+	rows, err := res.RowsAffected()
 	if err != nil {
 		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
@@ -170,13 +180,13 @@ func (db *PostgresDB) DeleteS3Credential(ctx context.Context, credentialID strin
 	return nil
 }
 
-func (db *PostgresDB) resolveCredentialID(ctx context.Context, raw string) (string, error) {
+func (db *Store) resolveCredentialID(ctx context.Context, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", errorapi.ErrStorageCredentialMissing
 	}
 	var exact string
-	err := db.db.QueryRowContext(ctx, "SELECT credential_id FROM s3_credential WHERE credential_id = $1", raw).Scan(&exact)
+	err := db.queryRowContext(ctx, "SELECT credential_id FROM s3_credential WHERE credential_id = ?", raw).Scan(&exact)
 	if err == nil {
 		return exact, nil
 	}
@@ -190,8 +200,8 @@ func (db *PostgresDB) resolveCredentialID(ctx context.Context, raw string) (stri
 	return cred.CredentialID, nil
 }
 
-func (db *PostgresDB) ListS3Credentials(ctx context.Context) ([]buckets.Credential, error) {
-	rows, err := db.db.QueryContext(ctx, "SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint FROM s3_credential")
+func (db *Store) ListS3Credentials(ctx context.Context) ([]buckets.Credential, error) {
+	rows, err := db.queryContext(ctx, "SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint FROM s3_credential")
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +226,7 @@ func (db *PostgresDB) ListS3Credentials(ctx context.Context) ([]buckets.Credenti
 	return creds, nil
 }
 
-func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *buckets.Scope) error {
+func (db *Store) CreateBucketScope(ctx context.Context, scope *buckets.Scope) error {
 	if scope == nil {
 		return fmt.Errorf("scope is required")
 	}
@@ -228,7 +238,6 @@ func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *buckets.Scop
 	if credentialID == "" {
 		credentialID = bucket
 	}
-
 	if org == "" || bucket == "" {
 		return fmt.Errorf("organization and bucket are required")
 	}
@@ -241,10 +250,10 @@ func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *buckets.Scop
 		if strings.EqualFold(strings.TrimSpace(existing.CredentialID), credentialID) && strings.EqualFold(strings.TrimSpace(existing.Bucket), bucket) && strings.Trim(strings.TrimSpace(existing.PathPrefix), "/") == prefix {
 			return nil
 		}
-		_, err = db.db.ExecContext(ctx, `
+		_, err = db.execContext(ctx, `
 			UPDATE bucket_scope
-			SET credential_id = $1, bucket = $2, path_prefix = $3
-			WHERE organization = $4 AND project_id = $5
+			SET credential_id = ?, bucket = ?, path_prefix = ?
+			WHERE organization = ? AND project_id = ?
 		`, credentialID, bucket, prefix, org, project)
 		if err != nil {
 			return fmt.Errorf("failed to update bucket scope: %w", err)
@@ -252,9 +261,9 @@ func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *buckets.Scop
 		return nil
 	}
 
-	_, err = db.db.ExecContext(ctx, `
+	_, err = db.execContext(ctx, `
 		INSERT INTO bucket_scope (organization, project_id, credential_id, bucket, path_prefix)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES (?, ?, ?, ?, ?)
 	`, org, project, credentialID, bucket, prefix)
 	if err != nil {
 		return fmt.Errorf("failed to create bucket scope: %w", err)
@@ -262,12 +271,12 @@ func (db *PostgresDB) CreateBucketScope(ctx context.Context, scope *buckets.Scop
 	return nil
 }
 
-func (db *PostgresDB) GetBucketScope(ctx context.Context, organization, projectID string) (*buckets.Scope, error) {
+func (db *Store) GetBucketScope(ctx context.Context, organization, projectID string) (*buckets.Scope, error) {
 	var s buckets.Scope
-	err := db.db.QueryRowContext(ctx, `
+	err := db.queryRowContext(ctx, `
 		SELECT organization, project_id, credential_id, bucket, COALESCE(path_prefix, '')
 		FROM bucket_scope
-		WHERE organization = $1 AND project_id = $2
+		WHERE organization = ? AND project_id = ?
 	`, strings.TrimSpace(organization), strings.TrimSpace(projectID)).Scan(
 		&s.Organization, &s.ProjectID, &s.CredentialID, &s.Bucket, &s.PathPrefix,
 	)
@@ -280,7 +289,7 @@ func (db *PostgresDB) GetBucketScope(ctx context.Context, organization, projectI
 	return &s, nil
 }
 
-func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
+func (db *Store) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
 	org := strings.TrimSpace(organization)
 	project := strings.TrimSpace(projectID)
 	credentialID = strings.TrimSpace(credentialID)
@@ -291,13 +300,13 @@ func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, proje
 
 	query := `
 		DELETE FROM bucket_scope
-		WHERE organization = $1
-		AND (credential_id = $2 OR bucket = $2)
+		WHERE organization = ?
+		AND (credential_id = ? OR bucket = ?)
 	`
-	args := []any{org, credentialID}
+	args := []any{org, credentialID, credentialID}
 	if project != "" {
 		query += `
-		AND project_id = $3
+		AND project_id = ?
 		`
 		args = append(args, project)
 	} else {
@@ -306,10 +315,11 @@ func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, proje
 		`
 	}
 	query += `
-	AND COALESCE(path_prefix, '') = $` + fmt.Sprint(len(args)+1)
+	AND COALESCE(path_prefix, '') = ?
+	`
 	args = append(args, pathPrefix)
 
-	result, err := db.db.ExecContext(ctx, query, args...)
+	result, err := db.execContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to delete bucket scope: %w", err)
 	}
@@ -323,8 +333,8 @@ func (db *PostgresDB) DeleteBucketScope(ctx context.Context, organization, proje
 	return nil
 }
 
-func (db *PostgresDB) ListBucketScopes(ctx context.Context) ([]buckets.Scope, error) {
-	rows, err := db.db.QueryContext(ctx, `
+func (db *Store) ListBucketScopes(ctx context.Context) ([]buckets.Scope, error) {
+	rows, err := db.queryContext(ctx, `
 		SELECT organization, project_id, credential_id, bucket, COALESCE(path_prefix, '')
 		FROM bucket_scope
 	`)
