@@ -381,8 +381,8 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	objectService := objectrecords.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Storage: cliFileStorageAccess{root: storageDir}, Scopes: bucketService, Credentials: bucketService,
-		Events: database,
+		Objects: objectService, Storage: cliFileStorageAccess{root: storageDir}, FileCounters: database,
+		Scopes: bucketService, Credentials: bucketService, Events: database,
 	})
 	description := "Calypr test DRS server"
 	environment := "test"
