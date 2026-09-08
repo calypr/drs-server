@@ -17,6 +17,7 @@ import (
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -466,7 +467,7 @@ func cloneAuthzMap(in map[string][]string) map[string][]string {
 	return out
 }
 
-func newInternalDRSInMemoryDB(t testing.TB) *sqlite.SqliteDB {
+func newInternalDRSInMemoryDB(t testing.TB) *store.Store {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
 	if err != nil {

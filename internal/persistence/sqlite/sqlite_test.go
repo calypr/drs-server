@@ -16,6 +16,8 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
+	"github.com/calypr/syfon/internal/persistence/testsuite"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 
@@ -23,15 +25,25 @@ import (
 )
 
 var (
-	_ buckets.CredentialReader = (*SqliteDB)(nil)
-	_ buckets.CredentialAdmin  = (*SqliteDB)(nil)
-	_ buckets.ScopeStore       = (*SqliteDB)(nil)
-	_ buckets.VisibilityQuery  = (*SqliteDB)(nil)
+	_ buckets.CredentialReader = (*store.Store)(nil)
+	_ buckets.CredentialAdmin  = (*store.Store)(nil)
+	_ buckets.ScopeStore       = (*store.Store)(nil)
+	_ buckets.VisibilityQuery  = (*store.Store)(nil)
 )
+
+func TestSQLiteStoreContract(t *testing.T) {
+	testsuite.RunStoreContract(t, func(t *testing.T) (*store.Store, func()) {
+		db, err := NewSqliteDB(":memory:", nil)
+		if err != nil {
+			t.Fatalf("NewSqliteDB: %v", err)
+		}
+		return db, func() { _ = db.Close() }
+	}, testsuite.BasicStoreCases())
+}
 
 func TestSqliteDB_CRUD(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -109,13 +121,13 @@ func TestSqliteDB_InitializesControlledAccessTable(t *testing.T) {
 		t.Fatalf("close legacy db: %v", err)
 	}
 
-	db, err := NewSqliteDB(dbPath)
+	db, err := NewSqliteDB(dbPath, nil)
 	if err != nil {
 		t.Fatalf("open migrated db: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
-	rows, err := db.db.Query(`PRAGMA table_info(drs_object_controlled_access)`)
+	rows, err := db.DB().Query(`PRAGMA table_info(drs_object_controlled_access)`)
 	if err != nil {
 		t.Fatalf("inspect controlled access table: %v", err)
 	}
@@ -190,17 +202,17 @@ func TestSqliteDB_BackfillsAccessGrantsFromExistingAccessEvents(t *testing.T) {
 		t.Fatalf("close legacy db: %v", err)
 	}
 
-	db, err := NewSqliteDB(dbPath)
+	db, err := NewSqliteDB(dbPath, nil)
 	if err != nil {
 		t.Fatalf("open migrated db: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
 	var grants, issueCount, distinctEventGrants int
-	if err := db.db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grants, &issueCount); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grants, &issueCount); err != nil {
 		t.Fatalf("inspect access_grant rows: %v", err)
 	}
-	if err := db.db.QueryRow(`SELECT COUNT(DISTINCT access_grant_id) FROM transfer_attribution_event`).Scan(&distinctEventGrants); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(DISTINCT access_grant_id) FROM transfer_attribution_event`).Scan(&distinctEventGrants); err != nil {
 		t.Fatalf("inspect migrated event grant ids: %v", err)
 	}
 	if grants != 1 || issueCount != 2 || distinctEventGrants != 1 {
@@ -210,7 +222,7 @@ func TestSqliteDB_BackfillsAccessGrantsFromExistingAccessEvents(t *testing.T) {
 
 func TestSqliteDB_GetObjectsByChecksum_WhenIDDiffers(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -251,20 +263,20 @@ func TestSqliteDB_GetObjectsByChecksum_WhenIDDiffers(t *testing.T) {
 
 func TestSqliteDB_GetObjectPreservesStoredName(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
 	now := time.Now().UTC()
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object (id, size, created_time, updated_time, name, version, description)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"legacy-1", int64(42), now, now, "file.txt", "v1", "desc",
 	); err != nil {
 		t.Fatalf("insert object: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object_access_method (object_id, url, type)
 		VALUES (?, ?, ?)`,
 		"legacy-1", "s3://bucket/key", "s3",
@@ -283,7 +295,7 @@ func TestSqliteDB_GetObjectPreservesStoredName(t *testing.T) {
 
 func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -366,7 +378,7 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 
 func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -449,7 +461,7 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 
 	for mode, makeCtx := range buildCtx {
 		t.Run(mode, func(t *testing.T) {
-			db, err := NewSqliteDB(":memory:")
+			db, err := NewSqliteDB(":memory:", nil)
 			if err != nil {
 				t.Fatalf("failed to create db: %v", err)
 			}
@@ -498,7 +510,7 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 
 func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -541,7 +553,7 @@ func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 func TestSqliteDB_S3Credentials(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -582,7 +594,7 @@ func TestSqliteDB_S3Credentials(t *testing.T) {
 func TestSqliteDB_SaveS3CredentialRejectsDuplicatePhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -614,14 +626,14 @@ func TestSqliteDB_SaveS3CredentialRejectsDuplicatePhysicalBucket(t *testing.T) {
 func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_insert`); err != nil {
+	if _, err := db.DB().ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_insert`); err != nil {
 		t.Fatalf("drop insert trigger: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_update`); err != nil {
+	if _, err := db.DB().ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_update`); err != nil {
 		t.Fatalf("drop update trigger: %v", err)
 	}
 
@@ -629,11 +641,11 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 		{CredentialID: "org-a/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-a", SecretKey: "secret-a"},
 		{CredentialID: "org-b/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-b", SecretKey: "secret-b"},
 	} {
-		stored, err := db.cipher.Prepare(context.Background(), &cred)
+		stored, err := db.CredentialCodec().Prepare(context.Background(), &cred)
 		if err != nil {
 			t.Fatalf("Prepare(%s) failed: %v", cred.CredentialID, err)
 		}
-		if _, err := db.db.ExecContext(ctx, `
+		if _, err := db.DB().ExecContext(ctx, `
 			INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, stored.CredentialID, stored.Bucket, "s3", stored.Region, stored.AccessKey, stored.SecretKey, stored.Endpoint); err != nil {
@@ -649,12 +661,12 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	first, err := db.cipher.Prepare(context.Background(), &buckets.Credential{
+	first, err := db.CredentialCodec().Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-a/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -665,14 +677,14 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare(first) failed: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, first.CredentialID, first.Bucket, "s3", first.Region, first.AccessKey, first.SecretKey, first.Endpoint); err != nil {
 		t.Fatalf("raw first insert failed: %v", err)
 	}
 
-	second, err := db.cipher.Prepare(context.Background(), &buckets.Credential{
+	second, err := db.CredentialCodec().Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-b/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -683,7 +695,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare(second) failed: %v", err)
 	}
-	_, err = db.db.ExecContext(ctx, `
+	_, err = db.DB().ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, second.CredentialID, second.Bucket, "s3", second.Region, second.AccessKey, second.SecretKey, second.Endpoint)
@@ -695,7 +707,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -712,7 +724,7 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	}
 
 	var storedAK, storedSK string
-	if err := db.db.QueryRowContext(ctx, "SELECT access_key, secret_key FROM s3_credential WHERE bucket = ?", "enc-bucket").Scan(&storedAK, &storedSK); err != nil {
+	if err := db.DB().QueryRowContext(ctx, "SELECT access_key, secret_key FROM s3_credential WHERE bucket = ?", "enc-bucket").Scan(&storedAK, &storedSK); err != nil {
 		t.Fatalf("raw select failed: %v", err)
 	}
 	if storedAK == "plain-ak" || storedSK == "plain-sk" {
@@ -730,7 +742,7 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 
 func TestSqliteDB_BulkOperations(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	records := []objects.Record{
 		{Id: "bulk-1", Size: 10, ControlledAccess: &[]string{"/organization/org/project/p1"}},
@@ -758,7 +770,7 @@ func TestSqliteDB_BulkOperations(t *testing.T) {
 
 func TestSqliteDB_RegisterObjectsChunksUsageFlushParameters(t *testing.T) {
 	ctx := context.Background()
-	database, err := NewSqliteDB(":memory:")
+	database, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -780,7 +792,7 @@ func TestSqliteDB_RegisterObjectsChunksUsageFlushParameters(t *testing.T) {
 
 func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	records := []objects.Record{
 		{
@@ -840,7 +852,7 @@ func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testi
 
 func TestSqliteDB_UpdateAccessMethods(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	obj := &objects.Record{Id: "update-me"}
 	if err := db.CreateObject(ctx, obj); err != nil {
@@ -866,7 +878,7 @@ func TestSqliteDB_UpdateAccessMethods(t *testing.T) {
 
 func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	now := time.Now()
 	records := []objects.Record{
@@ -918,7 +930,7 @@ func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 
 func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 	now := time.Now()
 	records := []objects.Record{
 		{
@@ -1002,7 +1014,7 @@ func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 
 func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 	now := time.Now()
 
 	if err := db.RegisterObjects(ctx, []objects.Record{
@@ -1043,7 +1055,7 @@ func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 
 func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1066,11 +1078,11 @@ func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 }
 
 func TestSqliteDB_ListObjectIDsByScopeReturnsQueryError(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
-	if err := db.db.Close(); err != nil {
+	if err := db.DB().Close(); err != nil {
 		t.Fatalf("failed to close db: %v", err)
 	}
 
@@ -1087,10 +1099,10 @@ func testAccessMethod(url string) objects.AccessMethod {
 	}
 }
 
-func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
+func newLegacyDuplicateSHAFixture(t *testing.T) (*store.Store, string, string) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1117,7 +1129,7 @@ func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
 	}
 
 	const sha = "faec17cafc7af76bbdbe96a499545ff00ce2ef0ff4c65e05571dbbe0f17435ce"
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object_checksum (object_id, type, checksum)
 		VALUES (?, ?, ?), (?, ?, ?)
 	`, objectA, "sha256", sha, objectB, "sha256", sha); err != nil {
@@ -1126,7 +1138,7 @@ func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
 	return db, objectA, objectB
 }
 
-func assertAccessMethodURL(t *testing.T, db *SqliteDB, objectID, wantURL string) {
+func assertAccessMethodURL(t *testing.T, db *store.Store, objectID, wantURL string) {
 	t.Helper()
 	obj, err := db.GetObject(context.Background(), objectID)
 	if err != nil {
@@ -1152,7 +1164,7 @@ func TestSqliteDB_UpdateObjectAccessMethodsTargetsPhysicalRowWithLegacyDuplicate
 
 func TestSqliteDB_BulkUpdateAccessMethods(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	now := time.Now()
 	if err := db.RegisterObjects(ctx, []objects.Record{
@@ -1207,7 +1219,7 @@ func TestSqliteDB_BulkUpdateAccessMethodsTargetsPhysicalRowWithLegacyDuplicateSH
 
 func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1246,7 +1258,7 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 
 func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1277,7 +1289,7 @@ func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 
 func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1334,7 +1346,7 @@ func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 
 func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1373,7 +1385,7 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 
 func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1443,7 +1455,7 @@ func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 
 func TestSqliteDB_AuthorizedObjectLookupQueries(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1496,7 +1508,7 @@ func TestSqliteDB_AuthorizedObjectLookupQueries(t *testing.T) {
 
 func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1570,7 +1582,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 
 func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1630,7 +1642,7 @@ func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 
 func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1673,7 +1685,7 @@ func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 
 func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1864,7 +1876,7 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	}
 
 	var grantCount, issueCount int
-	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grantCount, &issueCount); err != nil {
+	if err := db.DB().QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grantCount, &issueCount); err != nil {
 		t.Fatalf("count access grants: %v", err)
 	}
 	if grantCount != 1 || issueCount != 2 {
@@ -1874,7 +1886,7 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 
 func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1928,7 +1940,7 @@ func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *te
 		t.Fatalf("RecordProviderTransferEvents failed: %v", err)
 	}
 	var status string
-	if err := db.db.QueryRowContext(ctx, `SELECT reconciliation_status FROM provider_transfer_event WHERE provider_event_id = 'ambiguous-provider-event'`).Scan(&status); err != nil {
+	if err := db.DB().QueryRowContext(ctx, `SELECT reconciliation_status FROM provider_transfer_event WHERE provider_event_id = 'ambiguous-provider-event'`).Scan(&status); err != nil {
 		t.Fatalf("read provider event status: %v", err)
 	}
 	if status != usage.ProviderTransferAmbiguous {
@@ -1938,7 +1950,7 @@ func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *te
 
 func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -2024,7 +2036,7 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 
 func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}

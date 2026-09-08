@@ -11,10 +11,11 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	objectmodel "github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 type updateOperationStore struct {
-	*sqlite.SqliteDB
+	*store.Store
 	object   objectmodel.Record
 	replaced []objectmodel.Record
 }
@@ -39,11 +40,11 @@ func newUpdateOperationService(store ObjectStore) *Service {
 
 func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 	name := "updated.txt"
-	db, err := sqlite.NewSqliteDB(":memory:")
+	db, err := sqlite.NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &updateOperationStore{SqliteDB: db, object: objectmodel.Record{Id: "object", Size: 7}}
+	store := &updateOperationStore{Store: db, object: objectmodel.Record{Id: "object", Size: 7}}
 	service := newUpdateOperationService(store)
 	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
 
@@ -69,11 +70,11 @@ func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 }
 
 func TestUpdateRecordInScopeUsesServiceClockAndNormalizesScope(t *testing.T) {
-	db, err := sqlite.NewSqliteDB(":memory:")
+	db, err := sqlite.NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &updateOperationStore{SqliteDB: db, object: objectmodel.Record{Id: "object", Size: 7}}
+	store := &updateOperationStore{Store: db, object: objectmodel.Record{Id: "object", Size: 7}}
 	service := newUpdateOperationService(store)
 	fixed := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return fixed }

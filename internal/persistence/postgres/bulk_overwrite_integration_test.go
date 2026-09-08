@@ -17,7 +17,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	if dsn == "" {
 		t.Skip("SYFON_TEST_POSTGRES_DSN is not configured")
 	}
-	db, err := postgresdb.NewPostgresDB(dsn)
+	db, err := postgresdb.NewPostgresDB(dsn, nil)
 	if err != nil {
 		t.Fatalf("open postgres test database: %v", err)
 	}

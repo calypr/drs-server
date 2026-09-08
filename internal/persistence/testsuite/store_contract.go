@@ -1,0 +1,89 @@
+// Package testsuite contains the backend-independent persistence contract.
+package testsuite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"testing"
+
+	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/store"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
+	"github.com/calypr/syfon/internal/usage"
+)
+
+// StoreFactory opens a fully bootstrapped backend store and returns its cleanup.
+type StoreFactory func(*testing.T) (*store.Store, func())
+
+// StoreCase is a behavior assertion that can run against either SQL backend.
+type StoreCase func(*testing.T, *store.Store)
+
+// RunStoreContract runs the common cases and closes the factory-owned store.
+func RunStoreContract(t *testing.T, factory StoreFactory, cases []StoreCase) {
+	t.Helper()
+	for i, testCase := range cases {
+		t.Run(caseName(i), func(t *testing.T) {
+			shared, cleanup := factory(t)
+			if cleanup != nil {
+				defer cleanup()
+			}
+			if shared == nil {
+				t.Fatal("store factory returned nil store")
+			}
+			testCase(t, shared)
+		})
+	}
+}
+
+// BasicStoreCases covers behavior that is independent of SQL placeholder and
+// migration details. Backend packages add their dialect-specific assertions.
+func BasicStoreCases() []StoreCase {
+	return []StoreCase{
+		func(t *testing.T, shared *store.Store) {
+			if _, err := shared.GetObject(context.Background(), "missing"); err == nil {
+				t.Fatal("GetObject(missing) returned nil error")
+			}
+		},
+		func(t *testing.T, shared *store.Store) {
+			credentials, err := shared.ListS3Credentials(context.Background())
+			if err != nil {
+				t.Fatalf("ListS3Credentials: %v", err)
+			}
+			if credentials == nil {
+				t.Fatal("ListS3Credentials returned nil slice")
+			}
+		},
+	}
+}
+
+func caseName(i int) string { return fmt.Sprintf("case-%d", i) }
+
+// SQLMockDialect suppresses schema bootstrap while retaining the backend SQL
+// dialect for sqlmock assertions.
+type SQLMockDialect struct{ store.Dialect }
+
+func (SQLMockDialect) Bootstrap(context.Context, *sql.DB) error { return nil }
+
+// OpenSQLMockStore is the explicit constructor for PostgreSQL sqlmock cases.
+func OpenSQLMockStore(db *sql.DB, dialect store.Dialect, codec store.CredentialCodec) (*store.Store, error) {
+	return store.Open(db, SQLMockDialect{Dialect: dialect}, codec)
+}
+
+type lfsMetadataStore interface {
+	SavePendingMetadata(context.Context, []transferlfs.PendingMetadata) error
+	GetPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error)
+	PopPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error)
+}
+
+// Compile-time capability checks keep both backends on the same concrete API.
+var (
+	_ records.ObjectStore      = (*store.Store)(nil)
+	_ usage.ReportStore        = (*store.Store)(nil)
+	_ buckets.CredentialReader = (*store.Store)(nil)
+	_ buckets.CredentialAdmin  = (*store.Store)(nil)
+	_ buckets.ScopeStore       = (*store.Store)(nil)
+	_ buckets.VisibilityQuery  = (*store.Store)(nil)
+	_ lfsMetadataStore         = (*store.Store)(nil)
+)

@@ -8,27 +8,27 @@ import (
 
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 type pageSpyDB struct {
-	*sqlite.SqliteDB
+	*store.Store
 	pageCalls int
 	listCalls int
 }
 
 func (s *pageSpyDB) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
 	s.pageCalls++
-	return s.SqliteDB.ListObjectIDsPageByScope(ctx, organization, project, startAfter, limit, offset)
+	return s.Store.ListObjectIDsPageByScope(ctx, organization, project, startAfter, limit, offset)
 }
 
 func (s *pageSpyDB) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	return s.SqliteDB.ListObjectIDsPageByResources(ctx, resources, includeUnscoped, startAfter, limit, offset)
+	return s.Store.ListObjectIDsPageByResources(ctx, resources, includeUnscoped, startAfter, limit, offset)
 }
 
 func (s *pageSpyDB) ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error) {
 	s.listCalls++
-	return s.SqliteDB.ListObjectIDsByScope(ctx, organization, project)
+	return s.Store.ListObjectIDsByScope(ctx, organization, project)
 }
 
 func registerScopedCandidate(t *testing.T, om *objectrecords.Service, id, checksum, org, project string) {
@@ -337,7 +337,7 @@ func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
 }
 
 func TestListObjectIDsPageByScope_UsesDatabasePaginationForUnrestrictedScope(t *testing.T) {
-	database := &pageSpyDB{SqliteDB: newSQLiteDatabase(t)}
+	database := &pageSpyDB{Store: newSQLiteDatabase(t)}
 	om := newTestService(database, nil)
 
 	registerScopedCandidate(t, om, "scope-a", "2222222222222222222222222222222222222222222222222222222222222222", "org1", "proj1")
@@ -360,7 +360,7 @@ func TestListObjectIDsPageByScope_UsesDatabasePaginationForUnrestrictedScope(t *
 }
 
 func TestListObjectIDsPageByScope_FallsBackWhenAuthzRestrictsResources(t *testing.T) {
-	database := &pageSpyDB{SqliteDB: newSQLiteDatabase(t)}
+	database := &pageSpyDB{Store: newSQLiteDatabase(t)}
 	om := newTestService(database, nil)
 
 	registerScopedCandidate(t, om, "secure-obj", "5555555555555555555555555555555555555555555555555555555555555555", "secure", "p1")

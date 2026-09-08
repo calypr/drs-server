@@ -24,8 +24,8 @@ type CredentialCodec interface {
 }
 
 // Store owns the database handle and the shared, dialect-independent SQL
-// operation state. Backend packages retain temporary wrappers while their
-// receiver methods migrate here.
+// operation state. SQLite and PostgreSQL constructors return this concrete
+// implementation directly.
 type Store struct {
 	db      *sql.DB
 	dialect Dialect
@@ -33,8 +33,7 @@ type Store struct {
 }
 
 // Open bootstraps db through dialect and returns the shared store. A nil codec
-// is accepted during the constructor migration bridge; credential operations
-// added by later jobs must reject use until a codec is supplied.
+// is accepted for callers that do not use credential persistence.
 func Open(db *sql.DB, dialect Dialect, cipher CredentialCodec) (*Store, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database is required")
@@ -55,6 +54,23 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// DB exposes the owned handle to backend migration tests that must assert
+// schema and transaction behavior directly.
+func (s *Store) DB() *sql.DB {
+	if s == nil {
+		return nil
+	}
+	return s.db
+}
+
+// CredentialCodec returns the injected codec for credential persistence tests.
+func (s *Store) CredentialCodec() CredentialCodec {
+	if s == nil {
+		return nil
+	}
+	return s.cipher
 }
 
 func (s *Store) withContentWrite(ctx context.Context, fn func(*sql.Tx) error) error {

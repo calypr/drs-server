@@ -10,7 +10,7 @@ import (
 
 func TestSchemaEnsurers(t *testing.T) {
 	t.Run("ensureObjectSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectExec("CREATE TABLE IF NOT EXISTS drs_object").WillReturnResult(sqlmock.NewResult(0, 0))
@@ -52,13 +52,13 @@ func TestSchemaEnsurers(t *testing.T) {
 		mock.ExpectQuery("information_schema\\.columns").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		if err := pg.ensureObjectSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensureObjectSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("validateLegacyAccessMethodScopes_legacyColumnsWithoutScopedRows", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectQuery("information_schema\\.columns").
@@ -66,13 +66,13 @@ func TestSchemaEnsurers(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\)").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		if err := pg.validateLegacyAccessMethodScopes(context.Background()); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).validateLegacyAccessMethodScopes(context.Background()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("validateLegacyAccessMethodScopes_rejectsMismatchedScopedRows", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectQuery("information_schema\\.columns").
@@ -80,14 +80,14 @@ func TestSchemaEnsurers(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\)").
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
-		err := pg.validateLegacyAccessMethodScopes(context.Background())
+		err := (&postgresSchemaBootstrap{db: rawDB}).validateLegacyAccessMethodScopes(context.Background())
 		if err == nil {
 			t.Fatal("expected mismatch validation error")
 		}
 	})
 
 	t.Run("ensureS3CredentialSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		for _, query := range []string{
@@ -128,13 +128,13 @@ func TestSchemaEnsurers(t *testing.T) {
 			mock.ExpectExec(regexp.QuoteMeta(query)).WillReturnResult(sqlmock.NewResult(0, 0))
 		}
 
-		if err := pg.ensureS3CredentialSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensureS3CredentialSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("ensureBucketScopeSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		for _, query := range []string{
@@ -158,26 +158,26 @@ func TestSchemaEnsurers(t *testing.T) {
 			mock.ExpectExec(regexp.QuoteMeta(query)).WillReturnResult(sqlmock.NewResult(0, 0))
 		}
 
-		if err := pg.ensureBucketScopeSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensureBucketScopeSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("ensureLFSPendingSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectExec("CREATE TABLE IF NOT EXISTS lfs_pending_metadata").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_lfs_pending_metadata_expires").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_lfs_pending_metadata_created").WillReturnResult(sqlmock.NewResult(0, 0))
 
-		if err := pg.ensureLFSPendingSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensureLFSPendingSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("ensureObjectUsageSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectExec("CREATE TABLE IF NOT EXISTS object_usage").WillReturnResult(sqlmock.NewResult(0, 0))
@@ -185,20 +185,20 @@ func TestSchemaEnsurers(t *testing.T) {
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_object_usage_last_download_time_object_id").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_object_usage_last_upload_time").WillReturnResult(sqlmock.NewResult(0, 0))
 
-		if err := pg.ensureObjectUsageSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensureObjectUsageSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
 	t.Run("ensurePendingObjectUsageSchema", func(t *testing.T) {
-		pg, mock, rawDB := newMockPostgresDB(t)
+		_, mock, rawDB := newMockPostgresDB(t)
 		defer rawDB.Close()
 
 		mock.ExpectExec("CREATE TABLE IF NOT EXISTS object_usage_event").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_object_usage_event_object_id").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("CREATE INDEX IF NOT EXISTS idx_object_usage_event_event_time").WillReturnResult(sqlmock.NewResult(0, 0))
 
-		if err := pg.ensurePendingObjectUsageSchema(); err != nil {
+		if err := (&postgresSchemaBootstrap{db: rawDB}).ensurePendingObjectUsageSchema(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

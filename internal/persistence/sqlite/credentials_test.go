@@ -9,11 +9,11 @@ import (
 )
 
 func TestGetS3CredentialMissingHasTypedIdentity(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("NewSqliteDB: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
 	_, err = db.GetS3Credential(context.Background(), "missing")
 	if !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
@@ -22,11 +22,11 @@ func TestGetS3CredentialMissingHasTypedIdentity(t *testing.T) {
 }
 
 func TestGetS3CredentialDatabaseFailureIsNotMissing(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("NewSqliteDB: %v", err)
 	}
-	db.db.Close()
+	db.DB().Close()
 
 	_, err = db.GetS3Credential(context.Background(), "missing")
 	if err == nil || errors.Is(err, errorapi.ErrStorageCredentialMissing) {
@@ -35,11 +35,11 @@ func TestGetS3CredentialDatabaseFailureIsNotMissing(t *testing.T) {
 }
 
 func TestDeleteS3CredentialMissingHasTypedIdentity(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("NewSqliteDB: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
 	err = db.DeleteS3Credential(context.Background(), "missing")
 	if !errors.Is(err, errorapi.ErrStorageCredentialMissing) {

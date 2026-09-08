@@ -13,11 +13,11 @@ import (
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 type bucketTestStore struct {
-	*sqlite.SqliteDB
+	*store.Store
 	Credentials  map[string]domainbuckets.Credential
 	BucketScopes map[string]domainbuckets.Scope
 	Objects      map[string]*objects.Record

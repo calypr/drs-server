@@ -82,7 +82,11 @@ func (sqliteDialect) LockContentWrite(context.Context, *sql.Tx) error {
 }
 
 func (sqliteDialect) Bootstrap(_ context.Context, db *sql.DB) error {
-	return (&SqliteDB{db: db}).initSchema()
+	return (&sqliteSchemaBootstrap{db: db}).initSchema()
+}
+
+type sqliteSchemaBootstrap struct {
+	db *sql.DB
 }
 
 func (sqliteDialect) IsConflict(err error) bool {
@@ -95,7 +99,7 @@ func (sqliteDialect) IsConflict(err error) bool {
 		strings.Contains(message, "already configured")
 }
 
-func (db *SqliteDB) initSchema() error {
+func (db *sqliteSchemaBootstrap) initSchema() error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS drs_object (
 			id TEXT PRIMARY KEY,
@@ -350,7 +354,7 @@ func (db *SqliteDB) initSchema() error {
 	return nil
 }
 
-func (db *SqliteDB) ensureObjectTableShape() error {
+func (db *sqliteSchemaBootstrap) ensureObjectTableShape() error {
 	rows, err := db.db.Query(`PRAGMA table_info(drs_object)`)
 	if err != nil {
 		return err
@@ -406,7 +410,7 @@ func (db *SqliteDB) ensureObjectTableShape() error {
 	return tx.Commit()
 }
 
-func (db *SqliteDB) ensureCredentialIdentitySchema() error {
+func (db *sqliteSchemaBootstrap) ensureCredentialIdentitySchema() error {
 	rows, err := db.db.Query(`PRAGMA table_info(s3_credential)`)
 	if err != nil {
 		return err

@@ -13,14 +13,14 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
-type failedUploadReader struct{ *sqlite.SqliteDB }
+type failedUploadReader struct{ *store.Store }
 
 func (failedUploadReader) GetObject(context.Context, string) (*objects.Record, error) {
 	return nil, errors.New("database lookup failed: QA_PRIVATE_PROVIDER_DETAIL")
@@ -60,7 +60,7 @@ func TestBulkUploadRedactsServerCause(t *testing.T) {
 }
 
 type bulkProviderReader struct {
-	*sqlite.SqliteDB
+	*store.Store
 	objects map[string]*objects.Record
 	errID   string
 	err     error

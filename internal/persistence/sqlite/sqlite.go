@@ -10,16 +10,13 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type SqliteDB struct {
-	*store.Store
-	db     *sql.DB
-	cipher store.CredentialCodec
-}
-
-func NewSqliteDB(dsn string, codecs ...store.CredentialCodec) (*SqliteDB, error) {
-	cipher, err := credentialCodecFor(codecs)
-	if err != nil {
-		return nil, err
+func NewSqliteDB(dsn string, cipher store.CredentialCodec) (*store.Store, error) {
+	var err error
+	if cipher == nil {
+		cipher, err = credentialcipher.NewFromEnv()
+		if err != nil {
+			return nil, err
+		}
 	}
 	db, err := sql.Open("sqlite3", sqliteDSN(dsn))
 	if err != nil {
@@ -38,21 +35,7 @@ func NewSqliteDB(dsn string, codecs ...store.CredentialCodec) (*SqliteDB, error)
 	if err != nil {
 		return nil, err
 	}
-	return &SqliteDB{Store: shared, db: db, cipher: cipher}, nil
-}
-
-func credentialCodecFor(codecs []store.CredentialCodec) (store.CredentialCodec, error) {
-	switch len(codecs) {
-	case 0:
-		return credentialcipher.NewFromEnv()
-	case 1:
-		if codecs[0] == nil {
-			return nil, fmt.Errorf("credential cipher is required")
-		}
-		return codecs[0], nil
-	default:
-		return nil, fmt.Errorf("at most one credential cipher may be supplied")
-	}
+	return shared, nil
 }
 
 func sqliteDSN(dsn string) string {

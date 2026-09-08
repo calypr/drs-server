@@ -11,13 +11,13 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 const deleteResource = "/organization/org/project/owned"
 const otherResource = "/organization/org/project/other"
 
-func seedDeletionRecords(t *testing.T) *sqlite.SqliteDB {
+func seedDeletionRecords(t *testing.T) *store.Store {
 	t.Helper()
 	db := newSQLiteDatabase(t)
 	for _, seed := range []struct {
@@ -45,7 +45,7 @@ func deletionContext() context.Context {
 	return buildLocalAuthzContext(map[string]map[string]bool{deleteResource: {"read": true, "update": true, "delete": true}})
 }
 
-func assertRecordExists(t *testing.T, db *sqlite.SqliteDB, id string, exists bool) {
+func assertRecordExists(t *testing.T, db *store.Store, id string, exists bool) {
 	t.Helper()
 	_, err := db.GetObject(context.Background(), id)
 	if exists && err != nil {

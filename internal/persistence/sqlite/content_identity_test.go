@@ -14,10 +14,11 @@ import (
 	"github.com/calypr/syfon/internal/access"
 
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T
 		t.Fatal(err)
 	}
 	var rows int
-	if err := db.db.QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 1 {
@@ -58,7 +59,7 @@ func TestContentIdentityRegistrationMergesAliasesGrantsAndLocations(t *testing.T
 }
 
 func TestContentIdentityRejectsConflictingSHAAtomically(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestContentIdentityRejectsConflictingSHAAtomically(t *testing.T) {
 		t.Fatalf("expected conflicting SHA error, got %v", err)
 	}
 	var rows int
-	if err := db.db.QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 0 {
@@ -82,7 +83,7 @@ func TestContentIdentityRejectsConflictingSHAAtomically(t *testing.T) {
 }
 
 func TestContentIdentityReplaceIsAtomicAndPreservesSHA(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,16 +118,16 @@ func TestContentIdentityReplaceIsAtomicAndPreservesSHA(t *testing.T) {
 
 func TestContentIdentityConcurrentRegistrationsShareOnePhysicalRow(t *testing.T) {
 	dsn := filepath.Join(t.TempDir(), "identity.db")
-	first, err := NewSqliteDB(dsn)
+	first, err := NewSqliteDB(dsn, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer first.db.Close()
-	second, err := NewSqliteDB(dsn)
+	defer first.DB().Close()
+	second, err := NewSqliteDB(dsn, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer second.db.Close()
+	defer second.DB().Close()
 
 	sha := strings.Repeat("d", 64)
 	resource := "/organization/org/project/p"
@@ -135,7 +136,7 @@ func TestContentIdentityConcurrentRegistrationsShareOnePhysicalRow(t *testing.T)
 	for i := range records {
 		records[i] = identityTestObject(fmt.Sprintf("concurrent-%c", 'a'+i), sha, resource, fmt.Sprintf("s3://bucket/replica-%c", 'a'+i))
 	}
-	dbs := []*SqliteDB{first, second}
+	dbs := []*store.Store{first, second}
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	errs := make(chan error, len(records))
@@ -157,17 +158,17 @@ func TestContentIdentityConcurrentRegistrationsShareOnePhysicalRow(t *testing.T)
 	}
 
 	var rows, aliases int
-	if err := first.db.QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
+	if err := first.DB().QueryRow(`SELECT COUNT(*) FROM drs_object`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
-	if err := first.db.QueryRow(`SELECT COUNT(*) FROM drs_object_alias`).Scan(&aliases); err != nil {
+	if err := first.DB().QueryRow(`SELECT COUNT(*) FROM drs_object_alias`).Scan(&aliases); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 1 || aliases != len(records)-1 {
 		t.Fatalf("expected one canonical row and %d aliases, got rows=%d aliases=%d", 1, rows, aliases)
 	}
 	var canonicalID string
-	if err := first.db.QueryRow(`SELECT id FROM drs_object`).Scan(&canonicalID); err != nil {
+	if err := first.DB().QueryRow(`SELECT id FROM drs_object`).Scan(&canonicalID); err != nil {
 		t.Fatal(err)
 	}
 	for _, object := range records {
@@ -182,7 +183,7 @@ func TestContentIdentityConcurrentRegistrationsShareOnePhysicalRow(t *testing.T)
 }
 
 func TestContentIdentityChecksumQueriesNormalizeOnlySHA256(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

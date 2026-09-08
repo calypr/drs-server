@@ -19,6 +19,7 @@ import (
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -41,7 +42,7 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	return strings.TrimSpace(out.String() + errOut.String()), err
 }
 
-func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
+func newSQLiteDatabase(t testing.TB) *store.Store {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
 	if err != nil {

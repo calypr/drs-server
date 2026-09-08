@@ -19,6 +19,7 @@ import (
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
@@ -38,7 +39,7 @@ type integrationProjectStorageCatalog struct {
 	projectstorage.ScopeCatalog
 }
 
-func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
+func newSQLiteDatabase(t testing.TB) *store.Store {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
 	if err != nil {

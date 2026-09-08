@@ -21,6 +21,7 @@ import (
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/postgres"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -144,27 +145,27 @@ func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Reco
 	return access.HasObjectMethodAccess(ctx, "read", resources)
 }
 
-func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
+func sqliteServerBackend(database *store.Store) serverBackend {
 	return serverBackend{
 		objectStore: database,
 		bucketDependencies: buckets.Dependencies{
-			Credentials: database.Store, CredentialAdmin: database.Store, Scopes: database.Store, Visibility: database.Store,
+			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},
-		pending:      database.Store,
-		usageIngest:  database.Store,
-		usageReports: database.Store,
+		pending:      database,
+		usageIngest:  database,
+		usageReports: database,
 	}
 }
 
-func postgresServerBackend(database *postgres.PostgresDB) serverBackend {
+func postgresServerBackend(database *store.Store) serverBackend {
 	return serverBackend{
 		objectStore: database,
 		bucketDependencies: buckets.Dependencies{
-			Credentials: database.Store, CredentialAdmin: database.Store, Scopes: database.Store, Visibility: database.Store,
+			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},
-		pending:      database.Store,
-		usageIngest:  database.Store,
-		usageReports: database.Store,
+		pending:      database,
+		usageIngest:  database,
+		usageReports: database,
 	}
 }
 
@@ -201,7 +202,7 @@ var Cmd = &cobra.Command{
 				cfg.Database.Sqlite.File = dbPath
 			}
 			logger.Info("initializing sqlite database", "file", dbPath)
-			var database *sqlite.SqliteDB
+			var database *store.Store
 			database, errDb = sqlite.NewSqliteDB(dbPath, cipher)
 			if errDb == nil {
 				backend = sqliteServerBackend(database)
@@ -216,7 +217,7 @@ var Cmd = &cobra.Command{
 				cfg.Database.Postgres.SSLMode,
 			)
 			logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
-			var database *postgres.PostgresDB
+			var database *store.Store
 			database, errDb = postgres.NewPostgresDB(dsn, cipher)
 			if errDb == nil {
 				backend = postgresServerBackend(database)

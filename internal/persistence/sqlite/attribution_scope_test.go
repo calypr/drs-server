@@ -9,7 +9,7 @@ import (
 )
 
 func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}

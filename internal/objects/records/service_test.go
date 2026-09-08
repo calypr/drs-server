@@ -7,10 +7,11 @@ import (
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 type serviceCaptureStore struct {
-	*sqlite.SqliteDB
+	*store.Store
 	registered []objectmodel.Record
 }
 
@@ -20,11 +21,11 @@ func (w *serviceCaptureStore) RegisterObjects(_ context.Context, records []objec
 }
 
 func TestServiceOwnsRegistrationPort(t *testing.T) {
-	db, err := sqlite.NewSqliteDB(":memory:")
+	db, err := sqlite.NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer := &serviceCaptureStore{SqliteDB: db}
+	writer := &serviceCaptureStore{Store: db}
 	service := NewService(writer)
 	input := []objectmodel.Record{{Id: "record-1"}}
 

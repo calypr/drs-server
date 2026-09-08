@@ -11,18 +11,19 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/store"
+	"github.com/calypr/syfon/internal/persistence/testsuite"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
 var (
-	_ buckets.CredentialReader = (*PostgresDB)(nil)
-	_ buckets.CredentialAdmin  = (*PostgresDB)(nil)
-	_ buckets.ScopeStore       = (*PostgresDB)(nil)
-	_ buckets.VisibilityQuery  = (*PostgresDB)(nil)
+	_ buckets.CredentialReader = (*store.Store)(nil)
+	_ buckets.CredentialAdmin  = (*store.Store)(nil)
+	_ buckets.ScopeStore       = (*store.Store)(nil)
+	_ buckets.VisibilityQuery  = (*store.Store)(nil)
 )
 
-func newMockPostgresDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, *sql.DB) {
+func newMockPostgresDB(t *testing.T) (*store.Store, sqlmock.Sqlmock, *sql.DB) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -32,11 +33,11 @@ func newMockPostgresDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, *sql.DB) {
 	if err != nil {
 		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
 	}
-	shared, err := store.Open(db, mockPostgresDialect{}, cipher)
+	shared, err := testsuite.OpenSQLMockStore(db, mockPostgresDialect{}, cipher)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
-	return &PostgresDB{Store: shared, db: db, cipher: cipher}, mock, db
+	return shared, mock, db
 }
 
 type mockPostgresDialect struct{ postgresDialect }

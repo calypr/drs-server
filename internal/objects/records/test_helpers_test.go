@@ -10,6 +10,7 @@ import (
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 func newTestService(backend any, _ ...any) *objectrecords.Service {
@@ -47,7 +48,7 @@ func registerCandidates(ctx context.Context, service *objectrecords.Service, can
 	return len(records), nil
 }
 
-func newSQLiteDatabase(t *testing.T) *sqlite.SqliteDB {
+func newSQLiteDatabase(t *testing.T) *store.Store {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
 	if err != nil {
