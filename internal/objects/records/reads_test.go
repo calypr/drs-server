@@ -91,7 +91,7 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 		}
 	}
 
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	ctx := buildLocalAuthzContext(map[string]map[string]bool{
 		firstResource: {"read": true},
 	})
@@ -165,7 +165,7 @@ func TestGetObjectKeepsCanonicalContentPublicWhenAnySiblingIsPublic(t *testing.T
 		}
 	}
 
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	got, err := om.GetObject(buildLocalAuthzContext(nil), "controlled-uuid", "read")
 	if err != nil {
 		t.Fatalf("public checksum family should be readable: %v", err)
@@ -188,7 +188,7 @@ func TestGetObjectPrefersSHAIdentityOverCollidingPhysicalID(t *testing.T) {
 		}
 	}
 
-	got, err := newTestService(database, nil).GetObject(context.Background(), requestedSHA, "")
+	got, err := newTestService(database).GetObject(context.Background(), requestedSHA, "")
 	if err != nil {
 		t.Fatalf("GetObject failed: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
 
 func TestListObjectIDsPageByChecksum_ReturnsCanonicalContentID(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	checksum := "1111111111111111111111111111111111111111111111111111111111111111"
 
 	registerScopedCandidate(t, om, "chk-a", checksum, "org1", "proj1")
@@ -254,7 +254,7 @@ func TestListObjectIDsPageByChecksum_ReturnsCanonicalContentID(t *testing.T) {
 
 func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	service := newTestService(database, nil)
+	service := newTestService(database)
 	registerScopedCandidate(t, service, "prepared-a", "7777777777777777777777777777777777777777777777777777777777777777", "org", "proj")
 	registerScopedCandidate(t, service, "prepared-b", "8888888888888888888888888888888888888888888888888888888888888888", "org", "proj")
 
@@ -278,7 +278,7 @@ func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
 
 func TestLookupChecksumQueries_PreservesInputOrderAndDuplicates(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	service := newTestService(database, nil)
+	service := newTestService(database)
 	checksum := "9999999999999999999999999999999999999999999999999999999999999999"
 	registerScopedCandidate(t, service, "checksum-a", checksum, "org", "proj")
 
@@ -319,7 +319,7 @@ func TestNewScope_RejectsProjectWithoutOrganization(t *testing.T) {
 
 func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	checksumA := "2222222222222222222222222222222222222222222222222222222222222222"
 	checksumB := "3333333333333333333333333333333333333333333333333333333333333333"
 
@@ -338,7 +338,7 @@ func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
 
 func TestListObjectIDsPageByScope_UsesDatabasePaginationForUnrestrictedScope(t *testing.T) {
 	database := &pageSpyDB{Store: newSQLiteDatabase(t)}
-	om := newTestService(database, nil)
+	om := newTestService(database)
 
 	registerScopedCandidate(t, om, "scope-a", "2222222222222222222222222222222222222222222222222222222222222222", "org1", "proj1")
 	registerScopedCandidate(t, om, "scope-b", "3333333333333333333333333333333333333333333333333333333333333333", "org1", "proj1")
@@ -361,7 +361,7 @@ func TestListObjectIDsPageByScope_UsesDatabasePaginationForUnrestrictedScope(t *
 
 func TestListObjectIDsPageByScope_FallsBackWhenAuthzRestrictsResources(t *testing.T) {
 	database := &pageSpyDB{Store: newSQLiteDatabase(t)}
-	om := newTestService(database, nil)
+	om := newTestService(database)
 
 	registerScopedCandidate(t, om, "secure-obj", "5555555555555555555555555555555555555555555555555555555555555555", "secure", "p1")
 	restrictedCtx := buildLocalAuthzContext(map[string]map[string]bool{
@@ -385,7 +385,7 @@ func TestListObjectIDsPageByScope_FallsBackWhenAuthzRestrictsResources(t *testin
 
 func TestListObjectIDsByScope_AuthzFiltering(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	checksum := "5555555555555555555555555555555555555555555555555555555555555555"
 
 	registerScopedCandidate(t, om, "secure-obj", checksum, "secure", "p1")

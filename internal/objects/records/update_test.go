@@ -34,10 +34,6 @@ func (w *updateOperationStore) ReplaceObjects(_ context.Context, records []objec
 	return nil
 }
 
-func newUpdateOperationService(store ObjectStore) *Service {
-	return NewService(store)
-}
-
 func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 	name := "updated.txt"
 	db, err := sqlite.NewSqliteDB(":memory:", nil)
@@ -45,7 +41,7 @@ func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &updateOperationStore{Store: db, object: objectmodel.Record{Id: "object", Size: 7}}
-	service := newUpdateOperationService(store)
+	service := NewService(store)
 	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
 
 	merged, err := service.UpdateRecord(context.Background(), "object", objectmodel.Record{Name: &name}, nil, now)
@@ -75,7 +71,7 @@ func TestUpdateRecordInScopeUsesServiceClockAndNormalizesScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := &updateOperationStore{Store: db, object: objectmodel.Record{Id: "object", Size: 7}}
-	service := newUpdateOperationService(store)
+	service := NewService(store)
 	fixed := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return fixed }
 

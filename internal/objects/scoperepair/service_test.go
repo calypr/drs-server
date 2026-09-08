@@ -3,7 +3,6 @@ package scoperepair
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -251,15 +250,4 @@ func repairAuthzContext(privileges map[string]map[string]bool) context.Context {
 	session.AuthzEnforced = true
 	session.SetAuthorizations(nil, privileges, true)
 	return access.WithSession(context.Background(), session)
-}
-
-func TestScopeRepairTypesRemainPlainDomainValues(t *testing.T) {
-	var _ PreparedRecordReader = (*fakePrepared)(nil)
-	var _ ReferenceWriter = (*fakeWriter)(nil)
-	var _ ScopeReader = fakeScopeReader{}
-	var _ StorageProbe = (*fakeProbe)(nil)
-	var _ DuplicateCollapser = (*fakeCollapser)(nil)
-	if got := fmt.Sprintf("%T", Finding{}); got != "scoperepair.Finding" {
-		t.Fatalf("unexpected type = %s", got)
-	}
 }

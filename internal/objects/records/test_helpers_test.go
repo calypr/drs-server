@@ -13,8 +13,8 @@ import (
 	"github.com/calypr/syfon/internal/persistence/store"
 )
 
-func newTestService(backend any, _ ...any) *objectrecords.Service {
-	return objectrecords.NewService(backend.(objectrecords.ObjectStore))
+func newTestService(backend objectrecords.ObjectStore) *objectrecords.Service {
+	return objectrecords.NewService(backend)
 }
 
 func buildGen3Context(privileges map[string]map[string]bool) context.Context {

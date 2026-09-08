@@ -121,7 +121,7 @@ func recordHasDRSWorkflowChecksum(record objects.Record, wanted string) bool {
 
 func TestRegisterBulk_RegistersCandidate(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 
 	candidates := []objects.Candidate{
 		{
@@ -157,7 +157,7 @@ func TestRegisterBulk_RegistersCandidate(t *testing.T) {
 
 func TestRegisterBulk_InvalidChecksum(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 
 	candidates := []objects.Candidate{{
 		Aliases: ptr([]string{"id:test-invalid-checksum"}),
@@ -175,7 +175,7 @@ func TestRegisterBulk_InvalidChecksum(t *testing.T) {
 
 func TestBulkDeleteObjects_DeletesAuthorizedObjects(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 
 	_, err := registerCandidates(context.Background(), om, []objects.Candidate{{
 		Aliases: ptr([]string{"id:test-delete-bulk"}),
@@ -203,7 +203,7 @@ func TestBulkDeleteObjects_DeletesAuthorizedObjects(t *testing.T) {
 
 func TestRegisterObjects_CanonicalizesProjectChecksumDuplicates(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	now := time.Now().UTC()
 	later := now.Add(time.Minute)
 	accessURL1 := "s3://bucket/original"
@@ -280,7 +280,7 @@ func TestRegisterObjects_CanonicalizesProjectChecksumDuplicates(t *testing.T) {
 
 func TestRegisterObjects_ReusesContentAcrossProjects(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database, nil)
+	om := newTestService(database)
 	sha := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 	now := time.Date(2026, 9, 4, 16, 0, 0, 0, time.UTC)
 	later := now.Add(time.Minute)
