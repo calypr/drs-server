@@ -5,14 +5,20 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type SqliteDB struct {
-	db *sql.DB
+	db     *sql.DB
+	cipher *credentialcipher.Cipher
 }
 
-func NewSqliteDB(dsn string) (*SqliteDB, error) {
+func NewSqliteDB(dsn string, ciphers ...*credentialcipher.Cipher) (*SqliteDB, error) {
+	cipher, err := credentialCipherFor(ciphers)
+	if err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite3", sqliteDSN(dsn))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -25,12 +31,26 @@ func NewSqliteDB(dsn string) (*SqliteDB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	s := &SqliteDB{db: db}
+	s := &SqliteDB{db: db, cipher: cipher}
 	if err := s.initSchema(); err != nil {
 		return nil, fmt.Errorf("failed to init schema: %w", err)
 	}
 
 	return s, nil
+}
+
+func credentialCipherFor(ciphers []*credentialcipher.Cipher) (*credentialcipher.Cipher, error) {
+	switch len(ciphers) {
+	case 0:
+		return credentialcipher.NewFromEnv()
+	case 1:
+		if ciphers[0] == nil {
+			return nil, fmt.Errorf("credential cipher is required")
+		}
+		return ciphers[0], nil
+	default:
+		return nil, fmt.Errorf("at most one credential cipher may be supplied")
+	}
 }
 
 func sqliteDSN(dsn string) string {

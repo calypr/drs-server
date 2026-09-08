@@ -27,7 +27,11 @@ func newMockPostgresDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, *sql.DB) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	return &PostgresDB{db: db}, mock, db
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
+	}
+	return &PostgresDB{db: db, cipher: cipher}, mock, db
 }
 
 func TestGetS3Credential(t *testing.T) {
@@ -56,11 +60,15 @@ func TestGetS3Credential(t *testing.T) {
 
 func TestGetS3Credential_DecryptsEncryptedSecrets(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-	encAK, err := credentialcipher.EncryptCredentialField(context.Background(), "ak")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
+	}
+	encAK, err := cipher.EncryptField(context.Background(), "ak")
 	if err != nil {
 		t.Fatalf("encrypt access key: %v", err)
 	}
-	encSK, err := credentialcipher.EncryptCredentialField(context.Background(), "sk")
+	encSK, err := cipher.EncryptField(context.Background(), "sk")
 	if err != nil {
 		t.Fatalf("encrypt secret key: %v", err)
 	}

@@ -629,9 +629,9 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 		{CredentialID: "org-a/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-a", SecretKey: "secret-a"},
 		{CredentialID: "org-b/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-b", SecretKey: "secret-b"},
 	} {
-		stored, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &cred)
+		stored, err := db.cipher.Prepare(context.Background(), &cred)
 		if err != nil {
-			t.Fatalf("PrepareS3CredentialForStorage(%s) failed: %v", cred.CredentialID, err)
+			t.Fatalf("Prepare(%s) failed: %v", cred.CredentialID, err)
 		}
 		if _, err := db.db.ExecContext(ctx, `
 			INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
@@ -654,7 +654,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	first, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
+	first, err := db.cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-a/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -663,7 +663,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		SecretKey:    "secret-a",
 	})
 	if err != nil {
-		t.Fatalf("PrepareS3CredentialForStorage(first) failed: %v", err)
+		t.Fatalf("Prepare(first) failed: %v", err)
 	}
 	if _, err := db.db.ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
@@ -672,7 +672,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		t.Fatalf("raw first insert failed: %v", err)
 	}
 
-	second, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
+	second, err := db.cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-b/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -681,7 +681,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		SecretKey:    "secret-b",
 	})
 	if err != nil {
-		t.Fatalf("PrepareS3CredentialForStorage(second) failed: %v", err)
+		t.Fatalf("Prepare(second) failed: %v", err)
 	}
 	_, err = db.db.ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)

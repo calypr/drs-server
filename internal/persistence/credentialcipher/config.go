@@ -23,7 +23,26 @@ func configuredCredentialKeyManagerName() string {
 	return defaultCredentialKeyManager
 }
 
-func CredentialEncryptionEnabled() (bool, error) {
+// Cipher encrypts and decrypts credential fields using the key manager selected
+// at construction time. Key material is still loaded by the manager when an
+// operation needs it.
+type Cipher struct {
+	managerName string
+}
+
+func NewFromEnv() (*Cipher, error) {
+	return &Cipher{managerName: configuredCredentialKeyManagerName()}, nil
+}
+
+func (c *Cipher) manager() (CredentialKeyManager, error) {
+	name := defaultCredentialKeyManager
+	if c != nil && strings.TrimSpace(c.managerName) != "" {
+		name = c.managerName
+	}
+	return resolveCredentialKeyManager(name)
+}
+
+func (c *Cipher) Enabled() (bool, error) {
 	key, err := credentialMasterKey()
 	if err != nil {
 		return false, err

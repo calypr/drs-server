@@ -186,6 +186,11 @@ var Cmd = &cobra.Command{
 		if cfg.Auth.Mode == config.AuthModeGen3 && cfg.Database.Postgres == nil && !isMockAuthEnabled() {
 			return fmt.Errorf("auth.mode=gen3 requires postgres database")
 		}
+		applyCredentialEncryptionConfig(cfg)
+		cipher, cipherErr := credentialcipher.NewFromEnv()
+		if cipherErr != nil {
+			return fmt.Errorf("invalid credential encryption configuration: %w", cipherErr)
+		}
 
 		// Init DB
 		var backend serverBackend
@@ -199,7 +204,7 @@ var Cmd = &cobra.Command{
 			}
 			logger.Info("initializing sqlite database", "file", dbPath)
 			var database *sqlite.SqliteDB
-			database, errDb = sqlite.NewSqliteDB(dbPath)
+			database, errDb = sqlite.NewSqliteDB(dbPath, cipher)
 			if errDb == nil {
 				backend = sqliteServerBackend(database)
 			}
@@ -214,7 +219,7 @@ var Cmd = &cobra.Command{
 			)
 			logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
 			var database *postgres.PostgresDB
-			database, errDb = postgres.NewPostgresDB(dsn)
+			database, errDb = postgres.NewPostgresDB(dsn, cipher)
 			if errDb == nil {
 				backend = postgresServerBackend(database)
 			}
@@ -225,8 +230,6 @@ var Cmd = &cobra.Command{
 		if errDb != nil {
 			return fmt.Errorf("failed to initialize database: %w", errDb)
 		}
-
-		applyCredentialEncryptionConfig(cfg)
 
 		needsStorage := cfg.Routes.Ga4gh || cfg.Routes.Internal || cfg.Routes.LFS
 		var invalidator *storageInvalidator
@@ -254,7 +257,7 @@ var Cmd = &cobra.Command{
 
 		// Load configured bucket credentials if present.
 		if len(cfg.Buckets) > 0 {
-			encryptionEnabled, encErr := credentialcipher.CredentialEncryptionEnabled()
+			encryptionEnabled, encErr := cipher.Enabled()
 			if encErr != nil {
 				return fmt.Errorf("invalid credential encryption configuration for %s: %w", credentialcipher.CredentialMasterKeyEnv, encErr)
 			}
