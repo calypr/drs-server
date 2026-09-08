@@ -96,4 +96,25 @@ func TestStorageAddressParsing(t *testing.T) {
 	if _, err := NormalizeStoragePath("gs://other/a", "bucket"); err == nil {
 		t.Fatal("mismatched path bucket should fail")
 	}
+
+	for _, tc := range []struct {
+		raw, wantURL, wantScheme, wantProvider, wantBucket, wantKey, wantPath string
+	}{
+		{"s3://bucket/path/to/object", "s3://bucket/path/to/object", "s3", S3Provider, "bucket", "path/to/object", "/path/to/object"},
+		{"GS://bucket/path", "GS://bucket/path", "gs", GCSProvider, "bucket", "path", "/path"},
+		{"az://bucket/path", "az://bucket/path", "az", AzureProvider, "bucket", "path", "/path"},
+		{"file:///tmp/storage-root/object", "file:///tmp/storage-root/object", "file", FileProvider, "", "tmp/storage-root/object", "/tmp/storage-root/object"},
+		{"/tmp/storage-root/object", "/tmp/storage-root/object", "", "", "", "tmp/storage-root/object", "/tmp/storage-root/object"},
+	} {
+		got, err := ParseLocation(tc.raw)
+		if err != nil {
+			t.Fatalf("ParseLocation(%q) error: %v", tc.raw, err)
+		}
+		if got.URL != tc.wantURL || got.Scheme != tc.wantScheme || got.Provider != tc.wantProvider || got.Bucket != tc.wantBucket || got.Key != tc.wantKey || got.Path != tc.wantPath {
+			t.Fatalf("ParseLocation(%q)=%+v, want URL=%q scheme=%q provider=%q bucket=%q key=%q path=%q", tc.raw, got, tc.wantURL, tc.wantScheme, tc.wantProvider, tc.wantBucket, tc.wantKey, tc.wantPath)
+		}
+	}
+	if _, err := ParseLocation("s3://bucket/%zz"); err == nil {
+		t.Fatal("malformed URL escape should fail")
+	}
 }
