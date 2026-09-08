@@ -128,7 +128,8 @@ func bulkUploadRecord(id string, scoped bool) *objects.Record {
 		}},
 	}
 	if scoped {
-		obj.Authorizations = map[string][]string{"org": {"project"}}
+		controlled := []string{"/organization/org/project/project"}
+		obj.ControlledAccess = &controlled
 	}
 	return obj
 }

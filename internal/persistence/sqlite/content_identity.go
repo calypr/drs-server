@@ -446,7 +446,7 @@ func sqliteObjectResources(obj *objects.Record) []string {
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.NormalizeAccessResources(clientaccess.AuthzMapToList(obj.Authorizations))
+	return nil
 }
 
 func identityAliases(obj *objects.Record) []string {

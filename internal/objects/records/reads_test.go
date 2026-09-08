@@ -62,7 +62,6 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org1": {"project1"}},
 
 			Id:               "uuid-a",
 			CreatedTime:      created,
@@ -75,7 +74,6 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org2": {"project2"}},
 
 			Id:               "uuid-b",
 			CreatedTime:      created,
@@ -151,7 +149,6 @@ func TestGetObjectKeepsCanonicalContentPublicWhenAnySiblingIsPublic(t *testing.T
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org": {"controlled"}},
 
 			Id:               "controlled-uuid",
 			CreatedTime:      created,
@@ -207,8 +204,8 @@ func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
 	secondResource := "/organization/org/project/second"
 	created := drsISOTime("2026-01-01T00:00:00Z")
 	for _, obj := range []objects.Record{
-		{Authorizations: map[string][]string{"org": {"first"}}, Id: "bulk-a", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{firstResource}},
-		{Authorizations: map[string][]string{"org": {"second"}}, Id: "bulk-b", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{secondResource}},
+		{Id: "bulk-a", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{firstResource}},
+		{Id: "bulk-b", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{secondResource}},
 	} {
 		if err := database.CreateObject(context.Background(), &obj); err != nil {
 			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
@@ -362,7 +359,6 @@ func TestPrepareScopedObjects_HydratesOnlyMissingSiblingIDs(t *testing.T) {
 			UpdatedTime:      ptrTime("2026-01-01T00:00:00Z"),
 			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &controlled,
-			Authorizations:   map[string][]string{"org": {"proj"}},
 			AccessMethods: &[]objects.AccessMethod{{
 				Type:      "s3",
 				AccessUrl: &objects.AccessURL{Url: "s3://bucket/dup-a"},
@@ -374,7 +370,6 @@ func TestPrepareScopedObjects_HydratesOnlyMissingSiblingIDs(t *testing.T) {
 			UpdatedTime:      ptrTime("2026-01-02T00:00:00Z"),
 			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &controlled,
-			Authorizations:   map[string][]string{"org": {"proj"}},
 			AccessMethods: &[]objects.AccessMethod{{
 				Type:      "s3",
 				AccessUrl: &objects.AccessURL{Url: "s3://bucket/dup-b"},

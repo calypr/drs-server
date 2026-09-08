@@ -2,7 +2,6 @@ package records
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -90,7 +89,7 @@ func (m *internalRecordStore) RegisterObjects(_ context.Context, records []objec
 		id := string(obj.Id)
 		copyObj := cloneRecord(obj)
 		m.Objects[id] = &copyObj
-		m.ObjectAuthz[id] = cloneAuthzMap(obj.Authorizations)
+		m.ObjectAuthz[id] = clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(&obj))
 	}
 	return nil
 }
@@ -291,7 +290,8 @@ func (m *internalRecordStore) RemoveObjectControlledAccessBulk(ctx context.Conte
 func (m *internalRecordStore) cloneObject(id string, obj *objects.Record) *objects.Record {
 	copyObj := cloneRecord(*obj)
 	if authz, ok := m.ObjectAuthz[id]; ok {
-		copyObj.Authorizations = cloneAuthzMap(authz)
+		controlled := clientaccess.AuthzMapToControlledAccess(authz)
+		copyObj.ControlledAccess = &controlled
 	}
 	return &copyObj
 }
@@ -303,7 +303,7 @@ func (m *internalRecordStore) objectResources(id string, obj *objects.Record) []
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.AuthzMapToControlledAccess(obj.Authorizations)
+	return objects.AccessResources(obj)
 }
 
 func (m *internalRecordStore) objectMatchesScope(obj *objects.Record, organization, project string) bool {
@@ -334,7 +334,6 @@ func cloneRecord(record objects.Record) objects.Record {
 	copyRecord := record
 	copyRecord.Checksums = append([]objects.Checksum(nil), record.Checksums...)
 	copyRecord.NameAliases = append([]string(nil), record.NameAliases...)
-	copyRecord.Authorizations = cloneAuthzMap(record.Authorizations)
 	if record.AccessMethods != nil {
 		copyRecord.AccessMethods = cloneAccessMethods(*record.AccessMethods)
 	}
@@ -347,12 +346,6 @@ func cloneRecord(record objects.Record) objects.Record {
 	if record.Contents != nil {
 		contents := append([]objects.Content(nil), (*record.Contents)...)
 		copyRecord.Contents = &contents
-	}
-	if record.Properties != nil {
-		copyRecord.Properties = make(map[string]json.RawMessage, len(record.Properties))
-		for key, value := range record.Properties {
-			copyRecord.Properties[key] = append(json.RawMessage(nil), value...)
-		}
 	}
 	return copyRecord
 }

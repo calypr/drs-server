@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
@@ -63,7 +64,11 @@ func TestScopeForAccessUsesOnlyOneCanonicalResource(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			obj := &objects.Record{Authorizations: test.authorizations}
+			obj := &objects.Record{}
+			if test.authorizations != nil {
+				controlled := clientaccess.AuthzMapToControlledAccess(test.authorizations)
+				obj.ControlledAccess = &controlled
+			}
 			if test.controlled != nil {
 				obj.ControlledAccess = &test.controlled
 			}

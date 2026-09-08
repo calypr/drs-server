@@ -100,28 +100,28 @@ func TestRegisterObjects_CanonicalizesProjectChecksumDuplicates(t *testing.T) {
 	accessURL2 := "s3://bucket/renamed"
 
 	first := objects.Record{
-		Authorizations: map[string][]string{"org": {"proj"}},
 
-		Id:          "did-1",
-		Name:        ptr("original.tsv"),
-		Size:        42,
-		CreatedTime: now,
-		UpdatedTime: &now,
-		Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
+		Id:               "did-1",
+		ControlledAccess: &[]string{"/organization/org/project/proj"},
+		Name:             ptr("original.tsv"),
+		Size:             42,
+		CreatedTime:      now,
+		UpdatedTime:      &now,
+		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
 		AccessMethods: &[]objects.AccessMethod{{
 			Type:      "s3",
 			AccessUrl: &objects.AccessURL{Url: accessURL1},
 		}},
 	}
 	second := objects.Record{
-		Authorizations: map[string][]string{"org": {"proj"}},
 
-		Id:          "did-2",
-		Name:        ptr("renamed.tsv"),
-		Size:        42,
-		CreatedTime: later,
-		UpdatedTime: &later,
-		Checksums:   first.Checksums,
+		Id:               "did-2",
+		ControlledAccess: &[]string{"/organization/org/project/proj"},
+		Name:             ptr("renamed.tsv"),
+		Size:             42,
+		CreatedTime:      later,
+		UpdatedTime:      &later,
+		Checksums:        first.Checksums,
 		AccessMethods: &[]objects.AccessMethod{{
 			Type:      "s3",
 			AccessUrl: &objects.AccessURL{Url: accessURL2},
@@ -178,7 +178,6 @@ func TestRegisterObjects_ReusesContentAcrossProjects(t *testing.T) {
 	secondResource := "/organization/org/project/second"
 
 	first := objects.Record{
-		Authorizations: map[string][]string{"org": {"first"}},
 
 		Id:               "canonical-did",
 		Name:             ptr("first.tsv"),
@@ -193,7 +192,6 @@ func TestRegisterObjects_ReusesContentAcrossProjects(t *testing.T) {
 		}},
 	}
 	second := objects.Record{
-		Authorizations: map[string][]string{"org": {"second"}},
 
 		Id:               "second-did",
 		Name:             ptr("second.tsv"),

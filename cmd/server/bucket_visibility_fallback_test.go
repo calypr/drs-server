@@ -47,7 +47,6 @@ func TestBucketVisibilityFallbackScansAndProjectsRows(t *testing.T) {
 	reader := &bucketFallbackRecordReader{records: []objects.Record{
 		{
 			Id:               "obj-a",
-			Authorizations:   map[string][]string{"legacy": {"wrong"}},
 			ControlledAccess: &[]string{"/programs/org/projects/project", "/organization/org/project/project", "/organization/org/project/other"},
 			AccessMethods: &[]objects.AccessMethod{
 				{Type: "s3", AccessUrl: nil},

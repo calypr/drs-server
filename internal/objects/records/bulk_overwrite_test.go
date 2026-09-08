@@ -22,8 +22,7 @@ func TestBulkOverwriteObjects_ReplacesProjectChecksumSibling(t *testing.T) {
 	newName := "new"
 	db := &bulkOverwriteStore{Objects: map[string]*objects.Record{
 		"target-did": {
-			Id: "target-did", Name: &oldName, Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}},
-			Authorizations: map[string][]string{"org": {"project"}},
+			Id: "target-did", Name: &oldName, Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource},
 		},
 	}}
 	om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
@@ -33,7 +32,6 @@ func TestBulkOverwriteObjects_ReplacesProjectChecksumSibling(t *testing.T) {
 		Name:             &newName,
 		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
-		Authorizations:   map[string][]string{"org": {"project"}},
 	}
 	result, err := om.BulkOverwriteObjects(buildGen3Context(map[string]map[string]bool{resource: {"update": true}}), "org", "project", []objects.Record{candidate})
 	if err != nil {
@@ -60,7 +58,6 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 	candidate := func(id string) objects.Record {
 		return objects.Record{
 			Id: objects.RecordID(id), Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource},
-			Authorizations: map[string][]string{"org": {"project"}},
 		}
 	}
 
@@ -75,17 +72,15 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 		{name: "duplicate source did", db: &bulkOverwriteStore{}, candidates: []objects.Record{candidate("same"), candidate("same")}, want: "duplicate source did", conflict: true},
 		{name: "missing target scope", db: &bulkOverwriteStore{}, candidates: []objects.Record{{Id: "did"}}, want: "must include target project"},
 		{
-			name: "did exists outside project",
-			db: &bulkOverwriteStore{Objects: map[string]*objects.Record{
-				"did": {Id: "did", Authorizations: map[string][]string{"org": {"other"}}},
-			}},
+			name:       "did exists outside project",
+			db:         &bulkOverwriteStore{Objects: map[string]*objects.Record{"did": {Id: "did", ControlledAccess: &[]string{"/organization/org/project/other"}}}},
 			candidates: []objects.Record{candidate("did")}, want: "outside project", conflict: true,
 		},
 		{
 			name: "ambiguous checksum",
 			db: &bulkOverwriteStore{Objects: map[string]*objects.Record{
-				"one": {Id: "one", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, Authorizations: map[string][]string{"org": {"project"}}},
-				"two": {Id: "two", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, Authorizations: map[string][]string{"org": {"project"}}},
+				"one": {Id: "one", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource}},
+				"two": {Id: "two", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource}},
 			}},
 			candidates: []objects.Record{candidate("source")}, want: "multiple records", conflict: true,
 		},
@@ -122,14 +117,12 @@ func TestBulkOverwriteObjects_DoesNotMatchChecksumOutsideProject(t *testing.T) {
 	sha := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	db := &bulkOverwriteStore{Objects: map[string]*objects.Record{
 		"other-project": {
-			Id: "other-project", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}},
-			Authorizations: map[string][]string{"org": {"other"}},
+			Id: "other-project", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{"/organization/org/project/other"},
 		},
 	}}
 	om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
 	candidate := objects.Record{
 		Id: "source-did", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource},
-		Authorizations: map[string][]string{"org": {"project"}},
 	}
 	result, err := om.BulkOverwriteObjects(context.Background(), "org", "project", []objects.Record{candidate})
 	if err != nil {
@@ -149,7 +142,6 @@ func TestBulkOverwriteObjects_RejectsAliasTarget(t *testing.T) {
 	sha := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	originalName := "original"
 	canonical := objects.Record{
-		Authorizations: map[string][]string{"org": {"project"}},
 
 		Id:               "canonical-did",
 		Name:             &originalName,
@@ -165,7 +157,6 @@ func TestBulkOverwriteObjects_RejectsAliasTarget(t *testing.T) {
 
 	replacementName := "replacement"
 	candidate := objects.Record{
-		Authorizations: map[string][]string{"org": {"project"}},
 
 		Id:               "alias-did",
 		Name:             &replacementName,
@@ -198,7 +189,6 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 	}
 	resources := []string{targetResource, allowedResource}
 	candidate := objects.Record{
-		Authorizations: map[string][]string{"org": {"target", "allowed"}},
 
 		Id:               "new-did",
 		ControlledAccess: &resources,
@@ -217,9 +207,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 	})
 
 	t.Run("update", func(t *testing.T) {
-		database := &bulkOverwriteStore{Objects: map[string]*objects.Record{
-			string(candidate.Id): {Id: candidate.Id, Authorizations: map[string][]string{"org": {"target", "allowed"}}},
-		}}
+		database := &bulkOverwriteStore{Objects: map[string]*objects.Record{}}
 		om := objectrecords.NewService(objectrecords.Dependencies{Reader: database, Writer: database, Aliases: database, ChecksumScope: database})
 		ctx := buildLocalAuthzContext(map[string]map[string]bool{
 			allowedResource: {"update": true},

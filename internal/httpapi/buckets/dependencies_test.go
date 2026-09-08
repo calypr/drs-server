@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -168,7 +169,8 @@ func (f *bucketTestStore) objectCopy(id string) (objects.Record, bool) {
 	}
 	copy := *record
 	if authz, ok := f.ObjectAuthz[id]; ok {
-		copy.Authorizations = cloneBucketTestAuthz(authz)
+		controlled := clientaccess.AuthzMapToControlledAccess(authz)
+		copy.ControlledAccess = &controlled
 	}
 	if record.Name != nil {
 		name := *record.Name

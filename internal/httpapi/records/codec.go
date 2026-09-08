@@ -5,102 +5,15 @@ package records
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
-	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
-// Decode parses the internal record wire shape, including legacy did/hashes
-// fields and unknown property round-tripping.
-func Decode(data []byte) (objects.Record, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return objects.Record{}, err
-	}
-	if raw == nil {
-		raw = map[string]json.RawMessage{}
-	}
-	if _, ok := raw["file_name"]; ok {
-		return objects.Record{}, fmt.Errorf("file_name is no longer supported")
-	}
-	if _, ok := raw["path"]; ok {
-		return objects.Record{}, fmt.Errorf("path is no longer supported")
-	}
-
-	var wire struct {
-		ID               string                  `json:"id,omitempty"`
-		Did              string                  `json:"did,omitempty"`
-		Checksums        []objects.Checksum      `json:"checksums,omitempty"`
-		Hashes           map[string]string       `json:"hashes,omitempty"`
-		AccessMethods    *[]objects.AccessMethod `json:"access_methods,omitempty"`
-		ControlledAccess *[]string               `json:"controlled_access,omitempty"`
-		CreatedTime      time.Time               `json:"created_time"`
-		UpdatedTime      *time.Time              `json:"updated_time,omitempty"`
-		Size             int64                   `json:"size,omitempty"`
-		Name             *string                 `json:"name,omitempty"`
-		NameAliases      []string                `json:"name_aliases,omitempty"`
-		Description      *string                 `json:"description,omitempty"`
-		MimeType         *string                 `json:"mime_type,omitempty"`
-		SelfUri          string                  `json:"self_uri,omitempty"`
-		Version          *string                 `json:"version,omitempty"`
-		Aliases          *[]string               `json:"aliases,omitempty"`
-		Contents         *[]objects.Content      `json:"contents,omitempty"`
-		Project          string                  `json:"project,omitempty"`
-	}
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return objects.Record{}, err
-	}
-	id := wire.ID
-	if id == "" {
-		id = wire.Did
-	}
-	checksums := append([]objects.Checksum(nil), wire.Checksums...)
-	if len(checksums) == 0 && len(wire.Hashes) > 0 {
-		checksums = make([]objects.Checksum, 0, len(wire.Hashes))
-		for typ, checksum := range wire.Hashes {
-			if checksum != "" {
-				checksums = append(checksums, objects.Checksum{Type: typ, Checksum: checksum})
-			}
-		}
-	}
-	record := objects.Record{
-		Id:               objects.RecordID(id),
-		AccessMethods:    wire.AccessMethods,
-		Aliases:          wire.Aliases,
-		Checksums:        checksums,
-		Contents:         wire.Contents,
-		ControlledAccess: wire.ControlledAccess,
-		CreatedTime:      wire.CreatedTime,
-		Description:      wire.Description,
-		MimeType:         wire.MimeType,
-		Name:             wire.Name,
-		NameAliases:      normalizeNameAliases(stringValue(wire.Name), wire.NameAliases),
-		Project:          wire.Project,
-		SelfUri:          wire.SelfUri,
-		Size:             wire.Size,
-		UpdatedTime:      wire.UpdatedTime,
-		Version:          wire.Version,
-		Properties:       raw,
-	}
-	if record.ControlledAccess != nil {
-		record.Authorizations = clientaccess.ControlledAccessToAuthzMap(*record.ControlledAccess)
-	}
-	return record, nil
-}
-
-// Encode writes the compatibility record representation.  Unknown fields are
-// copied first; canonical fields then override them and retired auth fields
-// remain omitted.
+// Encode writes the compatibility record representation. Retired extension
+// fields remain omitted at this wire boundary.
 func Encode(record objects.Record) ([]byte, error) {
-	out := make(map[string]json.RawMessage, len(record.Properties)+16)
-	for key, value := range record.Properties {
-		if isRetiredInternalAuthField(key) {
-			continue
-		}
-		out[key] = value
-	}
+	out := make(map[string]json.RawMessage, 16)
 	put := func(key string, value any) error {
 		encoded, err := json.Marshal(value)
 		if err != nil {
@@ -176,15 +89,6 @@ func Encode(record objects.Record) ([]byte, error) {
 		}
 	}
 	return json.Marshal(out)
-}
-
-func isRetiredInternalAuthField(key string) bool {
-	switch key {
-	case "auth", "authz", "authorizations", "urls":
-		return true
-	default:
-		return false
-	}
 }
 
 func stringValue(v *string) string {

@@ -44,7 +44,8 @@ func TestSearchAfterID(t *testing.T) {
 }
 
 func TestObjectMatchesScope(t *testing.T) {
-	obj := &objectmodel.Record{Authorizations: map[string][]string{"org1": {"p1", "p2"}}}
+	controlled := []string{"/organization/org1/project/p1", "/organization/org1/project/p2"}
+	obj := &objectmodel.Record{ControlledAccess: &controlled}
 	if !objectMatchesScope(obj, "org1", "p1") {
 		t.Fatalf("expected org1/p1 to match")
 	}

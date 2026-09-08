@@ -13,5 +13,5 @@ func AccessResources(obj *Record) []string {
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.AuthzMapToList(obj.Authorizations)
+	return nil
 }

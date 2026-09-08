@@ -89,7 +89,6 @@ func testRecord() *objects.Record {
 		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
 		AccessMethods:    &methods,
 		ControlledAccess: &resources,
-		Authorizations:   map[string][]string{"org": {"project"}},
 	}
 }
 

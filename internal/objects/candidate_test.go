@@ -51,8 +51,8 @@ func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
 	if got.ControlledAccess == nil || len(*got.ControlledAccess) != 1 || (*got.ControlledAccess)[0] != controlled[0] {
 		t.Fatalf("controlled access = %v, want %v", got.ControlledAccess, controlled)
 	}
-	if got.Authorizations["org"][0] != "proj" {
-		t.Fatalf("authorizations = %#v", got.Authorizations)
+	if resources := AccessResources(&got); len(resources) != 1 || resources[0] != controlled[0] {
+		t.Fatalf("controlled access = %#v", resources)
 	}
 	if got.AccessMethods == nil || len(*got.AccessMethods) != 2 || (*got.AccessMethods)[0].AccessId == nil || *(*got.AccessMethods)[0].AccessId != accessID || (*got.AccessMethods)[1].AccessId == nil || *(*got.AccessMethods)[1].AccessId != "s3" {
 		t.Fatalf("access IDs = %#v", got.AccessMethods)

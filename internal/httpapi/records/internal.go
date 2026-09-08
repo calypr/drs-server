@@ -1,7 +1,6 @@
 package records
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +26,6 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 		CreatedTime: parseRecordTime(value.CreatedTime, now),
 		Version:     stringPointerOrDefault(value.Version, "1"),
 		Description: value.Description,
-		Properties:  map[string]json.RawMessage{},
 	}
 	updated := parseRecordTime(value.UpdatedTime, record.CreatedTime)
 	record.UpdatedTime = &updated
@@ -48,7 +46,6 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 	if value.ControlledAccess != nil {
 		controlled := clientaccess.NormalizeAccessResources(*value.ControlledAccess)
 		record.ControlledAccess = &controlled
-		record.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	if value.AccessMethods != nil {
 		methods := fromGeneratedAccessMethods(*value.AccessMethods)
@@ -74,8 +71,6 @@ func ToInternalRecord(record objects.Record) generated.InternalRecord {
 	if controlled := record.ControlledAccess; controlled != nil {
 		values := append([]string(nil), (*controlled)...)
 		result.ControlledAccess = &values
-	} else if resources := clientaccess.AuthzMapToControlledAccess(record.Authorizations); len(resources) > 0 {
-		result.ControlledAccess = &resources
 	}
 	if record.UpdatedTime != nil {
 		result.UpdatedTime = stringPtr(record.UpdatedTime.Format(time.RFC3339))

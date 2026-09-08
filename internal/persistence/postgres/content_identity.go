@@ -444,7 +444,7 @@ func postgresObjectResources(obj *objects.Record) []string {
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.NormalizeAccessResources(clientaccess.AuthzMapToList(obj.Authorizations))
+	return nil
 }
 
 func postgresIdentityAliases(obj *objects.Record) []string {

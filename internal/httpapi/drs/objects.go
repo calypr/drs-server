@@ -7,7 +7,6 @@ import (
 
 	generated "github.com/calypr/syfon/apigen/drs"
 
-	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -63,10 +62,6 @@ func ToGenerated(record objects.Record) generated.DrsObject {
 	if record.Checksums != nil {
 		out.Checksums = make([]generated.Checksum, 0, len(record.Checksums))
 	}
-	if out.ControlledAccess == nil && len(record.Authorizations) > 0 {
-		controlled := clientaccess.AuthzMapToControlledAccess(record.Authorizations)
-		out.ControlledAccess = &controlled
-	}
 	for _, checksum := range record.Checksums {
 		out.Checksums = append(out.Checksums, generated.Checksum{Type: checksum.Type, Checksum: checksum.Checksum})
 	}
@@ -90,9 +85,7 @@ func ToGenerated(record objects.Record) generated.DrsObject {
 	return out
 }
 
-// ObjectPayload builds the compatibility DRS response payload. Unknown
-// properties remain raw JSON values so response encoding does not coerce them
-// through interface{}.
+// ObjectPayload builds the compatibility DRS response payload.
 func ObjectPayload(record objects.Record) map[string]json.RawMessage {
 	var payload map[string]json.RawMessage
 	data, err := json.Marshal(ToGenerated(record))
@@ -106,13 +99,6 @@ func ObjectPayload(record objects.Record) map[string]json.RawMessage {
 				if encoded, marshalErr := json.Marshal(record.NameAliases); marshalErr == nil {
 					payload["name_aliases"] = encoded
 				}
-			}
-			for key, value := range record.Properties {
-				switch key {
-				case "id", "did", "checksums", "hashes", "access_methods", "controlled_access", "created_time", "updated_time", "name", "name_aliases", "description", "mime_type", "size", "self_uri", "version", "aliases", "contents", "project", "auth", "authz", "authorizations", "urls":
-					continue
-				}
-				payload[key] = value
 			}
 			return payload
 		}

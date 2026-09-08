@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
@@ -113,7 +114,7 @@ func (f *transferObjectStoreFake) ListScopedObjectIDsByChecksums(ctx context.Con
 			return nil, err
 		}
 		for _, obj := range matches {
-			if transferObjectMatchesScope(obj.Authorizations, organization, project) {
+			if transferObjectMatchesScope(clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(&obj)), organization, project) {
 				out[checksum] = append(out[checksum], string(obj.Id))
 			}
 		}
@@ -124,7 +125,7 @@ func (f *transferObjectStoreFake) ListScopedObjectIDsByChecksums(ctx context.Con
 func (f *transferObjectStoreFake) ListObjectIDsByScope(_ context.Context, organization, project string) ([]string, error) {
 	ids := make([]string, 0)
 	for id, obj := range f.fixture.Objects {
-		if transferObjectMatchesScope(f.fixture.ObjectAuthz[id], organization, project) || transferObjectMatchesScope(obj.Authorizations, organization, project) {
+		if transferObjectMatchesScope(f.fixture.ObjectAuthz[id], organization, project) || transferObjectMatchesScope(clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(obj)), organization, project) {
 			ids = append(ids, id)
 		}
 	}
@@ -141,14 +142,15 @@ func (f *transferObjectStoreFake) registerObjects(records []objects.Record) {
 	for _, obj := range records {
 		copyObj := obj
 		f.fixture.Objects[string(obj.Id)] = &copyObj
-		f.fixture.ObjectAuthz[string(obj.Id)] = transferCloneAuthzMap(obj.Authorizations)
+		f.fixture.ObjectAuthz[string(obj.Id)] = clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(&obj))
 	}
 }
 
 func (f *transferObjectStoreFake) copyObject(id string, obj *objects.Record) *objects.Record {
 	copyObj := *obj
 	if authz, ok := f.fixture.ObjectAuthz[id]; ok {
-		copyObj.Authorizations = transferCloneAuthzMap(authz)
+		controlled := clientaccess.AuthzMapToControlledAccess(authz)
+		copyObj.ControlledAccess = &controlled
 	}
 	return &copyObj
 }

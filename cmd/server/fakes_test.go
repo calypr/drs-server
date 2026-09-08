@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
@@ -254,7 +255,7 @@ func serverRecordInScope(record *objects.Record, organization, project string) b
 	if organization == "" {
 		return true
 	}
-	for resource, projects := range record.Authorizations {
+	for resource, projects := range clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(record)) {
 		if strings.TrimSpace(resource) != organization {
 			continue
 		}
@@ -288,12 +289,6 @@ func cloneServerRecord(record *objects.Record) *objects.Record {
 	if record.ControlledAccess != nil {
 		controlled := append([]string(nil), (*record.ControlledAccess)...)
 		copyRecord.ControlledAccess = &controlled
-	}
-	if record.Authorizations != nil {
-		copyRecord.Authorizations = make(map[string][]string, len(record.Authorizations))
-		for resource, projects := range record.Authorizations {
-			copyRecord.Authorizations[resource] = append([]string(nil), projects...)
-		}
 	}
 	return &copyRecord
 }

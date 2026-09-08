@@ -173,8 +173,8 @@ func TestGetObject_DeduplicatesAndPropagatesAuthz(t *testing.T) {
 	if len(obj.Checksums) != 2 {
 		t.Fatalf("expected 2 deduplicated checksums, got %d", len(obj.Checksums))
 	}
-	if got := obj.Authorizations["p1"]; len(got) != 2 {
-		t.Fatalf("expected 2 deduplicated authz projects, got %+v", obj.Authorizations)
+	if obj.ControlledAccess == nil || len(*obj.ControlledAccess) != 2 {
+		t.Fatalf("expected 2 deduplicated controlled resources, got %+v", obj.ControlledAccess)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)

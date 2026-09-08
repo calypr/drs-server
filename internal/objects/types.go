@@ -3,10 +3,7 @@
 // generated HTTP contract: adapters translate at the boundary.
 package objects
 
-import (
-	"encoding/json"
-	"time"
-)
+import "time"
 
 // RecordID identifies one physical persisted record.  Two records may refer
 // to the same content while retaining distinct record IDs.
@@ -72,30 +69,27 @@ type Candidate struct {
 	Size             *int64          `json:"size,omitempty"`
 }
 
-// Record is one physical object record.  Extension fields are retained only
-// while the value is in memory; SQL hydration preserves the historical
-// behavior and does not claim to persist unknown properties.
+// Record is one physical object record. ControlledAccess is the sole modeled
+// scope state carried by the record.
 type Record struct {
-	Id                    RecordID                   `json:"id"`
-	AccessMethods         *[]AccessMethod            `json:"access_methods,omitempty"`
-	Aliases               *[]string                  `json:"aliases,omitempty"`
-	Authorizations        map[string][]string        `json:"-"`
-	Checksums             []Checksum                 `json:"checksums"`
-	Contents              *[]Content                 `json:"contents,omitempty"`
-	ControlledAccess      *[]string                  `json:"controlled_access,omitempty"`
-	CreatedTime           time.Time                  `json:"created_time"`
-	Description           *string                    `json:"description,omitempty"`
-	MimeType              *string                    `json:"mime_type,omitempty"`
-	Name                  *string                    `json:"name,omitempty"`
-	NameAliases           []string                   `json:"name_aliases,omitempty"`
-	Properties            map[string]json.RawMessage `json:"-"`
-	Project               string                     `json:"project"`
-	PublicRead            bool                       `json:"-"`
-	PublicReadPolicyKnown bool                       `json:"-"`
-	SelfUri               string                     `json:"self_uri"`
-	Size                  int64                      `json:"size"`
-	UpdatedTime           *time.Time                 `json:"updated_time,omitempty"`
-	Version               *string                    `json:"version,omitempty"`
+	Id                    RecordID        `json:"id"`
+	AccessMethods         *[]AccessMethod `json:"access_methods,omitempty"`
+	Aliases               *[]string       `json:"aliases,omitempty"`
+	Checksums             []Checksum      `json:"checksums"`
+	Contents              *[]Content      `json:"contents,omitempty"`
+	ControlledAccess      *[]string       `json:"controlled_access,omitempty"`
+	CreatedTime           time.Time       `json:"created_time"`
+	Description           *string         `json:"description,omitempty"`
+	MimeType              *string         `json:"mime_type,omitempty"`
+	Name                  *string         `json:"name,omitempty"`
+	NameAliases           []string        `json:"name_aliases,omitempty"`
+	Project               string          `json:"project"`
+	PublicRead            bool            `json:"-"`
+	PublicReadPolicyKnown bool            `json:"-"`
+	SelfUri               string          `json:"self_uri"`
+	Size                  int64           `json:"size"`
+	UpdatedTime           *time.Time      `json:"updated_time,omitempty"`
+	Version               *string         `json:"version,omitempty"`
 }
 
 // CanonicalContent is the prepared same-content view returned by

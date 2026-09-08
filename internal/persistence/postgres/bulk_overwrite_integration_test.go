@@ -36,7 +36,6 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 		UpdatedTime:      &now,
 		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
-		Authorizations:   map[string][]string{"ci-overwrite": {"project"}},
 	}}); err != nil {
 		t.Fatalf("seed target record: %v", err)
 	}
@@ -63,7 +62,6 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 		UpdatedTime:      &now,
 		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
-		Authorizations:   map[string][]string{"ci-overwrite": {"project"}},
 	}})
 	if err != nil {
 		t.Fatalf("bulk overwrite: %v", err)

@@ -570,7 +570,8 @@ func objectMatchesScope(obj *objectmodel.Record, organization, project string) b
 	if obj == nil || strings.TrimSpace(organization) == "" {
 		return obj != nil
 	}
-	projects, ok := obj.Authorizations[organization]
+	authz := clientaccess.ControlledAccessToAuthzMap(objectmodel.AccessResources(obj))
+	projects, ok := authz[organization]
 	if !ok {
 		return false
 	}

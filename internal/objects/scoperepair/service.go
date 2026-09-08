@@ -2,7 +2,6 @@ package scoperepair
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -192,7 +191,6 @@ func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes
 		object.findings = append(object.findings, newFinding(FindingMissingControlledAccess, SeverityWarn, record, sha, object.currentURLs, object.canonicalURL, true, "missing controlled_access row recoverable from deterministic scope"))
 		updated := cloneRecord(record)
 		updated.ControlledAccess = addControlledAccess(updated.ControlledAccess, targetResource)
-		updated.Authorizations = clientaccess.ControlledAccessToAuthzMap(*updated.ControlledAccess)
 		object.updated = &updated
 	}
 	if object.scopeKnown && object.canonicalURL != "" {
@@ -256,7 +254,6 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 	if object.updated != nil && object.updated.ControlledAccess != nil {
 		controlled := append([]string(nil), (*object.updated.ControlledAccess)...)
 		updated.ControlledAccess = &controlled
-		updated.Authorizations = clientaccess.ControlledAccessToAuthzMap(*updated.ControlledAccess)
 	}
 	object.updated = &updated
 }
@@ -514,18 +511,6 @@ func cloneRecord(record objects.Record) objects.Record {
 	}
 	result.Checksums = append([]objects.Checksum(nil), record.Checksums...)
 	result.NameAliases = append([]string(nil), record.NameAliases...)
-	if record.Authorizations != nil {
-		result.Authorizations = make(map[string][]string, len(record.Authorizations))
-		for key, values := range record.Authorizations {
-			result.Authorizations[key] = append([]string(nil), values...)
-		}
-	}
-	if record.Properties != nil {
-		result.Properties = make(map[string]json.RawMessage, len(record.Properties))
-		for key, value := range record.Properties {
-			result.Properties[key] = append(json.RawMessage(nil), value...)
-		}
-	}
 	return result
 }
 

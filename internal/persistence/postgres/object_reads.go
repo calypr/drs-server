@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -91,7 +90,6 @@ retryLookup:
 		Name:        postgresPtr(r.Name),
 		SelfUri:     "drs://" + objectID,
 		NameAliases: nameAliases,
-		Properties:  map[string]json.RawMessage{},
 	}
 	// 2. Fetch storage access methods.
 	urlRows, err := db.db.QueryContext(ctx, "SELECT url, type FROM drs_object_access_method WHERE object_id = $1", lookupID)
@@ -126,7 +124,6 @@ retryLookup:
 	}
 	if len(controlled) > 0 {
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	obj.PublicRead, obj.PublicReadPolicyKnown, err = db.publicReadForObject(ctx, lookupID, len(controlled) == 0)
 	if err != nil {

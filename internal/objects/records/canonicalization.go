@@ -2,7 +2,6 @@ package records
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -180,10 +179,8 @@ func collapseCanonicalGroup(group []objectmodel.Record) objectmodel.Record {
 	}
 	if len(controlled) > 0 {
 		merged.ControlledAccess = &controlled
-		merged.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	} else {
 		merged.ControlledAccess = nil
-		merged.Authorizations = nil
 	}
 	merged.NameAliases = mergeNameAliases(merged.Name, group)
 	merged.Aliases = mergeStringPointerValues(func(obj objectmodel.Record) []string { return recordStringSliceValue(obj.Aliases) }, group)
@@ -239,20 +236,6 @@ func cloneObject(obj objectmodel.Record) objectmodel.Record {
 	if obj.Aliases != nil {
 		aliases := append([]string(nil), (*obj.Aliases)...)
 		cloned.Aliases = &aliases
-	}
-	if obj.Authorizations != nil {
-		authz := make(map[string][]string, len(obj.Authorizations))
-		for org, projects := range obj.Authorizations {
-			authz[org] = append([]string(nil), projects...)
-		}
-		cloned.Authorizations = authz
-	}
-	if obj.Properties != nil {
-		props := make(map[string]json.RawMessage, len(obj.Properties))
-		for key, value := range obj.Properties {
-			props[key] = value
-		}
-		cloned.Properties = props
 	}
 	return cloned
 }

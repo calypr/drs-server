@@ -124,7 +124,7 @@ func TestHandleInternalList_CanonicalizesProjectChecksumDuplicates(t *testing.T)
 
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 
 			Id:          "did-1",
 			Name:        stringPtr("older.tsv"),
@@ -137,7 +137,7 @@ func TestHandleInternalList_CanonicalizesProjectChecksumDuplicates(t *testing.T)
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 
 			Id:          "did-2",
 			Name:        stringPtr("newer.tsv"),
@@ -203,7 +203,7 @@ func TestHandleInternalList_FillsLimitAfterCanonicalizingDuplicates(t *testing.T
 
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 
 			Id:          "did-1",
 			Name:        stringPtr("older.tsv"),
@@ -216,7 +216,7 @@ func TestHandleInternalList_FillsLimitAfterCanonicalizingDuplicates(t *testing.T
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 
 			Id:          "did-2",
 			Name:        stringPtr("newer.tsv"),
@@ -229,7 +229,7 @@ func TestHandleInternalList_FillsLimitAfterCanonicalizingDuplicates(t *testing.T
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 
 			Id:          "did-3",
 			Name:        stringPtr("unique.tsv"),
@@ -302,7 +302,6 @@ func TestHandleInternalList_MergesSiblingAccessMethodsFromLegacyDuplicateRows(t 
 				Type:      "s3",
 				AccessUrl: &objects.AccessURL{Url: oldURL},
 			}},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 		{
 
@@ -316,7 +315,6 @@ func TestHandleInternalList_MergesSiblingAccessMethodsFromLegacyDuplicateRows(t 
 				Type:      "s3",
 				AccessUrl: &objects.AccessURL{Url: newURL},
 			}},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 	} {
 		candidate := obj
@@ -358,7 +356,7 @@ func TestHandleInternalList_PaginatesIDs(t *testing.T) {
 	now := time.Now().UTC()
 	mockDB := &internalRecordStore{
 		Objects: map[string]*objects.Record{
-			"obj-1": {Id: "obj-1", CreatedTime: now, UpdatedTime: &now, Checksums: []objects.Checksum{{Type: "sha256", Checksum: "h1"}}, Properties: map[string]json.RawMessage{"large": json.RawMessage(`9007199254740993`), "auth": json.RawMessage(`{"retired":true}`)}},
+			"obj-1": {Id: "obj-1", CreatedTime: now, UpdatedTime: &now, Checksums: []objects.Checksum{{Type: "sha256", Checksum: "h1"}}},
 			"obj-2": {Id: "obj-2", CreatedTime: now, UpdatedTime: &now, Checksums: []objects.Checksum{{Type: "sha256", Checksum: "h2"}}},
 			"obj-3": {Id: "obj-3", CreatedTime: now, UpdatedTime: &now, Checksums: []objects.Checksum{{Type: "sha256", Checksum: "h3"}}},
 		},
@@ -654,7 +652,6 @@ func TestHandleInternalList_ScopedFiltersKeepProjectPhysicalRecord(t *testing.T)
 	later := now.Add(time.Minute)
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
 
 			Id:               "project-a-did",
 			CreatedTime:      now,
@@ -667,7 +664,6 @@ func TestHandleInternalList_ScopedFiltersKeepProjectPhysicalRecord(t *testing.T)
 			}},
 		},
 		{
-			Authorizations: map[string][]string{"org": {"p2"}},
 
 			Id:               "project-b-did",
 			CreatedTime:      later,
@@ -1294,10 +1290,6 @@ func TestRegisterInternalIndexRoutes_LegacyAliases(t *testing.T) {
 			"obj-1": {
 				Id: "obj-1", CreatedTime: now, UpdatedTime: &now,
 				Checksums: []objects.Checksum{{Type: "sha256", Checksum: "h1"}},
-				Properties: map[string]json.RawMessage{
-					"large": json.RawMessage(`9007199254740993`),
-					"auth":  json.RawMessage(`{"retired":true}`),
-				},
 			},
 		},
 	}
@@ -1335,8 +1327,8 @@ func TestRegisterInternalIndexRoutes_LegacyAliases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(body), `"did":"obj-1"`) || !strings.Contains(string(body), `"large":9007199254740993`) {
-			t.Fatalf("detail response lost compatibility/raw fields: %s", body)
+		if !strings.Contains(string(body), `"did":"obj-1"`) {
+			t.Fatalf("detail response lost compatibility fields: %s", body)
 		}
 		if strings.Contains(string(body), `"auth"`) {
 			t.Fatalf("detail response emitted retired auth field: %s", body)

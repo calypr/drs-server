@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -83,7 +82,6 @@ func (db *PostgresDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []st
 			Version:     postgresPtr(version.String),
 			Description: postgresPtr(description.String),
 			SelfUri:     "drs://" + id,
-			Properties:  map[string]json.RawMessage{},
 		}
 	}
 
@@ -203,7 +201,7 @@ func objectAccessResources(obj *objects.Record) []string {
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.AuthzMapToList(obj.Authorizations)
+	return nil
 }
 
 func normalizeObjectNameAliases(obj *objects.Record) []string {
@@ -295,7 +293,6 @@ func (db *PostgresDB) attachControlledAccess(ctx context.Context, objectsByID ma
 			continue
 		}
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
@@ -383,8 +384,7 @@ func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 		AccessMethods: &[]objects.AccessMethod{
 			{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/path/object"}},
 		},
-
-		Authorizations: map[string][]string{"a": {"b"}},
+		ControlledAccess: &[]string{"/organization/a/project/b"},
 	}); err != nil {
 		t.Fatalf("CreateObject failed: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 				AccessMethods: &[]objects.AccessMethod{
 					{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/path/object"}},
 				},
-				Authorizations: map[string][]string{"org": {"project"}},
+				ControlledAccess: &[]string{"/organization/org/project/project"},
 			}); err != nil {
 				t.Fatalf("CreateObject failed: %v", err)
 			}
@@ -508,12 +508,11 @@ func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 	now := time.Now().UTC()
 
 	if err := db.CreateObject(ctx, &objects.Record{
-		Id:          objects.RecordID(canonicalID),
-		CreatedTime: now,
-		UpdatedTime: &now,
-		Name:        sqliteTestPtr("object.txt"),
-
-		Authorizations: map[string][]string{"a": {"b"}},
+		Id:               objects.RecordID(canonicalID),
+		CreatedTime:      now,
+		UpdatedTime:      &now,
+		Name:             sqliteTestPtr("object.txt"),
+		ControlledAccess: &[]string{"/organization/a/project/b"},
 	}); err != nil {
 		t.Fatalf("CreateObject failed: %v", err)
 	}
@@ -734,8 +733,8 @@ func TestSqliteDB_BulkOperations(t *testing.T) {
 	db, _ := NewSqliteDB(":memory:")
 
 	records := []objects.Record{
-		{Id: "bulk-1", Size: 10, Authorizations: map[string][]string{"org": {"p1"}}},
-		{Id: "bulk-2", Size: 20, Authorizations: map[string][]string{"org": {"p2"}}},
+		{Id: "bulk-1", Size: 10, ControlledAccess: &[]string{"/organization/org/project/p1"}},
+		{Id: "bulk-2", Size: 20, ControlledAccess: &[]string{"/organization/org/project/p2"}},
 	}
 
 	if err := db.RegisterObjects(ctx, records); err != nil {
@@ -785,8 +784,9 @@ func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testi
 
 	records := []objects.Record{
 		{
-			Id:   "bulk-a",
-			Size: 10,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "bulk-a",
+			Size:             10,
 			AccessMethods: &[]objects.AccessMethod{
 				{
 					Type:      "s3",
@@ -801,12 +801,12 @@ func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testi
 				{Type: "sha256", Checksum: "aaa"},
 				{Type: "sha256", Checksum: "aaa"},
 			},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 
 		{
-			Id:   "bulk-b",
-			Size: 20,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "bulk-b",
+			Size:             20,
 			AccessMethods: &[]objects.AccessMethod{
 				{
 					Type:      "gs",
@@ -816,7 +816,6 @@ func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testi
 			Checksums: []objects.Checksum{
 				{Type: "md5", Checksum: "bbb"},
 			},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 	}
 
@@ -879,7 +878,7 @@ func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 			AccessMethods: &[]objects.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/b/sha-x"),
 			},
-			Authorizations: map[string][]string{"a": {"b"}},
+			ControlledAccess: &[]string{"/programs/a/projects/b"},
 		},
 
 		{
@@ -890,7 +889,7 @@ func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 			AccessMethods: &[]objects.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/c/sha-y"),
 			},
-			Authorizations: map[string][]string{"a": {"c"}},
+			ControlledAccess: &[]string{"/programs/a/projects/c"},
 		},
 	}
 	if err := db.RegisterObjects(ctx, records); err != nil {
@@ -923,43 +922,43 @@ func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 	now := time.Now()
 	records := []objects.Record{
 		{
-			Id:             "proj-a-1",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-a-1",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 
 		{
-			Id:             "proj-a-2",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-a-2",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 
 		{
-			Id:             "other-project",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p2"}},
+			Id:               "other-project",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
 		},
 
 		{
-			Id:             "other-org",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"other": {"p1"}},
+			Id:               "other-org",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/other/project/p1"},
 		},
 
 		{
-			Id:             "proj-b",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-b"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-b",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "sha-b"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 	}
 	if err := db.RegisterObjects(ctx, records); err != nil {
@@ -1008,22 +1007,22 @@ func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 
 	if err := db.RegisterObjects(ctx, []objects.Record{
 		{
-			Id:          "scoped",
-			CreatedTime: now,
-			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "scoped"}},
+			ControlledAccess: &[]string{"/organization/a/project/b"},
+			Id:               "scoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "scoped"}},
 			AccessMethods: &[]objects.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/b/scoped"),
 			},
-			Authorizations: map[string][]string{"a": {"b"}},
 		},
 
 		{
-			Id:             "unscoped",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "unscoped"}},
-			Authorizations: map[string][]string{"a": {"b"}},
+			ControlledAccess: &[]string{"/organization/a/project/b"},
+			Id:               "unscoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "unscoped"}},
 		},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
@@ -1050,9 +1049,9 @@ func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 	}
 	now := time.Now()
 	if err := db.RegisterObjects(ctx, []objects.Record{
-		{Id: "org-wide", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {}}},
-		{Id: "project-scoped", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {"project"}}},
-		{Id: "other-org", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"other": {"project"}}},
+		{Id: "org-wide", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/org"}},
+		{Id: "project-scoped", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/org/project/project"}},
+		{Id: "other-org", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/other/project/project"}},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
 	}
@@ -1158,15 +1157,17 @@ func TestSqliteDB_BulkUpdateAccessMethods(t *testing.T) {
 	now := time.Now()
 	if err := db.RegisterObjects(ctx, []objects.Record{
 		{
-			Id:          "obj-a",
-			CreatedTime: now,
-			UpdatedTime: &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-a",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Id:          "obj-b",
-			CreatedTime: now,
-			UpdatedTime: &now,
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
+			Id:               "obj-b",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
@@ -1378,9 +1379,7 @@ func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	objectWithURL := func(id, rawURL string, authz map[string][]string) objects.Record {
-		return objects.Record{
-			Authorizations: authz,
-
+		obj := objects.Record{
 			Id:          objects.RecordID(id),
 			CreatedTime: now,
 			UpdatedTime: &now,
@@ -1390,6 +1389,11 @@ func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 				AccessUrl: &objects.AccessURL{Url: rawURL},
 			}},
 		}
+		if authz != nil {
+			controlled := clientaccess.AuthzMapToControlledAccess(authz)
+			obj.ControlledAccess = &controlled
+		}
+		return obj
 	}
 	targetURL := "s3://bucket/path/image.offsets.json"
 	for _, obj := range []objects.Record{
@@ -1446,19 +1450,19 @@ func TestSqliteDB_AuthorizedObjectLookupQueries(t *testing.T) {
 	now := time.Now().UTC()
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-a",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "same"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-a",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "same"}},
 		},
 
 		{
-			Authorizations: map[string][]string{"org": {"p2"}},
-			Id:             "obj-b",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "same"}},
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
+			Id:               "obj-b",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "same"}},
 		},
 
 		{
@@ -1499,30 +1503,30 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	now := time.Now().UTC()
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-1",
-			Name:           sqliteTestPtr("one"),
-			Size:           1,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-1",
+			Name:             sqliteTestPtr("one"),
+			Size:             1,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-2",
-			Name:           sqliteTestPtr("two"),
-			Size:           2,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-2",
+			Name:             sqliteTestPtr("two"),
+			Size:             2,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Authorizations: map[string][]string{"org": {"p2"}},
-			Id:             "obj-3",
-			Name:           sqliteTestPtr("three"),
-			Size:           3,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
+			Id:               "obj-3",
+			Name:             sqliteTestPtr("three"),
+			Size:             3,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 	} {
 		if err := db.CreateObject(ctx, &obj); err != nil {
@@ -1633,10 +1637,10 @@ func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 	now := time.Now().UTC()
 	for _, obj := range []objects.Record{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-scoped",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-scoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 			AccessMethods: &[]objects.AccessMethod{{
 				Type:      "s3",
 				AccessUrl: &objects.AccessURL{Url: "s3://bucket-a/scoped"},
@@ -1676,13 +1680,13 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	now := time.Now().UTC()
 	oid := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 	if err := db.CreateObject(ctx, &objects.Record{
-		Authorizations: map[string][]string{"calypr": {"proj-a"}},
-		Id:             "did-1",
-		Name:           sqliteTestPtr("transfer-object"),
-		Size:           42,
-		CreatedTime:    now,
-		UpdatedTime:    &now,
-		Version:        sqliteTestPtr("1"),
+		ControlledAccess: &[]string{"/organization/calypr/project/proj-a"},
+		Id:               "did-1",
+		Name:             sqliteTestPtr("transfer-object"),
+		Size:             42,
+		CreatedTime:      now,
+		UpdatedTime:      &now,
+		Version:          sqliteTestPtr("1"),
 		Checksums: []objects.Checksum{
 			{Type: "sha256", Checksum: oid},
 		},

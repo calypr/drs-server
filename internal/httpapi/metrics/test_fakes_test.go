@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -27,7 +28,8 @@ func newMetricsObjectReader(records map[string]*objects.Record, authorizations m
 	for id, record := range records {
 		copyRecord := *record
 		if authz, ok := authorizations[id]; ok {
-			copyRecord.Authorizations = cloneMetricsAuthorizations(authz)
+			controlled := clientaccess.AuthzMapToControlledAccess(authz)
+			copyRecord.ControlledAccess = &controlled
 		}
 		result.records[id] = copyRecord
 	}
@@ -59,7 +61,7 @@ func metricsObjectMatchesScope(record objects.Record, organization, project stri
 	if organization == "" {
 		return true
 	}
-	projects, ok := record.Authorizations[organization]
+	projects, ok := clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(&record))[organization]
 	if !ok {
 		return false
 	}

@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -75,7 +74,6 @@ retryLookup:
 		Name:        sqlitePtr(r.Name),
 		SelfUri:     "drs://" + objectID,
 		NameAliases: nameAliases,
-		Properties:  map[string]json.RawMessage{},
 	}
 
 	// 2. Fetch storage access methods.
@@ -112,7 +110,6 @@ retryLookup:
 	}
 	if len(controlled) > 0 {
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	obj.PublicRead, obj.PublicReadPolicyKnown, err = db.publicReadForObject(ctx, lookupID, len(controlled) == 0)
 	if err != nil {
@@ -234,7 +231,6 @@ func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []stri
 			Version:     sqlitePtr(version.String),
 			Description: sqlitePtr(description.String),
 			SelfUri:     "drs://" + id,
-			Properties:  map[string]json.RawMessage{},
 		}
 	}
 
@@ -357,7 +353,7 @@ func objectAccessResources(obj *objects.Record) []string {
 	if obj.ControlledAccess != nil {
 		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
 	}
-	return clientaccess.AuthzMapToList(obj.Authorizations)
+	return nil
 }
 
 func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
@@ -452,7 +448,6 @@ func (db *SqliteDB) attachControlledAccess(ctx context.Context, objectsByID map[
 			continue
 		}
 		obj.ControlledAccess = &controlled
-		obj.Authorizations = clientaccess.ControlledAccessToAuthzMap(controlled)
 	}
 	return nil
 }

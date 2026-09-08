@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -184,7 +185,7 @@ func recordHasChecksum(obj *objects.Record, checksum string) bool {
 }
 
 func recordInScope(obj *objects.Record, organization, project string) bool {
-	projects := obj.Authorizations[strings.TrimSpace(organization)]
+	projects := clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(obj))[strings.TrimSpace(organization)]
 	if strings.TrimSpace(project) == "" || len(projects) == 0 {
 		return len(projects) > 0
 	}

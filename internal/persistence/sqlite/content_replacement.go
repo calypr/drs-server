@@ -201,7 +201,7 @@ func replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, obj *objects.
 			}
 		}
 	}
-	if obj.ControlledAccess != nil || obj.Authorizations != nil {
+	if obj.ControlledAccess != nil {
 		resources := sqliteObjectResources(obj)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM drs_object_controlled_access WHERE object_id = ?`, id); err != nil {
 			return fmt.Errorf("replace controlled access: %w", err)

@@ -7,9 +7,9 @@ import (
 )
 
 func TestEnforceCanonicalProjectScope(t *testing.T) {
+	initial := []string{"/organization/other/project/proj"}
 	obj, err := EnforceCanonicalProjectScope(Record{
-		Id:             "obj-1",
-		Authorizations: map[string][]string{"other": {"proj"}},
+		Id: "obj-1", ControlledAccess: &initial,
 	}, "org", "proj")
 	if err != nil {
 		t.Fatalf("EnforceCanonicalProjectScope() error = %v", err)
@@ -49,8 +49,8 @@ func TestMergeRecordUpdatePreservesAndMergesRecordState(t *testing.T) {
 	if merged.Id != "new-id" || !merged.UpdatedTime.Equal(now) || merged.Name == nil || *merged.Name != "new-name.txt" {
 		t.Fatalf("unexpected identity/name: %#v", merged)
 	}
-	if len(merged.Checksums) != 2 || merged.Authorizations["org"][0] != "proj" {
-		t.Fatalf("unexpected merged checksums/authz: %#v", merged)
+	if len(merged.Checksums) != 2 || merged.ControlledAccess == nil || (*merged.ControlledAccess)[0] != controlled[0] {
+		t.Fatalf("unexpected merged checksums/access: %#v", merged)
 	}
 	if !merged.CreatedTime.Equal(created) {
 		t.Fatalf("CreatedTime changed: got %v, want %v", merged.CreatedTime, created)

@@ -205,7 +205,7 @@ func postgresReplaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, obj *
 			}
 		}
 	}
-	if obj.ControlledAccess != nil || obj.Authorizations != nil {
+	if obj.ControlledAccess != nil {
 		resources := postgresObjectResources(obj)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM drs_object_controlled_access WHERE object_id = $1`, id); err != nil {
 			return fmt.Errorf("replace controlled access: %w", err)
