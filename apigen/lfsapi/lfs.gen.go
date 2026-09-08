@@ -1136,7 +1136,7 @@ func (response LfsBatch200ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch401ResponseHeaders struct {
@@ -1153,7 +1153,7 @@ func (response LfsBatch401ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response.Body)
+	return ctx.JSON(&response.Body, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch403ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1162,7 +1162,7 @@ func (response LfsBatch403ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch404ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1171,7 +1171,7 @@ func (response LfsBatch404ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch406ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1180,7 +1180,7 @@ func (response LfsBatch406ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(406)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch413ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1189,7 +1189,7 @@ func (response LfsBatch413ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch422ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1198,7 +1198,7 @@ func (response LfsBatch422ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(422)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch429ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1207,7 +1207,7 @@ func (response LfsBatch429ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(429)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch500ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1216,7 +1216,7 @@ func (response LfsBatch500ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch502ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1225,7 +1225,7 @@ func (response LfsBatch502ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(502)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch503ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1234,7 +1234,7 @@ func (response LfsBatch503ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(503)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch504ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1243,7 +1243,7 @@ func (response LfsBatch504ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(504)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch507ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1252,7 +1252,7 @@ func (response LfsBatch507ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(507)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsBatch509ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1261,7 +1261,7 @@ func (response LfsBatch509ApplicationVndGitLfsPlusJSONResponse) VisitLfsBatchRes
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(509)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadataRequestObject struct {
@@ -1279,7 +1279,7 @@ func (response LfsStageMetadata200JSONResponse) VisitLfsStageMetadataResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadata200ApplicationVndGitLfsPlusJSONResponse MetadataSubmitResponse
@@ -1288,7 +1288,7 @@ func (response LfsStageMetadata200ApplicationVndGitLfsPlusJSONResponse) VisitLfs
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadata400JSONResponse LFSErrorResponse
@@ -1297,7 +1297,7 @@ func (response LfsStageMetadata400JSONResponse) VisitLfsStageMetadataResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadata401ResponseHeaders struct {
@@ -1314,7 +1314,7 @@ func (response LfsStageMetadata401JSONResponse) VisitLfsStageMetadataResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response.Body)
+	return ctx.JSON(&response.Body, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadata403JSONResponse LFSErrorResponse
@@ -1323,7 +1323,7 @@ func (response LfsStageMetadata403JSONResponse) VisitLfsStageMetadataResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsStageMetadata500JSONResponse LFSErrorResponse
@@ -1332,7 +1332,7 @@ func (response LfsStageMetadata500JSONResponse) VisitLfsStageMetadataResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsUploadProxyRequestObject struct {
@@ -1434,7 +1434,7 @@ func (response LfsVerify400ApplicationVndGitLfsPlusJSONResponse) VisitLfsVerifyR
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsVerify401ResponseHeaders struct {
@@ -1451,7 +1451,7 @@ func (response LfsVerify401ApplicationVndGitLfsPlusJSONResponse) VisitLfsVerifyR
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response.Body)
+	return ctx.JSON(&response.Body, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsVerify403ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1460,7 +1460,7 @@ func (response LfsVerify403ApplicationVndGitLfsPlusJSONResponse) VisitLfsVerifyR
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsVerify404ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1469,7 +1469,7 @@ func (response LfsVerify404ApplicationVndGitLfsPlusJSONResponse) VisitLfsVerifyR
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type LfsVerify500ApplicationVndGitLfsPlusJSONResponse LFSErrorResponse
@@ -1478,7 +1478,7 @@ func (response LfsVerify500ApplicationVndGitLfsPlusJSONResponse) VisitLfsVerifyR
 	ctx.Response().Header.Set("Content-Type", "application/vnd.git-lfs+json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 // StrictServerInterface represents all server handlers.

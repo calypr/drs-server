@@ -2715,7 +2715,7 @@ func (response ListMetricsFiles200JSONResponse) VisitListMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type ListMetricsFiles400JSONResponse APIError
@@ -2724,7 +2724,7 @@ func (response ListMetricsFiles400JSONResponse) VisitListMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type ListMetricsFiles401JSONResponse APIError
@@ -2733,7 +2733,7 @@ func (response ListMetricsFiles401JSONResponse) VisitListMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type ListMetricsFiles403JSONResponse APIError
@@ -2742,7 +2742,7 @@ func (response ListMetricsFiles403JSONResponse) VisitListMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type ListMetricsFiles500JSONResponse APIError
@@ -2751,7 +2751,7 @@ func (response ListMetricsFiles500JSONResponse) VisitListMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkMetricsFilesRequestObject struct {
@@ -2769,7 +2769,7 @@ func (response BulkMetricsFiles200JSONResponse) VisitBulkMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkMetricsFiles400JSONResponse APIError
@@ -2778,7 +2778,7 @@ func (response BulkMetricsFiles400JSONResponse) VisitBulkMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkMetricsFiles401JSONResponse APIError
@@ -2787,7 +2787,7 @@ func (response BulkMetricsFiles401JSONResponse) VisitBulkMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkMetricsFiles403JSONResponse APIError
@@ -2796,7 +2796,7 @@ func (response BulkMetricsFiles403JSONResponse) VisitBulkMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkMetricsFiles500JSONResponse APIError
@@ -2805,7 +2805,7 @@ func (response BulkMetricsFiles500JSONResponse) VisitBulkMetricsFilesResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFileRequestObject struct {
@@ -2823,7 +2823,7 @@ func (response GetMetricsFile200JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFile400JSONResponse APIError
@@ -2832,7 +2832,7 @@ func (response GetMetricsFile400JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFile401JSONResponse APIError
@@ -2841,7 +2841,7 @@ func (response GetMetricsFile401JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFile403JSONResponse APIError
@@ -2850,7 +2850,7 @@ func (response GetMetricsFile403JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFile404JSONResponse APIError
@@ -2859,7 +2859,7 @@ func (response GetMetricsFile404JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsFile500JSONResponse APIError
@@ -2868,7 +2868,7 @@ func (response GetMetricsFile500JSONResponse) VisitGetMetricsFileResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RecordProviderTransferEventsRequestObject struct {
@@ -2886,7 +2886,7 @@ func (response RecordProviderTransferEvents201JSONResponse) VisitRecordProviderT
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(201)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RecordProviderTransferEvents400JSONResponse APIError
@@ -2895,7 +2895,7 @@ func (response RecordProviderTransferEvents400JSONResponse) VisitRecordProviderT
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RecordProviderTransferEvents401JSONResponse APIError
@@ -2904,7 +2904,7 @@ func (response RecordProviderTransferEvents401JSONResponse) VisitRecordProviderT
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RecordProviderTransferEvents403JSONResponse APIError
@@ -2913,7 +2913,7 @@ func (response RecordProviderTransferEvents403JSONResponse) VisitRecordProviderT
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RecordProviderTransferEvents500JSONResponse APIError
@@ -2922,7 +2922,7 @@ func (response RecordProviderTransferEvents500JSONResponse) VisitRecordProviderT
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsSummaryRequestObject struct {
@@ -2939,7 +2939,7 @@ func (response GetMetricsSummary200JSONResponse) VisitGetMetricsSummaryResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsSummary400JSONResponse APIError
@@ -2948,7 +2948,7 @@ func (response GetMetricsSummary400JSONResponse) VisitGetMetricsSummaryResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsSummary401JSONResponse APIError
@@ -2957,7 +2957,7 @@ func (response GetMetricsSummary401JSONResponse) VisitGetMetricsSummaryResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsSummary403JSONResponse APIError
@@ -2966,7 +2966,7 @@ func (response GetMetricsSummary403JSONResponse) VisitGetMetricsSummaryResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetMetricsSummary500JSONResponse APIError
@@ -2975,7 +2975,7 @@ func (response GetMetricsSummary500JSONResponse) VisitGetMetricsSummaryResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferBreakdownRequestObject struct {
@@ -2992,7 +2992,7 @@ func (response GetTransferBreakdown200JSONResponse) VisitGetTransferBreakdownRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferBreakdown400JSONResponse APIError
@@ -3001,7 +3001,7 @@ func (response GetTransferBreakdown400JSONResponse) VisitGetTransferBreakdownRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferBreakdown401JSONResponse APIError
@@ -3010,7 +3010,7 @@ func (response GetTransferBreakdown401JSONResponse) VisitGetTransferBreakdownRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferBreakdown403JSONResponse APIError
@@ -3019,7 +3019,7 @@ func (response GetTransferBreakdown403JSONResponse) VisitGetTransferBreakdownRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferBreakdown500JSONResponse APIError
@@ -3028,7 +3028,7 @@ func (response GetTransferBreakdown500JSONResponse) VisitGetTransferBreakdownRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferSummaryRequestObject struct {
@@ -3045,7 +3045,7 @@ func (response GetTransferSummary200JSONResponse) VisitGetTransferSummaryRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferSummary400JSONResponse APIError
@@ -3054,7 +3054,7 @@ func (response GetTransferSummary400JSONResponse) VisitGetTransferSummaryRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferSummary401JSONResponse APIError
@@ -3063,7 +3063,7 @@ func (response GetTransferSummary401JSONResponse) VisitGetTransferSummaryRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferSummary403JSONResponse APIError
@@ -3072,7 +3072,7 @@ func (response GetTransferSummary403JSONResponse) VisitGetTransferSummaryRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetTransferSummary500JSONResponse APIError
@@ -3081,7 +3081,7 @@ func (response GetTransferSummary500JSONResponse) VisitGetTransferSummaryRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 // StrictServerInterface represents all server handlers.

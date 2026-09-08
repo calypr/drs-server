@@ -5857,7 +5857,7 @@ func (response InternalDownload200JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownload302Response struct {
@@ -5874,7 +5874,7 @@ func (response InternalDownload400JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownload401JSONResponse APIError
@@ -5883,7 +5883,7 @@ func (response InternalDownload401JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownload403JSONResponse APIError
@@ -5892,7 +5892,7 @@ func (response InternalDownload403JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownload404JSONResponse APIError
@@ -5901,7 +5901,7 @@ func (response InternalDownload404JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownload500JSONResponse APIError
@@ -5910,7 +5910,7 @@ func (response InternalDownload500JSONResponse) VisitInternalDownloadResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPartRequestObject struct {
@@ -5928,7 +5928,7 @@ func (response InternalDownloadPart200JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPart400JSONResponse APIError
@@ -5937,7 +5937,7 @@ func (response InternalDownloadPart400JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPart401JSONResponse APIError
@@ -5946,7 +5946,7 @@ func (response InternalDownloadPart401JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPart403JSONResponse APIError
@@ -5955,7 +5955,7 @@ func (response InternalDownloadPart403JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPart404JSONResponse APIError
@@ -5964,7 +5964,7 @@ func (response InternalDownloadPart404JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDownloadPart500JSONResponse APIError
@@ -5973,7 +5973,7 @@ func (response InternalDownloadPart500JSONResponse) VisitInternalDownloadPartRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventoryRequestObject struct {
@@ -5990,7 +5990,7 @@ func (response InternalInspectProjectBucketInventory200JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory400JSONResponse APIError
@@ -5999,7 +5999,7 @@ func (response InternalInspectProjectBucketInventory400JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory401JSONResponse APIError
@@ -6008,7 +6008,7 @@ func (response InternalInspectProjectBucketInventory401JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory403JSONResponse APIError
@@ -6017,7 +6017,7 @@ func (response InternalInspectProjectBucketInventory403JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory404JSONResponse APIError
@@ -6026,7 +6026,7 @@ func (response InternalInspectProjectBucketInventory404JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory409JSONResponse APIError
@@ -6035,7 +6035,7 @@ func (response InternalInspectProjectBucketInventory409JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectBucketInventory500JSONResponse APIError
@@ -6044,7 +6044,7 @@ func (response InternalInspectProjectBucketInventory500JSONResponse) VisitIntern
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesRequestObject struct {
@@ -6061,7 +6061,7 @@ func (response InternalInspectProjectScopes200JSONResponse) VisitInternalInspect
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopes400JSONResponse APIError
@@ -6070,7 +6070,7 @@ func (response InternalInspectProjectScopes400JSONResponse) VisitInternalInspect
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopes401JSONResponse APIError
@@ -6079,7 +6079,7 @@ func (response InternalInspectProjectScopes401JSONResponse) VisitInternalInspect
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopes403JSONResponse APIError
@@ -6088,7 +6088,7 @@ func (response InternalInspectProjectScopes403JSONResponse) VisitInternalInspect
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopes500JSONResponse APIError
@@ -6097,7 +6097,7 @@ func (response InternalInspectProjectScopes500JSONResponse) VisitInternalInspect
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesPostRequestObject struct {
@@ -6114,7 +6114,7 @@ func (response InternalInspectProjectScopesPost200JSONResponse) VisitInternalIns
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesPost400JSONResponse APIError
@@ -6123,7 +6123,7 @@ func (response InternalInspectProjectScopesPost400JSONResponse) VisitInternalIns
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesPost401JSONResponse APIError
@@ -6132,7 +6132,7 @@ func (response InternalInspectProjectScopesPost401JSONResponse) VisitInternalIns
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesPost403JSONResponse APIError
@@ -6141,7 +6141,7 @@ func (response InternalInspectProjectScopesPost403JSONResponse) VisitInternalIns
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalInspectProjectScopesPost500JSONResponse APIError
@@ -6150,7 +6150,7 @@ func (response InternalInspectProjectScopesPost500JSONResponse) VisitInternalIns
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartCompleteRequestObject struct {
@@ -6175,7 +6175,7 @@ func (response InternalMultipartComplete400JSONResponse) VisitInternalMultipartC
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartComplete401JSONResponse APIError
@@ -6184,7 +6184,7 @@ func (response InternalMultipartComplete401JSONResponse) VisitInternalMultipartC
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartComplete403JSONResponse APIError
@@ -6193,7 +6193,7 @@ func (response InternalMultipartComplete403JSONResponse) VisitInternalMultipartC
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartComplete500JSONResponse APIError
@@ -6202,7 +6202,7 @@ func (response InternalMultipartComplete500JSONResponse) VisitInternalMultipartC
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartInitRequestObject struct {
@@ -6219,7 +6219,7 @@ func (response InternalMultipartInit200JSONResponse) VisitInternalMultipartInitR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartInit400JSONResponse APIError
@@ -6228,7 +6228,7 @@ func (response InternalMultipartInit400JSONResponse) VisitInternalMultipartInitR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartInit401JSONResponse APIError
@@ -6237,7 +6237,7 @@ func (response InternalMultipartInit401JSONResponse) VisitInternalMultipartInitR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartInit403JSONResponse APIError
@@ -6246,7 +6246,7 @@ func (response InternalMultipartInit403JSONResponse) VisitInternalMultipartInitR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartInit500JSONResponse APIError
@@ -6255,7 +6255,7 @@ func (response InternalMultipartInit500JSONResponse) VisitInternalMultipartInitR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartUploadRequestObject struct {
@@ -6272,7 +6272,7 @@ func (response InternalMultipartUpload200JSONResponse) VisitInternalMultipartUpl
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartUpload400JSONResponse APIError
@@ -6281,7 +6281,7 @@ func (response InternalMultipartUpload400JSONResponse) VisitInternalMultipartUpl
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartUpload401JSONResponse APIError
@@ -6290,7 +6290,7 @@ func (response InternalMultipartUpload401JSONResponse) VisitInternalMultipartUpl
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartUpload403JSONResponse APIError
@@ -6299,7 +6299,7 @@ func (response InternalMultipartUpload403JSONResponse) VisitInternalMultipartUpl
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalMultipartUpload500JSONResponse APIError
@@ -6308,7 +6308,7 @@ func (response InternalMultipartUpload500JSONResponse) VisitInternalMultipartUpl
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBlankRequestObject struct {
@@ -6325,7 +6325,7 @@ func (response InternalUploadBlank201JSONResponse) VisitInternalUploadBlankRespo
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(201)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBlank400JSONResponse APIError
@@ -6334,7 +6334,7 @@ func (response InternalUploadBlank400JSONResponse) VisitInternalUploadBlankRespo
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBlank401JSONResponse APIError
@@ -6343,7 +6343,7 @@ func (response InternalUploadBlank401JSONResponse) VisitInternalUploadBlankRespo
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBlank403JSONResponse APIError
@@ -6352,7 +6352,7 @@ func (response InternalUploadBlank403JSONResponse) VisitInternalUploadBlankRespo
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBlank500JSONResponse APIError
@@ -6361,7 +6361,7 @@ func (response InternalUploadBlank500JSONResponse) VisitInternalUploadBlankRespo
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulkRequestObject struct {
@@ -6378,7 +6378,7 @@ func (response InternalUploadBulk200JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk207JSONResponse InternalUploadBulkOutput
@@ -6387,7 +6387,7 @@ func (response InternalUploadBulk207JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(207)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk400JSONResponse APIError
@@ -6396,7 +6396,7 @@ func (response InternalUploadBulk400JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk401JSONResponse APIError
@@ -6405,7 +6405,7 @@ func (response InternalUploadBulk401JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk403JSONResponse APIError
@@ -6414,7 +6414,7 @@ func (response InternalUploadBulk403JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk413JSONResponse APIError
@@ -6423,7 +6423,7 @@ func (response InternalUploadBulk413JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadBulk500JSONResponse APIError
@@ -6432,7 +6432,7 @@ func (response InternalUploadBulk500JSONResponse) VisitInternalUploadBulkRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURLRequestObject struct {
@@ -6450,7 +6450,7 @@ func (response InternalUploadURL200JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURL400JSONResponse APIError
@@ -6459,7 +6459,7 @@ func (response InternalUploadURL400JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURL401JSONResponse APIError
@@ -6468,7 +6468,7 @@ func (response InternalUploadURL401JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURL403JSONResponse APIError
@@ -6477,7 +6477,7 @@ func (response InternalUploadURL403JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURL404JSONResponse APIError
@@ -6486,7 +6486,7 @@ func (response InternalUploadURL404JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUploadURL500JSONResponse APIError
@@ -6495,7 +6495,7 @@ func (response InternalUploadURL500JSONResponse) VisitInternalUploadURLResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteByQueryRequestObject struct {
@@ -6512,7 +6512,7 @@ func (response InternalDeleteByQuery200JSONResponse) VisitInternalDeleteByQueryR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteByQuery400JSONResponse APIError
@@ -6521,7 +6521,7 @@ func (response InternalDeleteByQuery400JSONResponse) VisitInternalDeleteByQueryR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteByQuery401JSONResponse APIError
@@ -6530,7 +6530,7 @@ func (response InternalDeleteByQuery401JSONResponse) VisitInternalDeleteByQueryR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteByQuery403JSONResponse APIError
@@ -6539,7 +6539,7 @@ func (response InternalDeleteByQuery403JSONResponse) VisitInternalDeleteByQueryR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteByQuery500JSONResponse APIError
@@ -6548,7 +6548,7 @@ func (response InternalDeleteByQuery500JSONResponse) VisitInternalDeleteByQueryR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalListRequestObject struct {
@@ -6565,7 +6565,7 @@ func (response InternalList200JSONResponse) VisitInternalListResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalList400JSONResponse APIError
@@ -6574,7 +6574,7 @@ func (response InternalList400JSONResponse) VisitInternalListResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalList401JSONResponse APIError
@@ -6583,7 +6583,7 @@ func (response InternalList401JSONResponse) VisitInternalListResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalList403JSONResponse APIError
@@ -6592,7 +6592,7 @@ func (response InternalList403JSONResponse) VisitInternalListResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalList500JSONResponse APIError
@@ -6601,7 +6601,7 @@ func (response InternalList500JSONResponse) VisitInternalListResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalCreateRequestObject struct {
@@ -6618,7 +6618,7 @@ func (response InternalCreate201JSONResponse) VisitInternalCreateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(201)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalCreate400JSONResponse APIError
@@ -6627,7 +6627,7 @@ func (response InternalCreate400JSONResponse) VisitInternalCreateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalCreate401JSONResponse APIError
@@ -6636,7 +6636,7 @@ func (response InternalCreate401JSONResponse) VisitInternalCreateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalCreate403JSONResponse APIError
@@ -6645,7 +6645,7 @@ func (response InternalCreate403JSONResponse) VisitInternalCreateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalCreate500JSONResponse APIError
@@ -6654,7 +6654,7 @@ func (response InternalCreate500JSONResponse) VisitInternalCreateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreateRequestObject struct {
@@ -6671,7 +6671,7 @@ func (response InternalBulkCreate201JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(201)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreate400JSONResponse APIError
@@ -6680,7 +6680,7 @@ func (response InternalBulkCreate400JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreate401JSONResponse APIError
@@ -6689,7 +6689,7 @@ func (response InternalBulkCreate401JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreate403JSONResponse APIError
@@ -6698,7 +6698,7 @@ func (response InternalBulkCreate403JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreate413JSONResponse APIError
@@ -6707,7 +6707,7 @@ func (response InternalBulkCreate413JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkCreate500JSONResponse APIError
@@ -6716,7 +6716,7 @@ func (response InternalBulkCreate500JSONResponse) VisitInternalBulkCreateRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashesRequestObject struct {
@@ -6733,7 +6733,7 @@ func (response InternalBulkDeleteHashes200JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashes400JSONResponse APIError
@@ -6742,7 +6742,7 @@ func (response InternalBulkDeleteHashes400JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashes401JSONResponse APIError
@@ -6751,7 +6751,7 @@ func (response InternalBulkDeleteHashes401JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashes403JSONResponse APIError
@@ -6760,7 +6760,7 @@ func (response InternalBulkDeleteHashes403JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashes413JSONResponse APIError
@@ -6769,7 +6769,7 @@ func (response InternalBulkDeleteHashes413JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDeleteHashes500JSONResponse APIError
@@ -6778,7 +6778,7 @@ func (response InternalBulkDeleteHashes500JSONResponse) VisitInternalBulkDeleteH
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDocumentsRequestObject struct {
@@ -6795,7 +6795,7 @@ func (response InternalBulkDocuments200JSONResponse) VisitInternalBulkDocumentsR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDocuments400JSONResponse APIError
@@ -6804,7 +6804,7 @@ func (response InternalBulkDocuments400JSONResponse) VisitInternalBulkDocumentsR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDocuments413JSONResponse APIError
@@ -6813,7 +6813,7 @@ func (response InternalBulkDocuments413JSONResponse) VisitInternalBulkDocumentsR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkDocuments500JSONResponse APIError
@@ -6822,7 +6822,7 @@ func (response InternalBulkDocuments500JSONResponse) VisitInternalBulkDocumentsR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkHashesRequestObject struct {
@@ -6839,7 +6839,7 @@ func (response InternalBulkHashes200JSONResponse) VisitInternalBulkHashesRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkHashes400JSONResponse APIError
@@ -6848,7 +6848,7 @@ func (response InternalBulkHashes400JSONResponse) VisitInternalBulkHashesRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkHashes413JSONResponse APIError
@@ -6857,7 +6857,7 @@ func (response InternalBulkHashes413JSONResponse) VisitInternalBulkHashesRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkHashes500JSONResponse APIError
@@ -6866,7 +6866,7 @@ func (response InternalBulkHashes500JSONResponse) VisitInternalBulkHashesRespons
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwriteRequestObject struct {
@@ -6883,7 +6883,7 @@ func (response InternalBulkOverwrite200JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite400JSONResponse APIError
@@ -6892,7 +6892,7 @@ func (response InternalBulkOverwrite400JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite401JSONResponse APIError
@@ -6901,7 +6901,7 @@ func (response InternalBulkOverwrite401JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite403JSONResponse APIError
@@ -6910,7 +6910,7 @@ func (response InternalBulkOverwrite403JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite409JSONResponse APIError
@@ -6919,7 +6919,7 @@ func (response InternalBulkOverwrite409JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(409)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite413JSONResponse APIError
@@ -6928,7 +6928,7 @@ func (response InternalBulkOverwrite413JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkOverwrite500JSONResponse APIError
@@ -6937,7 +6937,7 @@ func (response InternalBulkOverwrite500JSONResponse) VisitInternalBulkOverwriteR
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256RequestObject struct {
@@ -6954,7 +6954,7 @@ func (response InternalBulkMissingSHA256200JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256400JSONResponse APIError
@@ -6963,7 +6963,7 @@ func (response InternalBulkMissingSHA256400JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256401JSONResponse APIError
@@ -6972,7 +6972,7 @@ func (response InternalBulkMissingSHA256401JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256403JSONResponse APIError
@@ -6981,7 +6981,7 @@ func (response InternalBulkMissingSHA256403JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256413JSONResponse APIError
@@ -6990,7 +6990,7 @@ func (response InternalBulkMissingSHA256413JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkMissingSHA256500JSONResponse APIError
@@ -6999,7 +6999,7 @@ func (response InternalBulkMissingSHA256500JSONResponse) VisitInternalBulkMissin
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkSHA256ValidityRequestObject struct {
@@ -7016,7 +7016,7 @@ func (response InternalBulkSHA256Validity200JSONResponse) VisitInternalBulkSHA25
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkSHA256Validity400JSONResponse APIError
@@ -7025,7 +7025,7 @@ func (response InternalBulkSHA256Validity400JSONResponse) VisitInternalBulkSHA25
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkSHA256Validity413JSONResponse APIError
@@ -7034,7 +7034,7 @@ func (response InternalBulkSHA256Validity413JSONResponse) VisitInternalBulkSHA25
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalBulkSHA256Validity500JSONResponse APIError
@@ -7043,7 +7043,7 @@ func (response InternalBulkSHA256Validity500JSONResponse) VisitInternalBulkSHA25
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDeleteRequestObject struct {
@@ -7068,7 +7068,7 @@ func (response InternalDelete404JSONResponse) VisitInternalDeleteResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalDelete500JSONResponse APIError
@@ -7077,7 +7077,7 @@ func (response InternalDelete500JSONResponse) VisitInternalDeleteResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalGetRequestObject struct {
@@ -7094,7 +7094,7 @@ func (response InternalGet200JSONResponse) VisitInternalGetResponse(ctx fiber.Ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalGet404JSONResponse APIError
@@ -7103,7 +7103,7 @@ func (response InternalGet404JSONResponse) VisitInternalGetResponse(ctx fiber.Ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalGet500JSONResponse APIError
@@ -7112,7 +7112,7 @@ func (response InternalGet500JSONResponse) VisitInternalGetResponse(ctx fiber.Ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUpdateRequestObject struct {
@@ -7130,7 +7130,7 @@ func (response InternalUpdate200JSONResponse) VisitInternalUpdateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUpdate400JSONResponse APIError
@@ -7139,7 +7139,7 @@ func (response InternalUpdate400JSONResponse) VisitInternalUpdateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUpdate404JSONResponse APIError
@@ -7148,7 +7148,7 @@ func (response InternalUpdate404JSONResponse) VisitInternalUpdateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalUpdate500JSONResponse APIError
@@ -7157,7 +7157,7 @@ func (response InternalUpdate500JSONResponse) VisitInternalUpdateResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalRemoveControlledAccessRequestObject struct {
@@ -7175,7 +7175,7 @@ func (response InternalRemoveControlledAccess200JSONResponse) VisitInternalRemov
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalRemoveControlledAccess400JSONResponse APIError
@@ -7184,7 +7184,7 @@ func (response InternalRemoveControlledAccess400JSONResponse) VisitInternalRemov
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalRemoveControlledAccess404JSONResponse APIError
@@ -7193,7 +7193,7 @@ func (response InternalRemoveControlledAccess404JSONResponse) VisitInternalRemov
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type InternalRemoveControlledAccess500JSONResponse APIError
@@ -7202,7 +7202,7 @@ func (response InternalRemoveControlledAccess500JSONResponse) VisitInternalRemov
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 // StrictServerInterface represents all server handlers.

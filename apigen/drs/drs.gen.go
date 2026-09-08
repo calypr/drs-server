@@ -4973,7 +4973,7 @@ func (response OptionsBulkObject200JSONResponse) VisitOptionsBulkObjectResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsBulkObject204Response = AuthorizationsNotSupportedResponse
@@ -4989,7 +4989,7 @@ func (response OptionsBulkObject400JSONResponse) VisitOptionsBulkObjectResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsBulkObject404JSONResponse struct {
@@ -5000,7 +5000,7 @@ func (response OptionsBulkObject404JSONResponse) VisitOptionsBulkObjectResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsBulkObject405Response struct {
@@ -5019,7 +5019,7 @@ func (response OptionsBulkObject413JSONResponse) VisitOptionsBulkObjectResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsBulkObject500JSONResponse struct {
@@ -5030,7 +5030,7 @@ func (response OptionsBulkObject500JSONResponse) VisitOptionsBulkObjectResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjectsRequestObject struct {
@@ -5048,7 +5048,7 @@ func (response GetBulkObjects200JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects202Response = N202AcceptedResponse
@@ -5065,7 +5065,7 @@ func (response GetBulkObjects400JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5074,7 +5074,7 @@ func (response GetBulkObjects401JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5083,7 +5083,7 @@ func (response GetBulkObjects403JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects404JSONResponse struct {
@@ -5094,7 +5094,7 @@ func (response GetBulkObjects404JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects413JSONResponse struct {
@@ -5105,7 +5105,7 @@ func (response GetBulkObjects413JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkObjects500JSONResponse struct {
@@ -5116,7 +5116,7 @@ func (response GetBulkObjects500JSONResponse) VisitGetBulkObjectsResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURLRequestObject struct {
@@ -5133,7 +5133,7 @@ func (response GetBulkAccessURL200JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL202Response = N202AcceptedResponse
@@ -5150,7 +5150,7 @@ func (response GetBulkAccessURL400JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5159,7 +5159,7 @@ func (response GetBulkAccessURL401JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5168,7 +5168,7 @@ func (response GetBulkAccessURL403JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL404JSONResponse struct{ N404NotFoundAccessJSONResponse }
@@ -5177,7 +5177,7 @@ func (response GetBulkAccessURL404JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL413JSONResponse struct {
@@ -5188,7 +5188,7 @@ func (response GetBulkAccessURL413JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetBulkAccessURL500JSONResponse struct {
@@ -5199,7 +5199,7 @@ func (response GetBulkAccessURL500JSONResponse) VisitGetBulkAccessURLResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethodsRequestObject struct {
@@ -5218,7 +5218,7 @@ func (response BulkUpdateAccessMethods200JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -5227,7 +5227,7 @@ func (response BulkUpdateAccessMethods400JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5236,7 +5236,7 @@ func (response BulkUpdateAccessMethods401JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5245,7 +5245,7 @@ func (response BulkUpdateAccessMethods403JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods404JSONResponse struct {
@@ -5256,7 +5256,7 @@ func (response BulkUpdateAccessMethods404JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods413JSONResponse struct {
@@ -5267,7 +5267,7 @@ func (response BulkUpdateAccessMethods413JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkUpdateAccessMethods500JSONResponse struct {
@@ -5278,7 +5278,7 @@ func (response BulkUpdateAccessMethods500JSONResponse) VisitBulkUpdateAccessMeth
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksumRequestObject struct {
@@ -5295,7 +5295,7 @@ func (response GetObjectsByChecksum200JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksum202Response = N202AcceptedResponse
@@ -5312,7 +5312,7 @@ func (response GetObjectsByChecksum400JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksum401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5321,7 +5321,7 @@ func (response GetObjectsByChecksum401JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksum403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5330,7 +5330,7 @@ func (response GetObjectsByChecksum403JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksum404JSONResponse struct {
@@ -5341,7 +5341,7 @@ func (response GetObjectsByChecksum404JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectsByChecksum500JSONResponse struct {
@@ -5352,7 +5352,7 @@ func (response GetObjectsByChecksum500JSONResponse) VisitGetObjectsByChecksumRes
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksumsRequestObject struct {
@@ -5371,7 +5371,7 @@ func (response BulkAddChecksums200JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -5380,7 +5380,7 @@ func (response BulkAddChecksums400JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5389,7 +5389,7 @@ func (response BulkAddChecksums401JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5398,7 +5398,7 @@ func (response BulkAddChecksums403JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums404JSONResponse struct {
@@ -5409,7 +5409,7 @@ func (response BulkAddChecksums404JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums413JSONResponse struct {
@@ -5420,7 +5420,7 @@ func (response BulkAddChecksums413JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkAddChecksums500JSONResponse struct {
@@ -5431,7 +5431,7 @@ func (response BulkAddChecksums500JSONResponse) VisitBulkAddChecksumsResponse(ct
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjectsRequestObject struct {
@@ -5457,7 +5457,7 @@ func (response BulkDeleteObjects400JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjects401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5466,7 +5466,7 @@ func (response BulkDeleteObjects401JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjects403JSONResponse struct {
@@ -5477,7 +5477,7 @@ func (response BulkDeleteObjects403JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjects404JSONResponse struct{ N404NotFoundDeleteJSONResponse }
@@ -5486,7 +5486,7 @@ func (response BulkDeleteObjects404JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjects413JSONResponse struct {
@@ -5497,7 +5497,7 @@ func (response BulkDeleteObjects413JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type BulkDeleteObjects500JSONResponse struct {
@@ -5508,7 +5508,7 @@ func (response BulkDeleteObjects500JSONResponse) VisitBulkDeleteObjectsResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjectsRequestObject struct {
@@ -5525,7 +5525,7 @@ func (response RegisterObjects201JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(201)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjects400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -5534,7 +5534,7 @@ func (response RegisterObjects400JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjects401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5543,7 +5543,7 @@ func (response RegisterObjects401JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjects403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5552,7 +5552,7 @@ func (response RegisterObjects403JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjects413JSONResponse struct {
@@ -5563,7 +5563,7 @@ func (response RegisterObjects413JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type RegisterObjects500JSONResponse struct {
@@ -5574,7 +5574,7 @@ func (response RegisterObjects500JSONResponse) VisitRegisterObjectsResponse(ctx 
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObjectRequestObject struct {
@@ -5592,7 +5592,7 @@ func (response GetObject200JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObject202Response = N202AcceptedResponse
@@ -5609,7 +5609,7 @@ func (response GetObject400JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObject401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5618,7 +5618,7 @@ func (response GetObject401JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObject403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5627,7 +5627,7 @@ func (response GetObject403JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObject404JSONResponse struct {
@@ -5638,7 +5638,7 @@ func (response GetObject404JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetObject500JSONResponse struct {
@@ -5649,7 +5649,7 @@ func (response GetObject500JSONResponse) VisitGetObjectResponse(ctx fiber.Ctx) e
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsObjectRequestObject struct {
@@ -5668,7 +5668,7 @@ func (response OptionsObject200JSONResponse) VisitOptionsObjectResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsObject204Response = AuthorizationsNotSupportedResponse
@@ -5684,7 +5684,7 @@ func (response OptionsObject400JSONResponse) VisitOptionsObjectResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsObject404JSONResponse struct {
@@ -5695,7 +5695,7 @@ func (response OptionsObject404JSONResponse) VisitOptionsObjectResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type OptionsObject405Response struct {
@@ -5714,7 +5714,7 @@ func (response OptionsObject500JSONResponse) VisitOptionsObjectResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObjectRequestObject struct {
@@ -5732,7 +5732,7 @@ func (response PostObject200JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObject202Response = N202AcceptedResponse
@@ -5749,7 +5749,7 @@ func (response PostObject400JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObject401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5758,7 +5758,7 @@ func (response PostObject401JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObject403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5767,7 +5767,7 @@ func (response PostObject403JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObject404JSONResponse struct{ N404NotFoundAccessJSONResponse }
@@ -5776,7 +5776,7 @@ func (response PostObject404JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostObject500JSONResponse struct {
@@ -5787,7 +5787,7 @@ func (response PostObject500JSONResponse) VisitPostObjectResponse(ctx fiber.Ctx)
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethodsRequestObject struct {
@@ -5807,7 +5807,7 @@ func (response UpdateObjectAccessMethods200JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethods400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -5816,7 +5816,7 @@ func (response UpdateObjectAccessMethods400JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethods401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5825,7 +5825,7 @@ func (response UpdateObjectAccessMethods401JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethods403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5834,7 +5834,7 @@ func (response UpdateObjectAccessMethods403JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethods404JSONResponse struct {
@@ -5845,7 +5845,7 @@ func (response UpdateObjectAccessMethods404JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type UpdateObjectAccessMethods500JSONResponse struct {
@@ -5856,7 +5856,7 @@ func (response UpdateObjectAccessMethods500JSONResponse) VisitUpdateObjectAccess
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURLRequestObject struct {
@@ -5874,7 +5874,7 @@ func (response GetAccessURL200JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURL202Response = N202AcceptedResponse
@@ -5891,7 +5891,7 @@ func (response GetAccessURL400JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURL401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5900,7 +5900,7 @@ func (response GetAccessURL401JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURL403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5909,7 +5909,7 @@ func (response GetAccessURL403JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURL404JSONResponse struct{ N404NotFoundAccessJSONResponse }
@@ -5918,7 +5918,7 @@ func (response GetAccessURL404JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetAccessURL500JSONResponse struct {
@@ -5929,7 +5929,7 @@ func (response GetAccessURL500JSONResponse) VisitGetAccessURLResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURLRequestObject struct {
@@ -5948,7 +5948,7 @@ func (response PostAccessURL200JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURL202Response = N202AcceptedResponse
@@ -5965,7 +5965,7 @@ func (response PostAccessURL400JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURL401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -5974,7 +5974,7 @@ func (response PostAccessURL401JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURL403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -5983,7 +5983,7 @@ func (response PostAccessURL403JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURL404JSONResponse struct{ N404NotFoundAccessJSONResponse }
@@ -5992,7 +5992,7 @@ func (response PostAccessURL404JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostAccessURL500JSONResponse struct {
@@ -6003,7 +6003,7 @@ func (response PostAccessURL500JSONResponse) VisitPostAccessURLResponse(ctx fibe
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksumsRequestObject struct {
@@ -6023,7 +6023,7 @@ func (response AddChecksums200JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -6032,7 +6032,7 @@ func (response AddChecksums400JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -6041,7 +6041,7 @@ func (response AddChecksums401JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -6050,7 +6050,7 @@ func (response AddChecksums403JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums404JSONResponse struct {
@@ -6061,7 +6061,7 @@ func (response AddChecksums404JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums413JSONResponse struct {
@@ -6072,7 +6072,7 @@ func (response AddChecksums413JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(413)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type AddChecksums500JSONResponse struct {
@@ -6083,7 +6083,7 @@ func (response AddChecksums500JSONResponse) VisitAddChecksumsResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type DeleteObjectRequestObject struct {
@@ -6110,7 +6110,7 @@ func (response DeleteObject400JSONResponse) VisitDeleteObjectResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type DeleteObject401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -6119,7 +6119,7 @@ func (response DeleteObject401JSONResponse) VisitDeleteObjectResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type DeleteObject403JSONResponse struct {
@@ -6130,7 +6130,7 @@ func (response DeleteObject403JSONResponse) VisitDeleteObjectResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type DeleteObject404JSONResponse struct{ N404NotFoundDeleteJSONResponse }
@@ -6139,7 +6139,7 @@ func (response DeleteObject404JSONResponse) VisitDeleteObjectResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(404)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type DeleteObject500JSONResponse struct {
@@ -6150,7 +6150,7 @@ func (response DeleteObject500JSONResponse) VisitDeleteObjectResponse(ctx fiber.
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetServiceInfoRequestObject struct {
@@ -6166,7 +6166,7 @@ func (response GetServiceInfo200JSONResponse) VisitGetServiceInfoResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type GetServiceInfo500JSONResponse struct {
@@ -6177,7 +6177,7 @@ func (response GetServiceInfo500JSONResponse) VisitGetServiceInfoResponse(ctx fi
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostUploadRequestRequestObject struct {
@@ -6194,7 +6194,7 @@ func (response PostUploadRequest200JSONResponse) VisitPostUploadRequestResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostUploadRequest400JSONResponse struct{ N400BadRequestJSONResponse }
@@ -6203,7 +6203,7 @@ func (response PostUploadRequest400JSONResponse) VisitPostUploadRequestResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(400)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostUploadRequest401JSONResponse struct{ N401UnauthorizedJSONResponse }
@@ -6212,7 +6212,7 @@ func (response PostUploadRequest401JSONResponse) VisitPostUploadRequestResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(401)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostUploadRequest403JSONResponse struct{ N403ForbiddenJSONResponse }
@@ -6221,7 +6221,7 @@ func (response PostUploadRequest403JSONResponse) VisitPostUploadRequestResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 type PostUploadRequest500JSONResponse struct {
@@ -6232,7 +6232,7 @@ func (response PostUploadRequest500JSONResponse) VisitPostUploadRequestResponse(
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
-	return ctx.JSON(&response)
+	return ctx.JSON(&response, string(ctx.Response().Header.ContentType()))
 }
 
 // StrictServerInterface represents all server handlers.
