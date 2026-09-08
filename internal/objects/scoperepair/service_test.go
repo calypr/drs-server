@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -201,6 +202,55 @@ func TestApplyRequiresProjectScopeBeforeCallingPorts(t *testing.T) {
 	if err == nil || len(collapser.calls) != 0 || len(prepared.queries) != 0 {
 		t.Fatalf("Apply() validation err=%v collapse=%v queries=%v", err, collapser.calls, prepared.queries)
 	}
+}
+
+func TestAuthorizedRepairChecksReadThenUpdateBeforeAnyStateChange(t *testing.T) {
+	const resource = "/organization/org/project/project"
+
+	t.Run("denied read does not inspect or collapse", func(t *testing.T) {
+		prepared := &fakePrepared{}
+		collapser := &fakeCollapser{}
+		service := NewService(prepared, nil, repairScopeReader(), nil, collapser)
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{}), Options{Organization: "org", Project: "project"})
+		if !errors.Is(err, errorapi.ErrAccessDenied) {
+			t.Fatalf("ApplyAuthorized() error = %v, want access denied", err)
+		}
+		if len(prepared.queries) != 0 || len(collapser.calls) != 0 {
+			t.Fatalf("denied read caused state changes: queries=%v collapse=%v", prepared.queries, collapser.calls)
+		}
+	})
+
+	t.Run("read-only access does not update or collapse", func(t *testing.T) {
+		prepared := &fakePrepared{}
+		collapser := &fakeCollapser{}
+		service := NewService(prepared, nil, repairScopeReader(), nil, collapser)
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{resource: {"read": true}}), Options{Organization: "org", Project: "project"})
+		if !errors.Is(err, errorapi.ErrAccessDenied) {
+			t.Fatalf("ApplyAuthorized() error = %v, want access denied", err)
+		}
+		if len(prepared.queries) != 0 || len(collapser.calls) != 0 {
+			t.Fatalf("denied update caused state changes: queries=%v collapse=%v", prepared.queries, collapser.calls)
+		}
+	})
+}
+
+func TestAuditAuthorizedUsesReadPolicyBeforePorts(t *testing.T) {
+	prepared := &fakePrepared{}
+	service := NewService(prepared, nil, repairScopeReader(), nil, nil)
+	_, err := service.AuditAuthorized(repairAuthzContext(map[string]map[string]bool{}), Options{Organization: "org", Project: "project"})
+	if !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("AuditAuthorized() error = %v, want access denied", err)
+	}
+	if len(prepared.queries) != 0 {
+		t.Fatalf("denied audit queried records: %v", prepared.queries)
+	}
+}
+
+func repairAuthzContext(privileges map[string]map[string]bool) context.Context {
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations(nil, privileges, true)
+	return access.WithSession(context.Background(), session)
 }
 
 func TestScopeRepairTypesRemainPlainDomainValues(t *testing.T) {

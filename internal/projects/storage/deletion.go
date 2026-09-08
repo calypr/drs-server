@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -64,7 +65,22 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 // are removed first, then matching bucket scopes are listed and deleted in
 // repository order. A scope count includes only successful deletions.
 func (s *ProjectCleanup) DeleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+	return s.deleteProjectData(ctx, strings.TrimSpace(organization), strings.TrimSpace(project))
+}
+
+// DeleteProjectDataAuthorized applies the maintenance write policy before
+// entering the trusted cleanup sequence. Trusted callers should continue
+// using DeleteProjectData.
+func (s *ProjectCleanup) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
 	result := ProjectCleanupResult{Organization: strings.TrimSpace(organization), ProjectID: strings.TrimSpace(project)}
+	if err := buckets.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectID, "delete", "update"); err != nil {
+		return result, err
+	}
+	return s.deleteProjectData(ctx, result.Organization, result.ProjectID)
+}
+
+func (s *ProjectCleanup) deleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+	result := ProjectCleanupResult{Organization: organization, ProjectID: project}
 	if s.cleanupObjects == nil || s.cleanupScopes == nil {
 		return result, &Error{Kind: ErrorUnsupported, Message: "project cleanup dependencies are not configured"}
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -302,6 +304,50 @@ func TestDeleteProjectDataDeletesObjectsBeforeMatchingScopes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(scopes.deleted, []string{"org/project/cred-a/prefix/a", "org/project/bucket-c/"}) {
 		t.Fatalf("scope deletions = %v", scopes.deleted)
+	}
+}
+
+func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
+	objects := &fakeCleanupObjects{count: 3}
+	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "cred"}}}
+	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations(nil, nil, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	result, err := service.ProjectCleanup.DeleteProjectDataAuthorized(ctx, " org ", " project ")
+	if !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("DeleteProjectDataAuthorized() error = %v, want access denied", err)
+	}
+	if result.Organization != "org" || result.ProjectID != "project" {
+		t.Fatalf("authorized result = %+v, want trimmed identifiers", result)
+	}
+	if len(objects.deleted) != 0 || len(scopes.deleted) != 0 {
+		t.Fatalf("denied cleanup caused writes: objects=%v scopes=%v", objects.deleted, scopes.deleted)
+	}
+}
+
+func TestDeleteProjectDataAuthorizedPreservesTrustedCleanupOrder(t *testing.T) {
+	objects := &fakeCleanupObjects{count: 3}
+	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "cred"}}}
+	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{
+		"/organization/org/project/project": {"delete": true},
+	}, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	result, err := service.ProjectCleanup.DeleteProjectDataAuthorized(ctx, " org ", " project ")
+	if err != nil {
+		t.Fatalf("DeleteProjectDataAuthorized() error = %v", err)
+	}
+	if result.DeletedObjects != 3 || result.DeletedBucketScopes != 1 {
+		t.Fatalf("authorized cleanup result = %+v", result)
+	}
+	if !reflect.DeepEqual(objects.deleted, []string{"org/project"}) || !reflect.DeepEqual(scopes.deleted, []string{"org/project/cred/"}) {
+		t.Fatalf("cleanup writes = objects:%v scopes:%v", objects.deleted, scopes.deleted)
 	}
 }
 

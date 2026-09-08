@@ -1,30 +1,12 @@
 package maintenance
 
 import (
-	"context"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/errorapi"
-	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	"github.com/gofiber/fiber/v3"
 )
-
-func authorizeStorageCleanupScope(ctx context.Context, organization, project string, methods ...string) error {
-	if !access.IsAuthzEnforced(ctx) {
-		return nil
-	}
-	resource, err := clientaccess.ResourcePath(organization, project)
-	if err != nil {
-		return err
-	}
-	if access.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || access.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
-		return nil
-	}
-	return errorapi.ErrAccessDenied
-}
 
 func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -41,10 +23,7 @@ func handleInternalScopeRepairAuditFiber(svc *scoperepair.Service) fiber.Handler
 		if req.Organization == "" || req.Project == "" {
 			return middleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 		}
-		if err := authorizeStorageCleanupScope(c.Context(), req.Organization, req.Project, "read"); err != nil {
-			return middleware.HandleError(c, err)
-		}
-		report, err := svc.Audit(c.Context(), req)
+		report, err := svc.AuditAuthorized(c.Context(), req)
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
@@ -67,13 +46,7 @@ func handleInternalScopeRepairApplyFiber(svc *scoperepair.Service) fiber.Handler
 		if req.Organization == "" || req.Project == "" {
 			return middleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 		}
-		if err := authorizeStorageCleanupScope(c.Context(), req.Organization, req.Project, "read"); err != nil {
-			return middleware.HandleError(c, err)
-		}
-		if err := authorizeStorageCleanupScope(c.Context(), req.Organization, req.Project, "update"); err != nil {
-			return middleware.HandleError(c, err)
-		}
-		result, err := svc.Apply(c.Context(), req)
+		result, err := svc.ApplyAuthorized(c.Context(), req)
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}

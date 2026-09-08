@@ -10,6 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage/address"
@@ -63,12 +64,52 @@ func (s *Service) Audit(ctx context.Context, options Options) (Report, error) {
 	return state.report, nil
 }
 
+// AuditAuthorized applies the HTTP maintenance read policy before running the
+// trusted audit state machine. Trusted callers should continue using Audit.
+func (s *Service) AuditAuthorized(ctx context.Context, options Options) (Report, error) {
+	options.Organization = strings.TrimSpace(options.Organization)
+	options.Project = strings.TrimSpace(options.Project)
+	if options.Organization == "" || options.Project == "" {
+		return Report{}, fmt.Errorf("audit requires --organization and --project")
+	}
+	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
+		return Report{}, err
+	}
+	state, err := s.audit(ctx, options)
+	if err != nil {
+		return Report{}, err
+	}
+	return state.report, nil
+}
+
 func (s *Service) Apply(ctx context.Context, options Options) (ApplyResult, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
 	if options.Organization == "" || options.Project == "" {
 		return ApplyResult{}, fmt.Errorf("apply requires --organization and --project")
 	}
+	return s.apply(ctx, options)
+}
+
+// ApplyAuthorized performs read authorization before update authorization and
+// before entering the trusted collapse/audit/write state machine. Trusted
+// callers should continue using Apply.
+func (s *Service) ApplyAuthorized(ctx context.Context, options Options) (ApplyResult, error) {
+	options.Organization = strings.TrimSpace(options.Organization)
+	options.Project = strings.TrimSpace(options.Project)
+	if options.Organization == "" || options.Project == "" {
+		return ApplyResult{}, fmt.Errorf("apply requires --organization and --project")
+	}
+	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
+		return ApplyResult{}, err
+	}
+	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "update"); err != nil {
+		return ApplyResult{}, err
+	}
+	return s.apply(ctx, options)
+}
+
+func (s *Service) apply(ctx context.Context, options Options) (ApplyResult, error) {
 	if s.collapser != nil {
 		if _, err := s.collapser.Collapse(ctx, options.Organization, options.Project); err != nil {
 			return ApplyResult{}, err
@@ -95,6 +136,20 @@ func (s *Service) Apply(ctx context.Context, options Options) (ApplyResult, erro
 		result.Mutated++
 	}
 	return result, nil
+}
+
+func authorizeStorageCleanupScope(ctx context.Context, organization, project string, methods ...string) error {
+	if !access.IsAuthzEnforced(ctx) {
+		return nil
+	}
+	resource, err := clientaccess.ResourcePath(organization, project)
+	if err != nil {
+		return err
+	}
+	if access.HasMethodAccess(ctx, methods[0], []string{"/programs", "/data_file"}) || access.HasAnyMethodAccess(ctx, []string{resource}, methods...) {
+		return nil
+	}
+	return errorapi.ErrAccessDenied
 }
 
 func (s *Service) audit(ctx context.Context, options Options) (*auditState, error) {
