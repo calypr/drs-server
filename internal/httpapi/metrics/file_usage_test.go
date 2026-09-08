@@ -19,30 +19,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type metricsOptimizedReportStore struct {
-	*metricsReportFake
-}
-
-func (s metricsOptimizedReportStore) ListFileUsagePageByScope(context.Context, string, string, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{{ObjectID: "org/"}}, nil
-}
-
-func (s metricsOptimizedReportStore) ListFileUsagePageByResources(context.Context, []string, bool, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return nil, nil
-}
-
-func (s metricsOptimizedReportStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
-}
-
-func (s metricsOptimizedReportStore) GetFileUsageSummaryByResources(context.Context, []string, bool, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
-}
-
-func (s metricsOptimizedReportStore) GetProjectRecordSummaryByScope(context.Context, string, string) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
-}
-
 func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 	now := time.Now().UTC()
 	objectReader := newMetricsObjectReader(map[string]*objects.Record{

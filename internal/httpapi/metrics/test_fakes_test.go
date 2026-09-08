@@ -76,17 +76,6 @@ func metricsObjectMatchesScope(record objects.Record, organization, project stri
 	return false
 }
 
-func cloneMetricsAuthorizations(input map[string][]string) map[string][]string {
-	if len(input) == 0 {
-		return nil
-	}
-	result := make(map[string][]string, len(input))
-	for organization, projects := range input {
-		result[organization] = append([]string(nil), projects...)
-	}
-	return result
-}
-
 type metricsTransferState struct {
 	events         []usage.Event
 	providerEvents []usage.ProviderEvent

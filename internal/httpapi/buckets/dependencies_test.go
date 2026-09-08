@@ -192,17 +192,6 @@ func (f *bucketTestStore) objectCopy(id string) (objects.Record, bool) {
 	return copy, true
 }
 
-func cloneBucketTestAuthz(authz map[string][]string) map[string][]string {
-	if authz == nil {
-		return nil
-	}
-	copy := make(map[string][]string, len(authz))
-	for organization, projects := range authz {
-		copy[organization] = append([]string(nil), projects...)
-	}
-	return copy
-}
-
 func newInternalDRSObjectManager(store *bucketTestStore, storageDependency any) internalDRSTestFixture {
 	var invalidator interface{ InvalidateBucket(string) }
 	if candidate, ok := storageDependency.(interface{ InvalidateBucket(string) }); ok {
