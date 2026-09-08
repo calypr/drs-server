@@ -1,6 +1,7 @@
 package records
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -29,7 +30,7 @@ func handleInternalGetFiber(objectService *objectrecords.Service) fiber.Handler 
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
-		encoded, err := Encode(*obj)
+		encoded, err := json.Marshal(projectGet(*obj))
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
