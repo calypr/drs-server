@@ -62,10 +62,7 @@ func (s *server) UpdateObjectAccessMethods(c fiber.Ctx, objectID string) error {
 	if err := c.Bind().JSON(&body); err != nil || len(body.AccessMethods) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	if err := s.objectService.UpdateObjectAccessMethods(c.Context(), objectID, FromGeneratedAccessMethods(body.AccessMethods)); err != nil {
-		return middleware.HandleError(c, err)
-	}
-	obj, err := s.objectService.GetObject(c.Context(), objectID, "read")
+	obj, err := s.objectService.UpdateAccessMethodsAndRead(c.Context(), objectID, FromGeneratedAccessMethods(body.AccessMethods))
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
@@ -78,32 +75,28 @@ func (s *server) BulkUpdateAccessMethods(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	updates := make(map[string][]generated.AccessMethod, len(body.Updates))
-	orderedIDs := make([]string, 0, len(body.Updates))
+	updates := make([]objectrecords.AccessMethodUpdate, 0, len(body.Updates))
 	for _, update := range body.Updates {
 		id := strings.TrimSpace(update.ObjectId)
 		if id == "" || len(update.AccessMethods) == 0 {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
-		if _, exists := updates[id]; !exists {
-			orderedIDs = append(orderedIDs, id)
-		}
-		updates[id] = update.AccessMethods
+		updates = append(updates, objectrecords.AccessMethodUpdate{
+			ObjectID: id,
+			Methods:  FromGeneratedAccessMethods(update.AccessMethods),
+		})
 	}
 
-	if err := s.objectService.BulkUpdateAccessMethods(c.Context(), FromGeneratedAccessMethodMap(updates)); err != nil {
+	updated, err := s.objectService.BulkUpdateAccessMethodsAndRead(c.Context(), updates)
+	if err != nil {
 		return middleware.HandleError(c, err)
 	}
 
-	objects := make([]ObjectResponse, 0, len(orderedIDs))
-	for _, id := range orderedIDs {
-		obj, err := s.objectService.GetObject(c.Context(), id, "read")
-		if err != nil {
-			return middleware.HandleError(c, err)
-		}
-		objects = append(objects, ObjectPayload(*obj))
+	response := make([]ObjectResponse, 0, len(updated))
+	for _, obj := range updated {
+		response = append(response, ObjectPayload(obj))
 	}
-	return c.JSON(fiber.Map{"objects": objects})
+	return c.JSON(fiber.Map{"objects": response})
 }
 
 func (s *server) BulkDeleteObjects(c fiber.Ctx) error {
