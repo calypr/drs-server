@@ -1,25 +1,509 @@
-package transfers
+package httpapi
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	httpdrs "github.com/calypr/syfon/internal/httpapi/drs"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/store"
+	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
+	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 )
+
+func TestHandleInternalDownloadAmbiguousScopeSucceedsWithUnattributedEvent(t *testing.T) {
+	database := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"shared-object": {
+				Id: "shared-object",
+				ControlledAccess: &[]string{
+					"/organization/org/project/project-a",
+					"/organization/org/project/project-b",
+				},
+				AccessMethods: &[]objects.AccessMethod{{
+					Type:      "s3",
+					AccessUrl: &objects.AccessURL{Url: "s3://bucket/shared-object"},
+				}},
+			},
+		},
+		Credentials: map[string]buckets.Credential{"bucket": {Bucket: "bucket"}},
+	}
+
+	response := transfersDoInternalDRSTestRequest(
+		httptest.NewRequest(http.MethodGet, "/data/download/shared-object", nil),
+		transfersNewInternalDRSObjectManager(database, &internalDRSStorageFake{}),
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("ambiguous download status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(database.TransferEvents) != 1 {
+		t.Fatalf("ambiguous download events = %+v, want one event", database.TransferEvents)
+	}
+	event := database.TransferEvents[0]
+	if event.Organization != "" || event.Project != "" {
+		t.Fatalf("ambiguous download was attributed to %q/%q", event.Organization, event.Project)
+	}
+}
+
+func TestHandleInternalUploadURLUsesAuthorizedExplicitScopeForAttribution(t *testing.T) {
+	database := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"scoped-object": {
+				Id: "scoped-object",
+				ControlledAccess: &[]string{
+					"/organization/org/project/project",
+					"/organization/org/project/other",
+				},
+				AccessMethods: &[]objects.AccessMethod{{
+					Type:      "s3",
+					AccessUrl: &objects.AccessURL{Url: "s3://bucket/scoped-object"},
+				}},
+			},
+		},
+		Credentials: map[string]buckets.Credential{"bucket": {Bucket: "bucket"}},
+		BucketScopes: map[string]buckets.Scope{
+			"org|":        {Organization: "org", Bucket: "bucket"},
+			"org|project": {Organization: "org", ProjectID: "project", Bucket: "bucket"},
+			"org|missing": {Organization: "org", ProjectID: "missing", Bucket: "bucket"},
+		},
+	}
+
+	response := transfersDoInternalDRSTestRequest(
+		httptest.NewRequest(http.MethodGet, "/data/upload/scoped-object?organization=org&project=project&key=scoped-object", nil),
+		transfersNewInternalDRSObjectManager(database, &internalDRSStorageFake{}),
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("explicit upload status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(database.TransferEvents) != 1 {
+		t.Fatalf("explicit upload events = %+v, want one event", database.TransferEvents)
+	}
+	event := database.TransferEvents[0]
+	if event.Organization != "org" || event.Project != "project" {
+		t.Fatalf("explicit upload scope = %q/%q, want org/project", event.Organization, event.Project)
+	}
+
+	database.TransferEvents = nil
+	unsupported := transfersDoInternalDRSTestRequest(
+		httptest.NewRequest(http.MethodGet, "/data/upload/scoped-object?organization=org&project=missing&key=scoped-object", nil),
+		transfersNewInternalDRSObjectManager(database, &internalDRSStorageFake{}),
+	)
+	if unsupported.Code != http.StatusOK {
+		t.Fatalf("unsupported upload scope status = %d, body = %s", unsupported.Code, unsupported.Body.String())
+	}
+	if len(database.TransferEvents) != 1 {
+		t.Fatalf("unsupported upload events = %+v, want one event", database.TransferEvents)
+	}
+	if event := database.TransferEvents[0]; event.Organization != "" || event.Project != "" {
+		t.Fatalf("unsupported upload scope = %q/%q, want empty scope", event.Organization, event.Project)
+	}
+}
+
+type transfersInternalDRSTestFixture struct {
+	ObjectService   *objectrecords.Service
+	TransferService *domaintransfers.Service
+	FileCounters    usage.FileCounterRecorder
+	bucketService   *buckets.Service
+	objectStore     *transferObjectStoreFake
+}
+
+type transferStorageDependency interface {
+	domaintransfers.StoragePort
+}
+
+func transfersNewInternalDRSObjectManager(store *transferHTTPFixture, storageDependency transferStorageDependency) transfersInternalDRSTestFixture {
+	objectStore := &transferObjectStoreFake{fixture: store}
+	bucketStore := &transferBucketStoreFake{fixture: store}
+	eventStore := &transferEventStoreFake{fixture: store}
+	fileCounters := &transferFileCounterFake{fixture: store}
+	bucketService := newInternalDRSBucketService(bucketStore)
+
+	objectService := objectrecords.NewService(objectStore)
+	transferService := domaintransfers.NewService(domaintransfers.Dependencies{
+		Objects:      objectService,
+		Storage:      storageDependency,
+		FileCounters: fileCounters,
+		Scopes:       bucketService,
+		Credentials:  bucketService,
+		Events:       eventStore,
+	})
+	return transfersInternalDRSTestFixture{
+		ObjectService:   objectService,
+		TransferService: transferService,
+		FileCounters:    fileCounters,
+		bucketService:   bucketService,
+		objectStore:     objectStore,
+	}
+}
+
+func newInternalDRSBucketService(store *transferBucketStoreFake) *buckets.Service {
+	service, err := buckets.NewService(buckets.Dependencies{
+		Credentials:     store,
+		CredentialAdmin: store,
+		Scopes:          store,
+		Fallback: func(context.Context) ([]buckets.VisibilityRow, error) {
+			return nil, nil
+		},
+	}, nil)
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+func (f transfersInternalDRSTestFixture) GetObject(ctx context.Context, id, requiredMethod string) (*objects.Record, error) {
+	return f.ObjectService.GetObject(ctx, id, requiredMethod)
+}
+
+func (f transfersInternalDRSTestFixture) RegisterObjects(ctx context.Context, records []objects.Record) error {
+	_ = ctx
+	f.objectStore.registerObjects(records)
+	return nil
+}
+
+func (f transfersInternalDRSTestFixture) SaveS3Credential(ctx context.Context, credential *buckets.Credential) error {
+	return f.bucketService.SaveS3Credential(ctx, credential)
+}
+
+func (f transfersInternalDRSTestFixture) CreateBucketScope(ctx context.Context, scope *buckets.Scope) error {
+	return f.bucketService.CreateBucketScope(ctx, scope)
+}
+
+type captureURLManager struct {
+	internalDRSStorageFake
+	lastOptions storage.SignRequest
+}
+
+func transfersStringPtr(s string) *string { return &s }
+
+func (m *captureURLManager) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	m.lastOptions = request
+	return m.internalDRSStorageFake.Sign(ctx, request)
+}
+
+func TestHandleInternalDownload(t *testing.T) {
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"test-file-id": {
+				Id:   "test-file-id",
+				Name: transfersStringPtr("sha/LP6008050-DNA_B01__pv.2.0o__rg.grch38__alleleFrequencies_chr17.txt"),
+				AccessMethods: &[]objects.AccessMethod{{
+					Type: "s3",
+					AccessUrl: &objects.AccessURL{
+
+						Url: "s3://bucket/key"},
+				}},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/data/download/test-file-id", nil)
+	um := &captureURLManager{}
+	om := transfersNewInternalDRSObjectManager(mockDB, um)
+	rr := transfersDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected download response to disable caching, got %q", got)
+	}
+	var resp internalapi.InternalSignedURL
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stringValue(resp.Url), "signed=true") {
+		t.Fatalf("expected signed url, got %v", stringValue(resp.Url))
+	}
+	if got, want := um.lastOptions.DownloadFilename, "LP6008050-DNA_B01__pv.2.0o__rg.grch38__alleleFrequencies_chr17.txt"; got != want {
+		t.Fatalf("unexpected download filename override: got %q want %q", got, want)
+	}
+	if len(mockDB.TransferEvents) != 1 {
+		t.Fatalf("expected one event, got %+v", mockDB.TransferEvents)
+	}
+}
+
+func TestHandleInternalDownloadPart(t *testing.T) {
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"test-file-id": {
+				Id: "test-file-id",
+				AccessMethods: &[]objects.AccessMethod{{
+					Type: "s3",
+					AccessUrl: &objects.AccessURL{
+
+						Url: "s3://bucket/key"},
+				}},
+			},
+		},
+	}
+	om := transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{})
+
+	t.Run("success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/data/download/test-file-id/part?start=0&end=1024", nil)
+		rr := transfersDoInternalDRSTestRequest(req, om)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("expected ranged download response to disable caching, got %q", got)
+		}
+	})
+	t.Run("missing parameters", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/data/download/test-file-id/part?start=0", nil)
+		rr := transfersDoInternalDRSTestRequest(req, om)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+	t.Run("invalid range", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/data/download/test-file-id/part?start=100&end=50", nil)
+		rr := transfersDoInternalDRSTestRequest(req, om)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+}
+
+func TestHandleInternalDownload_ResolvesByChecksum(t *testing.T) {
+	const did = "did-123"
+	const oid = "sha256-abc"
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			did: {
+				Id:        did,
+				Checksums: []objects.Checksum{{Type: "sha256", Checksum: oid}},
+				AccessMethods: &[]objects.AccessMethod{{
+					Type: "s3",
+					AccessUrl: &objects.AccessURL{
+
+						Url: "s3://bucket/cbds/end_to_end_test/" + did + "/" + oid},
+				}},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/data/download/"+oid, nil)
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleInternalDownload_ResolvesByUUID(t *testing.T) {
+	const did = "2eb7a53c-1309-4be6-b6aa-8ed9249e23a9"
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			did: {
+				Id: did,
+				AccessMethods: &[]objects.AccessMethod{{
+					Type: "s3",
+					AccessUrl: &objects.AccessURL{
+
+						Url: "s3://bucket/cbds/end_to_end_test/" + did},
+				}},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/data/download/"+did, nil)
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleInternalDownload_MultiCloud(t *testing.T) {
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"gcs-file": {Id: "gcs-file", AccessMethods: &[]objects.AccessMethod{{Type: "gs", AccessUrl: &objects.AccessURL{
+
+				Url: "gs://gcs-bucket/obj"}}}},
+			"azure-file": {Id: "azure-file", AccessMethods: &[]objects.AccessMethod{{Type: "azblob", AccessUrl: &objects.AccessURL{
+
+				Url: "azblob://azure-bucket/obj"}}}},
+		},
+	}
+	for _, id := range []string{"gcs-file", "azure-file"} {
+		req := httptest.NewRequest(http.MethodGet, "/data/download/"+id, nil)
+		rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d", id, rr.Code)
+		}
+	}
+}
+
+func TestHandleInternalDownload_Gen3Auth(t *testing.T) {
+	mockDB := &transferHTTPFixture{
+		Objects: map[string]*objects.Record{
+			"secure-id": {Id: "secure-id", AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{
+
+				Url: "s3://bucket/key"}}}},
+		},
+		ObjectAuthz: map[string]map[string][]string{"secure-id": {"p": {"q"}}},
+	}
+	om := transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{})
+	req401 := httptest.NewRequest(http.MethodGet, "/data/download/secure-id", nil)
+	req401 = req401.WithContext(transfersDataTestAuthContext(req401.Context(), "gen3", false, nil))
+	rr401 := transfersDoInternalDRSTestRequest(req401, om)
+	if rr401.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr401.Code)
+	}
+}
+
+func TestHandleInternalDownload_AuthzParity(t *testing.T) {
+	for _, mode := range []string{"gen3", "local-authz"} {
+		t.Run(mode, func(t *testing.T) {
+			mockDB := &transferHTTPFixture{
+				Objects: map[string]*objects.Record{
+					"secure-id": {Id: "secure-id", AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{
+
+						Url: "s3://bucket/key"}}}},
+				},
+				ObjectAuthz: map[string]map[string][]string{"secure-id": {"p": {"q"}}},
+			}
+			om := transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{})
+			req200 := httptest.NewRequest(http.MethodGet, "/data/download/secure-id", nil)
+			req200 = transfersWithTestAuthzContext(req200, mode, map[string]map[string]bool{"/programs/p/projects/q": {"read": true}})
+			rr200 := transfersDoInternalDRSTestRequest(req200, om)
+			if rr200.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rr200.Code)
+			}
+		})
+	}
+}
+
+func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
+	mockDB := &transferHTTPFixture{}
+	mockUM := &internalDRSStorageFake{}
+	om := transfersNewInternalDRSObjectManager(mockDB, mockUM)
+	app := fiber.New()
+	app.Post("/multipart/upload", handleInternalMultipartUploadFiber(om.TransferService))
+
+	reqBody := internalapi.InternalMultipartUploadRequest{
+		UploadId:   "non-existent",
+		PartNumber: 1,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/multipart/upload", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
+	}
+}
+
+func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
+	mockDB := &transferHTTPFixture{}
+	mockUM := &internalDRSStorageFake{}
+	om := transfersNewInternalDRSObjectManager(mockDB, mockUM)
+	app := fiber.New()
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
+
+	reqBody := internalapi.InternalMultipartCompleteRequest{
+		UploadId: "non-existent",
+		Parts:    []internalapi.InternalMultipartPart{},
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/multipart/complete", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, _ := app.Test(req)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+	var responseBody internalapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
+		t.Errorf("unexpected not-found body: %+v", responseBody)
+	}
+}
+
+func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *testing.T) {
+	fake := &internalDRSStorageFake{}
+	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{}, fake)
+	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
+	uploadID, err := lifecycle.Begin(t.Context(), "bucket-a", "path/object.bin")
+	if err != nil || uploadID != "mock-upload-id" {
+		t.Fatalf("begin multipart upload = (%q, %v)", uploadID, err)
+	}
+
+	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{
+		UploadId: uploadID,
+		Parts: []internalapi.InternalMultipartPart{
+			{PartNumber: 7, ETag: `"opaque-seven"`},
+			{PartNumber: 2, ETag: `"opaque-two"`},
+		},
+	})
+	app := fiber.New()
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
+	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
+	if err != nil {
+		t.Fatalf("complete request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(fake.completeParts) != 2 || fake.completeParts[0].PartNumber != 7 || fake.completeParts[0].ETag != `"opaque-seven"` || fake.completeParts[1].PartNumber != 2 || fake.completeParts[1].ETag != `"opaque-two"` {
+		t.Fatalf("completed parts were not preserved in caller order: %+v", fake.completeParts)
+	}
+}
+
+func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *testing.T) {
+	fake := &internalDRSStorageFake{completeErr: errors.New("provider completion failed")}
+	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{}, fake)
+	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
+	uploadID, err := lifecycle.Begin(t.Context(), "bucket-a", "path/object.bin")
+	if err != nil || uploadID != "mock-upload-id" {
+		t.Fatalf("begin multipart upload = (%q, %v)", uploadID, err)
+	}
+
+	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{UploadId: uploadID})
+	app := fiber.New()
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
+	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
+	if err != nil {
+		t.Fatalf("complete request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected provider failure to map to 500, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	fake.completeErr = nil
+	resp, err = app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
+	if err != nil {
+		t.Fatalf("retry complete request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected successful retry after provider recovery, got %d", resp.StatusCode)
+	}
+	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+		t.Fatalf("expected consumed upload ID after successful completion, got %v", err)
+	}
+}
 
 func TestHandleInternalUploadMatrix(t *testing.T) {
 	cases := []struct {
@@ -65,7 +549,7 @@ func uploadCaseBlank(t *testing.T) {
 	org := "syfon"
 	project := "e2e"
 	body, _ := json.Marshal(internalapi.InternalUploadBlankRequest{Guid: &guid, Organization: &org, Project: &project})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -88,7 +572,7 @@ func uploadCaseBlankResolvesOrganizationProjectScope(t *testing.T) {
 	project := "e2e"
 	body, _ := json.Marshal(internalapi.InternalUploadBlankRequest{Guid: &guid, Organization: &org, Project: &project})
 	mockUM := &internalDRSStorageFake{}
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -120,7 +604,7 @@ func uploadCaseBlankResolvesOrganizationProjectScope(t *testing.T) {
 func uploadCaseBlankRequiresScope(t *testing.T) {
 	guid := "new-guid"
 	body, _ := json.Marshal(internalapi.InternalUploadBlankRequest{Guid: &guid})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -129,7 +613,7 @@ func uploadCaseBlankRequiresScope(t *testing.T) {
 func uploadCaseURLMissingObjectResolvesOrganizationProjectScope(t *testing.T) {
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/new-guid?organization=syfon&project=e2e&key=payload.bin", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -161,7 +645,7 @@ func uploadCaseMultipartInit(t *testing.T) {
 	org := "syfon"
 	project := "e2e"
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &guid, Key: &fileName, Organization: &org, Project: &project})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -177,7 +661,7 @@ func uploadCaseMultipartInitRequiresScopeForNewUpload(t *testing.T) {
 	fileName := "test.bam"
 	guid := "multipart-guid"
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &guid, Key: &fileName})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -189,7 +673,7 @@ func uploadCaseMultipartInitResolvesOrganizationProjectScope(t *testing.T) {
 	project := "e2e"
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &key, Organization: &org, Project: &project})
 	mockUM := &internalDRSStorageFake{}
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -220,7 +704,7 @@ func uploadCaseMultipartInitPreservesRequestedKey(t *testing.T) {
 	project := "e2e"
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &key, Organization: &org, Project: &project})
 	mockUM := &internalDRSStorageFake{}
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(&transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
 		BucketScopes: map[string]buckets.Scope{
@@ -236,7 +720,7 @@ func uploadCaseMultipartInitMintsUUIDForChecksumInput(t *testing.T) {
 	checksum := strings.Repeat("a", 64)
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Key: &checksum})
 	mockDB := &transferHTTPFixture{Objects: map[string]*objects.Record{}}
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -258,7 +742,7 @@ func uploadCaseMultipartInitResolvesExistingByChecksumGUID(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &checksum})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
@@ -293,7 +777,7 @@ func uploadCaseMultipartInitExistingScopedObjectUsesMappedLocation(t *testing.T)
 	}
 	mockUM := &internalDRSStorageFake{}
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &checksum})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), newInternalDRSObjectManager(mockDB, mockUM))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/init", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(mockDB, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -304,7 +788,7 @@ func uploadCaseMultipartInitExistingScopedObjectUsesMappedLocation(t *testing.T)
 
 func uploadCaseMultipartUpload(t *testing.T) {
 	fake := &internalDRSStorageFake{}
-	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
+	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
 	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
@@ -323,7 +807,7 @@ func uploadCaseMultipartUpload(t *testing.T) {
 
 func uploadCaseMultipartComplete(t *testing.T) {
 	fake := &internalDRSStorageFake{}
-	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
+	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
 	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
@@ -342,8 +826,8 @@ func uploadCaseMultipartComplete(t *testing.T) {
 
 func uploadCaseURLGen3Unauthorized(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/some-id?organization=syfon&project=e2e", nil)
-	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", false, nil))
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
+	req = req.WithContext(transfersDataTestAuthContext(req.Context(), "gen3", false, nil))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
@@ -358,7 +842,7 @@ func uploadCaseURLBranches(t *testing.T) {
 		},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/abc?organization=syfon&project=e2e&filename=f1", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "upload=true") {
 		t.Fatalf("expected signed upload URL, got status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -367,7 +851,7 @@ func uploadCaseURLBranches(t *testing.T) {
 func uploadCaseURLMissingObjectRequiresScope(t *testing.T) {
 	db := &transferHTTPFixture{Objects: map[string]*objects.Record{}, Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}}}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/abc", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -399,7 +883,7 @@ func uploadCaseURLRewritesScopedObjectURL(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/scoped-obj", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -415,7 +899,7 @@ func uploadCaseURLRewritesScopedObjectURL(t *testing.T) {
 func uploadCaseURLResolvesRegisteredScopedObjectID(t *testing.T) {
 	ctx := t.Context()
 	database := &transferHTTPFixture{}
-	om := newInternalDRSObjectManager(database, &internalDRSStorageFake{})
+	om := transfersNewInternalDRSObjectManager(database, &internalDRSStorageFake{})
 	if err := om.SaveS3Credential(ctx, &buckets.Credential{Bucket: "syfon-e2e-bucket", Provider: "s3", Region: "us-east-1"}); err != nil {
 		t.Fatalf("SaveS3Credential failed: %v", err)
 	}
@@ -455,9 +939,9 @@ func uploadCaseURLResolvesRegisteredScopedObjectID(t *testing.T) {
 	}
 
 	mockUM := &internalDRSStorageFake{}
-	om = newInternalDRSObjectManager(database, mockUM)
+	om = transfersNewInternalDRSObjectManager(database, mockUM)
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/"+string(registered.Id)+"?key=program-root/"+oid, nil)
-	rr := doInternalDRSTestRequest(req, om)
+	rr := transfersDoInternalDRSTestRequest(req, om)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -469,7 +953,7 @@ func uploadCaseURLResolvesRegisteredScopedObjectID(t *testing.T) {
 func uploadCaseURLResolvesRegisteredProjectScopedObjectWithoutQueryHints(t *testing.T) {
 	ctx := t.Context()
 	database := &transferHTTPFixture{}
-	om := newInternalDRSObjectManager(database, &internalDRSStorageFake{})
+	om := transfersNewInternalDRSObjectManager(database, &internalDRSStorageFake{})
 	if err := om.SaveS3Credential(ctx, &buckets.Credential{Bucket: "syfon-e2e-bucket", Provider: "s3", Region: "us-east-1"}); err != nil {
 		t.Fatalf("SaveS3Credential failed: %v", err)
 	}
@@ -516,7 +1000,7 @@ func uploadCaseURLResolvesRegisteredProjectScopedObjectWithoutQueryHints(t *test
 
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/"+did, nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(database, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(database, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -566,7 +1050,7 @@ func uploadCaseURLRepairsMalformedScopedObjectURL(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/scoped-obj", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -615,7 +1099,7 @@ func uploadCaseURLUsesScopedPathForMalformedObjectURL(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/scoped-obj", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -660,7 +1144,7 @@ func uploadCaseURLUsesExplicitObjectKeyForExistingObject(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/7b9de5b9-19b2-536f-abcc-fe2a146c4eb5?key=program-root/"+checksum, nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -710,7 +1194,7 @@ func uploadCaseURLExplicitScopeOverridesMalformedExistingObjectURL(t *testing.T)
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/f781273b-52eb-5ac2-a484-775235eef303?organization=syfon&project=e2e&key=project-subpath/"+checksum, nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -755,7 +1239,7 @@ func uploadCaseURLExplicitScopeIgnoresConflictingObjectMetadata(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/4f74e0c2-3c80-5c19-b47c-061b300ae270?organization=syfon&project=e2e&key="+checksum, nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -792,7 +1276,7 @@ func uploadCaseURLRejectsMalformedUnscopedObjectURL(t *testing.T) {
 	}
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/f781273b-52eb-5ac2-a484-775235eef303", nil)
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, mockUM))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, mockUM))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -805,7 +1289,7 @@ func uploadCaseBulkMixedResults(t *testing.T) {
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1", Provider: "s3", Region: "us-east-1"}},
 	}
 	body, _ := json.Marshal(internalapi.InternalUploadBulkRequest{Requests: []internalapi.InternalUploadBulkItem{{FileId: "obj-1"}, {FileId: ""}}})
-	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload/bulk", bytes.NewBuffer(body)), newInternalDRSObjectManager(db, &internalDRSStorageFake{}))
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload/bulk", bytes.NewBuffer(body)), transfersNewInternalDRSObjectManager(db, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusMultiStatus {
 		t.Fatalf("expected 207, got %d", rr.Code)
 	}
@@ -818,21 +1302,224 @@ func uploadCaseBulkGen3UnauthorizedPerItem(t *testing.T) {
 	}
 	body, _ := json.Marshal(internalapi.InternalUploadBulkRequest{Requests: []internalapi.InternalUploadBulkItem{{FileId: "secure-id"}}})
 	req := httptest.NewRequest(http.MethodPost, "/data/upload/bulk", bytes.NewBuffer(body))
-	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", false, nil))
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, &internalDRSStorageFake{}))
+	req = req.WithContext(transfersDataTestAuthContext(req.Context(), "gen3", false, nil))
+	rr := transfersDoInternalDRSTestRequest(req, transfersNewInternalDRSObjectManager(db, &internalDRSStorageFake{}))
 	if rr.Code != http.StatusMultiStatus {
 		t.Fatalf("expected 207, got %d", rr.Code)
 	}
 }
 
 func uploadCaseMultipartValidationErrors(t *testing.T) {
-	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{})
-	rrUpload := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", strings.NewReader(`{}`)), om)
+	om := transfersNewInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{})
+	rrUpload := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", strings.NewReader(`{}`)), om)
 	if rrUpload.Code != http.StatusBadRequest {
 		t.Fatalf("expected upload 400, got %d", rrUpload.Code)
 	}
-	rrComplete := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", strings.NewReader(`{}`)), om)
+	rrComplete := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", strings.NewReader(`{}`)), om)
 	if rrComplete.Code != http.StatusBadRequest {
 		t.Fatalf("expected complete 400, got %d", rrComplete.Code)
+	}
+}
+
+type failedUploadReader struct{ *store.Store }
+
+func (failedUploadReader) GetObject(context.Context, string) (*objects.Record, error) {
+	return nil, errors.New("database lookup failed: QA_PRIVATE_PROVIDER_DETAIL")
+}
+
+func (failedUploadReader) GetBulkObjects(context.Context, []string) ([]objects.Record, error) {
+	return nil, errors.New("database lookup failed: QA_PRIVATE_PROVIDER_DETAIL")
+}
+
+func TestBulkUploadRedactsServerCause(t *testing.T) {
+	service := objectrecords.NewService(failedUploadReader{})
+	app := fiber.New()
+	app.Post("/bulk", handleInternalUploadBulkFiber(service, nil))
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/bulk", strings.NewReader(`{"requests":[{"file_id":"record-id"}]}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 207 {
+		t.Fatalf("expected partial success, got %d body=%s", resp.StatusCode, body)
+	}
+	var output internalapi.InternalUploadBulkOutput
+	if err := json.Unmarshal(body, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Results == nil || len(*output.Results) != 1 || (*output.Results)[0].Error == nil || *(*output.Results)[0].Error == "" {
+		t.Fatalf("expected one failed result, got %+v", output.Results)
+	}
+	if strings.Contains(*(*output.Results)[0].Error, "QA_PRIVATE_PROVIDER_DETAIL") {
+		t.Fatal("internal provider detail leaked into partial-success response")
+	}
+}
+
+type bulkProviderReader struct {
+	*store.Store
+	objects map[string]*objects.Record
+	errID   string
+	err     error
+}
+
+func (r *bulkProviderReader) GetObject(_ context.Context, id string) (*objects.Record, error) {
+	if id == r.errID {
+		return nil, r.err
+	}
+	obj, ok := r.objects[id]
+	if !ok {
+		return nil, errors.New("object missing")
+	}
+	return obj, nil
+}
+
+func (r *bulkProviderReader) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
+	out := make([]objects.Record, 0, len(ids))
+	for _, id := range ids {
+		obj, err := r.GetObject(context.Background(), id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *obj)
+	}
+	return out, nil
+}
+
+type bulkScopeFailure struct{ err error }
+
+func (s bulkScopeFailure) LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error) {
+	return buckets.Scope{}, false, s.err
+}
+
+type bulkAccessFailure struct {
+	failID string
+	err    error
+}
+
+func (a bulkAccessFailure) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	if strings.Contains(request.Target.OriginalURL, "/"+a.failID) {
+		return storage.SignedAccess{}, a.err
+	}
+	return storage.SignedAccess{Location: request.Target.OriginalURL + "?signed=true"}, nil
+}
+
+func (a bulkAccessFailure) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+	return "", nil
+}
+func (a bulkAccessFailure) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+func (a bulkAccessFailure) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
+}
+
+type bulkEventFailure struct {
+	failID string
+	err    error
+}
+
+func (e bulkEventFailure) RecordTransferAttributionEvents(_ context.Context, events []usage.Event) error {
+	for _, event := range events {
+		if event.ObjectID == e.failID {
+			return e.err
+		}
+	}
+	return nil
+}
+
+func bulkUploadRecord(id string, scoped bool) *objects.Record {
+	obj := &objects.Record{
+		Id: objects.RecordID(id),
+		AccessMethods: &[]objects.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &objects.AccessURL{Url: "s3://bucket/" + id},
+		}},
+	}
+	if scoped {
+		controlled := []string{"/organization/org/project/project"}
+		obj.ControlledAccess = &controlled
+	}
+	return obj
+}
+
+func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
+	providerError := func(capability string) error {
+		return &storage.OperationError{
+			Kind:       storage.ErrorInvalid,
+			Provider:   "s3",
+			Capability: capability,
+			Cause:      errors.New("QA_PRIVATE_PROVIDER_DETAIL"),
+		}
+	}
+	tests := []struct {
+		name       string
+		failure    string
+		readerErr  error
+		scopeErr   error
+		accessErr  error
+		eventErr   error
+		scopedFail bool
+	}{
+		{name: "lookup", failure: "lookup", readerErr: providerError("lookup")},
+		{name: "target", failure: "target", scopeErr: providerError("target"), scopedFail: true},
+		{name: "sign", failure: "sign", accessErr: providerError("sign")},
+		{name: "record", failure: "record", eventErr: providerError("record")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			const failID = "fail"
+			reader := &bulkProviderReader{objects: map[string]*objects.Record{
+				failID:    bulkUploadRecord(failID, tc.scopedFail),
+				"success": bulkUploadRecord("success", false),
+			}, errID: "", err: tc.readerErr}
+			if tc.readerErr != nil {
+				reader.errID = failID
+			}
+			var scopes domaintransfers.ScopeReader
+			if tc.scopeErr != nil {
+				scopes = bulkScopeFailure{err: tc.scopeErr}
+			}
+			var access domaintransfers.StoragePort
+			if tc.accessErr != nil {
+				access = bulkAccessFailure{failID: failID, err: tc.accessErr}
+			} else {
+				access = bulkAccessFailure{failID: "never", err: errors.New("unused")}
+			}
+			var events domaintransfers.EventRecorder
+			if tc.eventErr != nil {
+				events = bulkEventFailure{failID: failID, err: tc.eventErr}
+			} else {
+				events = bulkEventFailure{failID: "never", err: errors.New("unused")}
+			}
+			objectService := objectrecords.NewService(reader)
+			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Storage: access, Scopes: scopes, Events: events})
+			app := fiber.New()
+			app.Post("/bulk", handleInternalUploadBulkFiber(objectService, transferService))
+			body := strings.NewReader(`{"requests":[{"file_id":"` + failID + `"},{"file_id":"success"}]}`)
+			resp, err := app.Test(httptest.NewRequest("POST", "/bulk", body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			var output internalapi.InternalUploadBulkOutput
+			if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 207 || output.Results == nil || len(*output.Results) != 2 {
+				t.Fatalf("unexpected bulk response: status=%d output=%+v", resp.StatusCode, output)
+			}
+			failed, succeeded := (*output.Results)[0], (*output.Results)[1]
+			if failed.Error == nil || *failed.Error != "storage request is invalid" || strings.Contains(*failed.Error, "QA_PRIVATE_PROVIDER_DETAIL") || failed.Status != 400 {
+				t.Fatalf("unsafe failed result: %+v", failed)
+			}
+			if succeeded.Error != nil || succeeded.Url == nil || succeeded.Status != 200 {
+				t.Fatalf("successful sibling was not retained: %+v", succeeded)
+			}
+		})
 	}
 }

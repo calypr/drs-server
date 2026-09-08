@@ -8,11 +8,8 @@ import (
 	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
 	httpdrs "github.com/calypr/syfon/internal/httpapi/drs"
 	"github.com/calypr/syfon/internal/httpapi/lfs"
-	"github.com/calypr/syfon/internal/httpapi/maintenance"
 	"github.com/calypr/syfon/internal/httpapi/metrics"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/records"
-	httptransfers "github.com/calypr/syfon/internal/httpapi/transfers"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
@@ -80,8 +77,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	}
 	if options.Internal {
 		internalapi.RegisterHandlers(api, newInternalServer(deps))
-		maintenance.RegisterUndocumentedRoutes(api, deps.ScopeRepair, deps.ProjectInspector, deps.ProjectCleanup)
-		httpbuckets.RegisterRoutes(api, deps.Buckets, maintenance.ProjectCleanupHandler(deps.ProjectCleanup))
+		httpbuckets.RegisterRoutes(api, deps.Buckets, ProjectCleanupHandler(deps.ProjectCleanup))
 	}
 	if options.LFS {
 		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
@@ -90,18 +86,13 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	}
 }
 
-type internalServer struct {
-	*records.RecordsServer
-	*httptransfers.TransfersServer
-	*maintenance.MaintenanceServer
-}
-
-var _ internalapi.ServerInterface = (*internalServer)(nil)
-
 func newInternalServer(deps Dependencies) *internalServer {
 	return &internalServer{
-		RecordsServer:     records.NewRecordsServer(deps.Objects),
-		TransfersServer:   httptransfers.NewTransfersServer(deps.Transfers),
-		MaintenanceServer: maintenance.NewMaintenanceServer(deps.ProjectInspector, deps.Buckets),
+		objects:   deps.Objects,
+		transfers: deps.Transfers,
+		inspector: deps.ProjectInspector,
+		cleanup:   deps.ProjectCleanup,
+		buckets:   deps.Buckets,
+		repair:    deps.ScopeRepair,
 	}
 }
