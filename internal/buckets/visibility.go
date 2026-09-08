@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -66,7 +67,7 @@ func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows
 		if !exists {
 			continue
 		}
-		resource, resourceErr := access.ResourcePath(scope.Organization, scope.ProjectID)
+		resource, resourceErr := clientaccess.ResourcePath(scope.Organization, scope.ProjectID)
 		if resourceErr != nil || strings.TrimSpace(resource) == "" {
 			continue
 		}

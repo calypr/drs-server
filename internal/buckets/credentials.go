@@ -2,7 +2,6 @@ package buckets
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -72,23 +71,4 @@ func (s *Service) credentialIDForCredential(cred Credential) string {
 		return credentialID
 	}
 	return strings.TrimSpace(cred.Bucket)
-}
-
-func (s *Service) ResolveBucket(ctx context.Context, bucketName string) (string, error) {
-	creds, err := s.ListS3Credentials(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(creds) == 0 {
-		return "", fmt.Errorf("no buckets configured")
-	}
-	if bucketName == "" {
-		return creds[0].Bucket, nil
-	}
-	for _, cred := range creds {
-		if cred.Bucket == bucketName {
-			return cred.Bucket, nil
-		}
-	}
-	return "", fmt.Errorf("bucket %q not configured", bucketName)
 }

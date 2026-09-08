@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 )
 
@@ -338,7 +339,7 @@ func visiblePrograms(visible map[string]VisibleBucket) map[string][]string {
 
 func mustResource(t *testing.T, organization, project string) string {
 	t.Helper()
-	resource, err := access.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		t.Fatalf("ResourcePath(%q,%q): %v", organization, project, err)
 	}
