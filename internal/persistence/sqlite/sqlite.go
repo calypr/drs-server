@@ -6,16 +6,18 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type SqliteDB struct {
+	*store.Store
 	db     *sql.DB
-	cipher *credentialcipher.Cipher
+	cipher store.CredentialCodec
 }
 
-func NewSqliteDB(dsn string, ciphers ...*credentialcipher.Cipher) (*SqliteDB, error) {
-	cipher, err := credentialCipherFor(ciphers)
+func NewSqliteDB(dsn string, codecs ...store.CredentialCodec) (*SqliteDB, error) {
+	cipher, err := credentialCodecFor(codecs)
 	if err != nil {
 		return nil, err
 	}
@@ -28,26 +30,26 @@ func NewSqliteDB(dsn string, ciphers ...*credentialcipher.Cipher) (*SqliteDB, er
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	s := &SqliteDB{db: db, cipher: cipher}
-	if err := s.initSchema(); err != nil {
-		return nil, fmt.Errorf("failed to init schema: %w", err)
+	shared, err := store.Open(db, sqliteDialect{}, cipher)
+	if err != nil {
+		return nil, err
 	}
-
-	return s, nil
+	return &SqliteDB{Store: shared, db: db, cipher: cipher}, nil
 }
 
-func credentialCipherFor(ciphers []*credentialcipher.Cipher) (*credentialcipher.Cipher, error) {
-	switch len(ciphers) {
+func credentialCodecFor(codecs []store.CredentialCodec) (store.CredentialCodec, error) {
+	switch len(codecs) {
 	case 0:
 		return credentialcipher.NewFromEnv()
 	case 1:
-		if ciphers[0] == nil {
+		if codecs[0] == nil {
 			return nil, fmt.Errorf("credential cipher is required")
 		}
-		return ciphers[0], nil
+		return codecs[0], nil
 	default:
 		return nil, fmt.Errorf("at most one credential cipher may be supplied")
 	}

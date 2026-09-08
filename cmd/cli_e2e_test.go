@@ -17,6 +17,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage"
@@ -42,7 +43,11 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 
 func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
 	t.Helper()
-	database, err := sqlite.NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential cipher: %v", err)
+	}
+	database, err := sqlite.NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("create in-memory SQLite database: %v", err)
 	}

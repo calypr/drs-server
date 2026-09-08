@@ -5,18 +5,20 @@ import (
 	"fmt"
 
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
 
 	// Postgres driver
 	_ "github.com/lib/pq"
 )
 
 type PostgresDB struct {
+	*store.Store
 	db     *sql.DB
-	cipher *credentialcipher.Cipher
+	cipher store.CredentialCodec
 }
 
-func NewPostgresDB(dsn string, ciphers ...*credentialcipher.Cipher) (*PostgresDB, error) {
-	cipher, err := credentialCipherFor(ciphers)
+func NewPostgresDB(dsn string, codecs ...store.CredentialCodec) (*PostgresDB, error) {
+	cipher, err := credentialCodecFor(codecs)
 	if err != nil {
 		return nil, err
 	}
@@ -25,42 +27,25 @@ func NewPostgresDB(dsn string, ciphers ...*credentialcipher.Cipher) (*PostgresDB
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-	pg := &PostgresDB{db: db, cipher: cipher}
-	if err := pg.ensureObjectSchema(); err != nil {
+	shared, err := store.Open(db, postgresDialect{}, cipher)
+	if err != nil {
 		return nil, err
 	}
-	if err := pg.ensureBucketScopeSchema(); err != nil {
-		return nil, err
-	}
-	if err := pg.ensureS3CredentialSchema(); err != nil {
-		return nil, err
-	}
-	if err := pg.ensureLFSPendingSchema(); err != nil {
-		return nil, err
-	}
-	if err := pg.ensureObjectUsageSchema(); err != nil {
-		return nil, err
-	}
-	if err := pg.ensurePendingObjectUsageSchema(); err != nil {
-		return nil, err
-	}
-	if err := pg.ensureTransferAttributionSchema(); err != nil {
-		return nil, err
-	}
-	return pg, nil
+	return &PostgresDB{Store: shared, db: db, cipher: cipher}, nil
 }
 
-func credentialCipherFor(ciphers []*credentialcipher.Cipher) (*credentialcipher.Cipher, error) {
-	switch len(ciphers) {
+func credentialCodecFor(codecs []store.CredentialCodec) (store.CredentialCodec, error) {
+	switch len(codecs) {
 	case 0:
 		return credentialcipher.NewFromEnv()
 	case 1:
-		if ciphers[0] == nil {
+		if codecs[0] == nil {
 			return nil, fmt.Errorf("credential cipher is required")
 		}
-		return ciphers[0], nil
+		return codecs[0], nil
 	default:
 		return nil, fmt.Errorf("at most one credential cipher may be supplied")
 	}

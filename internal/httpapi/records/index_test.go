@@ -17,6 +17,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 
 	"github.com/calypr/syfon/internal/objects"
@@ -633,7 +634,11 @@ func TestHandleInternalList_HashTypeFiltering(t *testing.T) {
 
 func TestHandleInternalList_ScopedFiltersKeepProjectPhysicalRecord(t *testing.T) {
 	fixturePath := filepath.Join(t.TempDir(), "legacy.sqlite")
-	database, err := sqlite.NewSqliteDB(fixturePath)
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	database, err := sqlite.NewSqliteDB(fixturePath, cipher)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,7 +31,11 @@ var (
 
 func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
 	t.Helper()
-	database, err := sqlite.NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential cipher: %v", err)
+	}
+	database, err := sqlite.NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("create in-memory SQLite database: %v", err)
 	}

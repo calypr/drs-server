@@ -10,13 +10,18 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 )
 
 func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.T) {
 	ctx := context.Background()
 	fixturePath := filepath.Join(t.TempDir(), "legacy.sqlite")
-	database, err := sqlite.NewSqliteDB(fixturePath)
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	database, err := sqlite.NewSqliteDB(fixturePath, cipher)
 	if err != nil {
 		t.Fatalf("NewSqliteDB failed: %v", err)
 	}

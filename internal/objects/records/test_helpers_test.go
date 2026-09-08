@@ -8,6 +8,7 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 )
 
@@ -48,7 +49,11 @@ func registerCandidates(ctx context.Context, service *objectrecords.Service, can
 
 func newSQLiteDatabase(t *testing.T) *sqlite.SqliteDB {
 	t.Helper()
-	database, err := sqlite.NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential cipher: %v", err)
+	}
+	database, err := sqlite.NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("create in-memory SQLite database: %v", err)
 	}
