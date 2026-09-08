@@ -104,6 +104,8 @@ github.com/calypr/syfon/apigen v0.3.1-0.20260908001007-8743d81d59e5 h1:ZLxGZ14NH
 github.com/calypr/syfon/apigen v0.3.1-0.20260908001007-8743d81d59e5/go.mod h1:ZStSoj40FBRN18rm/KyFtd+g8o5Nga9TXqaEGqVL4s0=
 github.com/calypr/syfon/client v0.3.4-0.20260908000039-840c5637a4ee h1:OnrjZh8b4L0sQf6x2DA638T1PF4fTOSeJHA55nDAaaU=
 github.com/calypr/syfon/client v0.3.4-0.20260908000039-840c5637a4ee/go.mod h1:KzBkzdl2vYmMG3W5gAjWBnAc5Ck7Fh7jIgU5xMKLUQQ=
+github.com/calypr/syfon/client v0.3.4-0.20260908001736-8dddd89799e3 h1:lUnYWnZ2EMtxH0JZxVOiP2v2wL1T/afTpfqKdOzCaGQ=
+github.com/calypr/syfon/client v0.3.4-0.20260908001736-8dddd89799e3/go.mod h1:KzBkzdl2vYmMG3W5gAjWBnAc5Ck7Fh7jIgU5xMKLUQQ=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

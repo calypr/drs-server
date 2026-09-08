@@ -27,6 +27,7 @@ func TestPublishedModulesWorkWithoutWorkspace(t *testing.T) {
 		{"canonical", 409, `{"code":"object_checksum_immutable","message":"immutable"}`, errorapi.ErrorCodeObjectChecksumImmutable, errorapi.ErrObjectChecksumImmutable, errorapi.ErrConflict},
 		{"malformed", 404, `{"code":`, errorapi.ErrorCodeNotFound, nil, errorapi.ErrNotFound},
 		{"numeric legacy", 404, `{"code":404,"message":"missing"}`, errorapi.ErrorCodeNotFound, nil, errorapi.ErrNotFound},
+		{"fractional numeric", 500, `{"code":404.5}`, errorapi.ErrorCodeInternalError, nil, errorapi.Define(errorapi.ErrorCodeInternalError, errorapi.ErrorCategoryInternalError, "internal error")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
