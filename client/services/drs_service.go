@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/transfer"
 
@@ -14,6 +15,9 @@ import (
 )
 
 var ErrNoRecordsForHash = fmt.Errorf("no records found for hash")
+
+// Deprecated: use errorapi.ErrNotFound.
+var ErrObjectNotFound = errorapi.ErrNotFound
 
 type DRSService struct {
 	gen   drsapi.ClientWithResponsesInterface

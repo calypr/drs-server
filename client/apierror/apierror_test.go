@@ -223,3 +223,76 @@ func TestFromResponseDecodesNestedLegacyErrors(t *testing.T) {
 		t.Fatalf("nested exact error_code did not beat outer numeric code: %+v", err)
 	}
 }
+
+func TestFromResponsePreservesRawBodyAndBoundaryMetadata(t *testing.T) {
+	req := &http.Request{Method: http.MethodPatch, URL: &url.URL{Scheme: "https", Host: "example.test", Path: "/objects/1"}}
+	header := make(http.Header)
+	header.Set("X-Request-ID", "header-request")
+	header.Set("X-Trace", "trace-1")
+	resp := &http.Response{StatusCode: http.StatusBadRequest, Header: header, Request: req}
+	body := []byte("  not-json\n")
+	err := FromResponse(resp, body)
+	if err.Body != string(body) {
+		t.Fatalf("raw body changed: got %q, want %q", err.Body, body)
+	}
+	if err.Message != "not-json" || err.Status != http.StatusBadRequest || err.Method != http.MethodPatch || err.URL != "https://example.test/objects/1" {
+		t.Fatalf("unexpected boundary metadata: %+v", err)
+	}
+	header.Set("X-Trace", "changed")
+	if err.Headers.Get("X-Trace") != "trace-1" {
+		t.Fatalf("headers were not cloned: %v", err.Headers)
+	}
+}
+
+func TestFromResponseNestedPrecedenceAndBoundaryConflicts(t *testing.T) {
+	header := make(http.Header)
+	header.Set("X-Request-ID", "header-request")
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     header,
+		Request:    &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "https", Host: "example.test", Path: "/nested"}},
+	}
+	err := FromResponse(resp, []byte(`{"error":{"error":{"error_code":"object_not_found","msg":"deep message","requestId":"deep-request"}}}`))
+	if err.Code != errorapi.ErrorCodeObjectNotFound || err.Message != "deep message" || err.RequestID != "header-request" {
+		t.Fatalf("three-level nested payload was not decoded: %+v", err)
+	}
+
+	err = FromResponse(resp, []byte(`{"status":418,"code":"conflict","message":"outer","request_id":"body-request","error":{"code":"object_not_found","message":"inner"}}`))
+	if err.Status != http.StatusBadRequest || err.Code != errorapi.ErrorCodeConflict || err.Message != "outer" || err.RequestID != "header-request" {
+		t.Fatalf("payload overrode boundary precedence: %+v", err)
+	}
+}
+
+func TestFromResponseScalarArrayAndNullPayloads(t *testing.T) {
+	for _, body := range []string{`null`, `[]`, `42`, `"message"`, `{"error":null}`, `{"error":[]}`} {
+		err := FromResponse(&http.Response{StatusCode: http.StatusBadRequest, Header: make(http.Header)}, []byte(body))
+		if err == nil || err.Status != http.StatusBadRequest || err.Body != body {
+			t.Fatalf("unexpected scalar payload result for %q: %+v", body, err)
+		}
+	}
+}
+
+func FuzzFromResponseNeverPanics(f *testing.F) {
+	f.Add([]byte(`{"code":"not_found","message":"missing"}`), http.StatusNotFound)
+	f.Add([]byte{0, 1, 2, '\n', 'x'}, http.StatusInternalServerError)
+	f.Fuzz(func(t *testing.T, body []byte, status int) {
+		if len(body) > 64<<10 {
+			t.Skip()
+		}
+		header := make(http.Header)
+		header.Set("X-Request-ID", "fuzz-request")
+		resp := &http.Response{
+			StatusCode: status,
+			Header:     header,
+			Request:    &http.Request{Method: http.MethodPost, URL: &url.URL{Scheme: "https", Host: "example.test", Path: "/fuzz"}},
+		}
+		err := FromResponse(resp, body)
+		if err == nil || err.Status != status || err.Body != string(body) || err.RequestID != "fuzz-request" || err.Method != http.MethodPost || err.URL != "https://example.test/fuzz" {
+			t.Fatalf("boundary invariant failed: %+v", err)
+		}
+		resp.Header.Set("X-Request-ID", "changed")
+		if err.Headers.Get("X-Request-ID") != "fuzz-request" {
+			t.Fatal("response headers were not cloned")
+		}
+	})
+}

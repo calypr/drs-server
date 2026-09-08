@@ -74,7 +74,7 @@ func (e *APIError) Is(target error) bool {
 func FromResponse(resp *http.Response, body []byte) *APIError {
 	err := &APIError{
 		Status: httpStatus(resp),
-		Body:   strings.TrimSpace(string(body)),
+		Body:   string(body),
 	}
 	if resp != nil {
 		err.Headers = resp.Header.Clone()
@@ -96,7 +96,7 @@ func FromResponse(resp *http.Response, body []byte) *APIError {
 		err.Category = errorapi.CategoryForStatus(err.Status)
 	}
 	if err.Message == "" {
-		err.Message = err.Body
+		err.Message = strings.TrimSpace(err.Body)
 	}
 	if err.Message == "" {
 		err.Message = http.StatusText(err.Status)

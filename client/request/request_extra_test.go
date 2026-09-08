@@ -62,7 +62,7 @@ func TestRequestDo_ResponseAndDecodeErrors(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *apierror.APIError, got %T", err)
 	}
-	if respErr.Status != http.StatusForbidden || respErr.Code != "forbidden" || respErr.Method != http.MethodGet || respErr.Body != "denied" {
+	if respErr.Status != http.StatusForbidden || respErr.Code != "forbidden" || respErr.Method != http.MethodGet || respErr.Body != " denied " || respErr.Message != "denied" {
 		t.Fatalf("unexpected response error details: %+v", respErr)
 	}
 	if !errors.Is(respErr, errorapi.ErrForbidden) {
