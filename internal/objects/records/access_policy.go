@@ -15,18 +15,18 @@ import (
 
 const maxDeniedAccessResources = 25
 
-func (m *mutationService) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objectmodel.AccessMethod) error {
-	obj, err := m.recordReader.GetObject(ctx, objectID)
+func (s *Service) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objectmodel.AccessMethod) error {
+	obj, err := s.store.GetObject(ctx, objectID)
 	if err != nil {
 		return err
 	}
 	if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
 		return err
 	}
-	return m.accessMethods.UpdateObjectAccessMethods(ctx, objectID, accessMethods)
+	return s.store.UpdateObjectAccessMethods(ctx, objectID, accessMethods)
 }
 
-func (m *mutationService) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objectmodel.AccessMethod) error {
+func (s *Service) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objectmodel.AccessMethod) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -35,7 +35,7 @@ func (m *mutationService) BulkUpdateAccessMethods(ctx context.Context, updates m
 	for objectID := range updates {
 		ids = append(ids, objectID)
 	}
-	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
+	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
 		return err
 	}
@@ -52,11 +52,11 @@ func (m *mutationService) BulkUpdateAccessMethods(ctx context.Context, updates m
 			return err
 		}
 	}
-	return m.accessMethods.BulkUpdateAccessMethods(ctx, updates)
+	return s.store.BulkUpdateAccessMethods(ctx, updates)
 }
 
-func (m *mutationService) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*objectmodel.Record, error) {
-	obj, err := m.recordReader.GetObject(ctx, objectID)
+func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*objectmodel.Record, error) {
+	obj, err := s.store.GetObject(ctx, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,18 +81,18 @@ func (m *mutationService) RemoveObjectControlledAccess(ctx context.Context, obje
 		return nil, errorapi.ErrObjectNotFound
 	}
 
-	if err := m.accessPolicy.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
+	if err := s.store.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
 		return nil, err
 	}
 
-	updated, err := m.recordReader.GetObject(ctx, objectID)
+	updated, err := s.store.GetObject(ctx, objectID)
 	if err != nil {
 		return nil, err
 	}
 	return updated, nil
 }
 
-func (m *mutationService) RequireObjectResources(ctx context.Context, method string, resources []string) error {
+func (s *Service) RequireObjectResources(ctx context.Context, method string, resources []string) error {
 	if strings.TrimSpace(method) == "" {
 		return nil
 	}

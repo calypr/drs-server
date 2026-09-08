@@ -41,20 +41,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	}
 
 	newName := "new"
-	service := objectrecords.NewService(objectrecords.Dependencies{
-		Reader:        db,
-		Writer:        db,
-		AccessMethods: db,
-		AccessPolicy:  db,
-		Aliases:       db,
-		Content:       db,
-		ChecksumScope: db,
-		Scope:         db,
-		Resources:     db,
-		Pages:         db,
-		URLPages:      db,
-		Authorized:    db,
-	})
+	service := objectrecords.NewService(db)
 	result, err := service.BulkOverwriteObjects(context.Background(), "ci-overwrite", "project", []objects.Record{{
 		Id:               "ci-overwrite-source",
 		Name:             &newName,

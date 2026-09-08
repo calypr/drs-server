@@ -12,8 +12,8 @@ import (
 // GetObject retrieves the prepared canonical record identified by ID, alias,
 // or checksum and validates access.  Callers that need the identity and
 // physical-record distinction should use GetCanonicalContent.
-func (m *queryService) GetObject(ctx context.Context, ident string, requiredMethod string) (*objectmodel.Record, error) {
-	view, err := m.GetCanonicalContent(ctx, ident, requiredMethod)
+func (s *Service) GetObject(ctx context.Context, ident string, requiredMethod string) (*objectmodel.Record, error) {
+	view, err := s.GetCanonicalContent(ctx, ident, requiredMethod)
 	if err != nil {
 		return nil, err
 	}
@@ -23,14 +23,14 @@ func (m *queryService) GetObject(ctx context.Context, ident string, requiredMeth
 // GetCanonicalContent resolves a physical lookup to the prepared same-content
 // view.  The returned ContentID is checksum-derived and Records retains the
 // physical rows used to build the merged objectmodel.Record.
-func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, requiredMethod string) (*objectmodel.CanonicalContent, error) {
+func (s *Service) GetCanonicalContent(ctx context.Context, ident string, requiredMethod string) (*objectmodel.CanonicalContent, error) {
 	if strings.TrimSpace(ident) == "" {
 		return nil, errorapi.ErrObjectNotFound
 	}
 
 	checksum, checksumIdent := objectmodel.NormalizeSHA256Query(ident)
 	if checksumIdent {
-		view, found, err := m.canonicalContentForChecksum(ctx, checksum, requiredMethod)
+		view, found, err := s.canonicalContentForChecksum(ctx, checksum, requiredMethod)
 		if err != nil {
 			return nil, err
 		}
@@ -39,31 +39,31 @@ func (m *queryService) GetCanonicalContent(ctx context.Context, ident string, re
 		}
 	}
 
-	if obj, found, err := m.lookupObjectByID(ctx, ident); err != nil {
+	if obj, found, err := s.lookupObjectByID(ctx, ident); err != nil {
 		return nil, err
 	} else if found {
-		return m.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
+		return s.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
 	}
 
-	if obj, found, err := m.lookupObjectByAlias(ctx, ident); err != nil {
+	if obj, found, err := s.lookupObjectByAlias(ctx, ident); err != nil {
 		return nil, err
 	} else if found {
-		return m.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
+		return s.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
 	}
 
 	if !checksumIdent {
-		if obj, found, err := m.lookupObjectByChecksum(ctx, ident, requiredMethod); err != nil {
+		if obj, found, err := s.lookupObjectByChecksum(ctx, ident, requiredMethod); err != nil {
 			return nil, err
 		} else if found {
-			return m.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
+			return s.canonicalContentAndCheckAccess(ctx, obj, requiredMethod)
 		}
 	}
 
 	return nil, errorapi.ErrObjectNotFound
 }
 
-func (m *queryService) canonicalContentForChecksum(ctx context.Context, checksum, method string) (*objectmodel.CanonicalContent, bool, error) {
-	physical, err := m.content.GetObjectsByChecksum(ctx, checksum)
+func (s *Service) canonicalContentForChecksum(ctx context.Context, checksum, method string) (*objectmodel.CanonicalContent, bool, error) {
+	physical, err := s.store.GetObjectsByChecksum(ctx, checksum)
 	if err != nil {
 		return nil, false, err
 	}
@@ -86,14 +86,14 @@ func (m *queryService) canonicalContentForChecksum(ctx context.Context, checksum
 	return view, true, nil
 }
 
-func (m *queryService) lookupObjectByChecksum(ctx context.Context, ident string, requiredMethod string) (*objectmodel.Record, bool, error) {
-	byChecksum, err := m.GetObjectsByChecksum(ctx, ident, requiredMethod)
+func (s *Service) lookupObjectByChecksum(ctx context.Context, ident string, requiredMethod string) (*objectmodel.Record, bool, error) {
+	byChecksum, err := s.GetObjectsByChecksum(ctx, ident, requiredMethod)
 	if err != nil {
 		return nil, false, err
 	}
 	if len(byChecksum) == 0 {
 		if strings.TrimSpace(requiredMethod) != "" {
-			allMatches, err := m.GetObjectsByChecksum(ctx, ident, "")
+			allMatches, err := s.GetObjectsByChecksum(ctx, ident, "")
 			if err != nil {
 				return nil, false, err
 			}
@@ -106,8 +106,8 @@ func (m *queryService) lookupObjectByChecksum(ctx context.Context, ident string,
 	return &byChecksum[0], true, nil
 }
 
-func (m *queryService) lookupObjectByID(ctx context.Context, ident string) (*objectmodel.Record, bool, error) {
-	obj, err := m.recordReader.GetObject(ctx, ident)
+func (s *Service) lookupObjectByID(ctx context.Context, ident string) (*objectmodel.Record, bool, error) {
+	obj, err := s.store.GetObject(ctx, ident)
 	if err == nil {
 		return obj, true, nil
 	}
@@ -117,8 +117,8 @@ func (m *queryService) lookupObjectByID(ctx context.Context, ident string) (*obj
 	return nil, false, err
 }
 
-func (m *queryService) lookupObjectByAlias(ctx context.Context, ident string) (*objectmodel.Record, bool, error) {
-	canonicalID, aliasErr := m.aliases.ResolveObjectAlias(ctx, ident)
+func (s *Service) lookupObjectByAlias(ctx context.Context, ident string) (*objectmodel.Record, bool, error) {
+	canonicalID, aliasErr := s.store.ResolveObjectAlias(ctx, ident)
 	if aliasErr != nil {
 		if errorapi.IsNotFoundError(aliasErr) {
 			return nil, false, nil
@@ -129,7 +129,7 @@ func (m *queryService) lookupObjectByAlias(ctx context.Context, ident string) (*
 		return nil, false, nil
 	}
 
-	obj, err := m.recordReader.GetObject(ctx, canonicalID)
+	obj, err := s.store.GetObject(ctx, canonicalID)
 	if err != nil {
 		if errorapi.IsNotFoundError(err) {
 			return nil, false, nil
@@ -140,8 +140,8 @@ func (m *queryService) lookupObjectByAlias(ctx context.Context, ident string) (*
 	return obj, true, nil
 }
 
-func (m *queryService) canonicalContentAndCheckAccess(ctx context.Context, obj *objectmodel.Record, method string) (*objectmodel.CanonicalContent, error) {
-	view, err := m.canonicalContentForObject(ctx, obj)
+func (s *Service) canonicalContentAndCheckAccess(ctx context.Context, obj *objectmodel.Record, method string) (*objectmodel.CanonicalContent, error) {
+	view, err := s.canonicalContentForObject(ctx, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -151,13 +151,13 @@ func (m *queryService) canonicalContentAndCheckAccess(ctx context.Context, obj *
 	return view, nil
 }
 
-func (m *queryService) canonicalContentForObject(ctx context.Context, obj *objectmodel.Record) (*objectmodel.CanonicalContent, error) {
+func (s *Service) canonicalContentForObject(ctx context.Context, obj *objectmodel.Record) (*objectmodel.CanonicalContent, error) {
 	sha, ok := objectmodel.CanonicalSHA256(obj.Checksums)
 	if !ok {
 		cloned := cloneObject(*obj)
 		return &objectmodel.CanonicalContent{Record: cloned, Records: []objectmodel.Record{cloned}}, nil
 	}
-	siblings, err := m.content.GetObjectsByChecksum(ctx, sha)
+	siblings, err := s.store.GetObjectsByChecksum(ctx, sha)
 	if err != nil {
 		return nil, err
 	}

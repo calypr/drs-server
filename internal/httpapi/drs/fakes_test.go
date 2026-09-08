@@ -19,13 +19,7 @@ type testDRSServicesFixture struct {
 
 func testDRSServices(store *drsObjectFixture, storageAccess transfers.AccessPort) *testDRSServicesFixture {
 	return &testDRSServicesFixture{
-		objectService: objectrecords.NewService(objectrecords.Dependencies{
-			Reader:        store.reader,
-			Writer:        store.writer,
-			AccessMethods: store.accessMethods,
-			Aliases:       store.aliases,
-			Content:       store.content,
-		}),
+		objectService: objectrecords.NewService(store),
 		transferService: transfers.NewService(transfers.Dependencies{
 			Access: storageAccess,
 			Events: testTransferEvents{},
@@ -34,11 +28,52 @@ func testDRSServices(store *drsObjectFixture, storageAccess transfers.AccessPort
 }
 
 type drsObjectFixture struct {
+	objectrecords.ObjectStore
 	reader        *drsObjectReader
 	writer        *drsObjectWriter
 	accessMethods *drsObjectAccessMethods
 	aliases       *drsObjectAliases
 	content       *drsObjectContent
+}
+
+func (s *drsObjectFixture) GetObject(ctx context.Context, id string) (*objects.Record, error) {
+	return s.reader.GetObject(ctx, id)
+}
+func (s *drsObjectFixture) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
+	return s.reader.GetBulkObjects(ctx, ids)
+}
+func (s *drsObjectFixture) DeleteObject(ctx context.Context, id string) error {
+	return s.writer.DeleteObject(ctx, id)
+}
+func (s *drsObjectFixture) BulkDeleteObjects(ctx context.Context, ids []string) error {
+	return s.writer.BulkDeleteObjects(ctx, ids)
+}
+func (s *drsObjectFixture) RegisterObjects(ctx context.Context, records []objects.Record) error {
+	return s.writer.RegisterObjects(ctx, records)
+}
+func (s *drsObjectFixture) ReplaceObjects(ctx context.Context, records []objects.Record) error {
+	return s.writer.ReplaceObjects(ctx, records)
+}
+func (s *drsObjectFixture) UpdateObjectAccessMethods(ctx context.Context, id string, methods []objects.AccessMethod) error {
+	return s.accessMethods.UpdateObjectAccessMethods(ctx, id, methods)
+}
+func (s *drsObjectFixture) BulkUpdateAccessMethods(ctx context.Context, methods map[string][]objects.AccessMethod) error {
+	return s.accessMethods.BulkUpdateAccessMethods(ctx, methods)
+}
+func (s *drsObjectFixture) DeleteObjectAlias(ctx context.Context, id string) error {
+	return s.aliases.DeleteObjectAlias(ctx, id)
+}
+func (s *drsObjectFixture) CreateObjectAlias(ctx context.Context, id, canonical string) error {
+	return s.aliases.CreateObjectAlias(ctx, id, canonical)
+}
+func (s *drsObjectFixture) ResolveObjectAlias(ctx context.Context, id string) (string, error) {
+	return s.aliases.ResolveObjectAlias(ctx, id)
+}
+func (s *drsObjectFixture) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
+	return s.content.GetObjectsByChecksum(ctx, checksum)
+}
+func (s *drsObjectFixture) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
+	return s.content.GetObjectsByChecksums(ctx, checksums)
 }
 
 type drsObjectData struct {
@@ -204,10 +239,6 @@ func (testTransferEvents) RecordTransferAttributionEvents(context.Context, []usa
 }
 
 var (
-	_ objectrecords.RecordReader       = (*drsObjectReader)(nil)
-	_ objectrecords.RecordWriter       = (*drsObjectWriter)(nil)
-	_ objectrecords.AccessMethodWriter = (*drsObjectAccessMethods)(nil)
-	_ objectrecords.AliasStore         = (*drsObjectAliases)(nil)
-	_ objectrecords.ContentReader      = (*drsObjectContent)(nil)
-	_ transfers.EventRecorder          = testTransferEvents{}
+	_ objectrecords.ObjectStore = (*drsObjectFixture)(nil)
+	_ transfers.EventRecorder   = testTransferEvents{}
 )

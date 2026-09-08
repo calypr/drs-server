@@ -25,19 +25,12 @@ type transferStorageDependency interface {
 
 func newInternalDRSObjectManager(store *transferHTTPFixture, storageDependency transferStorageDependency) internalDRSTestFixture {
 	objectStore := &transferObjectStoreFake{fixture: store}
-	aliasStore := &transferAliasStoreFake{fixture: store}
 	bucketStore := &transferBucketStoreFake{fixture: store}
 	eventStore := &transferEventStoreFake{fixture: store}
 	fileCounters := &transferFileCounterFake{fixture: store}
 	bucketService := newInternalDRSBucketService(bucketStore)
 
-	objectService := objectrecords.NewService(objectrecords.Dependencies{
-		Reader:        objectStore,
-		Aliases:       aliasStore,
-		Content:       objectStore,
-		ChecksumScope: objectStore,
-		Scope:         objectStore,
-	})
+	objectService := objectrecords.NewService(objectStore)
 	transferService := domaintransfers.NewService(domaintransfers.Dependencies{
 		Access:      storageDependency,
 		Multipart:   storageDependency,

@@ -58,7 +58,7 @@ func TestObjectMatchesScope(t *testing.T) {
 }
 
 func TestReadableChecksumFilter(t *testing.T) {
-	service := NewService(Dependencies{})
+	service := NewService(nil)
 	res, includeUnscoped, restrict, ok := service.readableChecksumFilter(context.Background(), "", "")
 	if !ok || includeUnscoped || restrict || res != nil {
 		t.Fatalf("unexpected unenforced filter: res=%+v includeUnscoped=%v restrict=%v ok=%v", res, includeUnscoped, restrict, ok)

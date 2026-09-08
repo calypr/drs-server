@@ -125,10 +125,7 @@ s3_credentials:
 	backend := sqliteServerBackend(database)
 	invalidator := &storageInvalidator{}
 	bucketDependencies := backend.bucketDependencies
-	bucketDependencies.Fallback = newBucketVisibilityFallback(
-		backend.objectDependencies.Scope,
-		backend.objectDependencies.Reader,
-	)
+	bucketDependencies.Fallback = newBucketVisibilityFallback(backend.objectStore)
 	bucketService, err := buckets.NewService(bucketDependencies, invalidator)
 	if err != nil {
 		t.Fatalf("failed to initialize bucket service: %v", err)
@@ -139,7 +136,7 @@ s3_credentials:
 	}
 	invalidator.manager = storageManager
 	app := fiber.New()
-	objectService := objectrecords.NewService(backend.objectDependencies)
+	objectService := objectrecords.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Access: storageManager, Multipart: storageManager, Scopes: bucketService, Credentials: bucketService,

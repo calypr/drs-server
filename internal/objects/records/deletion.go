@@ -12,23 +12,21 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
-func (m *mutationService) DeleteBulkByScope(ctx context.Context, organization, project string) (int, error) {
+func (s *Service) DeleteBulkByScope(ctx context.Context, organization, project string) (int, error) {
 	if err := requireScopeMethod(ctx, organization, project, objectMethodDelete); err != nil {
 		return 0, err
 	}
 
-	ids, err := m.scope.ListObjectIDsByScope(ctx, organization, project)
+	ids, err := s.store.ListObjectIDsByScope(ctx, organization, project)
 	if err != nil {
 		return 0, err
 	}
-	if lister := m.authorizedQuery; lister != nil {
-		resources, _, restrictToResources := objectMethodResourceFilter(ctx, objectMethodDelete)
-		if optimized, err := lister.ListObjectIDsByScopeAndResources(ctx, organization, project, resources, restrictToResources); err == nil {
-			ids = optimized
-		}
+	resources, _, restrictToResources := objectMethodResourceFilter(ctx, objectMethodDelete)
+	if optimized, err := s.store.ListObjectIDsByScopeAndResources(ctx, organization, project, resources, restrictToResources); err == nil {
+		ids = optimized
 	}
 
-	toDelete, err := m.deletableObjectIDsForMethod(ctx, ids, false)
+	toDelete, err := s.deletableObjectIDsForMethod(ctx, ids, false)
 	if err != nil {
 		return 0, err
 	}
@@ -41,22 +39,22 @@ func (m *mutationService) DeleteBulkByScope(ctx context.Context, organization, p
 	if err != nil {
 		return 0, err
 	}
-	return m.accessPolicy.RemoveObjectControlledAccessBulk(ctx, toDelete, resource)
+	return s.store.RemoveObjectControlledAccessBulk(ctx, toDelete, resource)
 }
 
-func (m *mutationService) DeleteObject(ctx context.Context, id string) error {
-	return m.DeleteObjectWithOptions(ctx, id, DeleteOptions{})
+func (s *Service) DeleteObject(ctx context.Context, id string) error {
+	return s.DeleteObjectWithOptions(ctx, id, DeleteOptions{})
 }
 
 type DeleteOptions struct {
 	DeleteStorageData bool
 }
 
-func (m *mutationService) DeleteObjectWithOptions(ctx context.Context, id string, opts DeleteOptions) error {
+func (s *Service) DeleteObjectWithOptions(ctx context.Context, id string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
 		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}
-	obj, err := m.recordReader.GetObject(ctx, id)
+	obj, err := s.store.GetObject(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -66,29 +64,29 @@ func (m *mutationService) DeleteObjectWithOptions(ctx context.Context, id string
 	if opts.DeleteStorageData && (obj.PublicRead || len(objectmodel.AccessResources(obj)) > 0) {
 		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", errorapi.ErrConflict)
 	}
-	return m.recordWriter.DeleteObject(ctx, id)
+	return s.store.DeleteObject(ctx, id)
 }
 
-func (m *mutationService) BulkDeleteObjects(ctx context.Context, ids []string) error {
-	return m.BulkDeleteObjectsWithOptions(ctx, ids, DeleteOptions{})
+func (s *Service) BulkDeleteObjects(ctx context.Context, ids []string) error {
+	return s.BulkDeleteObjectsWithOptions(ctx, ids, DeleteOptions{})
 }
 
-func (m *mutationService) BulkDeleteObjectsWithOptions(ctx context.Context, ids []string, opts DeleteOptions) error {
+func (s *Service) BulkDeleteObjectsWithOptions(ctx context.Context, ids []string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
 		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}
-	toDelete, err := m.deletablePhysicalObjectIDsForBulk(ctx, ids)
+	toDelete, err := s.deletablePhysicalObjectIDsForBulk(ctx, ids)
 	if err != nil {
 		return err
 	}
 	if len(toDelete) == 0 {
 		return nil
 	}
-	return m.recordWriter.BulkDeleteObjects(ctx, toDelete)
+	return s.store.BulkDeleteObjects(ctx, toDelete)
 }
 
-func (m *mutationService) deletablePhysicalObjectIDsForBulk(ctx context.Context, ids []string) ([]string, error) {
-	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
+func (s *Service) deletablePhysicalObjectIDsForBulk(ctx context.Context, ids []string) ([]string, error) {
+	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +104,7 @@ func (m *mutationService) deletablePhysicalObjectIDsForBulk(ctx context.Context,
 		}
 		obj, ok := byID[objectID]
 		if !ok {
-			canonicalID, resolveErr := m.aliases.ResolveObjectAlias(ctx, objectID)
+			canonicalID, resolveErr := s.store.ResolveObjectAlias(ctx, objectID)
 			if resolveErr == nil && strings.TrimSpace(canonicalID) != "" {
 				return nil, fmt.Errorf("%w: bulk delete requires a physical object UUID; %q is an alias for %q", errorapi.ErrConflict, objectID, strings.TrimSpace(canonicalID))
 			}
@@ -129,46 +127,44 @@ func (m *mutationService) deletablePhysicalObjectIDsForBulk(ctx context.Context,
 	}
 	return toDelete, nil
 }
-func (m *mutationService) DeleteObjectsByChecksums(ctx context.Context, hashes []string) (int, error) {
-	if lister := m.authorizedQuery; lister != nil {
-		resources, includeUnscoped, restrictToResources := objectMethodResourceFilter(ctx, objectMethodDelete)
-		if byChecksum, err := lister.ListObjectIDsByChecksumsAndResources(ctx, hashes, resources, includeUnscoped, restrictToResources); err == nil {
-			seen := make(map[string]struct{})
-			toDelete := make([]string, 0)
-			for _, hash := range hashes {
-				for _, objectID := range byChecksum[hash] {
-					if _, ok := seen[objectID]; ok {
-						continue
-					}
-					seen[objectID] = struct{}{}
-					toDelete = append(toDelete, objectID)
-				}
-			}
-			if len(toDelete) == 0 {
-				return 0, nil
-			}
-			objects, err := m.recordReader.GetBulkObjects(ctx, toDelete)
-			if err != nil {
-				return 0, err
-			}
-			authorized := make([]string, 0, len(objects))
-			for i := range objects {
-				if err := requireAllObjectMethod(ctx, &objects[i], objectMethodDelete); err != nil {
+func (s *Service) DeleteObjectsByChecksums(ctx context.Context, hashes []string) (int, error) {
+	resources, includeUnscoped, restrictToResources := objectMethodResourceFilter(ctx, objectMethodDelete)
+	if byChecksum, err := s.store.ListObjectIDsByChecksumsAndResources(ctx, hashes, resources, includeUnscoped, restrictToResources); err == nil {
+		seen := make(map[string]struct{})
+		toDelete := make([]string, 0)
+		for _, hash := range hashes {
+			for _, objectID := range byChecksum[hash] {
+				if _, ok := seen[objectID]; ok {
 					continue
 				}
-				authorized = append(authorized, string(objects[i].Id))
+				seen[objectID] = struct{}{}
+				toDelete = append(toDelete, objectID)
 			}
-			if len(authorized) == 0 {
-				return 0, nil
-			}
-			if err := m.recordWriter.BulkDeleteObjects(ctx, authorized); err != nil {
-				return 0, err
-			}
-			return len(authorized), nil
 		}
+		if len(toDelete) == 0 {
+			return 0, nil
+		}
+		objects, err := s.store.GetBulkObjects(ctx, toDelete)
+		if err != nil {
+			return 0, err
+		}
+		authorized := make([]string, 0, len(objects))
+		for i := range objects {
+			if err := requireAllObjectMethod(ctx, &objects[i], objectMethodDelete); err != nil {
+				continue
+			}
+			authorized = append(authorized, string(objects[i].Id))
+		}
+		if len(authorized) == 0 {
+			return 0, nil
+		}
+		if err := s.store.BulkDeleteObjects(ctx, authorized); err != nil {
+			return 0, err
+		}
+		return len(authorized), nil
 	}
 
-	objectsByChecksum, err := m.content.GetObjectsByChecksums(ctx, hashes)
+	objectsByChecksum, err := s.store.GetObjectsByChecksums(ctx, hashes)
 	if err != nil {
 		return 0, err
 	}
@@ -192,13 +188,13 @@ func (m *mutationService) DeleteObjectsByChecksums(ctx context.Context, hashes [
 	if len(toDelete) == 0 {
 		return 0, nil
 	}
-	if err := m.recordWriter.BulkDeleteObjects(ctx, toDelete); err != nil {
+	if err := s.store.BulkDeleteObjects(ctx, toDelete); err != nil {
 		return 0, err
 	}
 	return len(toDelete), nil
 }
-func (m *mutationService) deletableObjectIDsForMethod(ctx context.Context, ids []string, requireAll bool) ([]string, error) {
-	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
+func (s *Service) deletableObjectIDsForMethod(ctx context.Context, ids []string, requireAll bool) ([]string, error) {
+	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

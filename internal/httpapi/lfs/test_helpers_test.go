@@ -65,12 +65,7 @@ func (f *lfsTestStorage) CompleteMultipart(_ context.Context, request storage.Co
 }
 
 func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStorage) Dependencies {
-	objectService := objectrecords.NewService(objectrecords.Dependencies{
-		Reader:  ports.objectReader,
-		Writer:  ports.objectWriter,
-		Aliases: ports.aliases,
-		Content: ports.contentReader,
-	})
+	objectService := objectrecords.NewService(ports)
 	transferService := newLFSTransferService(storageFake, ports)
 	return Dependencies{
 		ObjectService:   objectService,

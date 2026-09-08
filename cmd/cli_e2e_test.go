@@ -340,27 +340,13 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	}
 
 	app := fiber.New()
-	objectDependencies := objectrecords.Dependencies{
-		Reader:        database,
-		Writer:        database,
-		AccessMethods: database,
-		AccessPolicy:  database,
-		Aliases:       database,
-		Content:       database,
-		ChecksumScope: database,
-		Scope:         database,
-		Resources:     database,
-		Pages:         database,
-		URLPages:      database,
-		Authorized:    database,
-	}
 	bucketService, err := buckets.NewService(buckets.Dependencies{
 		Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
 	}
-	objectService := objectrecords.NewService(objectDependencies)
+	objectService := objectrecords.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Access: cliFileStorageAccess{root: storageDir}, Scopes: bucketService, Credentials: bucketService,

@@ -6,74 +6,30 @@ import (
 	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
-// RecordReader reads physical object records.
-type RecordReader interface {
-	GetObject(ctx context.Context, id string) (*objectmodel.Record, error)
-	GetBulkObjects(ctx context.Context, ids []string) ([]objectmodel.Record, error)
-}
-
-// RecordWriter mutates physical object records.
-type RecordWriter interface {
-	DeleteObject(ctx context.Context, id string) error
-	CreateObject(ctx context.Context, obj *objectmodel.Record) error
-	BulkDeleteObjects(ctx context.Context, ids []string) error
-	RegisterObjects(ctx context.Context, objects []objectmodel.Record) error
-	ReplaceObjects(ctx context.Context, objects []objectmodel.Record) error
-}
-
-// AccessMethodWriter updates provider access methods attached to records.
-type AccessMethodWriter interface {
-	UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objectmodel.AccessMethod) error
-	BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objectmodel.AccessMethod) error
-}
-
-// AccessPolicyWriter updates controlled-access policy on records.
-type AccessPolicyWriter interface {
-	RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) error
-	RemoveObjectControlledAccessBulk(ctx context.Context, objectIDs []string, resource string) (int, error)
-}
-
-// AliasStore owns physical-to-canonical object alias operations.
-type AliasStore interface {
-	DeleteObjectAlias(ctx context.Context, aliasID string) error
-	CreateObjectAlias(ctx context.Context, aliasID, canonicalObjectID string) error
-	ResolveObjectAlias(ctx context.Context, aliasID string) (string, error)
-}
-
-// ContentReader reads physical records that share a checksum.
-type ContentReader interface {
-	GetObjectsByChecksum(ctx context.Context, checksum string) ([]objectmodel.Record, error)
-	GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objectmodel.Record, error)
-}
-
-// ChecksumScopeQuery expands checksums within a specific object scope.
-type ChecksumScopeQuery interface {
-	ListScopedObjectIDsByChecksums(ctx context.Context, organization, project string, checksums []string) (map[string][]string, error)
-}
-
-// ScopeQuery lists object IDs in a specific object scope.
-type ScopeQuery interface {
-	ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error)
-}
-
-// OptionalResourceQuery is an optional authorization-aware object ID query.
-type OptionalResourceQuery interface {
-	ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error)
-}
-
-// OptionalPageQuery is an optional pagination optimization for object IDs.
-type OptionalPageQuery interface {
-	ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error)
-	ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error)
-}
-
-// OptionalURLQuery is an optional URL-filtered pagination optimization.
-type OptionalURLQuery interface {
-	ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error)
-}
-
-// OptionalAuthorizedQuery is an optional authorization-aware bulk query capability.
-type OptionalAuthorizedQuery interface {
-	ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, restrictToResources bool) ([]string, error)
-	ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums []string, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error)
+// ObjectStore is the complete persistence capability required by the record
+// service. Concrete SQLite and Postgres stores implement this contract.
+type ObjectStore interface {
+	GetObject(context.Context, string) (*objectmodel.Record, error)
+	GetBulkObjects(context.Context, []string) ([]objectmodel.Record, error)
+	DeleteObject(context.Context, string) error
+	BulkDeleteObjects(context.Context, []string) error
+	RegisterObjects(context.Context, []objectmodel.Record) error
+	ReplaceObjects(context.Context, []objectmodel.Record) error
+	UpdateObjectAccessMethods(context.Context, string, []objectmodel.AccessMethod) error
+	BulkUpdateAccessMethods(context.Context, map[string][]objectmodel.AccessMethod) error
+	RemoveObjectControlledAccess(context.Context, string, string) error
+	RemoveObjectControlledAccessBulk(context.Context, []string, string) (int, error)
+	DeleteObjectAlias(context.Context, string) error
+	CreateObjectAlias(context.Context, string, string) error
+	ResolveObjectAlias(context.Context, string) (string, error)
+	GetObjectsByChecksum(context.Context, string) ([]objectmodel.Record, error)
+	GetObjectsByChecksums(context.Context, []string) (map[string][]objectmodel.Record, error)
+	ListScopedObjectIDsByChecksums(context.Context, string, string, []string) (map[string][]string, error)
+	ListObjectIDsByScope(context.Context, string, string) ([]string, error)
+	ListObjectIDsByResources(context.Context, []string, bool) ([]string, error)
+	ListObjectIDsPageByScope(context.Context, string, string, string, int, int) ([]string, error)
+	ListObjectIDsPageByResources(context.Context, []string, bool, string, int, int) ([]string, error)
+	ListObjectIDsPageByURL(context.Context, string, string, string, string, int, int, []string, bool, bool) ([]string, error)
+	ListObjectIDsByScopeAndResources(context.Context, string, string, []string, bool) ([]string, error)
+	ListObjectIDsByChecksumsAndResources(context.Context, []string, []string, bool, bool) (map[string][]string, error)
 }

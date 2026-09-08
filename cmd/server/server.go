@@ -54,7 +54,7 @@ func serviceInfoForBackend(sqlite bool) drs.Service {
 }
 
 type serverBackend struct {
-	objectDependencies objectrecords.Dependencies
+	objectStore        objectrecords.ObjectStore
 	bucketDependencies buckets.Dependencies
 	pending            transferlfs.PendingStore
 	usageIngest        usage.Ingestor
@@ -66,16 +66,13 @@ var (
 	errBucketVisibilityRecordReader = fmt.Errorf("bucket visibility fallback requires an object record reader")
 )
 
-func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectrecords.RecordReader) buckets.VisibilityFallback {
+func newBucketVisibilityFallback(store objectrecords.ObjectStore) buckets.VisibilityFallback {
 	return func(ctx context.Context) ([]buckets.VisibilityRow, error) {
-		if scope == nil {
+		if store == nil {
 			return nil, errBucketVisibilityScopeQuery
 		}
-		if reader == nil {
-			return nil, errBucketVisibilityRecordReader
-		}
 
-		ids, err := scope.ListObjectIDsByScope(ctx, "", "")
+		ids, err := store.ListObjectIDsByScope(ctx, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +80,7 @@ func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectre
 			return []buckets.VisibilityRow{}, nil
 		}
 
-		records, err := reader.GetBulkObjects(ctx, ids)
+		records, err := store.GetBulkObjects(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -140,11 +137,7 @@ func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Reco
 
 func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
 	return serverBackend{
-		objectDependencies: objectrecords.Dependencies{
-			Reader: database, Writer: database, AccessMethods: database, AccessPolicy: database,
-			Aliases: database, Content: database, ChecksumScope: database, Scope: database,
-			Resources: database, Pages: database, URLPages: database, Authorized: database,
-		},
+		objectStore: database,
 		bucketDependencies: buckets.Dependencies{
 			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},
@@ -156,11 +149,7 @@ func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
 
 func postgresServerBackend(database *postgres.PostgresDB) serverBackend {
 	return serverBackend{
-		objectDependencies: objectrecords.Dependencies{
-			Reader: database, Writer: database, AccessMethods: database, AccessPolicy: database,
-			Aliases: database, Content: database, ChecksumScope: database, Scope: database,
-			Resources: database, Pages: database, URLPages: database, Authorized: database,
-		},
+		objectStore: database,
 		bucketDependencies: buckets.Dependencies{
 			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},
@@ -238,10 +227,7 @@ var Cmd = &cobra.Command{
 			invalidator = &storageInvalidator{}
 		}
 		bucketDependencies := backend.bucketDependencies
-		bucketDependencies.Fallback = newBucketVisibilityFallback(
-			backend.objectDependencies.Scope,
-			backend.objectDependencies.Reader,
-		)
+		bucketDependencies.Fallback = newBucketVisibilityFallback(backend.objectStore)
 		bucketService, err := buckets.NewService(bucketDependencies, invalidator)
 		if err != nil {
 			return fmt.Errorf("failed to initialize bucket service: %w", err)
@@ -286,7 +272,7 @@ var Cmd = &cobra.Command{
 			return fmt.Errorf("failed to load configured bucket scopes: %w", err)
 		}
 
-		objectService := objectrecords.NewService(backend.objectDependencies)
+		objectService := objectrecords.NewService(backend.objectStore)
 		usageService := usage.NewService(usage.Dependencies{
 			Reports: backend.usageReports,
 			Objects: objectService,

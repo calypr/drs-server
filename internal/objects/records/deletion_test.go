@@ -132,11 +132,7 @@ func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
 	for _, optimized := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
 			db := seedDeletionRecords(t)
-			deps := objectrecords.Dependencies{Reader: db, Writer: db, Content: db}
-			if optimized {
-				deps.Authorized = db
-			}
-			service := objectrecords.NewService(deps)
+			service := newTestService(db)
 			hashes := []string{strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), "missing"}
 			count, err := service.DeleteObjectsByChecksums(deletionContext(), hashes)
 			if err != nil || count != 1 {
@@ -157,11 +153,7 @@ func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
 	for _, optimized := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
 			db := seedDeletionRecords(t)
-			deps := objectrecords.Dependencies{Reader: db, Scope: db, AccessPolicy: db}
-			if optimized {
-				deps.Authorized = db
-			}
-			service := objectrecords.NewService(deps)
+			service := newTestService(db)
 			count, err := service.DeleteBulkByScope(deletionContext(), "org", "owned")
 			if err != nil || count != 2 {
 				t.Fatalf("scope delete = %d, %v", count, err)

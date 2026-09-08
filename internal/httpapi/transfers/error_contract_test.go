@@ -13,13 +13,14 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/sqlite"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
-type failedUploadReader struct{}
+type failedUploadReader struct{ *sqlite.SqliteDB }
 
 func (failedUploadReader) GetObject(context.Context, string) (*objects.Record, error) {
 	return nil, errors.New("database lookup failed: QA_PRIVATE_PROVIDER_DETAIL")
@@ -30,7 +31,7 @@ func (failedUploadReader) GetBulkObjects(context.Context, []string) ([]objects.R
 }
 
 func TestBulkUploadRedactsServerCause(t *testing.T) {
-	service := objectrecords.NewService(objectrecords.Dependencies{Reader: failedUploadReader{}})
+	service := objectrecords.NewService(failedUploadReader{})
 	app := fiber.New()
 	app.Post("/bulk", handleInternalUploadBulkFiber(service, nil))
 
@@ -59,6 +60,7 @@ func TestBulkUploadRedactsServerCause(t *testing.T) {
 }
 
 type bulkProviderReader struct {
+	*sqlite.SqliteDB
 	objects map[string]*objects.Record
 	errID   string
 	err     error
@@ -183,7 +185,7 @@ func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
 			} else {
 				events = bulkEventFailure{failID: "never", err: errors.New("unused")}
 			}
-			objectService := objectrecords.NewService(objectrecords.Dependencies{Reader: reader})
+			objectService := objectrecords.NewService(reader)
 			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Access: access, Scopes: scopes, Events: events})
 			app := fiber.New()
 			app.Post("/bulk", handleInternalUploadBulkFiber(objectService, transferService))

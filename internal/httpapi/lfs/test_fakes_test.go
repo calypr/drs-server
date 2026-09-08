@@ -16,6 +16,7 @@ import (
 )
 
 type lfsTestServicePorts struct {
+	objectrecords.ObjectStore
 	objectReader  *lfsObjectReaderFake
 	objectWriter  *lfsObjectWriterFake
 	contentReader *lfsContentReaderFake
@@ -24,6 +25,40 @@ type lfsTestServicePorts struct {
 	pending       *lfsPendingStoreFake
 	events        *lfsEventRecorderFake
 	fileCounters  *lfsFileCounterFake
+}
+
+func (p *lfsTestServicePorts) GetObject(ctx context.Context, id string) (*objects.Record, error) {
+	return p.objectReader.GetObject(ctx, id)
+}
+func (p *lfsTestServicePorts) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
+	return p.objectReader.GetBulkObjects(ctx, ids)
+}
+func (p *lfsTestServicePorts) DeleteObject(ctx context.Context, id string) error {
+	return p.objectWriter.DeleteObject(ctx, id)
+}
+func (p *lfsTestServicePorts) BulkDeleteObjects(ctx context.Context, ids []string) error {
+	return p.objectWriter.BulkDeleteObjects(ctx, ids)
+}
+func (p *lfsTestServicePorts) RegisterObjects(ctx context.Context, records []objects.Record) error {
+	return p.objectWriter.RegisterObjects(ctx, records)
+}
+func (p *lfsTestServicePorts) ReplaceObjects(ctx context.Context, records []objects.Record) error {
+	return p.objectWriter.ReplaceObjects(ctx, records)
+}
+func (p *lfsTestServicePorts) DeleteObjectAlias(ctx context.Context, id string) error {
+	return p.aliases.DeleteObjectAlias(ctx, id)
+}
+func (p *lfsTestServicePorts) CreateObjectAlias(ctx context.Context, id, canonical string) error {
+	return p.aliases.CreateObjectAlias(ctx, id, canonical)
+}
+func (p *lfsTestServicePorts) ResolveObjectAlias(ctx context.Context, id string) (string, error) {
+	return p.aliases.ResolveObjectAlias(ctx, id)
+}
+func (p *lfsTestServicePorts) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
+	return p.contentReader.GetObjectsByChecksum(ctx, checksum)
+}
+func (p *lfsTestServicePorts) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
+	return p.contentReader.GetObjectsByChecksums(ctx, checksums)
 }
 
 func newLFSTestPorts(records map[string]*objects.Record, credentials map[string]buckets.Credential) *lfsTestServicePorts {
@@ -43,8 +78,6 @@ type lfsObjectReaderFake struct {
 	records map[string]*objects.Record
 	getErr  error
 }
-
-var _ objectrecords.RecordReader = (*lfsObjectReaderFake)(nil)
 
 func (f *lfsObjectReaderFake) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	if f.getErr != nil {
@@ -73,8 +106,6 @@ func (f *lfsObjectReaderFake) GetBulkObjects(_ context.Context, ids []string) ([
 type lfsObjectWriterFake struct {
 	records map[string]*objects.Record
 }
-
-var _ objectrecords.RecordWriter = (*lfsObjectWriterFake)(nil)
 
 func (f *lfsObjectWriterFake) DeleteObject(_ context.Context, id string) error {
 	delete(f.records, id)
@@ -110,8 +141,6 @@ func (f *lfsObjectWriterFake) ReplaceObjects(ctx context.Context, records []obje
 type lfsContentReaderFake struct {
 	records map[string]*objects.Record
 }
-
-var _ objectrecords.ContentReader = (*lfsContentReaderFake)(nil)
 
 func (f *lfsContentReaderFake) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
 	result := make([]objects.Record, 0)
@@ -153,8 +182,6 @@ func recordMatchesChecksum(record *objects.Record, checksum string) bool {
 type lfsAliasStoreFake struct {
 	aliases map[string]string
 }
-
-var _ objectrecords.AliasStore = (*lfsAliasStoreFake)(nil)
 
 func (f *lfsAliasStoreFake) DeleteObjectAlias(_ context.Context, aliasID string) error {
 	delete(f.aliases, aliasID)

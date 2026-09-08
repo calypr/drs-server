@@ -8,9 +8,11 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
 
 type bulkOverwriteStore struct {
+	objectrecords.ObjectStore
 	Objects map[string]*objects.Record
 	Aliases map[string]string
 }
@@ -108,6 +110,7 @@ func (f *bulkOverwriteStore) ListScopedObjectIDsByChecksums(_ context.Context, o
 }
 
 type readObjectStore struct {
+	objectrecords.ObjectStore
 	Objects   map[string]*objects.Record
 	BulkCalls [][]string
 }

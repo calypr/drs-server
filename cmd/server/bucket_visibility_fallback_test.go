@@ -9,6 +9,7 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
 
 type bucketFallbackScopeQuery struct {
@@ -30,6 +31,30 @@ type bucketFallbackRecordReader struct {
 	err     error
 	calls   int
 	ids     []string
+}
+
+type bucketFallbackStore struct {
+	*serverObjectStore
+	scope  *bucketFallbackScopeQuery
+	reader *bucketFallbackRecordReader
+}
+
+func (s *bucketFallbackStore) ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error) {
+	if s.scope == nil {
+		return nil, errBucketVisibilityScopeQuery
+	}
+	return s.scope.ListObjectIDsByScope(ctx, organization, project)
+}
+
+func (s *bucketFallbackStore) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
+	if s.reader == nil {
+		return nil, errBucketVisibilityRecordReader
+	}
+	return s.reader.GetBulkObjects(ctx, ids)
+}
+
+func newBucketFallbackStore(scope *bucketFallbackScopeQuery, reader *bucketFallbackRecordReader) objectrecords.ObjectStore {
+	return &bucketFallbackStore{serverObjectStore: &serverObjectStore{}, scope: scope, reader: reader}
 }
 
 func (r *bucketFallbackRecordReader) GetObject(context.Context, string) (*objects.Record, error) {
@@ -63,7 +88,7 @@ func TestBucketVisibilityFallbackScansAndProjectsRows(t *testing.T) {
 		},
 	}}
 
-	rows, err := newBucketVisibilityFallback(scope, reader)(context.Background())
+	rows, err := newBucketVisibilityFallback(newBucketFallbackStore(scope, reader))(context.Background())
 	if err != nil {
 		t.Fatalf("fallback returned error: %v", err)
 	}
@@ -96,7 +121,7 @@ func TestBucketVisibilityFallbackFiltersRestrictedObjectsAndHonorsBroadAccess(t 
 		{Id: "denied", ControlledAccess: &[]string{"/organization/org/project/denied"}, AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/denied"}}}},
 		{Id: "policy-denied", PublicReadPolicyKnown: true, AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/policy-denied"}}}},
 	}}
-	fallback := newBucketVisibilityFallback(scope, reader)
+	fallback := newBucketVisibilityFallback(newBucketFallbackStore(scope, reader))
 
 	restricted := access.NewSession("local")
 	restricted.SetAuthorizations(nil, map[string]map[string]bool{resource: {"read": true}}, true)
@@ -122,7 +147,7 @@ func TestBucketVisibilityFallbackFiltersRestrictedObjectsAndHonorsBroadAccess(t 
 func TestBucketVisibilityFallbackPropagatesScanAndHydrationErrors(t *testing.T) {
 	scanErr := errors.New("scan failed")
 	reader := &bucketFallbackRecordReader{}
-	fallback := newBucketVisibilityFallback(&bucketFallbackScopeQuery{err: scanErr}, reader)
+	fallback := newBucketVisibilityFallback(newBucketFallbackStore(&bucketFallbackScopeQuery{err: scanErr}, reader))
 	if _, err := fallback(context.Background()); !errors.Is(err, scanErr) {
 		t.Fatalf("scan error = %v, want %v", err, scanErr)
 	}
@@ -131,19 +156,19 @@ func TestBucketVisibilityFallbackPropagatesScanAndHydrationErrors(t *testing.T) 
 	}
 
 	hydrateErr := errors.New("hydration failed")
-	fallback = newBucketVisibilityFallback(&bucketFallbackScopeQuery{ids: []string{"obj"}}, &bucketFallbackRecordReader{err: hydrateErr})
+	fallback = newBucketVisibilityFallback(newBucketFallbackStore(&bucketFallbackScopeQuery{ids: []string{"obj"}}, &bucketFallbackRecordReader{err: hydrateErr}))
 	if _, err := fallback(context.Background()); !errors.Is(err, hydrateErr) {
 		t.Fatalf("hydration error = %v, want %v", err, hydrateErr)
 	}
 }
 
 func TestBucketVisibilityFallbackRejectsMissingObjectCapabilities(t *testing.T) {
-	fallback := newBucketVisibilityFallback(nil, nil)
+	fallback := newBucketVisibilityFallback(nil)
 	if _, err := fallback(context.Background()); !errors.Is(err, errBucketVisibilityScopeQuery) {
 		t.Fatalf("missing scope error = %v, want %v", err, errBucketVisibilityScopeQuery)
 	}
 
-	fallback = newBucketVisibilityFallback(&bucketFallbackScopeQuery{ids: []string{"obj"}}, nil)
+	fallback = newBucketVisibilityFallback(newBucketFallbackStore(&bucketFallbackScopeQuery{ids: []string{"obj"}}, nil))
 	if _, err := fallback(context.Background()); !errors.Is(err, errBucketVisibilityRecordReader) {
 		t.Fatalf("missing reader error = %v, want %v", err, errBucketVisibilityRecordReader)
 	}

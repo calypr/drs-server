@@ -213,7 +213,7 @@ func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
 	}
 
 	ctx := buildLocalAuthzContext(map[string]map[string]bool{firstResource: {"read": true}})
-	service := objectrecords.NewService(objectrecords.Dependencies{Reader: database, Content: database})
+	service := newTestService(database)
 	got, err := service.GetBulkObjects(ctx, []string{"bulk-b"}, "read")
 	if err != nil {
 		t.Fatalf("GetBulkObjects failed: %v", err)
@@ -380,7 +380,7 @@ func TestPrepareScopedObjects_HydratesOnlyMissingSiblingIDs(t *testing.T) {
 			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
 		}
 	}
-	om := objectrecords.NewService(objectrecords.Dependencies{Reader: tracked, Content: tracked, ChecksumScope: tracked})
+	om := newTestService(tracked)
 
 	initial, err := tracked.GetBulkObjects(context.Background(), []string{"dup-a"})
 	if err != nil {

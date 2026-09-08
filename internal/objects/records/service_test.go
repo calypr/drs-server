@@ -6,28 +6,26 @@ import (
 	"testing"
 
 	objectmodel "github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/sqlite"
 )
 
-type serviceCaptureWriter struct {
+type serviceCaptureStore struct {
+	*sqlite.SqliteDB
 	registered []objectmodel.Record
 }
 
-func (w *serviceCaptureWriter) DeleteObject(context.Context, string) error              { return nil }
-func (w *serviceCaptureWriter) CreateObject(context.Context, *objectmodel.Record) error { return nil }
-func (w *serviceCaptureWriter) BulkDeleteObjects(context.Context, []string) error {
-	return nil
-}
-func (w *serviceCaptureWriter) RegisterObjects(_ context.Context, records []objectmodel.Record) error {
+func (w *serviceCaptureStore) RegisterObjects(_ context.Context, records []objectmodel.Record) error {
 	w.registered = append([]objectmodel.Record(nil), records...)
-	return nil
-}
-func (w *serviceCaptureWriter) ReplaceObjects(context.Context, []objectmodel.Record) error {
 	return nil
 }
 
 func TestServiceOwnsRegistrationPort(t *testing.T) {
-	writer := &serviceCaptureWriter{}
-	service := NewService(Dependencies{Writer: writer})
+	db, err := sqlite.NewSqliteDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := &serviceCaptureStore{SqliteDB: db}
+	service := NewService(writer)
 	input := []objectmodel.Record{{Id: "record-1"}}
 
 	if err := service.RegisterObjects(context.Background(), input); err != nil {

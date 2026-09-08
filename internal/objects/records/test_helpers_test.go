@@ -12,29 +12,7 @@ import (
 )
 
 func newTestService(backend any, _ ...any) *objectrecords.Service {
-	deps := objectrecords.Dependencies{
-		Reader:        backend.(objectrecords.RecordReader),
-		Writer:        backend.(objectrecords.RecordWriter),
-		AccessMethods: backend.(objectrecords.AccessMethodWriter),
-		AccessPolicy:  backend.(objectrecords.AccessPolicyWriter),
-		Aliases:       backend.(objectrecords.AliasStore),
-		Content:       backend.(objectrecords.ContentReader),
-		ChecksumScope: backend.(objectrecords.ChecksumScopeQuery),
-		Scope:         backend.(objectrecords.ScopeQuery),
-	}
-	if optional, ok := backend.(objectrecords.OptionalResourceQuery); ok {
-		deps.Resources = optional
-	}
-	if optional, ok := backend.(objectrecords.OptionalPageQuery); ok {
-		deps.Pages = optional
-	}
-	if optional, ok := backend.(objectrecords.OptionalURLQuery); ok {
-		deps.URLPages = optional
-	}
-	if optional, ok := backend.(objectrecords.OptionalAuthorizedQuery); ok {
-		deps.Authorized = optional
-	}
-	return objectrecords.NewService(deps)
+	return objectrecords.NewService(backend.(objectrecords.ObjectStore))
 }
 
 func buildGen3Context(privileges map[string]map[string]bool) context.Context {

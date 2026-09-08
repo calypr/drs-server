@@ -9,8 +9,8 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 )
 
-func (m *mutationService) UpdateRecord(ctx context.Context, id string, update objectmodel.Record, explicitSize *int64, now time.Time) (objectmodel.Record, error) {
-	existing, err := m.GetObject(ctx, id, objectMethodUpdate)
+func (s *Service) UpdateRecord(ctx context.Context, id string, update objectmodel.Record, explicitSize *int64, now time.Time) (objectmodel.Record, error) {
+	existing, err := s.GetObject(ctx, id, objectMethodUpdate)
 	if err != nil {
 		return objectmodel.Record{}, err
 	}
@@ -27,12 +27,12 @@ func (m *mutationService) UpdateRecord(ctx context.Context, id string, update ob
 	if err != nil {
 		return objectmodel.Record{}, err
 	}
-	if err := m.recordWriter.ReplaceObjects(ctx, []objectmodel.Record{merged}); err != nil {
+	if err := s.store.ReplaceObjects(ctx, []objectmodel.Record{merged}); err != nil {
 		return objectmodel.Record{}, err
 	}
 	return merged, nil
 }
 
-func (m *mutationService) ReplaceObjects(ctx context.Context, objs []objectmodel.Record) error {
-	return m.recordWriter.ReplaceObjects(ctx, objs)
+func (s *Service) ReplaceObjects(ctx context.Context, objs []objectmodel.Record) error {
+	return s.store.ReplaceObjects(ctx, objs)
 }

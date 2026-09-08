@@ -409,12 +409,12 @@ func uniqueStrings(values []string) []string {
 	sort.Strings(out)
 	return out
 }
-func (m *mutationService) CollapseProjectChecksumDuplicates(ctx context.Context, organization, project string) (int, error) {
-	ids, err := m.scope.ListObjectIDsByScope(ctx, organization, project)
+func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organization, project string) (int, error) {
+	ids, err := s.store.ListObjectIDsByScope(ctx, organization, project)
 	if err != nil {
 		return 0, err
 	}
-	objects, err := m.recordReader.GetBulkObjects(ctx, ids)
+	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
 		return 0, err
 	}
@@ -458,15 +458,15 @@ func (m *mutationService) CollapseProjectChecksumDuplicates(ctx context.Context,
 	if len(merged) == 0 {
 		return 0, nil
 	}
-	if err := m.recordWriter.RegisterObjects(ctx, merged); err != nil {
+	if err := s.store.RegisterObjects(ctx, merged); err != nil {
 		return 0, err
 	}
 	for aliasID, canonicalID := range aliasMap {
-		if err := m.aliases.CreateObjectAlias(ctx, aliasID, canonicalID); err != nil {
+		if err := s.store.CreateObjectAlias(ctx, aliasID, canonicalID); err != nil {
 			return 0, err
 		}
 	}
-	if err := m.recordWriter.BulkDeleteObjects(ctx, uniqueStrings(toDelete)); err != nil {
+	if err := s.store.BulkDeleteObjects(ctx, uniqueStrings(toDelete)); err != nil {
 		return 0, err
 	}
 	return len(aliasMap), nil

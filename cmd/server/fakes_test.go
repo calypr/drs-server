@@ -240,6 +240,104 @@ func (s *serverObjectStore) ListObjectIDsByResources(_ context.Context, resource
 	return result, nil
 }
 
+func (s *serverObjectStore) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
+	ids, err := s.ListObjectIDsByScope(ctx, organization, project)
+	return pageServerIDs(ids, startAfter, limit, offset), err
+}
+
+func (s *serverObjectStore) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
+	ids, err := s.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+	return pageServerIDs(ids, startAfter, limit, offset), err
+}
+
+func (s *serverObjectStore) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
+	ids := make([]string, 0)
+	for id, record := range s.records {
+		if organization != "" && !serverRecordInScope(record, organization, project) {
+			continue
+		}
+		if !serverRecordHasURL(record, objectURL) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return pageServerIDs(ids, startAfter, limit, offset), nil
+}
+
+func (s *serverObjectStore) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, includeUnscoped bool) ([]string, error) {
+	ids, err := s.ListObjectIDsByScope(ctx, organization, project)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := s.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(allowed))
+	for _, id := range allowed {
+		set[id] = struct{}{}
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := set[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+func (s *serverObjectStore) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
+	result := make(map[string][]string, len(checksums))
+	for _, checksum := range checksums {
+		matches, err := s.GetObjectsByChecksum(ctx, checksum)
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range matches {
+			if !restrictToResources || len(resources) == 0 {
+				result[checksum] = append(result[checksum], string(record.Id))
+				continue
+			}
+			for _, candidate := range objects.AccessResources(&record) {
+				for _, resource := range resources {
+					if candidate == resource {
+						result[checksum] = append(result[checksum], string(record.Id))
+					}
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
+func serverRecordHasURL(record *objects.Record, wanted string) bool {
+	if record == nil || record.AccessMethods == nil {
+		return false
+	}
+	for _, method := range *record.AccessMethods {
+		if method.AccessUrl != nil && strings.TrimSpace(method.AccessUrl.Url) == strings.TrimSpace(wanted) {
+			return true
+		}
+	}
+	return false
+}
+
+func pageServerIDs(ids []string, startAfter string, limit, offset int) []string {
+	start := 0
+	for start < len(ids) && ids[start] <= startAfter {
+		start++
+	}
+	start += offset
+	if start > len(ids) {
+		start = len(ids)
+	}
+	end := len(ids)
+	if limit >= 0 && start+limit < end {
+		end = start + limit
+	}
+	return append([]string(nil), ids[start:end]...)
+}
+
 func serverRecordHasChecksum(record *objects.Record, checksum string) bool {
 	for _, candidate := range record.Checksums {
 		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), checksum) {
@@ -294,19 +392,11 @@ func cloneServerRecord(record *objects.Record) *objects.Record {
 }
 
 var (
-	_ objectrecords.RecordReader          = (*serverObjectStore)(nil)
-	_ objectrecords.RecordWriter          = (*serverObjectStore)(nil)
-	_ objectrecords.AccessMethodWriter    = (*serverObjectStore)(nil)
-	_ objectrecords.AccessPolicyWriter    = (*serverObjectStore)(nil)
-	_ objectrecords.AliasStore            = (*serverObjectStore)(nil)
-	_ objectrecords.ContentReader         = (*serverObjectStore)(nil)
-	_ objectrecords.ChecksumScopeQuery    = (*serverObjectStore)(nil)
-	_ objectrecords.ScopeQuery            = (*serverObjectStore)(nil)
-	_ objectrecords.OptionalResourceQuery = (*serverObjectStore)(nil)
+	_ objectrecords.ObjectStore = (*serverObjectStore)(nil)
 )
 
 type serverTestDependencies struct {
-	objects       objectrecords.Dependencies
+	objects       objectrecords.ObjectStore
 	bucketService *buckets.Service
 	usageIngest   usage.Ingestor
 	usageReports  usage.ReportStore
@@ -314,20 +404,15 @@ type serverTestDependencies struct {
 }
 
 func mockServerDependencies(objectStore *serverObjectStore, bucketStore *serverBucketStore) serverTestDependencies {
-	objectDependencies := objectrecords.Dependencies{
-		Reader: objectStore, Writer: objectStore, AccessMethods: objectStore,
-		AccessPolicy: objectStore, Aliases: objectStore, Content: objectStore,
-		ChecksumScope: objectStore, Scope: objectStore, Resources: objectStore,
-	}
 	bucketService, err := buckets.NewService(buckets.Dependencies{
 		Credentials: bucketStore, CredentialAdmin: bucketStore, Scopes: bucketStore,
-		Fallback: newBucketVisibilityFallback(objectDependencies.Scope, objectDependencies.Reader),
+		Fallback: newBucketVisibilityFallback(objectStore),
 	}, nil)
 	if err != nil {
 		panic(err)
 	}
 	return serverTestDependencies{
-		objects:       objectDependencies,
+		objects:       objectStore,
 		bucketService: bucketService,
 		usageIngest:   serverUsageStore{},
 		usageReports:  serverUsageStore{},

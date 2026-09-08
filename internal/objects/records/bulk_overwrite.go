@@ -23,7 +23,7 @@ type BulkOverwriteResult struct {
 // BulkOverwriteObjects replaces records from one project snapshot without
 // canonicalizing checksum siblings. A checksum can therefore exist in more
 // than one project, while still identifying an existing record in this scope.
-func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization, project string, candidates []objectmodel.Record) (BulkOverwriteResult, error) {
+func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, project string, candidates []objectmodel.Record) (BulkOverwriteResult, error) {
 	var result BulkOverwriteResult
 	if len(candidates) == 0 {
 		return result, nil
@@ -52,7 +52,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 		}
 	}
 
-	checksumMatches, err := m.checksumScope.ListScopedObjectIDsByChecksums(ctx, organization, project, uniqueOverwriteStrings(hashes))
+	checksumMatches, err := s.store.ListScopedObjectIDsByChecksums(ctx, organization, project, uniqueOverwriteStrings(hashes))
 	if err != nil {
 		return result, err
 	}
@@ -63,7 +63,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 	for _, matches := range checksumMatches {
 		ids = append(ids, matches...)
 	}
-	existingList, err := m.recordReader.GetBulkObjects(ctx, uniqueOverwriteStrings(ids))
+	existingList, err := s.store.GetBulkObjects(ctx, uniqueOverwriteStrings(ids))
 	if err != nil {
 		return result, err
 	}
@@ -76,7 +76,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 	usedTargets := make(map[string]string, len(candidates))
 	for i, candidate := range candidates {
 		sourceDID := string(candidate.Id)
-		canonicalID, aliasErr := m.aliases.ResolveObjectAlias(ctx, sourceDID)
+		canonicalID, aliasErr := s.store.ResolveObjectAlias(ctx, sourceDID)
 		if aliasErr == nil && canonicalID != sourceDID {
 			return result, fmt.Errorf("%w: target DID %q is an alias for %q", errorapi.ErrBulkOverwriteConflict, sourceDID, canonicalID)
 		}
@@ -111,7 +111,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 		candidate.SelfUri = "drs://" + targetDID
 		resolved[i] = candidate
 		if matched {
-			if err := m.RequireObjectResources(ctx, objectMethodUpdate, []string{resource}); err != nil {
+			if err := s.RequireObjectResources(ctx, objectMethodUpdate, []string{resource}); err != nil {
 				return result, err
 			}
 			current := existing[targetDID]
@@ -123,7 +123,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 			}
 			result.Replaced++
 		} else {
-			if err := m.RequireObjectResources(ctx, objectMethodCreate, []string{resource}); err != nil {
+			if err := s.RequireObjectResources(ctx, objectMethodCreate, []string{resource}); err != nil {
 				return result, err
 			}
 			if !hasObjectMethod(ctx, &candidate, objectMethodCreate) {
@@ -133,7 +133,7 @@ func (m *mutationService) BulkOverwriteObjects(ctx context.Context, organization
 		}
 	}
 
-	if err := m.recordWriter.RegisterObjects(ctx, resolved); err != nil {
+	if err := s.store.RegisterObjects(ctx, resolved); err != nil {
 		return BulkOverwriteResult{}, err
 	}
 	return result, nil

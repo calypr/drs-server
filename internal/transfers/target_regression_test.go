@@ -190,6 +190,23 @@ func TestTargetHelperContracts(t *testing.T) {
 
 type staticContentReader struct{ records []objects.Record }
 
+type staticObjectStore struct {
+	objectrecords.ObjectStore
+	staticContentReader
+}
+
+func newStaticObjectStore(reader staticContentReader) objectrecords.ObjectStore {
+	return staticObjectStore{staticContentReader: reader}
+}
+
+func (s staticObjectStore) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
+	return s.staticContentReader.GetObjectsByChecksum(ctx, checksum)
+}
+
+func (s staticObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
+	return s.staticContentReader.GetObjectsByChecksums(ctx, checksums)
+}
+
 func (r staticContentReader) GetObjectsByChecksum(context.Context, string) ([]objects.Record, error) {
 	return r.records, nil
 }
@@ -217,7 +234,7 @@ func TestMergedContentPreservesReplicaLocation(t *testing.T) {
 	if err != nil || single != "signed:"+original {
 		t.Fatalf("single project changed replica: %q (%v)", single, err)
 	}
-	objectService := objectrecords.NewService(objectrecords.Dependencies{Content: staticContentReader{records: objs}})
+	objectService := objectrecords.NewService(newStaticObjectStore(staticContentReader{records: objs}))
 	view, err := objectService.GetCanonicalContent(context.Background(), objs[0].Checksums[0].Checksum, "")
 	if err != nil {
 		t.Fatal(err)

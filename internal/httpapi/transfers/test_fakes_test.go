@@ -27,15 +27,23 @@ type transferHTTPFixture struct {
 }
 
 type transferObjectStoreFake struct {
+	objectrecords.ObjectStore
 	fixture *transferHTTPFixture
 }
 
 var (
-	_ objectrecords.RecordReader       = (*transferObjectStoreFake)(nil)
-	_ objectrecords.ContentReader      = (*transferObjectStoreFake)(nil)
-	_ objectrecords.ChecksumScopeQuery = (*transferObjectStoreFake)(nil)
-	_ objectrecords.ScopeQuery         = (*transferObjectStoreFake)(nil)
+	_ objectrecords.ObjectStore = (*transferObjectStoreFake)(nil)
 )
+
+func (f *transferObjectStoreFake) DeleteObjectAlias(ctx context.Context, id string) error {
+	return (&transferAliasStoreFake{fixture: f.fixture}).DeleteObjectAlias(ctx, id)
+}
+func (f *transferObjectStoreFake) CreateObjectAlias(ctx context.Context, id, canonical string) error {
+	return (&transferAliasStoreFake{fixture: f.fixture}).CreateObjectAlias(ctx, id, canonical)
+}
+func (f *transferObjectStoreFake) ResolveObjectAlias(ctx context.Context, id string) (string, error) {
+	return (&transferAliasStoreFake{fixture: f.fixture}).ResolveObjectAlias(ctx, id)
+}
 
 func (f *transferObjectStoreFake) GetObject(_ context.Context, id string) (*objects.Record, error) {
 	obj, ok := f.fixture.Objects[id]
@@ -58,8 +66,6 @@ func (f *transferObjectStoreFake) GetBulkObjects(_ context.Context, ids []string
 type transferAliasStoreFake struct {
 	fixture *transferHTTPFixture
 }
-
-var _ objectrecords.AliasStore = (*transferAliasStoreFake)(nil)
 
 func (f *transferAliasStoreFake) DeleteObjectAlias(_ context.Context, aliasID string) error {
 	delete(f.fixture.Objects, aliasID)

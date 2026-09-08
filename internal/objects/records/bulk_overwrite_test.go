@@ -25,7 +25,7 @@ func TestBulkOverwriteObjects_ReplacesProjectChecksumSibling(t *testing.T) {
 			Id: "target-did", Name: &oldName, Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource},
 		},
 	}}
-	om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
+	om := newTestService(db)
 	candidate := objects.Record{
 
 		Id:               "source-did",
@@ -88,7 +88,7 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			om := objectrecords.NewService(objectrecords.Dependencies{Reader: tc.db, Writer: tc.db, Aliases: tc.db, ChecksumScope: tc.db})
+			om := newTestService(tc.db)
 			_, err := om.BulkOverwriteObjects(context.Background(), "org", "project", tc.candidates)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected error containing %q, got %v", tc.want, err)
@@ -102,7 +102,7 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 
 func TestBulkOverwriteObjects_EmptyInput(t *testing.T) {
 	db := &bulkOverwriteStore{}
-	om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
+	om := newTestService(db)
 	result, err := om.BulkOverwriteObjects(context.Background(), "", "", nil)
 	if err != nil || result != (objectrecords.BulkOverwriteResult{}) {
 		t.Fatalf("expected empty result, got %+v err=%v", result, err)
@@ -120,7 +120,7 @@ func TestBulkOverwriteObjects_DoesNotMatchChecksumOutsideProject(t *testing.T) {
 			Id: "other-project", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{"/organization/org/project/other"},
 		},
 	}}
-	om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
+	om := newTestService(db)
 	candidate := objects.Record{
 		Id: "source-did", Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &[]string{resource},
 	}
@@ -195,7 +195,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 	}
 	t.Run("create", func(t *testing.T) {
 		db := &bulkOverwriteStore{}
-		om := objectrecords.NewService(objectrecords.Dependencies{Reader: db, Writer: db, Aliases: db, ChecksumScope: db})
+		om := newTestService(db)
 		ctx := buildLocalAuthzContext(map[string]map[string]bool{
 			allowedResource: {"create": true},
 		})
@@ -208,7 +208,7 @@ func TestBulkOverwriteObjects_RequiresTargetProjectPermission(t *testing.T) {
 
 	t.Run("update", func(t *testing.T) {
 		database := &bulkOverwriteStore{Objects: map[string]*objects.Record{}}
-		om := objectrecords.NewService(objectrecords.Dependencies{Reader: database, Writer: database, Aliases: database, ChecksumScope: database})
+		om := newTestService(database)
 		ctx := buildLocalAuthzContext(map[string]map[string]bool{
 			allowedResource: {"update": true},
 		})

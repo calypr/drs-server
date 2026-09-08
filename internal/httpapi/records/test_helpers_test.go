@@ -28,15 +28,7 @@ type internalRecordStore struct {
 }
 
 var (
-	_ objectrecords.RecordReader          = (*internalRecordStore)(nil)
-	_ objectrecords.RecordWriter          = (*internalRecordStore)(nil)
-	_ objectrecords.AccessMethodWriter    = (*internalRecordStore)(nil)
-	_ objectrecords.AccessPolicyWriter    = (*internalRecordStore)(nil)
-	_ objectrecords.AliasStore            = (*internalRecordStore)(nil)
-	_ objectrecords.ContentReader         = (*internalRecordStore)(nil)
-	_ objectrecords.ChecksumScopeQuery    = (*internalRecordStore)(nil)
-	_ objectrecords.ScopeQuery            = (*internalRecordStore)(nil)
-	_ objectrecords.OptionalResourceQuery = (*internalRecordStore)(nil)
+	_ objectrecords.ObjectStore = (*internalRecordStore)(nil)
 )
 
 func (m *internalRecordStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
@@ -285,6 +277,113 @@ func (m *internalRecordStore) RemoveObjectControlledAccessBulk(ctx context.Conte
 		}
 	}
 	return count, nil
+}
+
+func (m *internalRecordStore) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
+	ids, err := m.ListObjectIDsByScope(ctx, organization, project)
+	return pageRecordIDs(ids, startAfter, limit, offset), err
+}
+
+func (m *internalRecordStore) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
+	ids, err := m.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+	return pageRecordIDs(ids, startAfter, limit, offset), err
+}
+
+func (m *internalRecordStore) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
+	ids := make([]string, 0)
+	for id, obj := range m.Objects {
+		if !recordHasAccessURL(obj, objectURL) || (organization != "" && !m.objectMatchesScope(obj, organization, project)) {
+			continue
+		}
+		if restrictToResources {
+			allowed, err := m.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+			if err != nil { return nil, err }
+			found := false
+			for _, candidate := range allowed { if candidate == id { found = true; break } }
+			if !found { continue }
+		}
+		ids = append(ids, id)
+	}
+	return pageRecordIDs(ids, startAfter, limit, offset), nil
+}
+
+func recordHasAccessURL(obj *objects.Record, wanted string) bool {
+	if obj == nil || obj.AccessMethods == nil {
+		return false
+	}
+	for _, method := range *obj.AccessMethods {
+		if method.AccessUrl != nil && strings.TrimSpace(method.AccessUrl.Url) == strings.TrimSpace(wanted) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *internalRecordStore) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, includeUnscoped bool) ([]string, error) {
+	ids, err := m.ListObjectIDsByScope(ctx, organization, project)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := m.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(allowed))
+	for _, id := range allowed {
+		set[id] = struct{}{}
+	}
+	filtered := ids[:0]
+	for _, id := range ids {
+		if _, ok := set[id]; ok {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered, nil
+}
+
+func (m *internalRecordStore) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
+	result := make(map[string][]string, len(checksums))
+	allowed, err := m.ListObjectIDsByResources(ctx, resources, includeUnscoped)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(allowed))
+	for _, id := range allowed {
+		set[id] = struct{}{}
+	}
+	for _, checksum := range checksums {
+		objectsForChecksum, err := m.GetObjectsByChecksum(ctx, checksum)
+		if err != nil {
+			return nil, err
+		}
+		for _, obj := range objectsForChecksum {
+			id := string(obj.Id)
+			if !restrictToResources || len(resources) == 0 {
+				result[checksum] = append(result[checksum], id)
+				continue
+			}
+			if _, ok := set[id]; ok {
+				result[checksum] = append(result[checksum], id)
+			}
+		}
+	}
+	return result, nil
+}
+
+func pageRecordIDs(ids []string, startAfter string, limit, offset int) []string {
+	start := 0
+	for start < len(ids) && ids[start] <= startAfter {
+		start++
+	}
+	start += offset
+	if start > len(ids) {
+		start = len(ids)
+	}
+	end := len(ids)
+	if limit >= 0 && start+limit < end {
+		end = start + limit
+	}
+	return append([]string(nil), ids[start:end]...)
 }
 
 func (m *internalRecordStore) cloneObject(id string, obj *objects.Record) *objects.Record {

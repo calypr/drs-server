@@ -13,9 +13,11 @@ import (
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/persistence/sqlite"
 )
 
 type bucketTestStore struct {
+	*sqlite.SqliteDB
 	Credentials  map[string]domainbuckets.Credential
 	BucketScopes map[string]domainbuckets.Scope
 	Objects      map[string]*objects.Record
@@ -211,7 +213,7 @@ func newInternalDRSObjectManager(store *bucketTestStore, storageDependency any) 
 		Credentials:     store,
 		CredentialAdmin: store,
 		Scopes:          store,
-		Fallback:        newBucketVisibilityFallback(store, store),
+		Fallback:        newBucketVisibilityFallback(store),
 	}, invalidator)
 	if err != nil {
 		panic(err)
@@ -230,24 +232,20 @@ func (*internalDRSStorageFake) InvalidateBucket(string) {}
 var _ domainbuckets.CredentialReader = (*bucketTestStore)(nil)
 var _ domainbuckets.CredentialAdmin = (*bucketTestStore)(nil)
 var _ domainbuckets.ScopeStore = (*bucketTestStore)(nil)
-var _ objectrecords.RecordReader = (*bucketTestStore)(nil)
-var _ objectrecords.ScopeQuery = (*bucketTestStore)(nil)
+var _ objectrecords.ObjectStore = (*bucketTestStore)(nil)
 
 var (
 	errBucketVisibilityScopeQuery   = errors.New("bucket visibility fallback requires an object scope query")
 	errBucketVisibilityRecordReader = errors.New("bucket visibility fallback requires an object record reader")
 )
 
-func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectrecords.RecordReader) domainbuckets.VisibilityFallback {
+func newBucketVisibilityFallback(store objectrecords.ObjectStore) domainbuckets.VisibilityFallback {
 	return func(ctx context.Context) ([]domainbuckets.VisibilityRow, error) {
-		if scope == nil {
+		if store == nil {
 			return nil, errBucketVisibilityScopeQuery
 		}
-		if reader == nil {
-			return nil, errBucketVisibilityRecordReader
-		}
 
-		ids, err := scope.ListObjectIDsByScope(ctx, "", "")
+		ids, err := store.ListObjectIDsByScope(ctx, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +253,7 @@ func newBucketVisibilityFallback(scope objectrecords.ScopeQuery, reader objectre
 			return []domainbuckets.VisibilityRow{}, nil
 		}
 
-		records, err := reader.GetBulkObjects(ctx, ids)
+		records, err := store.GetBulkObjects(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
