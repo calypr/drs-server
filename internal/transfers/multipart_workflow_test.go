@@ -80,7 +80,7 @@ type lifecycleMultipartFake struct {
 	release       <-chan struct{}
 }
 
-func (f *lifecycleMultipartFake) BeginMultipart(context.Context, storage.ObjectTarget) (storage.UploadID, error) {
+func (f *lifecycleMultipartFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if len(f.beginIDs) == 0 {
@@ -91,8 +91,8 @@ func (f *lifecycleMultipartFake) BeginMultipart(context.Context, storage.ObjectT
 	return id, nil
 }
 
-func (f *lifecycleMultipartFake) AccessMultipartPart(context.Context, storage.MultipartPartRequest) (storage.Access, error) {
-	return storage.Access{}, nil
+func (f *lifecycleMultipartFake) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
 }
 
 func (f *lifecycleMultipartFake) CompleteMultipart(ctx context.Context, request storage.CompleteMultipartRequest) error {

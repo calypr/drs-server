@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"gocloud.dev/blob"
 )
 
-func (b *backend) SignMultipartPart(ctx context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (b *backend) SignMultipartPart(ctx context.Context, _ storage.ProviderBinding, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	partKey := storage.MultipartPartObjectKey(request.Target.Key, request.UploadID, request.PartNumber)
 	signed, err := b.rootBucket.SignedURL(ctx, partKey, &blob.SignedURLOptions{
 		Expiry: 15 * time.Minute,
@@ -21,16 +22,17 @@ func (b *backend) SignMultipartPart(ctx context.Context, request storage.Multipa
 	})
 	if err != nil {
 		// Preserve the local direct-path fallback when fileblob signing is unavailable.
-		return storage.Access{Location: b.pathForKey(partKey)}, nil
+		return storage.SignedAccess{Location: b.pathForKey(partKey)}, nil
 	}
-	return storage.Access{Location: signed}, nil
+	return storage.SignedAccess{Location: signed}, nil
 }
 
-func (b *backend) CompleteMultipartUpload(ctx context.Context, request storage.CompleteMultipartRequest) error {
+func (b *backend) CompleteMultipart(ctx context.Context, _ storage.ProviderBinding, request storage.CompleteMultipartRequest) error {
 	if len(request.Parts) == 0 {
 		return fmt.Errorf("multipart complete requires at least one part")
 	}
-	partList := storage.NormalizedMultipartParts(request.Parts)
+	partList := append([]storage.CompletedPart(nil), request.Parts...)
+	sort.Slice(partList, func(i, j int) bool { return partList[i].PartNumber < partList[j].PartNumber })
 
 	destinationKey := strings.Trim(strings.TrimSpace(request.Target.Key), "/")
 	writer, err := b.rootBucket.NewWriter(ctx, destinationKey, nil)

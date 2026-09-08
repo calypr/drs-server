@@ -216,7 +216,9 @@ func (s *Inspector) probeStorage(ctx context.Context, bucket, key string) (*Obje
 	if s.probe == nil {
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage probe is not configured"}
 	}
-	results := s.probe.Probe(ctx, []storage.ProbeTarget{{ID: "object", Target: storage.ObjectTarget{Bucket: bucket, Key: key}}})
+	results := s.probe.Probe(ctx, []storage.ProbeTarget{{ID: "object", Target: storage.Target{
+		Provider: address.S3Provider, PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}, Key: key,
+	}}})
 	if len(results) == 0 {
 		return nil, &Error{Kind: ErrorBucketUnavailable, Message: "storage probe returned no result"}
 	}

@@ -50,8 +50,8 @@ func noRetrySleep(t *testing.T) func() {
 
 func testListPages(t *testing.T, provider *backend, client *fakeListClient, request storage.InventoryRequest) ([]storage.ObjectMetadata, listStats, error) {
 	t.Helper()
-	input := &awss3.ListObjectsV2Input{Bucket: aws.String(request.Target.Bucket), Prefix: aws.String(request.Target.Prefix)}
-	items, stats, _, err := provider.listPages(context.Background(), client, input, request.Target.Bucket, request.Target.Prefix, request.Target.Prefix, request, false)
+	input := &awss3.ListObjectsV2Input{Bucket: aws.String(request.Target.PhysicalBucket), Prefix: aws.String(request.Prefix)}
+	items, stats, _, err := provider.listPages(context.Background(), client, input, request.Target.PhysicalBucket, request.Prefix, request.Prefix, request, false)
 	return items, stats, err
 }
 
@@ -69,8 +69,8 @@ func TestListPagesRetriesTransientPageFailure(t *testing.T) {
 			{output: testFinalListPage("prefix/two.txt")},
 		},
 	}}
-	provider := newBackend(nil)
-	items, stats, err := testListPages(t, provider, client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	provider := newBackend()
+	items, stats, err := testListPages(t, provider, client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err != nil {
 		t.Fatalf("list pages: %v", err)
 	}
@@ -104,8 +104,8 @@ func TestListPagesRecoversObservedPageSeventeenInternalError(t *testing.T) {
 		{output: testFinalListPage("prefix/page-17.txt")},
 		{output: testFinalListPage("prefix/page-17.txt")},
 	}
-	provider := newBackend(nil)
-	items, stats, err := testListPages(t, provider, client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	provider := newBackend()
+	items, stats, err := testListPages(t, provider, client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err != nil {
 		t.Fatalf("list pages: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestListPagesExhaustsTransientRetriesWithProgress(t *testing.T) {
 			{err: &smithy.GenericAPIError{Code: "InternalError", Message: "try again"}},
 		},
 	}}
-	items, stats, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	items, stats, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err == nil {
 		t.Fatal("expected retry exhaustion error")
 	}
@@ -154,7 +154,7 @@ func TestListPagesDoesNotRetryAccessDenied(t *testing.T) {
 	client := &fakeListClient{pages: map[string][]fakeListPage{
 		"": {{err: &smithy.GenericAPIError{Code: "AccessDenied", Message: "no"}}},
 	}}
-	_, _, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	_, _, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err == nil {
 		t.Fatal("expected access denied error")
 	}
@@ -170,7 +170,7 @@ func TestListPagesErrorsOnMissingContinuationToken(t *testing.T) {
 	client := &fakeListClient{pages: map[string][]fakeListPage{
 		"": {{output: &awss3.ListObjectsV2Output{IsTruncated: aws.Bool(true), Contents: []types.Object{{Key: aws.String("prefix/one.txt")}}}}},
 	}}
-	_, _, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	_, _, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err == nil || !strings.Contains(err.Error(), "without next continuation token") {
 		t.Fatalf("expected missing token error, got %v", err)
 	}
@@ -188,7 +188,7 @@ func TestListPagesRetriesMalformedTruncatedPage(t *testing.T) {
 			{output: testFinalListPage("prefix/one.txt")},
 		},
 	}}
-	items, stats, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	items, stats, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err != nil {
 		t.Fatalf("list pages: %v", err)
 	}
@@ -207,8 +207,8 @@ func TestListPagesRetriesExactProbeMiss(t *testing.T) {
 			{output: testFinalListPage("prefix/target.txt")},
 		},
 	}}
-	request := storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix/target.txt"}, ExactPrefix: true, MaxKeys: 1}
-	items, _, _, err := newBackend(nil).listPagesWithExactProbeRetry(context.Background(), client, &awss3.ListObjectsV2Input{Bucket: aws.String("bucket"), Prefix: aws.String("prefix/target.txt")}, "bucket", "prefix/target.txt", "prefix/target.txt", request, false)
+	request := storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix/target.txt", ExactPrefix: true, MaxKeys: 1}
+	items, _, _, err := newBackend().listPagesWithExactProbeRetry(context.Background(), client, &awss3.ListObjectsV2Input{Bucket: aws.String("bucket"), Prefix: aws.String("prefix/target.txt")}, "bucket", "prefix/target.txt", "prefix/target.txt", request, false)
 	if err != nil {
 		t.Fatalf("exact probe: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestListPagesTerminalReplayUsesContinuationTokenOnly(t *testing.T) {
 			{output: testFinalListPage("prefix/two.txt")},
 		},
 	}}
-	items, stats, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	items, stats, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err != nil {
 		t.Fatalf("list pages: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestListPagesRejectsContradictoryTerminalReplay(t *testing.T) {
 			{output: testListPage("token-3", "prefix/two.txt")},
 		},
 	}}
-	_, _, err := testListPages(t, newBackend(nil), client, storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	_, _, err := testListPages(t, newBackend(), client, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err == nil || !strings.Contains(err.Error(), "terminal replay") {
 		t.Fatalf("expected contradictory terminal replay error, got %v", err)
 	}
@@ -269,8 +269,9 @@ func TestInventoryIncludeHeadFailureDropsListedItems(t *testing.T) {
 		headErrs: []error{&smithy.GenericAPIError{Code: "AccessDenied", Message: "no"}},
 	}
 	provider := cachedBackend(client, &fakePresigner{})
-	result, err := provider.Inventory(context.Background(), storage.InventoryRequest{
-		Target:      storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"},
+	result, err := provider.Inventory(context.Background(), storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}, storage.InventoryRequest{
+		Target:      storage.Target{PhysicalBucket: "bucket"},
+		Prefix:      "prefix",
 		IncludeHead: true,
 	})
 	if err == nil {

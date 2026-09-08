@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -20,7 +19,6 @@ func NewManager(credentials CredentialLookup, registrations ...Registration) (*M
 	if isNilInterface(credentials) {
 		return nil, fmt.Errorf("storage credential lookup is required")
 	}
-
 	providers := make(map[string]Registration, len(registrations))
 	order := make([]Registration, 0, len(registrations))
 	for _, registration := range registrations {
@@ -38,7 +36,6 @@ func NewManager(credentials CredentialLookup, registrations ...Registration) (*M
 		providers[provider] = registration
 		order = append(order, registration)
 	}
-
 	return &Manager{credentials: credentials, providers: providers, order: order}, nil
 }
 
@@ -54,44 +51,81 @@ func canonicalProvider(raw string) (string, error) {
 	return provider, nil
 }
 
-func (m *Manager) Access(ctx context.Context, request AccessRequest) (Access, error) {
-	bucket, key, provider, err := m.resolveAccess(ctx, request.Target)
+// Sign resolves one credential binding and passes it to the provider.
+func (m *Manager) Sign(ctx context.Context, request SignRequest) (SignedAccess, error) {
+	binding, target, err := m.resolveTarget(ctx, request.Target, "access", true)
 	if err != nil {
-		return Access{}, err
+		return SignedAccess{}, err
 	}
-	registration, err := m.registration(provider, "access")
+	registration, err := m.registration(binding.Provider, "access")
 	if err != nil {
-		return Access{}, err
+		return SignedAccess{}, err
 	}
-	target := ObjectTarget{Bucket: bucket, Key: key}
-	if request.Range != nil {
-		return registration.complete.SignDownloadPart(ctx, target, *request.Range, request.Options)
-	}
-	return registration.complete.SignURL(ctx, target, request.Options)
+	request.Target = target
+	return registration.complete.Sign(ctx, binding, request)
 }
 
-func (m *Manager) BeginMultipart(ctx context.Context, target ObjectTarget) (UploadID, error) {
-	registration, err := m.registrationForBucket(ctx, target.Bucket, "multipart")
+// Access remains the legacy adapter until storage-retire-access migrates the
+// final signing callers.
+func (m *Manager) Access(ctx context.Context, request AccessRequest) (Access, error) {
+	requestTarget := Target{OriginalURL: request.Target.Location, LookupKey: request.Target.AccessID}
+	binding, target, err := m.resolveTarget(ctx, requestTarget, "access", true)
+	if err != nil {
+		return Access{}, err
+	}
+	registration, err := m.registration(binding.Provider, "access")
+	if err != nil {
+		return Access{}, err
+	}
+	signed, err := registration.complete.Sign(ctx, binding, SignRequest{
+		Target:           target,
+		Method:           request.Options.Method,
+		ExpiresIn:        request.Options.ExpiresIn,
+		DownloadFilename: request.Options.DownloadFilename,
+		Range:            request.Range,
+	})
+	if err != nil {
+		return Access{}, err
+	}
+	return Access{Location: signed.Location}, nil
+}
+
+func (m *Manager) BeginMultipart(ctx context.Context, target Target) (UploadID, error) {
+	binding, target, err := m.resolveTarget(ctx, target, "multipart", false)
 	if err != nil {
 		return "", err
 	}
-	return registration.complete.InitMultipartUpload(ctx, target)
+	registration, err := m.registration(binding.Provider, "multipart")
+	if err != nil {
+		return "", err
+	}
+	return registration.complete.BeginMultipart(ctx, binding, target)
 }
 
-func (m *Manager) AccessMultipartPart(ctx context.Context, request MultipartPartRequest) (Access, error) {
-	registration, err := m.registrationForBucket(ctx, request.Target.Bucket, "multipart")
+func (m *Manager) SignMultipartPart(ctx context.Context, request MultipartPartRequest) (SignedAccess, error) {
+	binding, target, err := m.resolveTarget(ctx, request.Target, "multipart", false)
 	if err != nil {
-		return Access{}, err
+		return SignedAccess{}, err
 	}
-	return registration.complete.SignMultipartPart(ctx, request)
+	registration, err := m.registration(binding.Provider, "multipart")
+	if err != nil {
+		return SignedAccess{}, err
+	}
+	request.Target = target
+	return registration.complete.SignMultipartPart(ctx, binding, request)
 }
 
 func (m *Manager) CompleteMultipart(ctx context.Context, request CompleteMultipartRequest) error {
-	registration, err := m.registrationForBucket(ctx, request.Target.Bucket, "multipart")
+	binding, target, err := m.resolveTarget(ctx, request.Target, "multipart", false)
 	if err != nil {
 		return err
 	}
-	return registration.complete.CompleteMultipartUpload(ctx, request)
+	registration, err := m.registration(binding.Provider, "multipart")
+	if err != nil {
+		return err
+	}
+	request.Target = target
+	return registration.complete.CompleteMultipart(ctx, binding, request)
 }
 
 func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResult {
@@ -99,31 +133,31 @@ func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResul
 		return nil
 	}
 	results := make([]ProbeResult, len(targets))
-	groups := make(map[string][]probeIndex)
-	providerOrder := make([]string, 0)
+	type groupKey struct{ provider, lookupKey, physicalBucket string }
+	groups := make(map[groupKey]*probeGroup)
+	order := make([]groupKey, 0)
 	for index, target := range targets {
 		results[index] = ProbeResult{ID: target.ID, Target: target.Target}
-		provider, err := m.providerForBucket(ctx, target.Target.Bucket, "probe")
+		binding, resolved, err := m.resolveTarget(ctx, target.Target, "probe", false)
 		if err != nil {
 			results[index].Err = err
 			continue
 		}
-		if _, ok := m.providers[provider]; !ok {
-			results[index].Err = operationError(ErrorProvider, provider, "probe", nil)
-			continue
+		target.Target = resolved
+		key := groupKey{binding.Provider, binding.LookupKey, binding.PhysicalBucket}
+		if _, exists := groups[key]; !exists {
+			order = append(order, key)
+			groups[key] = &probeGroup{binding: binding}
 		}
-		if _, exists := groups[provider]; !exists {
-			providerOrder = append(providerOrder, provider)
-		}
-		groups[provider] = append(groups[provider], probeIndex{index: index, target: target})
+		groups[key].items = append(groups[key].items, probeIndex{index: index, target: target})
 	}
-
-	for _, provider := range providerOrder {
-		registration := m.providers[provider]
-		indexes := groups[provider]
+	for _, key := range order {
+		registration := m.providers[key.provider]
+		group := groups[key]
+		indexes := group.items
 		if registration.prober == nil {
 			for _, item := range indexes {
-				results[item.index].Err = operationError(ErrorUnsupported, provider, "probe", nil)
+				results[item.index].Err = operationError(ErrorUnsupported, key.provider, "probe", nil)
 			}
 			continue
 		}
@@ -131,10 +165,10 @@ func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResul
 		for index, item := range indexes {
 			batch[index] = item.target
 		}
-		provided := registration.prober.Probe(ctx, batch)
+		provided := registration.prober.Probe(ctx, group.binding, batch)
 		for index, item := range indexes {
 			if index >= len(provided) {
-				results[item.index].Err = operationError(ErrorProvider, provider, "probe", fmt.Errorf("backend returned %d results for %d targets", len(provided), len(batch)))
+				results[item.index].Err = operationError(ErrorProvider, key.provider, "probe", fmt.Errorf("backend returned %d results for %d targets", len(provided), len(batch)))
 				continue
 			}
 			results[item.index].Metadata = provided[index].Metadata
@@ -145,14 +179,19 @@ func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResul
 }
 
 func (m *Manager) Inventory(ctx context.Context, request InventoryRequest) (InventoryResult, error) {
-	registration, err := m.registrationForBucket(ctx, request.Target.Bucket, "inventory")
+	binding, target, err := m.resolveTarget(ctx, request.Target, "inventory", false)
+	if err != nil {
+		return InventoryResult{}, err
+	}
+	registration, err := m.registration(binding.Provider, "inventory")
 	if err != nil {
 		return InventoryResult{}, err
 	}
 	if registration.inventory == nil {
-		return InventoryResult{}, operationError(ErrorUnsupported, registration.provider, "inventory", nil)
+		return InventoryResult{}, operationError(ErrorUnsupported, binding.Provider, "inventory", nil)
 	}
-	return registration.inventory.Inventory(ctx, request)
+	request.Target = target
+	return registration.inventory.Inventory(ctx, binding, request)
 }
 
 func (m *Manager) DeleteExact(ctx context.Context, targets []DeleteTarget) error {
@@ -160,9 +199,10 @@ func (m *Manager) DeleteExact(ctx context.Context, targets []DeleteTarget) error
 		return nil
 	}
 	resolved := make([]PhysicalTarget, 0, len(targets))
+	bindings := make(map[string]ProviderBinding, len(targets))
 	seen := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
-		physical, ok, err := m.physicalTarget(ctx, target.Location)
+		physical, binding, ok, err := m.physicalTargetWithBinding(ctx, target.Location)
 		if err != nil {
 			return err
 		}
@@ -175,51 +215,51 @@ func (m *Manager) DeleteExact(ctx context.Context, targets []DeleteTarget) error
 		}
 		seen[key] = struct{}{}
 		resolved = append(resolved, physical)
+		bindings[key] = binding
 	}
-
-	var s3TargetsByBucket map[string][]PhysicalTarget
+	type groupKey struct{ provider, lookupKey, physicalBucket string }
+	groups := make(map[groupKey][]PhysicalTarget)
 	for _, physical := range resolved {
-		if physical.Provider == address.S3Provider {
-			if s3TargetsByBucket == nil {
-				s3TargetsByBucket = make(map[string][]PhysicalTarget)
-			}
-			s3TargetsByBucket[physical.Bucket] = append(s3TargetsByBucket[physical.Bucket], physical)
-			continue
-		}
-		if err := m.deleteTargets(ctx, physical.Provider, []PhysicalTarget{physical}); err != nil {
-			return err
-		}
+		key := groupKey{physical.Provider, physical.LookupKey, physical.PhysicalBucket}
+		groups[key] = append(groups[key], physical)
 	}
-
-	buckets := make([]string, 0, len(s3TargetsByBucket))
-	for bucket := range s3TargetsByBucket {
-		buckets = append(buckets, bucket)
+	keys := make([]groupKey, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
 	}
-	sort.Strings(buckets)
-	for _, bucket := range buckets {
-		targets := s3TargetsByBucket[bucket]
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].provider != keys[j].provider {
+			return keys[i].provider < keys[j].provider
+		}
+		if keys[i].lookupKey != keys[j].lookupKey {
+			return keys[i].lookupKey < keys[j].lookupKey
+		}
+		return keys[i].physicalBucket < keys[j].physicalBucket
+	})
+	for _, key := range keys {
+		targets := groups[key]
 		sort.Slice(targets, func(i, j int) bool {
+			if targets[i].PhysicalBucket != targets[j].PhysicalBucket {
+				return targets[i].PhysicalBucket < targets[j].PhysicalBucket
+			}
 			return targets[i].Key < targets[j].Key
 		})
-		if err := m.deleteTargets(ctx, address.S3Provider, targets); err != nil {
+		if err := m.deleteTargets(ctx, bindings[physicalTargetKey(targets[0])], targets); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *Manager) deleteTargets(ctx context.Context, provider string, targets []PhysicalTarget) error {
-	registration, err := m.registration(provider, "delete")
+func (m *Manager) deleteTargets(ctx context.Context, binding ProviderBinding, targets []PhysicalTarget) error {
+	registration, err := m.registration(binding.Provider, "delete")
 	if err != nil {
 		return err
 	}
 	if registration.deleter == nil {
-		return operationError(ErrorUnsupported, provider, "delete", nil)
+		return operationError(ErrorUnsupported, binding.Provider, "delete", nil)
 	}
-	if err := registration.deleter.Delete(ctx, targets); err != nil {
-		return err
-	}
-	return nil
+	return registration.deleter.Delete(ctx, binding, targets)
 }
 
 func (m *Manager) InvalidateBucket(bucket string) {
@@ -239,47 +279,91 @@ type probeIndex struct {
 	target ProbeTarget
 }
 
-func (m *Manager) resolveAccess(ctx context.Context, target AccessTarget) (string, string, string, error) {
-	parsed, err := url.Parse(target.Location)
-	if err != nil {
-		return "", "", "", operationError(ErrorInvalid, "", "access", err)
+type probeGroup struct {
+	binding ProviderBinding
+	items   []probeIndex
+}
+
+func (m *Manager) resolveTarget(ctx context.Context, target Target, capability string, allowMissing bool) (ProviderBinding, Target, error) {
+	resolved := target
+	if strings.TrimSpace(resolved.OriginalURL) != "" {
+		parsed, err := address.ParseLocation(resolved.OriginalURL)
+		if err != nil {
+			return ProviderBinding{}, Target{}, operationError(ErrorInvalid, "", capability, err)
+		}
+		if resolved.PhysicalBucket == "" {
+			resolved.PhysicalBucket = parsed.Bucket
+		}
+		if resolved.Key == "" {
+			resolved.Key = parsed.Key
+		}
+		if resolved.Provider == "" {
+			resolved.Provider = parsed.Provider
+		}
+		if resolved.Path == "" {
+			resolved.Path = parsed.Path
+		}
 	}
-	bucket := parsed.Host
-	key := strings.TrimPrefix(parsed.Path, "/")
-	for _, candidate := range []string{bucket, target.AccessID} {
-		if strings.TrimSpace(candidate) == "" {
+	candidates := append([]string(nil), resolved.LookupCandidates...)
+	if strings.TrimSpace(resolved.PhysicalBucket) != "" {
+		candidates = append(candidates, resolved.PhysicalBucket)
+	}
+	if strings.TrimSpace(resolved.LookupKey) != "" {
+		candidates = append(candidates, resolved.LookupKey)
+	}
+	candidates = uniqueStrings(candidates)
+	var lastErr error
+	for _, candidate := range candidates {
+		credential, err := m.credentials.GetS3Credential(ctx, candidate)
+		if err != nil {
+			lastErr = operationError(ErrorProvider, resolved.Provider, capability, err)
 			continue
 		}
-		provider, lookupErr := m.providerForBucket(ctx, candidate, "access")
-		if lookupErr == nil {
-			return bucket, key, provider, nil
+		if credential == nil {
+			lastErr = operationError(ErrorNotFound, resolved.Provider, capability, fmt.Errorf("credential not found for %q", candidate))
+			continue
 		}
+		provider := address.NormalizeProvider(credential.Provider, resolved.Provider)
+		if provider == "" {
+			provider = address.S3Provider
+		}
+		resolved.Provider = provider
+		resolved.LookupKey = candidate
+		if resolved.PhysicalBucket == "" {
+			resolved.PhysicalBucket = strings.TrimSpace(credential.Bucket)
+		}
+		return ProviderBinding{Provider: provider, LookupKey: candidate, PhysicalBucket: resolved.PhysicalBucket, Credential: credential}, resolved, nil
 	}
-	provider := address.NormalizeProvider(address.ProviderFromScheme(parsed.Scheme), address.S3Provider)
-	return bucket, key, provider, nil
+	provider := address.NormalizeProvider(resolved.Provider, address.S3Provider)
+	if allowMissing && provider != address.FileProvider {
+		resolved.Provider = provider
+		return ProviderBinding{Provider: provider, LookupKey: resolved.LookupKey, PhysicalBucket: resolved.PhysicalBucket}, resolved, nil
+	}
+	if lastErr != nil {
+		return ProviderBinding{}, Target{}, lastErr
+	}
+	if provider == address.FileProvider && resolved.Path != "" {
+		resolved.Provider = provider
+		return ProviderBinding{Provider: provider, LookupKey: resolved.LookupKey, PhysicalBucket: resolved.PhysicalBucket}, resolved, nil
+	}
+	return ProviderBinding{}, Target{}, operationError(ErrorInvalid, provider, capability, fmt.Errorf("storage credential is required"))
 }
 
-func (m *Manager) registrationForBucket(ctx context.Context, bucket, capability string) (Registration, error) {
-	provider, err := m.providerForBucket(ctx, bucket, capability)
-	if err != nil {
-		return Registration{}, err
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
 	}
-	return m.registration(provider, capability)
-}
-
-func (m *Manager) providerForBucket(ctx context.Context, bucket, capability string) (string, error) {
-	trimmed := strings.TrimSpace(bucket)
-	if trimmed == "" {
-		return "", operationError(ErrorInvalid, "", capability, fmt.Errorf("bucket is required"))
-	}
-	credential, err := m.credentials.GetS3Credential(ctx, trimmed)
-	if err != nil {
-		return "", operationError(ErrorProvider, "", capability, err)
-	}
-	if credential == nil {
-		return "", operationError(ErrorNotFound, "", capability, fmt.Errorf("credential not found for %q", trimmed))
-	}
-	return address.NormalizeProvider(credential.Provider, address.S3Provider), nil
+	return result
 }
 
 func (m *Manager) registration(provider, capability string) (Registration, error) {

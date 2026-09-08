@@ -15,10 +15,10 @@ import (
 
 const maxDeleteObjects = 1000
 
-func (s *backend) Delete(ctx context.Context, targets []storage.PhysicalTarget) error {
+func (s *backend) Delete(ctx context.Context, binding storage.ProviderBinding, targets []storage.PhysicalTarget) error {
 	byBucket := make(map[string][]string)
 	for _, target := range targets {
-		bucket := strings.TrimSpace(target.Bucket)
+		bucket := strings.TrimSpace(target.PhysicalBucket)
 		key := strings.Trim(strings.TrimSpace(target.Key), "/")
 		if bucket == "" || key == "" {
 			continue
@@ -32,18 +32,18 @@ func (s *backend) Delete(ctx context.Context, targets []storage.PhysicalTarget) 
 	sort.Strings(buckets)
 	for _, bucket := range buckets {
 		keys := dedupeSorted(byBucket[bucket])
-		if err := s.deleteBucket(ctx, bucket, keys); err != nil {
+		if err := s.deleteBucket(ctx, binding, bucket, keys); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *backend) deleteBucket(ctx context.Context, bucket string, keys []string) error {
+func (s *backend) deleteBucket(ctx context.Context, binding storage.ProviderBinding, bucket string, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	clients, err := s.getClients(ctx, bucket)
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return err
 	}

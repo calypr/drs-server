@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,55 +37,56 @@ var newClient = func(ctx context.Context, cred *buckets.Credential) (*storage.Cl
 	return client, nil
 }
 
-func (b *backend) InitMultipartUpload(context.Context, storageports.ObjectTarget) (storageports.UploadID, error) {
+func (b *backend) BeginMultipart(context.Context, storageports.ProviderBinding, storageports.Target) (storageports.UploadID, error) {
 	return storageports.UploadID(uuid.NewString()), nil
 }
 
-func (b *backend) SignMultipartPart(ctx context.Context, request storageports.MultipartPartRequest) (storageports.Access, error) {
-	cred, err := b.credential(ctx, request.Target.Bucket)
+func (b *backend) SignMultipartPart(_ context.Context, binding storageports.ProviderBinding, request storageports.MultipartPartRequest) (storageports.SignedAccess, error) {
+	cred, err := b.credential(binding)
 	if err != nil {
-		return storageports.Access{}, err
+		return storageports.SignedAccess{}, err
 	}
 
 	partKey := storageports.MultipartPartObjectKey(request.Target.Key, request.UploadID, request.PartNumber)
-	location, err := b.signedURL(request.Target.Bucket, partKey, http.MethodPut, 15*time.Minute, "", "", cred)
+	location, err := b.signedURL(binding.PhysicalBucket, partKey, http.MethodPut, 15*time.Minute, "", "", cred)
 	if err != nil {
-		return storageports.Access{}, err
+		return storageports.SignedAccess{}, err
 	}
-	return storageports.Access{Location: location}, nil
+	return storageports.SignedAccess{Location: location}, nil
 }
 
-func (b *backend) CompleteMultipartUpload(ctx context.Context, request storageports.CompleteMultipartRequest) error {
-	client, err := b.getClient(ctx, request.Target.Bucket)
+func (b *backend) CompleteMultipart(ctx context.Context, binding storageports.ProviderBinding, request storageports.CompleteMultipartRequest) error {
+	client, err := b.getClient(ctx, binding)
 	if err != nil {
 		return err
 	}
 
-	partList := storageports.NormalizedMultipartParts(request.Parts)
+	partList := append([]storageports.CompletedPart(nil), request.Parts...)
+	sort.Slice(partList, func(i, j int) bool { return partList[i].PartNumber < partList[j].PartNumber })
 	partKeys := make([]string, 0, len(partList))
 	for _, part := range partList {
 		partKeys = append(partKeys, storageports.MultipartPartObjectKey(request.Target.Key, request.UploadID, part.PartNumber))
 	}
 
-	tempKeys, err := b.composeObjects(ctx, client, request.Target.Bucket, strings.Trim(strings.TrimSpace(request.Target.Key), "/"), request.UploadID, partKeys)
+	tempKeys, err := b.composeObjects(ctx, client, binding.PhysicalBucket, strings.Trim(strings.TrimSpace(request.Target.Key), "/"), request.UploadID, partKeys)
 	if err != nil {
 		return err
 	}
 
 	for _, key := range append(partKeys, tempKeys...) {
-		if err := client.Bucket(request.Target.Bucket).Object(key).Delete(ctx); err != nil {
+		if err := client.Bucket(binding.PhysicalBucket).Object(key).Delete(ctx); err != nil {
 			return fmt.Errorf("delete multipart component %s: %w", key, err)
 		}
 	}
 	return nil
 }
 
-func (b *backend) getClient(ctx context.Context, bucket string) (*storage.Client, error) {
-	if value, ok := b.cache.Load(bucket); ok {
+func (b *backend) getClient(ctx context.Context, binding storageports.ProviderBinding) (*storage.Client, error) {
+	if value, ok := b.cache.Load(binding.LookupKey); ok {
 		return value.(*storage.Client), nil
 	}
 
-	cred, err := b.credential(ctx, bucket)
+	cred, err := b.credential(binding)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func (b *backend) getClient(ctx context.Context, bucket string) (*storage.Client
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GCS client: %w", err)
 	}
-	b.cache.Store(bucket, client)
+	b.cache.Store(binding.LookupKey, client)
 	return client, nil
 }
 

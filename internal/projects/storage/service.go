@@ -121,7 +121,8 @@ func (s *Inspector) inventoryObjects(ctx context.Context, bucket, prefix string,
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage inventory is not configured"}
 	}
 	result, err := s.inventory.Inventory(ctx, storage.InventoryRequest{
-		Target:      storage.PrefixTarget{Bucket: bucket, Prefix: prefix},
+		Target:      storage.Target{Provider: address.S3Provider, PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}},
+		Prefix:      prefix,
 		IncludeHead: options.IncludeHead,
 		ExactPrefix: options.ExactPrefix,
 		MaxKeys:     options.MaxKeys,

@@ -20,19 +20,19 @@ type lfsUploadMultipartSpy struct {
 	completed  storage.CompleteMultipartRequest
 }
 
-func (s *lfsUploadMultipartSpy) BeginMultipart(_ context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
+func (s *lfsUploadMultipartSpy) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	s.events = append(s.events, "begin")
-	if target != (storage.ObjectTarget{Bucket: "bucket", Key: "object"}) {
+	if target.PhysicalBucket != "bucket" || target.Key != "object" {
 		return "", fmt.Errorf("unexpected target: %+v", target)
 	}
 	return "opaque-upload-id", nil
 }
 
-func (s *lfsUploadMultipartSpy) AccessMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (s *lfsUploadMultipartSpy) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	s.events = append(s.events, "sign")
-	s.partURLs = append(s.partURLs, request.Target.Bucket+"/"+request.Target.Key)
+	s.partURLs = append(s.partURLs, request.Target.PhysicalBucket+"/"+request.Target.Key)
 	s.partNumber = append(s.partNumber, request.PartNumber)
-	return storage.Access{Location: "https://provider.invalid/part"}, nil
+	return storage.SignedAccess{Location: "https://provider.invalid/part"}, nil
 }
 
 func (s *lfsUploadMultipartSpy) CompleteMultipart(_ context.Context, request storage.CompleteMultipartRequest) error {

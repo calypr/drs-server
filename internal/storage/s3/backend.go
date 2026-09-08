@@ -24,9 +24,8 @@ const defaultExpiry = 15 * time.Minute
 // remains keyed by the lookup bucket string, matching the previous signer.
 // Request-scoped policy caches stay above this package.
 type backend struct {
-	credentials storage.CredentialLookup
-	cache       sync.Map // bucket string -> *clients
-	limiter     *probeLimiter
+	cache   sync.Map // bucket string -> *clients
+	limiter *probeLimiter
 }
 
 type clients struct {
@@ -50,15 +49,14 @@ type s3Presigner interface {
 }
 
 // New constructs the S3 registration expected by storage.NewManager.
-func New(credentials storage.CredentialLookup) storage.Registration {
+func New() storage.Registration {
 	return storage.NewRegistration(address.S3Provider, &backend{
-		credentials: credentials,
-		limiter:     newProbeLimiterFromEnv(),
+		limiter: newProbeLimiterFromEnv(),
 	})
 }
 
-func newBackend(credentials storage.CredentialLookup) *backend {
-	return &backend{credentials: credentials, limiter: newProbeLimiterFromEnv()}
+func newBackend() *backend {
+	return &backend{limiter: newProbeLimiterFromEnv()}
 }
 
 func (s *backend) InvalidateBucket(bucket string) {
@@ -69,19 +67,14 @@ func (s *backend) InvalidateBucket(bucket string) {
 	s.cache.Delete(bucket)
 }
 
-func (s *backend) getClients(ctx context.Context, bucket string) (*clients, error) {
-	if value, ok := s.cache.Load(bucket); ok {
+func (s *backend) getClients(ctx context.Context, binding storage.ProviderBinding) (*clients, error) {
+	cacheKey := strings.TrimSpace(binding.LookupKey)
+	if value, ok := s.cache.Load(cacheKey); ok {
 		return value.(*clients), nil
 	}
-	if s.credentials == nil {
-		return nil, fmt.Errorf("credentials lookup is required")
-	}
-	cred, err := s.credentials.GetS3Credential(ctx, bucket)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials for bucket %s: %w", bucket, err)
-	}
+	cred := binding.Credential
 	if cred == nil {
-		return nil, fmt.Errorf("credentials not found for bucket %s", bucket)
+		return nil, fmt.Errorf("credentials not found for bucket %s", binding.PhysicalBucket)
 	}
 
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
@@ -110,7 +103,7 @@ func (s *backend) getClients(ctx context.Context, bucket string) (*clients, erro
 		}
 	})
 	result := &clients{client: client, presigner: awss3.NewPresignClient(client)}
-	s.cache.Store(bucket, result)
+	s.cache.Store(cacheKey, result)
 	return result, nil
 }
 

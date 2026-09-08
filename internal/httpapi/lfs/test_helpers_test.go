@@ -33,7 +33,7 @@ func (r *lfsTestRouter) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 type lfsTestStorage struct {
 	accessLocation string
 	partLocation   string
-	initTarget     storage.ObjectTarget
+	initTarget     storage.Target
 	partRequest    storage.MultipartPartRequest
 	complete       storage.CompleteMultipartRequest
 }
@@ -46,17 +46,17 @@ func (f *lfsTestStorage) Access(_ context.Context, request storage.AccessRequest
 	return storage.Access{Location: location + "?signed=true"}, nil
 }
 
-func (f *lfsTestStorage) BeginMultipart(_ context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
+func (f *lfsTestStorage) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	f.initTarget = target
 	return storage.UploadID("opaque-upload-id"), nil
 }
 
-func (f *lfsTestStorage) AccessMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (f *lfsTestStorage) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	f.partRequest = request
 	if f.partLocation != "" {
-		return storage.Access{Location: f.partLocation}, nil
+		return storage.SignedAccess{Location: f.partLocation}, nil
 	}
-	return storage.Access{Location: fmt.Sprintf("s3://%s/%s", request.Target.Bucket, request.Target.Key)}, nil
+	return storage.SignedAccess{Location: fmt.Sprintf("s3://%s/%s", request.Target.PhysicalBucket, request.Target.Key)}, nil
 }
 
 func (f *lfsTestStorage) CompleteMultipart(_ context.Context, request storage.CompleteMultipartRequest) error {

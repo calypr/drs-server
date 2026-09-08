@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -121,7 +122,7 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 	if _, ok := response.(lfsapi.LfsUploadProxy200Response); !ok {
 		t.Fatalf("upload proxy response = %T, want 200", response)
 	}
-	if storageFake.initTarget != (storage.ObjectTarget{Bucket: "bucket", Key: oid}) {
+	if !reflect.DeepEqual(storageFake.initTarget, storage.Target{LookupKey: "bucket", PhysicalBucket: "bucket", Key: oid, LookupCandidates: []string{"bucket"}}) {
 		t.Fatalf("multipart init target = %+v", storageFake.initTarget)
 	}
 	if storageFake.partRequest.UploadID != "opaque-upload-id" || storageFake.partRequest.PartNumber != 1 {
@@ -251,8 +252,8 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			if _, ok := response.(lfsapi.LfsUploadProxy200Response); !ok {
 				t.Fatalf("upload proxy response = %T (%+v)", response, response)
 			}
-			want := storage.ObjectTarget{Bucket: "physical", Key: "project-prefix/" + oid}
-			if storageFake.initTarget != want {
+			want := storage.Target{LookupKey: "physical", PhysicalBucket: "physical", Key: "project-prefix/" + oid, LookupCandidates: []string{"physical"}}
+			if !reflect.DeepEqual(storageFake.initTarget, want) {
 				t.Fatalf("multipart init target = %+v, want %+v", storageFake.initTarget, want)
 			}
 		})

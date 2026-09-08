@@ -28,8 +28,7 @@ func (f *fakeLookup) GetS3Credential(_ context.Context, bucket string) (*buckets
 type fakeBackend struct {
 	provider string
 
-	accessTargets  []ObjectTarget
-	accessOptions  []AccessOptions
+	accessRequests []SignRequest
 	partTargets    []MultipartPartRequest
 	completeTarget []CompleteMultipartRequest
 	probes         [][]ProbeTarget
@@ -45,49 +44,38 @@ type fakeBackend struct {
 
 type bareBackend struct{}
 
-func (bareBackend) SignURL(context.Context, ObjectTarget, AccessOptions) (Access, error) {
-	return Access{}, nil
+func (bareBackend) Sign(context.Context, ProviderBinding, SignRequest) (SignedAccess, error) {
+	return SignedAccess{}, nil
 }
 
-func (bareBackend) SignDownloadPart(context.Context, ObjectTarget, ByteRange, AccessOptions) (Access, error) {
-	return Access{}, nil
-}
-
-func (bareBackend) InitMultipartUpload(context.Context, ObjectTarget) (UploadID, error) {
+func (bareBackend) BeginMultipart(context.Context, ProviderBinding, Target) (UploadID, error) {
 	return "", nil
 }
 
-func (bareBackend) SignMultipartPart(context.Context, MultipartPartRequest) (Access, error) {
-	return Access{}, nil
+func (bareBackend) SignMultipartPart(context.Context, ProviderBinding, MultipartPartRequest) (SignedAccess, error) {
+	return SignedAccess{}, nil
 }
 
-func (bareBackend) CompleteMultipartUpload(context.Context, CompleteMultipartRequest) error {
+func (bareBackend) CompleteMultipart(context.Context, ProviderBinding, CompleteMultipartRequest) error {
 	return nil
 }
 
-func (f *fakeBackend) SignURL(_ context.Context, target ObjectTarget, options AccessOptions) (Access, error) {
-	f.accessTargets = append(f.accessTargets, target)
-	f.accessOptions = append(f.accessOptions, options)
-	return Access{Location: f.provider + "://" + target.Bucket + "/" + target.Key}, nil
+func (f *fakeBackend) Sign(_ context.Context, _ ProviderBinding, request SignRequest) (SignedAccess, error) {
+	f.accessRequests = append(f.accessRequests, request)
+	return SignedAccess{Location: f.provider + "://" + request.Target.PhysicalBucket + "/" + request.Target.Key}, nil
 }
 
-func (f *fakeBackend) SignDownloadPart(_ context.Context, target ObjectTarget, _ ByteRange, options AccessOptions) (Access, error) {
-	f.accessTargets = append(f.accessTargets, target)
-	f.accessOptions = append(f.accessOptions, options)
-	return Access{Location: f.provider + "://range/" + target.Key}, nil
-}
-
-func (f *fakeBackend) InitMultipartUpload(_ context.Context, target ObjectTarget) (UploadID, error) {
-	f.accessTargets = append(f.accessTargets, target)
+func (f *fakeBackend) BeginMultipart(_ context.Context, _ ProviderBinding, target Target) (UploadID, error) {
+	f.accessRequests = append(f.accessRequests, SignRequest{Target: target})
 	return UploadID("upload"), nil
 }
 
-func (f *fakeBackend) SignMultipartPart(_ context.Context, request MultipartPartRequest) (Access, error) {
+func (f *fakeBackend) SignMultipartPart(_ context.Context, _ ProviderBinding, request MultipartPartRequest) (SignedAccess, error) {
 	f.partTargets = append(f.partTargets, request)
-	return Access{Location: "part"}, nil
+	return SignedAccess{Location: "part"}, nil
 }
 
-func (f *fakeBackend) CompleteMultipartUpload(_ context.Context, request CompleteMultipartRequest) error {
+func (f *fakeBackend) CompleteMultipart(_ context.Context, _ ProviderBinding, request CompleteMultipartRequest) error {
 	f.completeTarget = append(f.completeTarget, request)
 	return nil
 }
@@ -96,7 +84,7 @@ func (f *fakeBackend) InvalidateBucket(bucket string) {
 	f.invalidations = append(f.invalidations, bucket)
 }
 
-func (f *fakeBackend) Probe(_ context.Context, targets []ProbeTarget) []ProbeResult {
+func (f *fakeBackend) Probe(_ context.Context, _ ProviderBinding, targets []ProbeTarget) []ProbeResult {
 	f.probes = append(f.probes, append([]ProbeTarget(nil), targets...))
 	if f.probeResult != nil {
 		return f.probeResult(targets)
@@ -108,12 +96,12 @@ func (f *fakeBackend) Probe(_ context.Context, targets []ProbeTarget) []ProbeRes
 	return results
 }
 
-func (f *fakeBackend) Inventory(_ context.Context, request InventoryRequest) (InventoryResult, error) {
+func (f *fakeBackend) Inventory(_ context.Context, _ ProviderBinding, request InventoryRequest) (InventoryResult, error) {
 	f.inventories = append(f.inventories, request)
 	return f.inventoryResult, f.inventoryErr
 }
 
-func (f *fakeBackend) Delete(_ context.Context, targets []PhysicalTarget) error {
+func (f *fakeBackend) Delete(_ context.Context, _ ProviderBinding, targets []PhysicalTarget) error {
 	f.deletions = append(f.deletions, append([]PhysicalTarget(nil), targets...))
 	return f.deleteErr
 }
@@ -194,7 +182,7 @@ func TestAccessUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
 	if got, want := lookup.queries, []string{"url-bucket", "logical"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("credential lookup order = %#v, want %#v", got, want)
 	}
-	if got, want := backend.accessTargets[0], (ObjectTarget{Bucket: "url-bucket", Key: "object"}); got != want {
+	if got, want := backend.accessRequests[0].Target, (Target{Provider: "gcs", LookupKey: "logical", PhysicalBucket: "url-bucket", Key: "object", Path: "/object", OriginalURL: "s3://url-bucket/object"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("backend target = %#v, want %#v", got, want)
 	}
 	if !strings.HasPrefix(access.Location, "gcs://") {
@@ -210,15 +198,15 @@ func TestAccessFallsBackToSchemeAndDefaultProvider(t *testing.T) {
 	if _, err := manager.Access(context.Background(), AccessRequest{Target: AccessTarget{AccessID: "access", Location: "gs://bucket/key"}}); err != nil {
 		t.Fatalf("scheme fallback returned error: %v", err)
 	}
-	if len(gcs.accessTargets) != 1 {
-		t.Fatalf("scheme fallback selected %d gcs calls, want 1", len(gcs.accessTargets))
+	if len(gcs.accessRequests) != 1 {
+		t.Fatalf("scheme fallback selected %d gcs calls, want 1", len(gcs.accessRequests))
 	}
 	lookup.errors = map[string]error{"bucket": errors.New("missing")}
 	if _, err := manager.Access(context.Background(), AccessRequest{Target: AccessTarget{Location: "https://bucket/key"}}); err != nil {
 		t.Fatalf("default fallback returned error: %v", err)
 	}
-	if len(s3.accessTargets) != 1 {
-		t.Fatalf("default fallback selected %d s3 calls, want 1", len(s3.accessTargets))
+	if len(s3.accessRequests) != 1 {
+		t.Fatalf("default fallback selected %d s3 calls, want 1", len(s3.accessRequests))
 	}
 }
 
@@ -226,12 +214,12 @@ func TestMultipartResolvesProviderStrictlyFromBucket(t *testing.T) {
 	lookup := &fakeLookup{credentials: map[string]*buckets.Credential{"bucket": credential("gcs", "bucket")}}
 	gcs := &fakeBackend{provider: "gcs"}
 	manager := managerWithBackends(t, lookup, gcs)
-	request := MultipartPartRequest{Target: ObjectTarget{Bucket: "bucket", Key: "object"}, UploadID: "upload", PartNumber: 3}
-	if _, err := manager.AccessMultipartPart(context.Background(), request); err != nil {
-		t.Fatalf("AccessMultipartPart returned error: %v", err)
+	request := MultipartPartRequest{Target: Target{PhysicalBucket: "bucket", Key: "object"}, UploadID: "upload", PartNumber: 3}
+	if _, err := manager.SignMultipartPart(context.Background(), request); err != nil {
+		t.Fatalf("SignMultipartPart returned error: %v", err)
 	}
-	if got := gcs.partTargets[0]; !reflect.DeepEqual(got, request) {
-		t.Fatalf("multipart request = %#v, want %#v", got, request)
+	if got := gcs.partTargets[0]; !reflect.DeepEqual(got.Target, (Target{Provider: "gcs", LookupKey: "bucket", PhysicalBucket: "bucket", Key: "object"})) || got.UploadID != request.UploadID || got.PartNumber != request.PartNumber {
+		t.Fatalf("multipart request = %#v, want resolved target %#v", got, request)
 	}
 }
 
@@ -241,12 +229,12 @@ func TestMissingCapabilitiesReturnTypedErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManager returned error: %v", err)
 	}
-	probe := manager.Probe(context.Background(), []ProbeTarget{{ID: "one", Target: ObjectTarget{Bucket: "bucket", Key: "key"}}})
+	probe := manager.Probe(context.Background(), []ProbeTarget{{ID: "one", Target: Target{PhysicalBucket: "bucket", Key: "key"}}})
 	var probeErr *OperationError
 	if len(probe) != 1 || !errors.As(probe[0].Err, &probeErr) || probeErr.Kind != ErrorUnsupported {
 		t.Fatalf("probe error = %#v, want typed unsupported error", probe[0].Err)
 	}
-	_, err = manager.Inventory(context.Background(), InventoryRequest{Target: PrefixTarget{Bucket: "bucket"}})
+	_, err = manager.Inventory(context.Background(), InventoryRequest{Target: Target{PhysicalBucket: "bucket"}})
 	var inventoryErr *OperationError
 	if !errors.As(err, &inventoryErr) || inventoryErr.Kind != ErrorUnsupported {
 		t.Fatalf("inventory error = %#v, want typed unsupported error", err)
@@ -263,8 +251,8 @@ func TestProbeGroupsByProviderAndRestoresInputOrder(t *testing.T) {
 		for i, target := range targets {
 			results[i] = ProbeResult{
 				ID:       "spoofed-" + target.ID,
-				Target:   ObjectTarget{Bucket: "spoofed-bucket", Key: "spoofed-key"},
-				Metadata: ObjectMetadata{Bucket: target.Target.Bucket, Key: target.Target.Key},
+				Target:   Target{PhysicalBucket: "spoofed-bucket", Key: "spoofed-key"},
+				Metadata: ObjectMetadata{Bucket: target.Target.PhysicalBucket, Key: target.Target.Key},
 				Err:      errors.New("provider probe result"),
 			}
 		}
@@ -273,16 +261,16 @@ func TestProbeGroupsByProviderAndRestoresInputOrder(t *testing.T) {
 	gcs := &fakeBackend{provider: "gcs", probeResult: s3.probeResult}
 	manager := managerWithBackends(t, lookup, s3, gcs)
 	targets := []ProbeTarget{
-		{ID: "g1", Target: ObjectTarget{Bucket: "gcs-bucket", Key: "a"}},
-		{ID: "s1", Target: ObjectTarget{Bucket: "s3-bucket", Key: "b"}},
-		{ID: "g2", Target: ObjectTarget{Bucket: "gcs-bucket", Key: "c"}},
+		{ID: "g1", Target: Target{PhysicalBucket: "gcs-bucket", Key: "a"}},
+		{ID: "s1", Target: Target{PhysicalBucket: "s3-bucket", Key: "b"}},
+		{ID: "g2", Target: Target{PhysicalBucket: "gcs-bucket", Key: "c"}},
 	}
 	results := manager.Probe(context.Background(), targets)
 	if got := []string{results[0].ID, results[1].ID, results[2].ID}; !reflect.DeepEqual(got, []string{"g1", "s1", "g2"}) {
 		t.Fatalf("result IDs = %#v", got)
 	}
-	if got := []ObjectTarget{results[0].Target, results[1].Target, results[2].Target}; !reflect.DeepEqual(got, []ObjectTarget{targets[0].Target, targets[1].Target, targets[2].Target}) {
-		t.Fatalf("result targets = %#v, want %#v", got, []ObjectTarget{targets[0].Target, targets[1].Target, targets[2].Target})
+	if got := []Target{results[0].Target, results[1].Target, results[2].Target}; !reflect.DeepEqual(got, []Target{targets[0].Target, targets[1].Target, targets[2].Target}) {
+		t.Fatalf("result targets = %#v, want %#v", got, []Target{targets[0].Target, targets[1].Target, targets[2].Target})
 	}
 	if results[1].Metadata.Key != "b" {
 		t.Fatalf("result metadata = %#v, want provider metadata", results[1].Metadata)
@@ -300,7 +288,7 @@ func TestInventoryReturnsRawBackendResultAndError(t *testing.T) {
 	lookup := &fakeLookup{credentials: map[string]*buckets.Credential{"bucket": credential("s3", "bucket")}}
 	backend := &fakeBackend{provider: "s3", inventoryResult: InventoryResult{Items: []ObjectMetadata{{Bucket: "bucket", Key: "key"}}, Complete: false}, inventoryErr: sentinel}
 	manager := managerWithBackends(t, lookup, backend)
-	result, err := manager.Inventory(context.Background(), InventoryRequest{Target: PrefixTarget{Bucket: "bucket", Prefix: "prefix"}, IncludeHead: true, ExactPrefix: true, MaxKeys: 2})
+	result, err := manager.Inventory(context.Background(), InventoryRequest{Target: Target{PhysicalBucket: "bucket"}, Prefix: "prefix", IncludeHead: true, ExactPrefix: true, MaxKeys: 2})
 	if !errors.Is(err, sentinel) || !reflect.DeepEqual(result, backend.inventoryResult) {
 		t.Fatalf("inventory = %#v, %v; want %#v, %v", result, err, backend.inventoryResult, sentinel)
 	}
@@ -336,20 +324,20 @@ func TestDeleteExactPreservesPhysicalTargetsAndGroupsByProvider(t *testing.T) {
 		t.Fatalf("DeleteExact returned error: %v", err)
 	}
 	if got, want := gcs.deletions, [][]PhysicalTarget{
-		{{Provider: "gcs", Bucket: "gcs-bucket", Key: "gcs-key"}},
-		{{Provider: "gcs", Bucket: "override-bucket", Key: "physical/key"}},
+		{{Provider: "gcs", LookupKey: "gcs-bucket", PhysicalBucket: "gcs-bucket", Key: "gcs-key"}},
+		{{Provider: "gcs", LookupKey: "override-bucket", PhysicalBucket: "override-bucket", Key: "physical/key"}},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("gcs targets = %#v, want %#v", got, want)
 	}
 	if got, want := file.deletions, [][]PhysicalTarget{{{Provider: "file", Path: filePath}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("file targets = %#v, want %#v", got, want)
 	}
-	if got, want := azure.deletions, [][]PhysicalTarget{{{Provider: "azure", Bucket: "azure-bucket", Key: "azure-key"}}}; !reflect.DeepEqual(got, want) {
+	if got, want := azure.deletions, [][]PhysicalTarget{{{Provider: "azure", LookupKey: "azure-bucket", PhysicalBucket: "azure-bucket", Key: "azure-key"}}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("azure targets = %#v, want %#v", got, want)
 	}
 	if got, want := s3.deletions, [][]PhysicalTarget{
-		{{Provider: "s3", Bucket: "s3-a", Key: "key-1"}, {Provider: "s3", Bucket: "s3-a", Key: "key-2"}},
-		{{Provider: "s3", Bucket: "s3-b", Key: "key-1"}, {Provider: "s3", Bucket: "s3-b", Key: "key-2"}},
+		{{Provider: "s3", LookupKey: "s3-a", PhysicalBucket: "s3-a", Key: "key-1"}, {Provider: "s3", LookupKey: "s3-a", PhysicalBucket: "s3-a", Key: "key-2"}},
+		{{Provider: "s3", LookupKey: "s3-b", PhysicalBucket: "s3-b", Key: "key-1"}, {Provider: "s3", LookupKey: "s3-b", PhysicalBucket: "s3-b", Key: "key-2"}},
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("s3 targets = %#v, want %#v", got, want)
 	}

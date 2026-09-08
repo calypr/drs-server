@@ -9,7 +9,7 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-func (b *backend) Delete(_ context.Context, targets []storage.PhysicalTarget) error {
+func (b *backend) Delete(_ context.Context, _ storage.ProviderBinding, targets []storage.PhysicalTarget) error {
 	for _, target := range targets {
 		if strings.TrimSpace(target.Path) == "" {
 			continue

@@ -68,7 +68,7 @@ func (f *fakeInventory) Inventory(_ context.Context, request storage.InventoryRe
 }
 
 type recordingProbe struct {
-	targets []storage.ObjectTarget
+	targets []storage.Target
 }
 
 func (f *recordingProbe) Probe(_ context.Context, targets []storage.ProbeTarget) []storage.ProbeResult {
@@ -77,7 +77,7 @@ func (f *recordingProbe) Probe(_ context.Context, targets []storage.ProbeTarget)
 	}
 	target := targets[0].Target
 	f.targets = append(f.targets, target)
-	return []storage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: storage.ObjectMetadata{Bucket: target.Bucket, Key: target.Key}}}
+	return []storage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: storage.ObjectMetadata{Bucket: target.PhysicalBucket, Key: target.Key}}}
 }
 
 type fakeDelete struct {
@@ -163,7 +163,7 @@ func TestInspectProjectPreservesPartialInventoryAndCanonicalItems(t *testing.T) 
 	if len(result.Items) != 2 || result.Items[0].Key != "prefix/project/a" || result.Items[1].ObjectURL != "s3://bucket/prefix/project/z" {
 		t.Fatalf("normalized items = %+v", result.Items)
 	}
-	if len(inventory.requests) != 1 || inventory.requests[0].Target.Prefix != "prefix/project" || !inventory.requests[0].IncludeHead {
+	if len(inventory.requests) != 1 || inventory.requests[0].Prefix != "prefix/project" || !inventory.requests[0].IncludeHead {
 		t.Fatalf("inventory requests = %+v", inventory.requests)
 	}
 }
@@ -189,7 +189,7 @@ func TestProbeObjectNormalizesScopedKeyAgainstEffectivePrefix(t *testing.T) {
 			if metadata.Key != tt.want || metadata.ObjectURL != "s3://bucket/"+tt.want {
 				t.Fatalf("metadata = %+v, want key %q", metadata, tt.want)
 			}
-			if len(probe.targets) != 1 || probe.targets[0].Bucket != "bucket" || probe.targets[0].Key != tt.want {
+			if len(probe.targets) != 1 || probe.targets[0].PhysicalBucket != "bucket" || probe.targets[0].Key != tt.want {
 				t.Fatalf("probe targets = %+v, want key %q", probe.targets, tt.want)
 			}
 		})
@@ -211,7 +211,7 @@ func TestProbeObjectNormalizesLegacyOrganizationPrefixAgainstComposedScope(t *te
 	if metadata.Key != "prefix/project/file.bin" || metadata.ObjectURL != "s3://bucket/prefix/project/file.bin" {
 		t.Fatalf("metadata = %+v, want key %q", metadata, "prefix/project/file.bin")
 	}
-	if len(probe.targets) != 1 || probe.targets[0].Bucket != "bucket" || probe.targets[0].Key != "prefix/project/file.bin" {
+	if len(probe.targets) != 1 || probe.targets[0].PhysicalBucket != "bucket" || probe.targets[0].Key != "prefix/project/file.bin" {
 		t.Fatalf("probe targets = %+v, want key %q", probe.targets, "prefix/project/file.bin")
 	}
 }

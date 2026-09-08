@@ -13,7 +13,7 @@ func (s *Service) InitMultipartUpload(ctx context.Context, bucket, key string) (
 	if s == nil || s.multipart == nil {
 		return "", fmt.Errorf("storage multipart is not configured")
 	}
-	uploadID, err := s.multipart.BeginMultipart(ctx, storage.ObjectTarget{Bucket: bucket, Key: key})
+	uploadID, err := s.multipart.BeginMultipart(ctx, storage.Target{PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}, Key: key})
 	return string(uploadID), err
 }
 
@@ -23,8 +23,8 @@ func (s *Service) SignMultipartPart(ctx context.Context, bucket, key, uploadID s
 	if s == nil || s.multipart == nil {
 		return "", fmt.Errorf("storage multipart is not configured")
 	}
-	access, err := s.multipart.AccessMultipartPart(ctx, storage.MultipartPartRequest{
-		Target:     storage.ObjectTarget{Bucket: bucket, Key: key},
+	access, err := s.multipart.SignMultipartPart(ctx, storage.MultipartPartRequest{
+		Target:     storage.Target{PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}, Key: key},
 		UploadID:   storage.UploadID(uploadID),
 		PartNumber: partNumber,
 	})
@@ -41,7 +41,7 @@ func (s *Service) CompleteMultipartUpload(ctx context.Context, bucket, key, uplo
 		return fmt.Errorf("storage multipart is not configured")
 	}
 	return s.multipart.CompleteMultipart(ctx, storage.CompleteMultipartRequest{
-		Target:   storage.ObjectTarget{Bucket: bucket, Key: key},
+		Target:   storage.Target{PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}, Key: key},
 		UploadID: storage.UploadID(uploadID),
 		Parts:    parts,
 	})

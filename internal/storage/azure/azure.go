@@ -18,9 +18,8 @@ import (
 )
 
 type backend struct {
-	credentials storage.CredentialLookup
-	cache       sync.Map // keyed by bucket name, stores *azureCreds
-	transport   policy.Transporter
+	cache     sync.Map // keyed by lookup key, stores *azureCreds
+	transport policy.Transporter
 }
 
 type azureCreds struct {
@@ -32,8 +31,8 @@ type azureCreds struct {
 // New returns the Azure storage registration. Azure intentionally does not
 // expose probe or inventory capabilities; those operations are not provided
 // by the Azure raw-storage backend.
-func New(credentials storage.CredentialLookup) storage.Registration {
-	return storage.NewRegistration("azure", &backend{credentials: credentials})
+func New() storage.Registration {
+	return storage.NewRegistration("azure", &backend{})
 }
 
 func (b *backend) InvalidateBucket(bucket string) {
@@ -44,65 +43,45 @@ func (b *backend) InvalidateBucket(bucket string) {
 	b.cache.Delete(bucket)
 }
 
-func (b *backend) SignURL(ctx context.Context, target storage.ObjectTarget, opts storage.AccessOptions) (storage.Access, error) {
-	creds, err := b.getCreds(ctx, target.Bucket)
+func (b *backend) Sign(ctx context.Context, binding storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
+	creds, err := b.getCreds(binding)
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 
 	expiry := 15 * time.Minute
-	if opts.ExpiresIn > 0 {
-		expiry = opts.ExpiresIn
+	if request.ExpiresIn > 0 {
+		expiry = request.ExpiresIn
 	}
 
 	method := http.MethodGet
-	if opts.Method != "" {
-		method = opts.Method
+	if request.Method != "" {
+		method = request.Method
 	}
 
-	signed, err := b.azureSignedURL(creds.ServiceURL, target.Bucket, target.Key, method, expiry, "", opts.DownloadFilename, creds.SharedKey)
-	if err != nil {
-		return storage.Access{}, err
+	rangeStr := ""
+	if request.Range != nil {
+		rangeStr = fmt.Sprintf("bytes=%d-%d", request.Range.Start, request.Range.End)
 	}
-	return storage.Access{Location: signed}, nil
+	signed, err := b.azureSignedURL(creds.ServiceURL, request.Target.PhysicalBucket, request.Target.Key, method, expiry, rangeStr, request.DownloadFilename, creds.SharedKey)
+	if err != nil {
+		return storage.SignedAccess{}, err
+	}
+	return storage.SignedAccess{Location: signed}, nil
 }
 
-func (b *backend) SignDownloadPart(ctx context.Context, target storage.ObjectTarget, byteRange storage.ByteRange, opts storage.AccessOptions) (storage.Access, error) {
-	creds, err := b.getCreds(ctx, target.Bucket)
-	if err != nil {
-		return storage.Access{}, err
-	}
-
-	expiry := 15 * time.Minute
-	if opts.ExpiresIn > 0 {
-		expiry = opts.ExpiresIn
-	}
-
-	// Azure SAS does not encode this range. Keep computing it and passing it
-	// through the signing seam to preserve the current caller contract.
-	rangeStr := fmt.Sprintf("bytes=%d-%d", byteRange.Start, byteRange.End)
-	signed, err := b.azureSignedURL(creds.ServiceURL, target.Bucket, target.Key, http.MethodGet, expiry, rangeStr, opts.DownloadFilename, creds.SharedKey)
-	if err != nil {
-		return storage.Access{}, err
-	}
-	return storage.Access{Location: signed}, nil
-}
-
-func (b *backend) InitMultipartUpload(_ context.Context, _ storage.ObjectTarget) (storage.UploadID, error) {
+func (b *backend) BeginMultipart(_ context.Context, _ storage.ProviderBinding, _ storage.Target) (storage.UploadID, error) {
 	return storage.UploadID(uuid.NewString()), nil
 }
 
-func (b *backend) getCreds(ctx context.Context, bucket string) (*azureCreds, error) {
-	if value, ok := b.cache.Load(bucket); ok {
+func (b *backend) getCreds(binding storage.ProviderBinding) (*azureCreds, error) {
+	if value, ok := b.cache.Load(binding.LookupKey); ok {
 		return value.(*azureCreds), nil
 	}
 
-	cred, err := b.credentials.GetS3Credential(ctx, bucket)
-	if err != nil {
-		return nil, err
-	}
+	cred := binding.Credential
 	if cred == nil {
-		return nil, fmt.Errorf("credentials not found for bucket %s", bucket)
+		return nil, fmt.Errorf("credentials not found for bucket %s", binding.PhysicalBucket)
 	}
 
 	accountName := strings.TrimSpace(cred.AccessKey)
@@ -111,7 +90,7 @@ func (b *backend) getCreds(ctx context.Context, bucket string) (*azureCreds, err
 	}
 	accountKey := strings.TrimSpace(cred.SecretKey)
 	if accountName == "" || accountKey == "" {
-		return nil, fmt.Errorf("azure signing requires shared key credentials for bucket %s", bucket)
+		return nil, fmt.Errorf("azure signing requires shared key credentials for bucket %s", binding.PhysicalBucket)
 	}
 
 	shared, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -124,7 +103,7 @@ func (b *backend) getCreds(ctx context.Context, bucket string) (*azureCreds, err
 		ServiceURL:       b.azureServiceURL(accountName, cred.Endpoint),
 		DeleteServiceURL: b.azureDeleteServiceURL(accountName, cred.Endpoint),
 	}
-	b.cache.Store(bucket, value)
+	b.cache.Store(binding.LookupKey, value)
 	return value, nil
 }
 

@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/calypr/syfon/internal/storage"
@@ -104,16 +103,16 @@ type deleteCandidate struct {
 }
 
 func parseDeleteURL(ctx context.Context, service *Inspector, raw string) (deleteCandidate, string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	parsed, err := address.ParseLocation(strings.TrimSpace(raw))
 	if err != nil {
 		return deleteCandidate{}, "", fmt.Errorf("parse access url %q: %w", raw, err)
 	}
-	provider := address.ProviderFromScheme(parsed.Scheme)
+	provider := parsed.Provider
 	if provider == "" {
 		return deleteCandidate{}, "invalid", nil
 	}
-	bucket := strings.TrimSpace(parsed.Host)
-	key := strings.Trim(strings.TrimSpace(parsed.Path), "/")
+	bucket := strings.TrimSpace(parsed.Bucket)
+	key := strings.Trim(strings.TrimSpace(parsed.Key), "/")
 	if bucket == "" || key == "" {
 		return deleteCandidate{}, "invalid", nil
 	}

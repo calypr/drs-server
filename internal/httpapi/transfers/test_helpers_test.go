@@ -65,25 +65,25 @@ func (m *internalDRSStorageFake) Access(_ context.Context, request storage.Acces
 	return storage.Access{Location: request.Target.Location + suffix}, nil
 }
 
-func (m *internalDRSStorageFake) BeginMultipart(_ context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
+func (m *internalDRSStorageFake) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	m.mu.Lock()
-	m.bucket = target.Bucket
+	m.bucket = target.PhysicalBucket
 	m.key = target.Key
 	m.mu.Unlock()
 	return storage.UploadID("mock-upload-id"), nil
 }
 
-func (m *internalDRSStorageFake) AccessMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (m *internalDRSStorageFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	m.mu.Lock()
-	m.bucket = request.Target.Bucket
+	m.bucket = request.Target.PhysicalBucket
 	m.key = request.Target.Key
 	m.mu.Unlock()
-	return storage.Access{Location: fmt.Sprintf("s3://%s/%s?uploadId=%s&partNumber=%d", request.Target.Bucket, request.Target.Key, request.UploadID, request.PartNumber)}, nil
+	return storage.SignedAccess{Location: fmt.Sprintf("s3://%s/%s?uploadId=%s&partNumber=%d", request.Target.PhysicalBucket, request.Target.Key, request.UploadID, request.PartNumber)}, nil
 }
 
 func (m *internalDRSStorageFake) CompleteMultipart(_ context.Context, request storage.CompleteMultipartRequest) error {
 	m.mu.Lock()
-	m.bucket = request.Target.Bucket
+	m.bucket = request.Target.PhysicalBucket
 	m.key = request.Target.Key
 	m.completeParts = append([]storage.CompletedPart(nil), request.Parts...)
 	err := m.completeErr

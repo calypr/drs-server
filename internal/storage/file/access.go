@@ -38,14 +38,10 @@ func newBackend(root string) (*backend, error) {
 	return &backend{rootPath: absPath, rootBucket: bucket}, nil
 }
 
-func (b *backend) SignURL(_ context.Context, target storage.ObjectTarget, _ storage.AccessOptions) (storage.Access, error) {
-	return storage.Access{Location: filepath.ToSlash(filepath.Join(b.rootPath, target.Key))}, nil
+func (b *backend) Sign(_ context.Context, _ storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(b.rootPath, request.Target.Key))}, nil
 }
 
-func (b *backend) SignDownloadPart(ctx context.Context, target storage.ObjectTarget, _ storage.ByteRange, options storage.AccessOptions) (storage.Access, error) {
-	return b.SignURL(ctx, target, options)
-}
-
-func (b *backend) InitMultipartUpload(context.Context, storage.ObjectTarget) (storage.UploadID, error) {
+func (b *backend) BeginMultipart(context.Context, storage.ProviderBinding, storage.Target) (storage.UploadID, error) {
 	return storage.UploadID(uuid.NewString()), nil
 }

@@ -11,14 +11,14 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-func (s *backend) InitMultipartUpload(ctx context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
-	clients, err := s.getClients(ctx, target.Bucket)
+func (s *backend) BeginMultipart(ctx context.Context, binding storage.ProviderBinding, target storage.Target) (storage.UploadID, error) {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return "", err
 	}
 
 	output, err := clients.client.CreateMultipartUpload(ctx, &awss3.CreateMultipartUploadInput{
-		Bucket: aws.String(target.Bucket),
+		Bucket: aws.String(target.PhysicalBucket),
 		Key:    aws.String(target.Key),
 	})
 	if err != nil {
@@ -29,14 +29,14 @@ func (s *backend) InitMultipartUpload(ctx context.Context, target storage.Object
 	return storage.UploadID(aws.ToString(output.UploadId)), nil
 }
 
-func (s *backend) SignMultipartPart(ctx context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
-	clients, err := s.getClients(ctx, request.Target.Bucket)
+func (s *backend) SignMultipartPart(ctx context.Context, binding storage.ProviderBinding, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 
 	result, err := clients.presigner.PresignUploadPart(ctx, &awss3.UploadPartInput{
-		Bucket:     aws.String(request.Target.Bucket),
+		Bucket:     aws.String(request.Target.PhysicalBucket),
 		Key:        aws.String(request.Target.Key),
 		UploadId:   aws.String(string(request.UploadID)),
 		PartNumber: aws.Int32(request.PartNumber),
@@ -44,13 +44,13 @@ func (s *backend) SignMultipartPart(ctx context.Context, request storage.Multipa
 		options.Expires = defaultExpiry
 	})
 	if err != nil {
-		return storage.Access{}, fmt.Errorf("failed to sign s3 multipart part: %w", err)
+		return storage.SignedAccess{}, fmt.Errorf("failed to sign s3 multipart part: %w", err)
 	}
-	return storage.Access{Location: result.URL}, nil
+	return storage.SignedAccess{Location: result.URL}, nil
 }
 
-func (s *backend) CompleteMultipartUpload(ctx context.Context, request storage.CompleteMultipartRequest) error {
-	clients, err := s.getClients(ctx, request.Target.Bucket)
+func (s *backend) CompleteMultipart(ctx context.Context, binding storage.ProviderBinding, request storage.CompleteMultipartRequest) error {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (s *backend) CompleteMultipartUpload(ctx context.Context, request storage.C
 		})
 	}
 	_, err = clients.client.CompleteMultipartUpload(ctx, &awss3.CompleteMultipartUploadInput{
-		Bucket:   aws.String(request.Target.Bucket),
+		Bucket:   aws.String(request.Target.PhysicalBucket),
 		Key:      aws.String(request.Target.Key),
 		UploadId: aws.String(string(request.UploadID)),
 		MultipartUpload: &types.CompletedMultipartUpload{

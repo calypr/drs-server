@@ -24,10 +24,10 @@ func TestAccessReturnsRawSlashNormalizedPathAndIgnoresCloudOptions(t *testing.T)
 		Method:           "POST",
 		DownloadFilename: "ignored.txt",
 	}
-	target := storage.ObjectTarget{Bucket: "ignored-bucket", Key: "nested/object.bin"}
+	target := storage.Target{PhysicalBucket: "ignored-bucket", Key: "nested/object.bin"}
 	want := filepath.ToSlash(filepath.Join(b.rootPath, target.Key))
 
-	got, err := b.SignURL(context.Background(), target, options)
+	got, err := b.Sign(context.Background(), storage.ProviderBinding{}, storage.SignRequest{Target: target, Method: options.Method, ExpiresIn: options.ExpiresIn, DownloadFilename: options.DownloadFilename})
 	if err != nil {
 		t.Fatalf("SignURL failed: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestAccessReturnsRawSlashNormalizedPathAndIgnoresCloudOptions(t *testing.T)
 		t.Fatalf("raw path = %q, want %q", got.Location, want)
 	}
 
-	ranged, err := b.SignDownloadPart(context.Background(), target, storage.ByteRange{Start: 20, End: 30}, options)
+	ranged, err := b.Sign(context.Background(), storage.ProviderBinding{}, storage.SignRequest{Target: target, Range: &storage.ByteRange{Start: 20, End: 30}, Method: options.Method, ExpiresIn: options.ExpiresIn, DownloadFilename: options.DownloadFilename})
 	if err != nil {
 		t.Fatalf("SignDownloadPart failed: %v", err)
 	}
@@ -50,14 +50,14 @@ func TestInitMultipartUploadReturnsUUID(t *testing.T) {
 		t.Fatalf("newBackend failed: %v", err)
 	}
 
-	first, err := b.InitMultipartUpload(context.Background(), storage.ObjectTarget{})
+	first, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.Target{})
 	if err != nil {
 		t.Fatalf("first InitMultipartUpload failed: %v", err)
 	}
 	if _, err := uuid.Parse(string(first)); err != nil {
 		t.Fatalf("upload ID %q is not a UUID: %v", first, err)
 	}
-	second, err := b.InitMultipartUpload(context.Background(), storage.ObjectTarget{})
+	second, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.Target{})
 	if err != nil {
 		t.Fatalf("second InitMultipartUpload failed: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestCompleteMultipartUploadSortsPartsAndCleansUp(t *testing.T) {
 	writeBlob(t, b, part1, "hello ")
 	writeBlob(t, b, part2, "world")
 
-	if err := b.CompleteMultipartUpload(ctx, storage.CompleteMultipartRequest{
-		Target:   storage.ObjectTarget{Bucket: "ignored", Key: key},
+	if err := b.CompleteMultipart(ctx, storage.ProviderBinding{}, storage.CompleteMultipartRequest{
+		Target:   storage.Target{PhysicalBucket: "ignored", Key: key},
 		UploadID: uploadID,
 		Parts: []storage.CompletedPart{
 			{PartNumber: 2, ETag: "e2"},
@@ -114,8 +114,8 @@ func TestCompleteMultipartUploadLeavesPartsOnMissingPartFailure(t *testing.T) {
 	part2 := storage.MultipartPartObjectKey(key, uploadID, 2)
 	writeBlob(t, b, part1, "hello ")
 
-	err = b.CompleteMultipartUpload(ctx, storage.CompleteMultipartRequest{
-		Target:   storage.ObjectTarget{Bucket: "ignored", Key: key},
+	err = b.CompleteMultipart(ctx, storage.ProviderBinding{}, storage.CompleteMultipartRequest{
+		Target:   storage.Target{PhysicalBucket: "ignored", Key: key},
 		UploadID: uploadID,
 		Parts: []storage.CompletedPart{
 			{PartNumber: 1},
@@ -139,7 +139,7 @@ func TestCompleteMultipartUploadRejectsEmptyParts(t *testing.T) {
 		t.Fatalf("newBackend failed: %v", err)
 	}
 
-	err = b.CompleteMultipartUpload(context.Background(), storage.CompleteMultipartRequest{Target: storage.ObjectTarget{Key: "object"}})
+	err = b.CompleteMultipart(context.Background(), storage.ProviderBinding{}, storage.CompleteMultipartRequest{Target: storage.Target{Key: "object"}})
 	if err == nil || err.Error() != "multipart complete requires at least one part" {
 		t.Fatalf("empty completion error = %v", err)
 	}
@@ -160,13 +160,13 @@ func TestDeleteRemovesExactPathAndIsIdempotent(t *testing.T) {
 	}
 
 	target := storage.PhysicalTarget{Provider: "file", Path: targetPath}
-	if err := b.Delete(context.Background(), []storage.PhysicalTarget{target}); err != nil {
+	if err := b.Delete(context.Background(), storage.ProviderBinding{Provider: "file"}, []storage.PhysicalTarget{target}); err != nil {
 		t.Fatalf("Delete(existing) failed: %v", err)
 	}
 	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
 		t.Fatalf("expected exact path to be removed, stat err=%v", err)
 	}
-	if err := b.Delete(context.Background(), []storage.PhysicalTarget{target}); err != nil {
+	if err := b.Delete(context.Background(), storage.ProviderBinding{Provider: "file"}, []storage.PhysicalTarget{target}); err != nil {
 		t.Fatalf("Delete(missing) failed: %v", err)
 	}
 }
@@ -181,12 +181,12 @@ func TestFileRegistrationDoesNotClaimProbeInventoryOrInvalidation(t *testing.T) 
 		t.Fatalf("NewManager failed: %v", err)
 	}
 
-	probe := manager.Probe(context.Background(), []storage.ProbeTarget{{ID: "one", Target: storage.ObjectTarget{Bucket: "bucket", Key: "key"}}})
+	probe := manager.Probe(context.Background(), []storage.ProbeTarget{{ID: "one", Target: storage.Target{Provider: "file", PhysicalBucket: "bucket", LookupKey: "bucket", Key: "key"}}})
 	var probeErr *storage.OperationError
 	if len(probe) != 1 || !errors.As(probe[0].Err, &probeErr) || probeErr.Kind != storage.ErrorUnsupported {
 		t.Fatalf("probe result = %#v, want unsupported capability", probe)
 	}
-	_, err = manager.Inventory(context.Background(), storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket"}})
+	_, err = manager.Inventory(context.Background(), storage.InventoryRequest{Target: storage.Target{Provider: "file", PhysicalBucket: "bucket", LookupKey: "bucket"}})
 	var inventoryErr *storage.OperationError
 	if !errors.As(err, &inventoryErr) || inventoryErr.Kind != storage.ErrorUnsupported {
 		t.Fatalf("inventory error = %v, want unsupported capability", err)

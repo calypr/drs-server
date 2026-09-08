@@ -12,11 +12,11 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-func (b *backend) Delete(ctx context.Context, targets []storage.PhysicalTarget) error {
+func (b *backend) Delete(ctx context.Context, binding storage.ProviderBinding, targets []storage.PhysicalTarget) error {
 	for _, target := range targets {
-		creds, err := b.getCreds(ctx, target.Bucket)
+		creds, err := b.getCreds(binding)
 		if err != nil {
-			return fmt.Errorf("lookup azure credential for bucket %s: %w", target.Bucket, err)
+			return fmt.Errorf("lookup azure credential for bucket %s: %w", target.PhysicalBucket, err)
 		}
 
 		client, err := azblob.NewClientWithSharedKeyCredential(creds.DeleteServiceURL, creds.SharedKey, b.blobClientOptions())
@@ -24,7 +24,7 @@ func (b *backend) Delete(ctx context.Context, targets []storage.PhysicalTarget) 
 			return fmt.Errorf("create azure client: %w", err)
 		}
 
-		if _, err := client.DeleteBlob(ctx, target.Bucket, target.Key, nil); err != nil {
+		if _, err := client.DeleteBlob(ctx, target.PhysicalBucket, target.Key, nil); err != nil {
 			if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ContainerNotFound) {
 				continue
 			}

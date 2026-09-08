@@ -25,22 +25,22 @@ func (f *accessFake) Access(_ context.Context, request storage.AccessRequest) (s
 }
 
 type multipartFake struct {
-	beginTarget storage.ObjectTarget
+	beginTarget storage.Target
 	partRequest storage.MultipartPartRequest
 	complete    storage.CompleteMultipartRequest
 	beginID     storage.UploadID
-	partAccess  storage.Access
+	partAccess  storage.SignedAccess
 	beginErr    error
 	partErr     error
 	completeErr error
 }
 
-func (f *multipartFake) BeginMultipart(_ context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
+func (f *multipartFake) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	f.beginTarget = target
 	return f.beginID, f.beginErr
 }
 
-func (f *multipartFake) AccessMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (f *multipartFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	f.partRequest = request
 	return f.partAccess, f.partErr
 }
@@ -129,7 +129,7 @@ func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
 }
 
 func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
-	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.Access{Location: "part-signed"}}
+	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.SignedAccess{Location: "part-signed"}}
 	service := NewService(Dependencies{Multipart: port})
 	ctx := context.Background()
 	id, err := service.InitMultipartUpload(ctx, "bucket", "key")

@@ -155,7 +155,7 @@ func (p errorProbe) Probe(_ context.Context, targets []providerstorage.ProbeTarg
 	if target.Key == "bad" {
 		return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Err: p.cause}}
 	}
-	return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: providerstorage.ObjectMetadata{Bucket: target.Bucket, Key: target.Key}}}
+	return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: providerstorage.ObjectMetadata{Bucket: target.PhysicalBucket, Key: target.Key}}}
 }
 
 type errorInventory struct {
@@ -163,8 +163,8 @@ type errorInventory struct {
 }
 
 func (i errorInventory) Inventory(_ context.Context, request providerstorage.InventoryRequest) (providerstorage.InventoryResult, error) {
-	if request.Target.Prefix == "prefix/project/good" {
-		return providerstorage.InventoryResult{Items: []providerstorage.ObjectMetadata{{Bucket: "bucket", Key: request.Target.Prefix}}, Complete: true}, nil
+	if request.Prefix == "prefix/project/good" {
+		return providerstorage.InventoryResult{Items: []providerstorage.ObjectMetadata{{Bucket: "bucket", Key: request.Prefix}}, Complete: true}, nil
 	}
 	return providerstorage.InventoryResult{}, i.cause
 }

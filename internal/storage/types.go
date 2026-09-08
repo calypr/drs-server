@@ -1,6 +1,40 @@
 package storage
 
-import "time"
+import (
+	"time"
+
+	"github.com/calypr/syfon/internal/buckets"
+)
+
+type Target struct {
+	Provider         string
+	LookupKey        string
+	PhysicalBucket   string
+	Key              string
+	Path             string
+	OriginalURL      string
+	CanonicalURL     string
+	LookupCandidates []string
+}
+
+type ProviderBinding struct {
+	Provider       string
+	LookupKey      string
+	PhysicalBucket string
+	Credential     *buckets.Credential
+}
+
+type SignRequest struct {
+	Target           Target
+	Method           string
+	ExpiresIn        time.Duration
+	DownloadFilename string
+	Range            *ByteRange
+}
+
+type SignedAccess struct {
+	Location string
+}
 
 type AccessTarget struct {
 	AccessID string
@@ -28,16 +62,6 @@ type Access struct {
 	Location string
 }
 
-type ObjectTarget struct {
-	Bucket string
-	Key    string
-}
-
-type PrefixTarget struct {
-	Bucket string
-	Prefix string
-}
-
 type UploadID string
 
 type CompletedPart struct {
@@ -46,13 +70,13 @@ type CompletedPart struct {
 }
 
 type MultipartPartRequest struct {
-	Target     ObjectTarget
+	Target     Target
 	UploadID   UploadID
 	PartNumber int32
 }
 
 type CompleteMultipartRequest struct {
-	Target   ObjectTarget
+	Target   Target
 	UploadID UploadID
 	Parts    []CompletedPart
 }
@@ -70,18 +94,19 @@ type ObjectMetadata struct {
 
 type ProbeTarget struct {
 	ID     string
-	Target ObjectTarget
+	Target Target
 }
 
 type ProbeResult struct {
 	ID       string
-	Target   ObjectTarget
+	Target   Target
 	Metadata ObjectMetadata
 	Err      error
 }
 
 type InventoryRequest struct {
-	Target      PrefixTarget
+	Target      Target
+	Prefix      string
 	IncludeHead bool
 	ExactPrefix bool
 	MaxKeys     int32
@@ -97,8 +122,9 @@ type DeleteTarget struct {
 }
 
 type PhysicalTarget struct {
-	Provider string
-	Bucket   string
-	Key      string
-	Path     string
+	Provider       string
+	LookupKey      string
+	PhysicalBucket string
+	Key            string
+	Path           string
 }

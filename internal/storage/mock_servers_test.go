@@ -98,7 +98,7 @@ func testFakeGCSStorageProvider(t *testing.T) {
 	lookup := credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
 		return &buckets.Credential{Bucket: bucket, Provider: "gcs", Endpoint: endpoint}, nil
 	})
-	manager, err := storage.NewManager(lookup, gcs.New(lookup))
+	manager, err := storage.NewManager(lookup, gcs.New())
 	if err != nil {
 		t.Fatalf("create GCS storage manager: %v", err)
 	}
@@ -191,7 +191,7 @@ func testAzuriteStorageProvider(t *testing.T) {
 			Endpoint:  endpoint,
 		}, nil
 	})
-	manager, err := storage.NewManager(lookup, azure.New(lookup))
+	manager, err := storage.NewManager(lookup, azure.New())
 	if err != nil {
 		t.Fatalf("create Azure storage manager: %v", err)
 	}

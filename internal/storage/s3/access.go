@@ -10,54 +10,57 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-func (s *backend) SignURL(ctx context.Context, target storage.ObjectTarget, options storage.AccessOptions) (storage.Access, error) {
-	clients, err := s.getClients(ctx, target.Bucket)
+func (s *backend) Sign(ctx context.Context, binding storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
+	if request.Range != nil {
+		return s.signDownloadPart(ctx, binding, request)
+	}
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 
-	if methodIsPut(options) {
-		request, err := clients.presigner.PresignPutObject(ctx, &awss3.PutObjectInput{
-			Bucket: aws.String(target.Bucket),
-			Key:    aws.String(target.Key),
+	if methodIsPut(storage.AccessOptions{Method: request.Method}) {
+		presigned, err := clients.presigner.PresignPutObject(ctx, &awss3.PutObjectInput{
+			Bucket: aws.String(request.Target.PhysicalBucket),
+			Key:    aws.String(request.Target.Key),
 		}, func(presign *awss3.PresignOptions) {
-			presign.Expires = expiry(options)
+			presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
 		})
 		if err != nil {
-			return storage.Access{}, err
+			return storage.SignedAccess{}, err
 		}
-		return storage.Access{Location: request.URL}, nil
+		return storage.SignedAccess{Location: presigned.URL}, nil
 	}
 
-	request, err := clients.presigner.PresignGetObject(ctx, &awss3.GetObjectInput{
-		Bucket:                     aws.String(target.Bucket),
-		Key:                        aws.String(target.Key),
-		ResponseContentDisposition: responseContentDisposition(options.DownloadFilename),
+	presigned, err := clients.presigner.PresignGetObject(ctx, &awss3.GetObjectInput{
+		Bucket:                     aws.String(request.Target.PhysicalBucket),
+		Key:                        aws.String(request.Target.Key),
+		ResponseContentDisposition: responseContentDisposition(request.DownloadFilename),
 	}, func(presign *awss3.PresignOptions) {
-		presign.Expires = expiry(options)
+		presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
 	})
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
-	return storage.Access{Location: request.URL}, nil
+	return storage.SignedAccess{Location: presigned.URL}, nil
 }
 
-func (s *backend) SignDownloadPart(ctx context.Context, target storage.ObjectTarget, byteRange storage.ByteRange, options storage.AccessOptions) (storage.Access, error) {
-	clients, err := s.getClients(ctx, target.Bucket)
+func (s *backend) signDownloadPart(ctx context.Context, binding storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 
-	request, err := clients.presigner.PresignGetObject(ctx, &awss3.GetObjectInput{
-		Bucket:                     aws.String(target.Bucket),
-		Key:                        aws.String(target.Key),
-		Range:                      aws.String(fmt.Sprintf("bytes=%d-%d", byteRange.Start, byteRange.End)),
-		ResponseContentDisposition: responseContentDisposition(options.DownloadFilename),
+	presigned, err := clients.presigner.PresignGetObject(ctx, &awss3.GetObjectInput{
+		Bucket:                     aws.String(request.Target.PhysicalBucket),
+		Key:                        aws.String(request.Target.Key),
+		Range:                      aws.String(fmt.Sprintf("bytes=%d-%d", request.Range.Start, request.Range.End)),
+		ResponseContentDisposition: responseContentDisposition(request.DownloadFilename),
 	}, func(presign *awss3.PresignOptions) {
-		presign.Expires = expiry(options)
+		presign.Expires = expiry(storage.AccessOptions{ExpiresIn: request.ExpiresIn})
 	})
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
-	return storage.Access{Location: request.URL}, nil
+	return storage.SignedAccess{Location: presigned.URL}, nil
 }

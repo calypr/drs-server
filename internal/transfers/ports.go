@@ -15,8 +15,8 @@ type AccessPort interface {
 // MultipartPort owns provider-specific multipart operations. Upload IDs are
 // intentionally opaque and are never parsed or normalized by transfers.
 type MultipartPort interface {
-	BeginMultipart(context.Context, storage.ObjectTarget) (storage.UploadID, error)
-	AccessMultipartPart(context.Context, storage.MultipartPartRequest) (storage.Access, error)
+	BeginMultipart(context.Context, storage.Target) (storage.UploadID, error)
+	SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error)
 	CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error
 }
 
