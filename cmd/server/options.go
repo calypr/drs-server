@@ -22,7 +22,7 @@ type serverRuntime struct {
 	serviceInfo         drs.Service
 	objectService       *objectrecords.Service
 	transferService     *transfers.Service
-	lfsPending          transferlfs.PendingStore
+	lfsService          *transferlfs.Service
 	usageService        *usage.Service
 	usageIngest         usage.Ingestor
 	projectInspector    *projectstorage.Inspector
@@ -38,7 +38,7 @@ func registerServerRoutes(rt *serverRuntime) {
 		ServiceInfo:      rt.serviceInfo,
 		Objects:          rt.objectService,
 		Transfers:        rt.transferService,
-		LFSPending:       rt.lfsPending,
+		LFS:              rt.lfsService,
 		UsageIngest:      rt.usageIngest,
 		UsageReports:     rt.usageService.Reports(),
 		Buckets:          rt.bucketService,

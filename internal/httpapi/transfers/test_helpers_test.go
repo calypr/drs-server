@@ -65,6 +65,11 @@ func (m *internalDRSStorageFake) Access(_ context.Context, request storage.Acces
 	return storage.Access{Location: request.Target.Location + suffix}, nil
 }
 
+func (m *internalDRSStorageFake) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	access, err := m.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{AccessID: request.Target.LookupKey, Location: request.Target.OriginalURL}, Options: storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}, Range: request.Range})
+	return storage.SignedAccess{Location: access.Location}, err
+}
+
 func (m *internalDRSStorageFake) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	m.mu.Lock()
 	m.bucket = target.PhysicalBucket
@@ -128,6 +133,6 @@ type transfersTestServer struct {
 
 func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
 	internalapi.RegisterHandlers(router, &transfersTestServer{
-		TransfersServer: NewTransfersServer(objectService, transferService, fileCounters),
+		TransfersServer: NewTransfersServer(transferService),
 	})
 }

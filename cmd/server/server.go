@@ -295,6 +295,7 @@ var Cmd = &cobra.Command{
 			Credentials:  bucketService,
 			Events:       backend.usageIngest,
 		})
+		lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, storage.UploadSignedMultipartPart)
 		projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 			Catalog: projectStorageCatalog{
 				ScopeReader:         bucketService,
@@ -335,7 +336,7 @@ var Cmd = &cobra.Command{
 			serviceInfo:         serviceInfoForBackend(cfg.Database.Sqlite != nil),
 			objectService:       objectService,
 			transferService:     transferService,
-			lfsPending:          backend.pending,
+			lfsService:          lfsService,
 			usageService:        usageService,
 			usageIngest:         backend.usageIngest,
 			projectInspector:    projectStorageService.Inspector,

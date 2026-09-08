@@ -289,10 +289,11 @@ func (f *lfsFileCounterFake) RecordFileDownload(_ context.Context, objectID stri
 
 func newLFSTransferService(storageFake *lfsTestStorage, ports *lfsTestServicePorts) *transfers.Service {
 	return transfers.NewService(transfers.Dependencies{
-		Access:      storageFake,
-		Multipart:   storageFake,
-		Credentials: ports.credentials,
-		Events:      ports.events,
+		Objects:      objectrecords.NewService(ports),
+		Storage:      storageFake,
+		Credentials:  ports.credentials,
+		Events:       ports.events,
+		FileCounters: ports.fileCounters,
 	})
 }
 

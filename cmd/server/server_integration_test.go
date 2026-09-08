@@ -22,6 +22,7 @@ import (
 	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -153,9 +154,10 @@ s3_credentials:
 	objectService := objectrecords.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Access: storageManager, Multipart: storageManager, Scopes: bucketService, Credentials: bucketService,
+		Objects: objectService, Storage: storageManager, Scopes: bucketService, Credentials: bucketService,
 		Events: backend.usageIngest,
 	})
+	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		Catalog: integrationProjectStorageCatalog{
 			ScopeReader:         bucketService,
@@ -169,7 +171,7 @@ s3_credentials:
 	})
 	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
-		LFSPending:       backend.pending,
+		LFS:              lfsService,
 		Objects:          objectService,
 		Transfers:        transferService,
 		UsageIngest:      backend.usageIngest,

@@ -19,8 +19,7 @@ type internalDRSTestFixture struct {
 }
 
 type transferStorageDependency interface {
-	domaintransfers.AccessPort
-	domaintransfers.MultipartPort
+	domaintransfers.StoragePort
 }
 
 func newInternalDRSObjectManager(store *transferHTTPFixture, storageDependency transferStorageDependency) internalDRSTestFixture {
@@ -33,8 +32,7 @@ func newInternalDRSObjectManager(store *transferHTTPFixture, storageDependency t
 	objectService := objectrecords.NewService(objectStore)
 	transferService := domaintransfers.NewService(domaintransfers.Dependencies{
 		Objects:      objectService,
-		Access:       storageDependency,
-		Multipart:    storageDependency,
+		Storage:      storageDependency,
 		FileCounters: fileCounters,
 		Scopes:       bucketService,
 		Credentials:  bucketService,

@@ -15,6 +15,7 @@ import (
 	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -105,13 +106,13 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
 	storageFake := &lfsTestStorage{}
 	deps := newLFSTestDependencies(ports, storageFake)
-	deps.PartUploader = func(_ context.Context, _ string, content []byte) (string, error) {
+	storageFake.uploadPart = func(content []byte) (string, error) {
 		if string(content) != "payload" {
 			t.Fatalf("multipart content = %q", content)
 		}
 		return "etag", nil
 	}
-	server := NewLFSServer(deps, DefaultOptions())
+	server := NewLFSServer(deps.Service, DefaultOptions())
 	response, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
 		Oid:  oid,
 		Body: bytes.NewReader([]byte("payload")),
@@ -122,7 +123,8 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 	if _, ok := response.(lfsapi.LfsUploadProxy200Response); !ok {
 		t.Fatalf("upload proxy response = %T, want 200", response)
 	}
-	if !reflect.DeepEqual(storageFake.initTarget, storage.Target{LookupKey: "bucket", PhysicalBucket: "bucket", Key: oid, LookupCandidates: []string{"bucket"}}) {
+	want := storage.Target{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket", Key: oid, CanonicalURL: "s3://bucket/" + oid, LookupCandidates: []string{"bucket"}}
+	if !reflect.DeepEqual(storageFake.initTarget, want) {
 		t.Fatalf("multipart init target = %+v", storageFake.initTarget)
 	}
 	if storageFake.partRequest.UploadID != "opaque-upload-id" || storageFake.partRequest.PartNumber != 1 {
@@ -138,7 +140,7 @@ func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
 	oid := strings.Repeat("e", 64)
 	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{})
 	ports.objectReader.getErr = errors.New(detail)
-	server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+	server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 
 	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
 		Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 1},
@@ -190,8 +192,8 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 	oid := strings.Repeat("d", 64)
 	newTransferService := func(ports *lfsTestServicePorts, storageFake *lfsTestStorage) *transfers.Service {
 		return transfers.NewService(transfers.Dependencies{
-			Access:      storageFake,
-			Multipart:   storageFake,
+			Objects:     objectrecords.NewService(ports),
+			Storage:     storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
 			Credentials: ports.credentials,
 			Events:      ports.events,
@@ -237,10 +239,9 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{"physical": {Bucket: "physical"}})
 			tt.populate(ports)
 			storageFake := &lfsTestStorage{}
-			deps := newLFSTestDependencies(ports, storageFake)
-			deps.TransferService = newTransferService(ports, storageFake)
-			deps.PartUploader = func(context.Context, string, []byte) (string, error) { return "etag", nil }
-			server := NewLFSServer(deps, DefaultOptions())
+			deps := newLFSTestDependenciesWithTransfer(ports, storageFake, newTransferService(ports, storageFake))
+			storageFake.uploadPart = func([]byte) (string, error) { return "etag", nil }
+			server := NewLFSServer(deps.Service, DefaultOptions())
 
 			response, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
 				Oid:  oid,
@@ -252,7 +253,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			if _, ok := response.(lfsapi.LfsUploadProxy200Response); !ok {
 				t.Fatalf("upload proxy response = %T (%+v)", response, response)
 			}
-			want := storage.Target{LookupKey: "physical", PhysicalBucket: "physical", Key: "project-prefix/" + oid, LookupCandidates: []string{"physical"}}
+			want := storage.Target{Provider: "s3", LookupKey: "physical", PhysicalBucket: "physical", Key: "project-prefix/" + oid, Path: "/project-prefix/" + oid, CanonicalURL: "s3://physical/project-prefix/" + oid, LookupCandidates: []string{"physical"}}
 			if !reflect.DeepEqual(storageFake.initTarget, want) {
 				t.Fatalf("multipart init target = %+v, want %+v", storageFake.initTarget, want)
 			}

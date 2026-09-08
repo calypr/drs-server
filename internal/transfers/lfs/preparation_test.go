@@ -29,6 +29,9 @@ func (s *lfsPreparationObjectSpy) RequireObjectResources(_ context.Context, meth
 	s.calls = append(s.calls, "require:"+method+":"+strings.Join(resources, ","))
 	return s.requireErr
 }
+func (s *lfsPreparationObjectSpy) RegisterObjects(context.Context, []objects.Record) error {
+	return nil
+}
 
 type lfsPreparationCredentialsSpy struct {
 	credentials []buckets.Credential
@@ -48,9 +51,9 @@ func (s *lfsPreparationCredentialsSpy) GetS3Credential(context.Context, string) 
 func TestLFSPreparationWorkflowPreservesUploadPreflightAndSizeRules(t *testing.T) {
 	objectsPort := &lfsPreparationObjectSpy{getErr: fmt.Errorf("%w: missing", errorapi.ErrNotFound)}
 	credentials := &lfsPreparationCredentialsSpy{credentials: []buckets.Credential{{Bucket: "bucket"}}}
-	workflow := NewPreparationWorkflow(transfers.NewService(transfers.Dependencies{}), objectsPort, credentials, nil, nil)
+	service := NewService(transfers.NewService(transfers.Dependencies{}), objectsPort, credentials, nil, nil, nil)
 
-	result, err := workflow.PrepareUpload(context.Background(), "oid", -3)
+	result, err := service.PrepareUpload(context.Background(), "oid", -3)
 	if err != nil {
 		t.Fatalf("PrepareUpload() error = %v", err)
 	}

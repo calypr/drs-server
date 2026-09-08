@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// SignedPartUploader uploads one multipart part to a previously signed URL
+// and returns the provider's opaque ETag.
+type SignedPartUploader func(context.Context, string, []byte) (string, error)
+
 func UploadSignedMultipartPart(ctx context.Context, signedURL string, content []byte) (string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPut, signedURL, bytes.NewReader(content))
 	if err != nil {

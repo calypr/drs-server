@@ -271,7 +271,7 @@ func TestHandleInternalMultipartUpload(t *testing.T) {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
 	app := fiber.New()
-	app.Post("/data/multipart/upload", handleInternalMultipartUploadFiber(lifecycle))
+	app.Post("/data/multipart/upload", handleInternalMultipartUploadFiber(om.TransferService))
 	body, _ := json.Marshal(internalapi.InternalMultipartUploadRequest{Key: "hash-key", UploadId: "mock-upload-id", PartNumber: 1})
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", bytes.NewBuffer(body)))
 	if err != nil {
@@ -290,7 +290,7 @@ func TestHandleInternalMultipartComplete(t *testing.T) {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
 	app := fiber.New()
-	app.Post("/data/multipart/complete", handleInternalMultipartCompleteFiber(lifecycle))
+	app.Post("/data/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
 	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{Key: "hash-key", UploadId: "mock-upload-id", Parts: []internalapi.InternalMultipartPart{{PartNumber: 1, ETag: "etag1"}}})
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)))
 	if err != nil {

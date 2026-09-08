@@ -8,6 +8,8 @@ import (
 
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
+	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -33,6 +35,7 @@ func (r *lfsTestRouter) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 type lfsTestStorage struct {
 	accessLocation string
 	partLocation   string
+	uploadPart     func([]byte) (string, error)
 	initTarget     storage.Target
 	partRequest    storage.MultipartPartRequest
 	complete       storage.CompleteMultipartRequest
@@ -44,6 +47,11 @@ func (f *lfsTestStorage) Access(_ context.Context, request storage.AccessRequest
 		location = f.accessLocation
 	}
 	return storage.Access{Location: location + "?signed=true"}, nil
+}
+
+func (f *lfsTestStorage) Sign(ctx context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	access, err := f.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{Location: request.Target.OriginalURL}, Options: storage.AccessOptions{Method: request.Method, ExpiresIn: request.ExpiresIn, DownloadFilename: request.DownloadFilename}, Range: request.Range})
+	return storage.SignedAccess{Location: access.Location}, err
 }
 
 func (f *lfsTestStorage) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
@@ -65,14 +73,24 @@ func (f *lfsTestStorage) CompleteMultipart(_ context.Context, request storage.Co
 }
 
 func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStorage) Dependencies {
-	objectService := objectrecords.NewService(ports)
 	transferService := newLFSTransferService(storageFake, ports)
+	return newLFSTestDependenciesWithTransfer(ports, storageFake, transferService)
+}
+
+func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) Dependencies {
+	objectService := objectrecords.NewService(ports)
+	lfsService := transferlfs.NewService(transferService, objectService, ports.credentials, ports.pending, ports.fileCounters, storageFakeUploader(storageFake))
 	return Dependencies{
-		ObjectService:   objectService,
-		TransferService: transferService,
-		FileCounters:    ports.fileCounters,
-		Credentials:     ports.credentials,
-		PendingStore:    ports.pending,
+		Service: lfsService,
+	}
+}
+
+func storageFakeUploader(fake *lfsTestStorage) storage.SignedPartUploader {
+	return func(_ context.Context, _ string, content []byte) (string, error) {
+		if fake.uploadPart != nil {
+			return fake.uploadPart(content)
+		}
+		return "etag", nil
 	}
 }
 

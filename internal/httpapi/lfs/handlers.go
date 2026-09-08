@@ -8,34 +8,21 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/lfsapi"
-
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
-	"github.com/calypr/syfon/internal/storage"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
 type LFSServer struct {
-	opts                Options
-	uploadWorkflow      *transferlfs.UploadWorkflow
-	metadataWorkflow    *transferlfs.MetadataWorkflow
-	preparationWorkflow *transferlfs.PreparationWorkflow
+	opts    Options
+	service *transferlfs.Service
 }
 
-func NewLFSServer(deps Dependencies, opts Options) *LFSServer {
-	partUploader := deps.PartUploader
-	if partUploader == nil {
-		partUploader = storage.UploadSignedMultipartPart
-	}
-	return &LFSServer{
-		opts:                opts,
-		uploadWorkflow:      transferlfs.NewUploadWorkflow(deps.TransferService, transferlfs.PartUploader(partUploader), deps.FileCounters),
-		metadataWorkflow:    transferlfs.NewMetadataWorkflow(deps.PendingStore, deps.ObjectService, deps.FileCounters),
-		preparationWorkflow: transferlfs.NewPreparationWorkflow(deps.TransferService, deps.ObjectService, deps.Credentials, deps.PendingStore, deps.FileCounters),
-	}
+func NewLFSServer(service *transferlfs.Service, opts Options) *LFSServer {
+	return &LFSServer{opts: opts, service: service}
 }
 
 func (s *LFSServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequestObject) (lfsapi.LfsBatchResponseObject, error) {
@@ -54,51 +41,46 @@ func (s *LFSServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequest
 		return lfsapi.LfsBatch413ApplicationVndGitLfsPlusJSONResponse{Message: "batch contains too many objects"}, nil
 	}
 
-	transfer := "basic"
-	responseObjects := make([]lfsapi.BatchResponseObject, 0, len(req.Objects))
-	hashAlgorithm := "sha256"
-	for _, input := range req.Objects {
-		objectResponse := lfsapi.BatchResponseObject{Oid: input.Oid, Size: input.Size}
+	responseObjects := make([]lfsapi.BatchResponseObject, len(req.Objects))
+	valid := make([]transferlfs.BatchObject, 0, len(req.Objects))
+	validIndexes := make([]int, 0, len(req.Objects))
+	for index, input := range req.Objects {
+		responseObjects[index] = lfsapi.BatchResponseObject{Oid: input.Oid, Size: input.Size}
 		if input.Size < 0 {
-			objectResponse.Size = 0
-			objectResponse.Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "size must be non-negative"}
-			responseObjects = append(responseObjects, objectResponse)
+			responseObjects[index].Size = 0
+			responseObjects[index].Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "size must be non-negative"}
 			continue
 		}
 		oid := clienthash.NormalizeOid(input.Oid)
 		if oid == "" {
-			objectResponse.Error = &lfsapi.ObjectError{Code: int32(http.StatusBadRequest), Message: "invalid oid"}
-			responseObjects = append(responseObjects, objectResponse)
+			responseObjects[index].Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "invalid oid"}
 			continue
 		}
-		objectResponse.Oid = oid
-		if req.Operation == "download" {
-			preparation, err := s.preparationWorkflow.PrepareDownload(ctx, oid)
-			if err != nil {
-				objectResponse.Error = downloadErrToBatchError(ctx, err)
-			} else {
-				objectResponse.Actions = &lfsapi.BatchActions{Download: &lfsapi.Action{Href: preparation.SignedURL}}
-			}
-		} else {
-			preparation, err := s.preparationWorkflow.PrepareUpload(ctx, oid, input.Size)
-			objectResponse.Size = preparation.Size
-			if err != nil {
-				objectResponse.Error = dbErrToBatchError(ctx, err)
-			} else if !preparation.Existing {
-				objectResponse.Actions = &lfsapi.BatchActions{
-					Upload: &lfsapi.Action{Href: GetBaseURL(ctx) + "/info/lfs/objects/" + oid},
-					Verify: &lfsapi.Action{Href: GetBaseURL(ctx) + "/info/lfs/verify"},
-				}
-			}
-		}
-		responseObjects = append(responseObjects, objectResponse)
+		responseObjects[index].Oid = oid
+		valid = append(valid, transferlfs.BatchObject{OID: oid, Size: input.Size})
+		validIndexes = append(validIndexes, index)
 	}
-
-	return lfsapi.LfsBatch200ApplicationVndGitLfsPlusJSONResponse{
-		Transfer: &transfer,
-		Objects:  responseObjects,
-		HashAlgo: &hashAlgorithm,
-	}, nil
+	batch, err := s.service.Batch(ctx, transferlfs.BatchRequest{Operation: string(req.Operation), Objects: valid})
+	if err != nil {
+		return lfsapi.LfsBatch500ApplicationVndGitLfsPlusJSONResponse{Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}, nil
+	}
+	for index, item := range batch.Objects {
+		responseIndex := validIndexes[index]
+		responseObjects[responseIndex].Size = item.Size
+		if item.Err != nil {
+			responseObjects[responseIndex].Error = batchErrToObjectError(ctx, item.Err, req.Operation == "download")
+			continue
+		}
+		if req.Operation == "download" {
+			responseObjects[responseIndex].Actions = &lfsapi.BatchActions{Download: &lfsapi.Action{Href: item.DownloadURL}}
+		} else if !item.Existing {
+			oid := responseObjects[responseIndex].Oid
+			responseObjects[responseIndex].Actions = &lfsapi.BatchActions{Upload: &lfsapi.Action{Href: GetBaseURL(ctx) + "/info/lfs/objects/" + oid}, Verify: &lfsapi.Action{Href: GetBaseURL(ctx) + "/info/lfs/verify"}}
+		}
+	}
+	transfer := "basic"
+	hashAlgorithm := "sha256"
+	return lfsapi.LfsBatch200ApplicationVndGitLfsPlusJSONResponse{Transfer: &transfer, Objects: responseObjects, HashAlgo: &hashAlgorithm}, nil
 }
 
 func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyRequestObject) (lfsapi.LfsVerifyResponseObject, error) {
@@ -112,8 +94,7 @@ func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 	if request.Body.Size < 0 {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "size must be non-negative"}, nil
 	}
-
-	if err := s.metadataWorkflow.Verify(ctx, oid); err != nil {
+	if err := s.service.Verify(ctx, oid); err != nil {
 		var candidateErr *transferlfs.MetadataCandidateError
 		if errors.As(err, &candidateErr) {
 			return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil
@@ -141,12 +122,11 @@ func (s *LFSServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 			return lfsapi.LfsStageMetadata400JSONResponse{Message: fmt.Sprintf("candidate[%d] size must be non-negative", index)}, nil
 		}
 	}
-
 	candidates := make([]objects.Candidate, 0, len(input.Candidates))
 	for _, candidate := range input.Candidates {
 		candidates = append(candidates, FromGeneratedCandidate(candidate))
 	}
-	if err := s.metadataWorkflow.Stage(ctx, candidates); err != nil {
+	if err := s.service.Stage(ctx, candidates); err != nil {
 		var stageErr *transferlfs.MetadataStageError
 		if errors.As(err, &stageErr) {
 			if stageErr.MissingSHA {
@@ -164,28 +144,30 @@ func (s *LFSServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUpload
 	if oid == "" {
 		return lfsapi.LfsUploadProxy400TextResponse("invalid oid"), nil
 	}
-	target, err := s.preparationWorkflow.ResolveUploadTarget(ctx, oid)
-	if err != nil {
+	if err := s.service.UploadProxy(ctx, oid, request.Body); err != nil {
 		if errors.Is(err, errorapi.ErrBucketNotConfigured) {
-			return lfsapi.LfsUploadProxy507TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInsufficientStorage, err)), nil
+			return lfsapi.LfsUploadProxy507TextResponse(lfsInternalError(ctx, "upload", http.StatusInsufficientStorage, err)), nil
 		}
-		return lfsapi.LfsUploadProxy500TextResponse(lfsInternalError(ctx, "resolve upload target", http.StatusInternalServerError, err)), nil
-	}
-	if err := s.uploadWorkflow.Upload(ctx, request.Body, target.Bucket, target.Key, target.ObjectID); err != nil {
 		return lfsapi.LfsUploadProxy500TextResponse(lfsInternalError(ctx, "upload", http.StatusInternalServerError, err)), nil
 	}
 	return lfsapi.LfsUploadProxy200Response{}, nil
 }
 
-func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
+func batchErrToObjectError(ctx context.Context, err error, download bool) *lfsapi.ObjectError {
+	if download {
+		var lookupErr *transferlfs.DownloadLookupError
+		if errors.As(err, &lookupErr) {
+			err = lookupErr.Err
+		}
+	}
 	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
-		return &lfsapi.ObjectError{Code: 404, Message: "no object location available"}
+		return &lfsapi.ObjectError{Code: http.StatusNotFound, Message: "no object location available"}
 	}
 	if errors.Is(err, errorapi.ErrBucketNotConfigured) {
 		return &lfsapi.ObjectError{Code: http.StatusInsufficientStorage, Message: lfsInternalError(ctx, "batch", http.StatusInsufficientStorage, err)}
 	}
 	if errorapi.IsNotFoundError(err) {
-		return &lfsapi.ObjectError{Code: 404, Message: "object not found"}
+		return &lfsapi.ObjectError{Code: http.StatusNotFound, Message: "object not found"}
 	}
 	if errors.Is(err, errorapi.ErrAccessDenied) {
 		return &lfsapi.ObjectError{Code: http.StatusForbidden, Message: "forbidden"}
@@ -193,24 +175,14 @@ func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
 	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch", http.StatusInternalServerError, err)}
 }
 
+func dbErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
+	return batchErrToObjectError(ctx, err, false)
+}
 func downloadErrToBatchError(ctx context.Context, err error) *lfsapi.ObjectError {
-	var lookupErr *transferlfs.DownloadLookupError
-	if errors.As(err, &lookupErr) {
-		return dbErrToBatchError(ctx, lookupErr.Err)
-	}
-	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
-		return dbErrToBatchError(ctx, err)
-	}
-	return &lfsapi.ObjectError{Code: http.StatusInternalServerError, Message: lfsInternalError(ctx, "batch download", http.StatusInternalServerError, err)}
+	return batchErrToObjectError(ctx, err, true)
 }
 
 func lfsInternalError(ctx context.Context, operation string, status int, err error) string {
-	slog.Error(
-		"lfs request failed",
-		"request_id", requestid.GetRequestID(ctx),
-		"operation", operation,
-		"status", status,
-		"err", err,
-	)
+	slog.Error("lfs request failed", "request_id", requestid.GetRequestID(ctx), "operation", operation, "status", status, "err", err)
 	return http.StatusText(status)
 }

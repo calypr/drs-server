@@ -20,6 +20,10 @@ type lfsUploadMultipartSpy struct {
 	completed  storage.CompleteMultipartRequest
 }
 
+func (s *lfsUploadMultipartSpy) Sign(context.Context, storage.SignRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{Location: "https://provider.invalid/object"}, nil
+}
+
 func (s *lfsUploadMultipartSpy) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
 	s.events = append(s.events, "begin")
 	if target.PhysicalBucket != "bucket" || target.Key != "object" {
@@ -47,6 +51,19 @@ type lfsUploadAccountingSpy struct {
 	err    error
 }
 
+type lfsUploadObjectSpy struct{}
+
+func (lfsUploadObjectSpy) GetObject(context.Context, string, string) (*objects.Record, error) {
+	url := "s3://bucket/object"
+	methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: url}}}
+	return &objects.Record{Id: "record", AccessMethods: &methods}, nil
+}
+func (lfsUploadObjectSpy) GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error) {
+	return nil, nil
+}
+func (lfsUploadObjectSpy) RequireObjectResources(context.Context, string, []string) error { return nil }
+func (lfsUploadObjectSpy) RegisterObjects(context.Context, []objects.Record) error        { return nil }
+
 func (s *lfsUploadAccountingSpy) RecordFileUpload(_ context.Context, objectID string) error {
 	*s.events = append(*s.events, "account")
 	s.object = objectID
@@ -58,14 +75,15 @@ func TestLFSUploadWorkflowPreservesPartSizeOrderAndAccountingOrder(t *testing.T)
 	multipart := &lfsUploadMultipartSpy{events: events}
 	accounting := &lfsUploadAccountingSpy{events: &multipart.events}
 	partLengths := make([]int, 0, 2)
-	workflow := NewUploadWorkflow(transfers.NewService(transfers.Dependencies{Multipart: multipart}), func(_ context.Context, _ string, content []byte) (string, error) {
+	transfer := transfers.NewService(transfers.Dependencies{Storage: multipart, Objects: lfsUploadObjectSpy{}})
+	service := NewService(transfer, lfsUploadObjectSpy{}, nil, nil, accounting, func(_ context.Context, _ string, content []byte) (string, error) {
 		multipart.events = append(multipart.events, "upload")
 		partLengths = append(partLengths, len(content))
 		return fmt.Sprintf("etag-%d", len(partLengths)), nil
-	}, accounting)
+	})
 
 	body := bytes.NewReader(bytes.Repeat([]byte{'x'}, multipartPartSize+1))
-	if err := workflow.Upload(context.Background(), body, "bucket", "object", "record"); err != nil {
+	if err := service.UploadProxy(context.Background(), "record", body); err != nil {
 		t.Fatalf("Upload() error = %v", err)
 	}
 
@@ -94,6 +112,10 @@ type lfsMetadataObjectSpy struct {
 	registered  []objects.Record
 	registerErr error
 }
+
+type objectsPortAdapter struct{ *lfsMetadataObjectSpy }
+
+func (objectsPortAdapter) RequireObjectResources(context.Context, string, []string) error { return nil }
 
 func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*objects.Record, error) {
 	*s.events = append(*s.events, "get")
@@ -139,9 +161,9 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound}
 	accounting := &lfsUploadAccountingSpy{events: &events}
-	workflow := NewMetadataWorkflow(pending, objectsPort, accounting)
+	service := NewService(nil, objectsPortAdapter{lfsMetadataObjectSpy: objectsPort}, nil, pending, accounting, nil)
 
-	if err := workflow.Verify(context.Background(), sha); err != nil {
+	if err := service.Verify(context.Background(), sha); err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
 
@@ -162,9 +184,9 @@ func TestLFSMetadataWorkflowExistingObjectOnlyAccounts(t *testing.T) {
 	object := &objects.Record{Id: "existing"}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, object: object}
 	accounting := &lfsUploadAccountingSpy{events: &events}
-	workflow := NewMetadataWorkflow(nil, objectsPort, accounting)
+	service := NewService(nil, objectsPortAdapter{lfsMetadataObjectSpy: objectsPort}, nil, nil, accounting, nil)
 
-	if err := workflow.Verify(context.Background(), "oid"); err != nil {
+	if err := service.Verify(context.Background(), "oid"); err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
 

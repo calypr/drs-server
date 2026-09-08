@@ -23,6 +23,7 @@ import (
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 	"github.com/spf13/cobra"
@@ -393,7 +394,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 		Providers: projectstorage.Providers{},
 	})
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
-		LFSPending:       database,
+		LFS:              transferlfs.NewService(transferService, objectService, bucketService, database, database, nil),
 		ServiceInfo:      serviceInfo,
 		Objects:          objectService,
 		Transfers:        transferService,

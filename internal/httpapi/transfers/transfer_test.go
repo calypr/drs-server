@@ -18,9 +18,8 @@ func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
 	mockDB := &transferHTTPFixture{}
 	mockUM := &internalDRSStorageFake{}
 	om := newInternalDRSObjectManager(mockDB, mockUM)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
 	app := fiber.New()
-	app.Post("/multipart/upload", handleInternalMultipartUploadFiber(lifecycle))
+	app.Post("/multipart/upload", handleInternalMultipartUploadFiber(om.TransferService))
 
 	reqBody := internalapi.InternalMultipartUploadRequest{
 		UploadId:   "non-existent",
@@ -47,9 +46,8 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 	mockDB := &transferHTTPFixture{}
 	mockUM := &internalDRSStorageFake{}
 	om := newInternalDRSObjectManager(mockDB, mockUM)
-	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
 	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(lifecycle))
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
 
 	reqBody := internalapi.InternalMultipartCompleteRequest{
 		UploadId: "non-existent",
@@ -89,7 +87,7 @@ func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *test
 		},
 	})
 	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(lifecycle))
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
 	if err != nil {
 		t.Fatalf("complete request failed: %v", err)
@@ -113,7 +111,7 @@ func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *test
 
 	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{UploadId: uploadID})
 	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(lifecycle))
+	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
 	if err != nil {
 		t.Fatalf("complete request failed: %v", err)

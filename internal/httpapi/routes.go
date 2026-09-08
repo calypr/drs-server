@@ -28,7 +28,7 @@ type Dependencies struct {
 	ServiceInfo      generated.Service
 	Objects          *objectrecords.Service
 	Transfers        *transfers.Service
-	LFSPending       transferlfs.PendingStore
+	LFS              *transferlfs.Service
 	UsageIngest      usage.Ingestor
 	UsageReports     usage.Reporter
 	Buckets          *buckets.Service
@@ -85,11 +85,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	}
 	if options.LFS {
 		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
-			ObjectService:   deps.Objects,
-			TransferService: deps.Transfers,
-			PendingStore:    deps.LFSPending,
-			FileCounters:    deps.UsageIngest,
-			Credentials:     deps.Buckets,
+			Service: deps.LFS,
 		}, options.LFSProtocol)
 	}
 }
@@ -105,7 +101,7 @@ var _ internalapi.ServerInterface = (*internalServer)(nil)
 func newInternalServer(deps Dependencies) *internalServer {
 	return &internalServer{
 		RecordsServer:     records.NewRecordsServer(deps.Objects),
-		TransfersServer:   httptransfers.NewTransfersServer(deps.Objects, deps.Transfers, deps.UsageIngest),
+		TransfersServer:   httptransfers.NewTransfersServer(deps.Transfers),
 		MaintenanceServer: maintenance.NewMaintenanceServer(deps.ProjectInspector, deps.Buckets),
 	}
 }

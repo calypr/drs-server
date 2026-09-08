@@ -3,104 +3,29 @@ package transfers
 import (
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 )
 
-func handleInternalMultipartInitFiber(objectService *objectrecords.Service, transferService *domaintransfers.Service, lifecycle *domaintransfers.MultipartLifecycle) fiber.Handler {
+func handleInternalMultipartInitFiber(transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartInitRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
-
-		key := ""
-		if req.Guid != nil {
-			key = strings.TrimSpace(*req.Guid)
-		} else if req.Key != nil {
-			key = strings.TrimSpace(*req.Key)
-		}
-		if key == "" {
-			return middleware.Reject(c, fiber.StatusBadRequest, "key/guid is required")
-		}
-
-		if strings.Contains(key, "/") {
-			target, err := resolveUploadTarget(c.Context(), transferService, stringValue(req.Organization), stringValue(req.Project), key)
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			internalID := uuid.NewString()
-			uploadID, err := lifecycle.Begin(c.Context(), target.Bucket, target.Key)
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			return c.Status(fiber.StatusOK).JSON(internalapi.InternalMultipartInitOutput{
-				UploadId: &uploadID,
-				Guid:     &internalID,
-			})
-		}
-
-		internalID := key
-		var (
-			bucket       string
-			multipartKey string
-		)
-		if objects.LooksLikeSHA256(key) {
-			existing, err := objectService.GetObjectsByChecksum(c.Context(), key, "read")
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			if len(existing) > 0 {
-				obj := &existing[0]
-				internalID = string(obj.Id)
-				target, err := transferService.ResolveCanonicalStorageTarget(c.Context(), domaintransfers.CanonicalStorageTargetRequest{
-					Object:         obj,
-					PreferChecksum: true,
-				})
-				if err != nil {
-					return middleware.HandleError(c, err)
-				}
-				bucket, multipartKey = target.Bucket, target.Key
-				if bucket == "" || multipartKey == "" {
-					return middleware.Reject(c, fiber.StatusBadRequest, "existing object storage location is not an s3 url")
-				}
-			} else {
-				return middleware.Reject(c, fiber.StatusBadRequest, "checksum-only multipart init requires an explicit guid or a project-scoped object id")
-			}
-		} else if _, err := uuid.Parse(key); err != nil {
-			internalID = uuid.NewString()
-		}
-
-		if bucket == "" {
-			target, err := resolveUploadTarget(c.Context(), transferService, stringValue(req.Organization), stringValue(req.Project), internalID)
-			if err != nil {
-				return middleware.HandleError(c, err)
-			}
-			bucket = target.Bucket
-			multipartKey = target.Key
-		}
-
-		uploadID, err := lifecycle.Begin(c.Context(), bucket, multipartKey)
+		result, err := transferService.BeginMultipart(c.Context(), domaintransfers.MultipartInitRequest{GUID: req.Guid, Key: req.Key, Organization: req.Organization, Project: req.Project})
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
-
-		return c.Status(fiber.StatusOK).JSON(internalapi.InternalMultipartInitOutput{
-			UploadId: &uploadID,
-			Guid:     &internalID,
-		})
+		return c.Status(fiber.StatusOK).JSON(internalapi.InternalMultipartInitOutput{UploadId: &result.UploadID, Guid: &result.GUID})
 	}
 }
 
-func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLifecycle) fiber.Handler {
+func handleInternalMultipartUploadFiber(transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartUploadRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -109,8 +34,7 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 		if req.UploadId == "" {
 			return middleware.Reject(c, fiber.StatusBadRequest, "uploadId is required")
 		}
-
-		urlStr, err := lifecycle.SignPart(c.Context(), req.UploadId, req.PartNumber)
+		urlStr, err := transferService.SignMultipartPart(c.Context(), req.UploadId, req.PartNumber)
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
@@ -118,7 +42,7 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 	}
 }
 
-func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLifecycle) fiber.Handler {
+func handleInternalMultipartCompleteFiber(transferService *domaintransfers.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var req internalapi.InternalMultipartCompleteRequest
 		if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -127,12 +51,11 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 		if req.UploadId == "" {
 			return middleware.Reject(c, fiber.StatusBadRequest, "uploadId is required")
 		}
-
 		parts := make([]storage.CompletedPart, len(req.Parts))
-		for i, p := range req.Parts {
-			parts[i] = storage.CompletedPart{ETag: p.ETag, PartNumber: p.PartNumber}
+		for i, part := range req.Parts {
+			parts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
 		}
-		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); err != nil {
+		if err := transferService.CompleteMultipart(c.Context(), req.UploadId, parts); err != nil {
 			return middleware.HandleError(c, err)
 		}
 		return c.SendStatus(fiber.StatusOK)

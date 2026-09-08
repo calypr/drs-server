@@ -16,6 +16,7 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -196,16 +197,18 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	objectService := objectrecords.NewService(dependencies.objects)
 	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Scopes: dependencies.bucketService, Credentials: dependencies.bucketService,
+		Objects: objectService,
+		Scopes:  dependencies.bucketService, Credentials: dependencies.bucketService,
 		Events: dependencies.usageIngest,
 	})
+	lfsService := transferlfs.NewService(transferService, objectService, dependencies.bucketService, dependencies.pending, dependencies.usageIngest, nil)
 	rt := &serverRuntime{
 		app:                 app,
 		cfg:                 cfg,
 		serviceInfo:         serviceInfoForBackend(true),
 		objectService:       objectService,
 		transferService:     transferService,
-		lfsPending:          dependencies.pending,
+		lfsService:          lfsService,
 		usageService:        usageService,
 		usageIngest:         dependencies.usageIngest,
 		bucketService:       dependencies.bucketService,

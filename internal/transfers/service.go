@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -56,15 +57,17 @@ type UploadResult struct {
 }
 
 type Service struct {
-	objects      ObjectPort
-	storage      StoragePort
-	access       AccessPort
-	multipart    MultipartPort
-	fileCounters usage.FileCounterRecorder
-	scopes       ScopeReader
-	credentials  CredentialReader
-	events       EventRecorder
-	now          func() time.Time
+	objects           ObjectPort
+	storage           StoragePort
+	access            AccessPort
+	multipart         MultipartPort
+	fileCounters      usage.FileCounterRecorder
+	scopes            ScopeReader
+	credentials       CredentialReader
+	events            EventRecorder
+	now               func() time.Time
+	multipartMu       sync.Mutex
+	multipartSessions map[string]*multipartSession
 }
 
 // BindLegacyDependencies keeps the old HTTP fixture composition executable

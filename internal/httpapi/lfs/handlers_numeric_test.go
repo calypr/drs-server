@@ -95,7 +95,7 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 				}},
 			},
 		}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
-		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 		response, err := server.LfsBatch(context.Background(), lfsapi.LfsBatchRequestObject{
 			Body: &lfsapi.LfsBatchApplicationVndGitLfsPlusJSONRequestBody{
 				Operation: "download",
@@ -113,7 +113,7 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 
 	t.Run("verify", func(t *testing.T) {
 		ports := newLFSTestPorts(map[string]*objects.Record{oid: {Id: objects.RecordID(oid)}}, nil)
-		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 		response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
 			Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 0},
 		})
@@ -130,7 +130,7 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 		typ := "s3"
 		url := "s3://bucket/" + oid
 		ports := newLFSTestPorts(nil, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
-		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+		server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 		response, err := server.LfsStageMetadata(context.Background(), lfsapi.LfsStageMetadataRequestObject{
 			JSONBody: &lfsapi.LfsStageMetadataJSONRequestBody{Candidates: []lfsapi.DrsObjectCandidate{{
 				Size:      &size,
@@ -152,5 +152,5 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 
 func newLFSTestServerForNumericValidation() *LFSServer {
 	ports := newLFSTestPorts(nil, nil)
-	return NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), DefaultOptions())
+	return NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 }

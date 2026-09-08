@@ -1,14 +1,8 @@
 package lfs
 
 import (
-	"context"
-
 	"github.com/calypr/syfon/apigen/lfsapi"
-	"github.com/calypr/syfon/internal/buckets"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
-	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -19,18 +13,8 @@ type Options struct {
 	BandwidthLimitBytesPerMinute int64
 }
 
-// PartUploader performs one provider PUT for a signed multipart part and
-// returns the provider's opaque ETag. The default is
-// storage.UploadSignedMultipartPart. Focused tests may inject another function.
-type PartUploader func(context.Context, string, []byte) (string, error)
-
 type Dependencies struct {
-	ObjectService   *objectrecords.Service
-	TransferService *transfers.Service
-	PendingStore    transferlfs.PendingStore
-	FileCounters    usage.FileCounterRecorder
-	Credentials     buckets.CredentialReader
-	PartUploader    PartUploader
+	Service *transferlfs.Service
 }
 
 // DefaultOptions returns the historical Git LFS limits.
@@ -48,7 +32,7 @@ func RegisterLFSRoutes(router fiber.Router, deps Dependencies, opts ...Options) 
 	if len(opts) > 0 {
 		effective = opts[0]
 	}
-	server := NewLFSServer(deps, effective)
+	server := NewLFSServer(deps.Service, effective)
 	strict := lfsapi.NewStrictHandler(server, []lfsapi.StrictMiddlewareFunc{
 		LFSRequestMiddleware(effective),
 	})
