@@ -131,18 +131,17 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 	}
 	result := DownloadResult{URL: signed.Location, SourceURL: sourceURL, Target: target, Object: obj}
 	if req.Accounting == AccountingDownloadBeforeEvent {
-		if s.fileCounters == nil {
-			return DownloadResult{}, fmt.Errorf("file usage recorder is not configured")
-		}
-		counterID := strings.TrimSpace(req.AccountingObjectID)
-		if counterID == "" {
-			counterID = string(obj.Id)
-		}
-		if err := s.fileCounters.RecordFileDownload(ctx, counterID); err != nil {
-			return DownloadResult{}, err
+		if s.fileCounters != nil {
+			counterID := strings.TrimSpace(req.AccountingObjectID)
+			if counterID == "" {
+				counterID = string(obj.Id)
+			}
+			if err := s.fileCounters.RecordFileDownload(ctx, counterID); err != nil {
+				return DownloadResult{}, err
+			}
 		}
 	}
-	if req.Accounting == AccountingDownloadBeforeEvent || req.Accounting == AccountingEventOnly {
+	if (req.Accounting == AccountingDownloadBeforeEvent || req.Accounting == AccountingEventOnly) && s.events != nil {
 		if err := s.recordAccessIssued(ctx, AccessRequest{Object: obj, Target: target, AccessID: req.AccessID, Direction: usage.ProviderTransferDirectionDownload, StorageURL: sourceURL, RangeStart: rangeStart(req.Range), RangeEnd: rangeEnd(req.Range)}); err != nil {
 			return DownloadResult{}, err
 		}

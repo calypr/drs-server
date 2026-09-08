@@ -106,6 +106,76 @@ func testRecord() *objects.Record {
 	}
 }
 
+type downloadObjectFake struct {
+	object *objects.Record
+}
+
+func (f downloadObjectFake) GetObject(context.Context, string, string) (*objects.Record, error) {
+	return f.object, nil
+}
+
+func (downloadObjectFake) GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error) {
+	return nil, nil
+}
+
+func (downloadObjectFake) RequireObjectResources(context.Context, string, []string) error {
+	return nil
+}
+
+type downloadAccountingFake struct {
+	calls []string
+}
+
+func (f *downloadAccountingFake) RecordFileUpload(context.Context, string) error {
+	return nil
+}
+
+func (f *downloadAccountingFake) RecordFileDownload(context.Context, string) error {
+	f.calls = append(f.calls, "counter")
+	return nil
+}
+
+func (f *downloadAccountingFake) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
+	f.calls = append(f.calls, "event")
+	return nil
+}
+
+func TestDownloadWithoutOptionalAccountingStillSigns(t *testing.T) {
+	access := &accessFake{result: storage.SignedAccess{Location: "signed-download"}}
+	service := NewService(Dependencies{
+		Objects: downloadObjectFake{object: testRecord()},
+		Storage: access,
+	})
+
+	result, err := service.Download(context.Background(), DownloadRequest{
+		ObjectID:   "record-1",
+		Accounting: AccountingDownloadBeforeEvent,
+	})
+	if err != nil {
+		t.Fatalf("Download() with no optional accounting recorder failed: %v", err)
+	}
+	if result.URL != "signed-download" {
+		t.Fatalf("Download() URL = %q, want signed-download", result.URL)
+	}
+}
+
+func TestDownloadAccountingPreservesConfiguredRecorderOrder(t *testing.T) {
+	accounting := &downloadAccountingFake{}
+	service := NewService(Dependencies{
+		Objects:      downloadObjectFake{object: testRecord()},
+		Storage:      &accessFake{result: storage.SignedAccess{Location: "signed-download"}},
+		FileCounters: accounting,
+		Events:       accounting,
+	})
+
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1", Accounting: AccountingDownloadBeforeEvent}); err != nil {
+		t.Fatalf("Download() failed with configured accounting: %v", err)
+	}
+	if got, want := accounting.calls, []string{"counter", "event"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting call order = %v, want %v", got, want)
+	}
+}
+
 func TestResolveCanonicalStorageTargetComposesScopesAndPrefixes(t *testing.T) {
 	service := NewService(Dependencies{Scopes: scopeFake{scopes: map[string]buckets.Scope{
 		"org|":        {Organization: "org", Bucket: "physical", PathPrefix: "org-prefix"},
