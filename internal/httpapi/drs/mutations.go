@@ -95,7 +95,7 @@ func (s *server) BulkUpdateAccessMethods(c fiber.Ctx) error {
 		return middleware.HandleError(c, err)
 	}
 
-	objects := make([]any, 0, len(orderedIDs))
+	objects := make([]ObjectResponse, 0, len(orderedIDs))
 	for _, id := range orderedIDs {
 		obj, err := s.objectService.GetObject(c.Context(), id, "read")
 		if err != nil {

@@ -85,31 +85,50 @@ func ToGenerated(record objects.Record) generated.DrsObject {
 	return out
 }
 
-// ObjectPayload builds the compatibility DRS response payload.
-func ObjectPayload(record objects.Record) map[string]json.RawMessage {
-	var payload map[string]json.RawMessage
-	data, err := json.Marshal(ToGenerated(record))
+// ObjectResponse is the typed DRS response with the legacy identity and alias
+// fields retained by this server's wire contract.
+type ObjectResponse struct {
+	generated.DrsObject
+	Did         string    `json:"did,omitempty"`
+	NameAliases *[]string `json:"name_aliases,omitempty"`
+}
+
+// MarshalJSON preserves the minimal identity response when a generated DRS
+// field cannot be encoded, such as an invalid timestamp.
+func (value ObjectResponse) MarshalJSON() ([]byte, error) {
+	type response struct {
+		generated.DrsObject
+		Did         string    `json:"did,omitempty"`
+		NameAliases *[]string `json:"name_aliases,omitempty"`
+	}
+	encoded, err := json.Marshal(response{
+		DrsObject:   value.DrsObject,
+		Did:         value.Did,
+		NameAliases: value.NameAliases,
+	})
 	if err == nil {
-		if err := json.Unmarshal(data, &payload); err == nil {
-			if record.Id != "" {
-				payload["id"], _ = json.Marshal(string(record.Id))
-				payload["did"], _ = json.Marshal(string(record.Id))
-			}
-			if record.NameAliases != nil {
-				if encoded, marshalErr := json.Marshal(record.NameAliases); marshalErr == nil {
-					payload["name_aliases"] = encoded
-				}
-			}
-			return payload
-		}
+		return encoded, nil
 	}
-	payload = map[string]json.RawMessage{}
-	if record.Id != "" {
-		payload["id"], _ = json.Marshal(string(record.Id))
-		payload["did"], _ = json.Marshal(string(record.Id))
+	type fallback struct {
+		ID      string `json:"id,omitempty"`
+		DID     string `json:"did,omitempty"`
+		SelfURI string `json:"self_uri"`
 	}
-	payload["self_uri"], _ = json.Marshal(record.SelfUri)
-	return payload
+	return json.Marshal(fallback{ID: value.Id, DID: value.Did, SelfURI: value.SelfUri})
+}
+
+// ObjectPayload projects a domain record into the typed DRS response.
+func ObjectPayload(record objects.Record) ObjectResponse {
+	var aliases *[]string
+	if record.NameAliases != nil {
+		copyAliases := append([]string(nil), record.NameAliases...)
+		aliases = &copyAliases
+	}
+	return ObjectResponse{
+		DrsObject:   ToGenerated(record),
+		Did:         string(record.Id),
+		NameAliases: aliases,
+	}
 }
 
 func FromGeneratedAccessMethods(methods []generated.AccessMethod) []objects.AccessMethod {

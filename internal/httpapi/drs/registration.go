@@ -11,11 +11,11 @@ import (
 )
 
 func (s *server) RegisterObjects(c fiber.Ctx) error {
-	var body registerObjectsRequest
+	var body generated.RegisterObjectsJSONBody
 	if err := json.Unmarshal(c.Body(), &body); err != nil || len(body.Candidates) == 0 {
-		var single registerObjectCandidate
+		var single generated.DrsObjectCandidate
 		if err2 := json.Unmarshal(c.Body(), &single); err2 == nil && len(single.Checksums) > 0 {
-			internalObj, err := registerCandidateToRecord(single, time.Now().UTC())
+			internalObj, err := objects.CandidateToRecord(FromGeneratedCandidate(single), time.Now().UTC())
 			if err != nil {
 				return middleware.HandleError(c, err)
 			}
@@ -26,16 +26,14 @@ func (s *server) RegisterObjects(c fiber.Ctx) error {
 			if err != nil {
 				return middleware.HandleError(c, err)
 			}
-			return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-				"objects": []any{ObjectPayload(*finalObj)},
-			})
+			return c.Status(fiber.StatusCreated).JSON(fiber.Map{"objects": []ObjectResponse{ObjectPayload(*finalObj)}})
 		}
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	toRegister := make([]objects.Record, 0, len(body.Candidates))
 	for _, cand := range body.Candidates {
-		internalObj, err := registerCandidateToRecord(cand, time.Now().UTC())
+		internalObj, err := objects.CandidateToRecord(FromGeneratedCandidate(cand), time.Now().UTC())
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
@@ -46,7 +44,7 @@ func (s *server) RegisterObjects(c fiber.Ctx) error {
 		return middleware.HandleError(c, err)
 	}
 
-	registered := make([]any, len(toRegister))
+	registered := make([]ObjectResponse, len(toRegister))
 	for i, internal := range toRegister {
 		obj, err := s.objectService.GetObject(c.Context(), string(internal.Id), "read")
 		if err != nil {
@@ -56,16 +54,4 @@ func (s *server) RegisterObjects(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"objects": registered})
-}
-
-type registerObjectsRequest struct {
-	Candidates []registerObjectCandidate `json:"candidates"`
-}
-
-type registerObjectCandidate struct {
-	generated.DrsObjectCandidate
-}
-
-func registerCandidateToRecord(c registerObjectCandidate, now time.Time) (objects.Record, error) {
-	return objects.CandidateToRecord(FromGeneratedCandidate(c.DrsObjectCandidate), now)
 }

@@ -31,7 +31,7 @@ func (s *server) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams) e
 		return middleware.HandleError(c, err)
 	}
 
-	resolved := make([]any, 0, len(objects))
+	resolved := make([]ObjectResponse, 0, len(objects))
 	for _, obj := range objects {
 		resolved = append(resolved, ObjectPayload(obj))
 	}
@@ -51,7 +51,7 @@ func (s *server) GetObjectsByChecksum(c fiber.Ctx, checksum generated.ChecksumPa
 		return middleware.HandleError(c, err)
 	}
 
-	resolved := make([]any, 0)
+	resolved := make([]ObjectResponse, 0)
 	for _, obj := range fetched {
 		resolved = append(resolved, ObjectPayload(obj))
 	}
