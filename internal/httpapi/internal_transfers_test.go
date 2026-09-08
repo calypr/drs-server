@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,7 +22,6 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
-	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
@@ -118,7 +116,6 @@ func TestHandleInternalUploadURLUsesAuthorizedExplicitScopeForAttribution(t *tes
 type transfersInternalDRSTestFixture struct {
 	ObjectService   *objectrecords.Service
 	TransferService *domaintransfers.Service
-	FileCounters    usage.FileCounterRecorder
 	bucketService   *buckets.Service
 	objectStore     *transferObjectStoreFake
 }
@@ -146,7 +143,6 @@ func transfersNewInternalDRSObjectManager(store *transferHTTPFixture, storageDep
 	return transfersInternalDRSTestFixture{
 		ObjectService:   objectService,
 		TransferService: transferService,
-		FileCounters:    fileCounters,
 		bucketService:   bucketService,
 		objectStore:     objectStore,
 	}
@@ -389,23 +385,20 @@ func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
 	mockDB := &transferHTTPFixture{}
 	mockUM := &internalDRSStorageFake{}
 	om := transfersNewInternalDRSObjectManager(mockDB, mockUM)
-	app := fiber.New()
-	app.Post("/multipart/upload", handleInternalMultipartUploadFiber(om.TransferService))
-
 	reqBody := internalapi.InternalMultipartUploadRequest{
 		UploadId:   "non-existent",
 		PartNumber: 1,
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/multipart/upload", bytes.NewBuffer(body))
+	req := httptest.NewRequest("POST", "/data/multipart/upload", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", resp.StatusCode)
+	rr := transfersDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
 	}
 	var responseBody internalapi.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&responseBody); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
 	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
@@ -417,23 +410,20 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 	mockDB := &transferHTTPFixture{}
 	mockUM := &internalDRSStorageFake{}
 	om := transfersNewInternalDRSObjectManager(mockDB, mockUM)
-	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
-
 	reqBody := internalapi.InternalMultipartCompleteRequest{
 		UploadId: "non-existent",
 		Parts:    []internalapi.InternalMultipartPart{},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/multipart/complete", bytes.NewBuffer(body))
+	req := httptest.NewRequest("POST", "/data/multipart/complete", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, _ := app.Test(req)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404, got %d", resp.StatusCode)
+	rr := transfersDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
 	}
 	var responseBody internalapi.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&responseBody); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
 	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
@@ -457,14 +447,9 @@ func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *test
 			{PartNumber: 2, ETag: `"opaque-two"`},
 		},
 	})
-	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
-	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatalf("complete request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)), om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	if len(fake.completeParts) != 2 || fake.completeParts[0].PartNumber != 7 || fake.completeParts[0].ETag != `"opaque-seven"` || fake.completeParts[1].PartNumber != 2 || fake.completeParts[1].ETag != `"opaque-two"` {
 		t.Fatalf("completed parts were not preserved in caller order: %+v", fake.completeParts)
@@ -481,24 +466,14 @@ func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *test
 	}
 
 	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{UploadId: uploadID})
-	app := fiber.New()
-	app.Post("/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
-	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatalf("complete request failed: %v", err)
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)), om)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected provider failure to map to 500, got %d", rr.Code)
 	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected provider failure to map to 500, got %d", resp.StatusCode)
-	}
-	resp.Body.Close()
 	fake.completeErr = nil
-	resp, err = app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatalf("retry complete request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected successful retry after provider recovery, got %d", resp.StatusCode)
+	rr = transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)), om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected successful retry after provider recovery, got %d", rr.Code)
 	}
 	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("expected consumed upload ID after successful completion, got %v", err)
@@ -793,15 +768,10 @@ func uploadCaseMultipartUpload(t *testing.T) {
 	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
-	app := fiber.New()
-	app.Post("/data/multipart/upload", handleInternalMultipartUploadFiber(om.TransferService))
 	body, _ := json.Marshal(internalapi.InternalMultipartUploadRequest{Key: "hash-key", UploadId: "mock-upload-id", PartNumber: 1})
-	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatalf("multipart upload request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", bytes.NewBuffer(body)), om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 }
 
@@ -812,15 +782,10 @@ func uploadCaseMultipartComplete(t *testing.T) {
 	if _, err := lifecycle.Begin(context.Background(), "bucket", "key"); err != nil {
 		t.Fatalf("begin multipart upload: %v", err)
 	}
-	app := fiber.New()
-	app.Post("/data/multipart/complete", handleInternalMultipartCompleteFiber(om.TransferService))
 	body, _ := json.Marshal(internalapi.InternalMultipartCompleteRequest{Key: "hash-key", UploadId: "mock-upload-id", Parts: []internalapi.InternalMultipartPart{{PartNumber: 1, ETag: "etag1"}}})
-	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatalf("multipart complete request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/complete", bytes.NewBuffer(body)), om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 }
 
@@ -1333,20 +1298,10 @@ func (failedUploadReader) GetBulkObjects(context.Context, []string) ([]objects.R
 
 func TestBulkUploadRedactsServerCause(t *testing.T) {
 	service := objectrecords.NewService(failedUploadReader{})
-	app := fiber.New()
-	app.Post("/bulk", handleInternalUploadBulkFiber(service, nil))
-
-	resp, err := app.Test(httptest.NewRequest("POST", "/bulk", strings.NewReader(`{"requests":[{"file_id":"record-id"}]}`)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != 207 {
-		t.Fatalf("expected partial success, got %d body=%s", resp.StatusCode, body)
+	rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload/bulk", strings.NewReader(`{"requests":[{"file_id":"record-id"}]}`)), transfersInternalDRSTestFixture{ObjectService: service})
+	body := rr.Body.Bytes()
+	if rr.Code != 207 {
+		t.Fatalf("expected partial success, got %d body=%s", rr.Code, body)
 	}
 	var output internalapi.InternalUploadBulkOutput
 	if err := json.Unmarshal(body, &output); err != nil {
@@ -1498,20 +1453,14 @@ func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
 			}
 			objectService := objectrecords.NewService(reader)
 			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Storage: access, Scopes: scopes, Events: events})
-			app := fiber.New()
-			app.Post("/bulk", handleInternalUploadBulkFiber(objectService, transferService))
 			body := strings.NewReader(`{"requests":[{"file_id":"` + failID + `"},{"file_id":"success"}]}`)
-			resp, err := app.Test(httptest.NewRequest("POST", "/bulk", body))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer resp.Body.Close()
+			rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload/bulk", body), transfersInternalDRSTestFixture{ObjectService: objectService, TransferService: transferService})
 			var output internalapi.InternalUploadBulkOutput
-			if err := json.NewDecoder(resp.Body).Decode(&output); err != nil {
+			if err := json.NewDecoder(rr.Body).Decode(&output); err != nil {
 				t.Fatal(err)
 			}
-			if resp.StatusCode != 207 || output.Results == nil || len(*output.Results) != 2 {
-				t.Fatalf("unexpected bulk response: status=%d output=%+v", resp.StatusCode, output)
+			if rr.Code != 207 || output.Results == nil || len(*output.Results) != 2 {
+				t.Fatalf("unexpected bulk response: status=%d output=%+v", rr.Code, output)
 			}
 			failed, succeeded := (*output.Results)[0], (*output.Results)[1]
 			if failed.Error == nil || *failed.Error != "storage request is invalid" || strings.Contains(*failed.Error, "QA_PRIVATE_PROVIDER_DETAIL") || failed.Status != 400 {

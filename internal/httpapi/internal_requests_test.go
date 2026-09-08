@@ -21,7 +21,6 @@ import (
 	"github.com/calypr/syfon/internal/persistence/store"
 	"github.com/calypr/syfon/internal/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
-	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -519,28 +518,8 @@ func recordsDoInternalDRSTestRequest(req *http.Request, fixture recordsInternalD
 	return runInternalDRSTestRequest(app, req)
 }
 
-type unimplementedInternalServer struct {
-	internalapi.ServerInterface
-}
-
-type recordsTestServer struct {
-	*RecordsServer
-	unimplementedInternalServer
-}
-
 func registerRecordRoutes(router fiber.Router, objectService *objectrecords.Service) {
-	internalapi.RegisterHandlers(router, &recordsTestServer{RecordsServer: NewRecordsServer(objectService)})
-}
-
-func recordsDoInternalDRSTestRequestWithAlias(req *http.Request, fixture recordsInternalDRSTestFixture, method string, pattern string, handler fiber.Handler) *httptest.ResponseRecorder {
-	app := fiber.New()
-	app.Use(func(c fiber.Ctx) error {
-		c.SetContext(req.Context())
-		return c.Next()
-	})
-	registerRecordRoutes(app, fixture.ObjectService)
-	app.Add([]string{method}, pattern, handler)
-	return runInternalDRSTestRequest(app, req)
+	internalapi.RegisterHandlers(router, &internalServer{objects: objectService})
 }
 
 func runInternalDRSTestRequest(app *fiber.App, req *http.Request) *httptest.ResponseRecorder {
@@ -640,7 +619,7 @@ func transfersDoInternalDRSTestRequest(req *http.Request, fixture transfersInter
 		c.SetContext(req.Context())
 		return c.Next()
 	})
-	registerTransferRoutes(app, fixture.ObjectService, fixture.TransferService, fixture.FileCounters)
+	registerTransferRoutes(app, fixture.ObjectService, fixture.TransferService)
 
 	rr := httptest.NewRecorder()
 	resp, err := app.Test(req)
@@ -660,6 +639,6 @@ func transfersDoInternalDRSTestRequest(req *http.Request, fixture transfersInter
 	return rr
 }
 
-func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service, fileCounters usage.FileCounterRecorder) {
+func registerTransferRoutes(router fiber.Router, objectService *objectrecords.Service, transferService *domaintransfers.Service) {
 	internalapi.RegisterHandlers(router, &internalServer{objects: objectService, transfers: transferService})
 }

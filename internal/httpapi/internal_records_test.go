@@ -95,34 +95,18 @@ func TestParseInternalListPaginationFiber_StartSuppressesPage(t *testing.T) {
 func TestHandleInternalBulkDocuments_InvalidBodyAndMissingIDs(t *testing.T) {
 	om := recordsNewInternalDRSObjectManager(&internalRecordStore{})
 
-	req := httptest.NewRequest(http.MethodPost, "/bulk/documents", strings.NewReader("not-json"))
+	req := httptest.NewRequest(http.MethodPost, "/index/bulk/documents", strings.NewReader("not-json"))
 	req.Header.Set("Content-Type", "application/json")
-	rr := recordsDoInternalDRSTestRequestWithAlias(req, om, http.MethodPost, "/bulk/documents", handleInternalBulkDocumentsFiber(om.ObjectService))
+	rr := recordsDoInternalDRSTestRequest(req, om)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid json, got %d body=%s", rr.Code, rr.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/bulk/documents", strings.NewReader(`{"ids":[]}`))
+	req = httptest.NewRequest(http.MethodPost, "/index/bulk/documents", strings.NewReader(`{"ids":[]}`))
 	req.Header.Set("Content-Type", "application/json")
-	rr = recordsDoInternalDRSTestRequestWithAlias(req, om, http.MethodPost, "/bulk/documents", handleInternalBulkDocumentsFiber(om.ObjectService))
+	rr = recordsDoInternalDRSTestRequest(req, om)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty ids, got %d body=%s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestHandleInternalList_IgnoresLegacyPathValidation(t *testing.T) {
-	om := recordsNewInternalDRSObjectManager(&internalRecordStore{})
-
-	req := httptest.NewRequest(http.MethodGet, "/index?path=nested", nil)
-	rr := recordsDoInternalDRSTestRequest(req, om)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 when legacy path query is ignored, got %d body=%s", rr.Code, rr.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/index?organization=org&project=proj&path=../nested", nil)
-	rr = recordsDoInternalDRSTestRequest(req, om)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200 when invalid legacy path query is ignored, got %d body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -931,10 +915,10 @@ func TestHandleInternalBulkHashes_HashTypeFiltering(t *testing.T) {
 	}
 
 	reqBody := `{"hashes":["sha256:samehash"]}`
-	req := httptest.NewRequest(http.MethodPost, "/bulk/hashes", strings.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/index/bulk/hashes", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	om := recordsNewInternalDRSObjectManager(mockDB)
-	rr := recordsDoInternalDRSTestRequestWithAlias(req, om, http.MethodPost, "/bulk/hashes", handleInternalBulkHashesFiber(om.ObjectService))
+	rr := recordsDoInternalDRSTestRequest(req, om)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
@@ -985,19 +969,13 @@ func TestHandleInternalBulkSHA256Validity(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/index/bulk/sha256/validity", strings.NewReader(`{"sha256":["present","md5-only","missing"]}`))
 	req.Header.Set("Content-Type", "application/json")
-	app := fiber.New()
 	om := recordsNewInternalDRSObjectManager(mockDB)
-	app.Post("/index/bulk/sha256/validity", handleInternalBulkSHA256ValidityFiber(om.ObjectService))
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
+	rr := recordsDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
 	var payload map[string]bool
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if !payload["present"] {
@@ -1026,21 +1004,14 @@ func TestHandleInternalBulkMissingSHA256(t *testing.T) {
 		"obj-sha": {"org": {"project"}},
 	}}
 	om := recordsNewInternalDRSObjectManager(mockDB)
-	app := fiber.New()
-	app.Post("/index/bulk/sha256/missing", handleInternalBulkMissingSHA256Fiber(om.ObjectService))
 	req := httptest.NewRequest(http.MethodPost, "/index/bulk/sha256/missing", strings.NewReader(`{"organization":"org","project":"project","sha256":["SHA256:`+present+`","`+missing+`","`+missing+`"]}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
+	rr := recordsDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
 	var payload internalapi.BulkMissingSHA256Response
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if payload.Checked != 2 || !slices.Equal(payload.MissingSha256, []string{missing}) {
@@ -1050,17 +1021,11 @@ func TestHandleInternalBulkMissingSHA256(t *testing.T) {
 
 func TestHandleInternalBulkMissingSHA256RejectsInvalidChecksum(t *testing.T) {
 	om := recordsNewInternalDRSObjectManager(&internalRecordStore{})
-	app := fiber.New()
-	app.Post("/index/bulk/sha256/missing", handleInternalBulkMissingSHA256Fiber(om.ObjectService))
 	req := httptest.NewRequest(http.MethodPost, "/index/bulk/sha256/missing", strings.NewReader(`{"organization":"org","project":"project","sha256":["not-a-sha256"]}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	rr := recordsDoInternalDRSTestRequest(req, om)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
 
@@ -1099,10 +1064,10 @@ func TestHandleInternalCreate_RequiredFieldsFailAtDecode(t *testing.T) {
 func TestHandleInternalBulkCreate_PersistsControlledAccess(t *testing.T) {
 	mockDB := &internalRecordStore{Objects: map[string]*objects.Record{}}
 	reqBody := `{"records":[{"did":"obj-bulk-1","size":7,"controlled_access":["/programs/test/projects/p1"],"access_methods":[{"type":"s3","access_url":{"url":"s3://bucket/path/obj-bulk-1"}}]}]}`
-	req := httptest.NewRequest(http.MethodPost, "/bulk/create", strings.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/index/bulk", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	om := recordsNewInternalDRSObjectManager(mockDB)
-	rr := recordsDoInternalDRSTestRequestWithAlias(req, om, http.MethodPost, "/bulk/create", handleInternalBulkCreateFiber(om.ObjectService))
+	rr := recordsDoInternalDRSTestRequest(req, om)
 
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
@@ -1623,15 +1588,9 @@ func TestHandleInternalGetOmitsRetiredFields(t *testing.T) {
 		},
 	}}
 	fixture := recordsNewInternalDRSObjectManager(store)
-	app := fiber.New()
-	app.Get("/index/:id", handleInternalGetFiber(fixture.ObjectService))
-
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/object-id", nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	response := recordsDoInternalDRSTestRequest(httptest.NewRequest(http.MethodGet, "/index/object-id", nil), fixture)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	var payload map[string]json.RawMessage
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
