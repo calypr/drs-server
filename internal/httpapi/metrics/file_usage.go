@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -28,7 +27,7 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 		return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
-	inactiveSince, err := parseInactiveSince(request.Params.InactiveDays)
+	inactiveSince, err := usage.ParseInactiveSince(time.Now().UTC(), request.Params.InactiveDays)
 	if err != nil {
 		return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
@@ -72,11 +71,17 @@ func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	if request.Body == nil {
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
-	objectIDs := uniqueNonEmptyStrings(request.Body.ObjectIds)
-	if len(objectIDs) == 0 {
+	hasObjectID := false
+	for _, objectID := range request.Body.ObjectIds {
+		if strings.TrimSpace(objectID) != "" {
+			hasObjectID = true
+			break
+		}
+	}
+	if !hasObjectID {
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
-	inactiveSince, err := parseInactiveSince(request.Body.InactiveDays)
+	inactiveSince, err := usage.ParseInactiveSince(time.Now().UTC(), request.Body.InactiveDays)
 	if err != nil {
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
@@ -93,28 +98,25 @@ func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 		}
 	}
 
-	readableObjectIDs, err := s.readableBulkObjectIDs(ctx, access, objectIDs)
-	if err != nil {
-		return nil, err
-	}
-	data, err := s.reporter.ListFileUsageByObjectIDs(ctx, readableObjectIDs)
+	data, err := s.reporter.ListFileUsageBatch(ctx, usage.FileUsageBatchQuery{
+		Scope:         access.scopeQuery(),
+		ObjectIDs:     request.Body.ObjectIds,
+		InactiveSince: inactiveSince,
+	})
 	if err != nil {
 		return nil, err
 	}
 	items := make([]metricsapi.FileUsage, 0, len(data))
-	for _, usage := range data {
-		if !usageMatchesInactiveFilter(usage, inactiveSince) {
-			continue
-		}
-		items = append(items, toMetricsFileUsage(usage))
+	for _, item := range data {
+		items = append(items, toMetricsFileUsage(item))
 	}
 
 	log.Printf(
 		"INFO: syfon_metrics_files_bulk requested=%d returned=%d scoped=%t aggregate_scopes=%d inactive_days=%t duration_ms=%d",
-		len(objectIDs),
+		len(request.Body.ObjectIds),
 		len(items),
 		access.isScoped(),
-		len(access.scopes),
+		len(access.scopeQuery().Scopes),
 		request.Body.InactiveDays != nil,
 		time.Since(started).Milliseconds(),
 	)
@@ -141,18 +143,18 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 		}
 	}
 
-	if access.isScoped() || access.hasScopeAggregate() {
-		inside, err := s.objectInScope(ctx, objectID, access)
-		if err != nil {
-			return nil, err
-		}
-		if !inside {
+	var fileUsage *usage.FileUsage
+	var err error
+	scoped := access.isScoped() || access.hasScopeAggregate()
+	if scoped {
+		fileUsage, err = s.reporter.GetScopedFileUsage(ctx, objectID, access.scopeQuery())
+	} else {
+		fileUsage, err = s.reporter.GetFileUsage(ctx, objectID)
+	}
+	if err != nil {
+		if scoped && errors.Is(err, errorapi.ErrNotFound) {
 			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
 		}
-	}
-
-	fileUsage, err := s.reporter.GetFileUsage(ctx, objectID)
-	if err != nil {
 		return nil, err
 	}
 
@@ -160,7 +162,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 }
 
 func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsapi.GetMetricsSummaryRequestObject) (metricsapi.GetMetricsSummaryResponseObject, error) {
-	inactiveSince, err := parseInactiveSince(request.Params.InactiveDays)
+	inactiveSince, err := usage.ParseInactiveSince(time.Now().UTC(), request.Params.InactiveDays)
 	if err != nil {
 		return metricsapi.GetMetricsSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
@@ -195,45 +197,6 @@ func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 	}, nil
 }
 
-func (s *MetricsServer) readableBulkObjectIDs(ctx context.Context, access metricsAccess, objectIDs []string) ([]string, error) {
-	return s.reporter.ListReadableObjectIDs(ctx, access.scopeQuery(), objectIDs)
-}
-
-func (s *MetricsServer) objectInScope(ctx context.Context, objectID string, access metricsAccess) (bool, error) {
-	items, err := s.reporter.ListReadableObjectIDs(ctx, access.scopeQuery(), []string{objectID})
-	if err != nil {
-		if errors.Is(err, errorapi.ErrNotFound) || errors.Is(err, errorapi.ErrAccessDenied) {
-			return false, nil
-		}
-		return false, err
-	}
-	return len(items) > 0, nil
-}
-
-func usageMatchesInactiveFilter(usage usage.FileUsage, inactiveSince *time.Time) bool {
-	if inactiveSince == nil {
-		return true
-	}
-	return usage.LastDownloadTime == nil || usage.LastDownloadTime.Before(*inactiveSince)
-}
-
-func uniqueNonEmptyStrings(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
-	return out
-}
-
 func scopedSummaryInt64(access metricsAccess, value int64) *int64 {
 	if !access.isScoped() {
 		return nil
@@ -246,18 +209,6 @@ func scopedSummaryTime(access metricsAccess, value *time.Time) *time.Time {
 		return nil
 	}
 	return value
-}
-
-func parseInactiveSince(inactiveDays *int) (*time.Time, error) {
-	if inactiveDays == nil {
-		return nil, nil
-	}
-	days := *inactiveDays
-	if days < 0 {
-		return nil, fmt.Errorf("inactive_days must be a non-negative integer")
-	}
-	t := time.Now().UTC().AddDate(0, 0, -days)
-	return &t, nil
 }
 
 func toMetricsFileUsage(v usage.FileUsage) metricsapi.FileUsage {

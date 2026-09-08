@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -483,86 +482,6 @@ func TestMetricsFilesAuthzAndScope(t *testing.T) {
 			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
 		}
 	})
-}
-
-func TestFileUsageScopeHelpers(t *testing.T) {
-	now := time.Now().UTC()
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"obj-a": {Id: "obj-a", CreatedTime: now, UpdatedTime: &now},
-		"obj-b": {Id: "obj-b", CreatedTime: now, UpdatedTime: &now},
-	}, map[string]map[string][]string{
-		"obj-a": {"org1": {"p1"}},
-		"obj-b": {"org2": {"p2"}},
-	})
-	state := &metricsTransferState{}
-	ingest := &metricsIngestFake{state: state}
-	reports := newMetricsReport(objectReader, nil, state)
-
-	service := usage.NewService(usage.Dependencies{
-		Reports: reports,
-		Objects: objectReader,
-	})
-	server := NewMetricsServer(service.Reports(), ingest)
-	access := metricsAccess{organization: "org1", project: "p1"}
-
-	inside, err := server.objectInScope(context.Background(), "obj-a", access)
-	if err != nil || !inside {
-		t.Fatalf("expected obj-a in scope org1/p1, inside=%v err=%v", inside, err)
-	}
-	inside, err = server.objectInScope(context.Background(), "obj-b", access)
-	if err != nil {
-		t.Fatalf("objectInScope error: %v", err)
-	}
-	if inside {
-		t.Fatalf("expected obj-b outside org1/p1")
-	}
-}
-
-func TestFileUsageScopeHelpersUseUnpagedObjectMembership(t *testing.T) {
-	ids := make([]string, 1001)
-	records := make(map[string]*objects.Record, len(ids))
-	authorizations := make(map[string]map[string][]string, len(ids))
-	fileUsage := make(map[string]usage.FileUsage, len(ids))
-	for i := range ids {
-		ids[i] = fmt.Sprintf("object-%04d", i)
-		records[ids[i]] = &objects.Record{Id: objects.RecordID(ids[i])}
-		authorizations[ids[i]] = map[string][]string{"org": {"project"}}
-		fileUsage[ids[i]] = usage.FileUsage{ObjectID: ids[i]}
-	}
-	objectReader := newMetricsObjectReader(records, authorizations)
-	reports := newMetricsReport(objectReader, fileUsage, &metricsTransferState{})
-	service := usage.NewService(usage.Dependencies{
-		Reports: reports,
-		Objects: objectReader,
-	})
-	server := NewMetricsServer(service.Reports(), nil)
-	readable, err := server.readableBulkObjectIDs(context.Background(), metricsAccess{organization: "org", project: "project"}, []string{"object-1000"})
-	if err != nil {
-		t.Fatalf("readableBulkObjectIDs error: %v", err)
-	}
-	if len(readable) != 1 || readable[0] != "object-1000" {
-		t.Fatalf("readable IDs = %v, want [object-1000]", readable)
-	}
-
-	orgReader := newMetricsObjectReader(
-		map[string]*objects.Record{"project-object": {Id: "project-object"}},
-		map[string]map[string][]string{
-			"project-object": {"org": {"project"}},
-		},
-	)
-	orgReports := newMetricsReport(orgReader, nil, &metricsTransferState{})
-	optimized := usage.NewService(usage.Dependencies{
-		Reports: metricsOptimizedReportStore{metricsReportFake: orgReports},
-		Objects: orgReader,
-	})
-	orgServer := NewMetricsServer(optimized.Reports(), nil)
-	inside, err := orgServer.objectInScope(context.Background(), "project-object", metricsAccess{organization: "org"})
-	if err != nil {
-		t.Fatalf("organization-wide objectInScope error: %v", err)
-	}
-	if !inside {
-		t.Fatal("organization-wide access did not match project object")
-	}
 }
 
 func TestListMultiScopedFileUsage_DeduplicatesAcrossScopes(t *testing.T) {

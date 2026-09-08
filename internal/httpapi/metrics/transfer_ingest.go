@@ -101,63 +101,46 @@ func providerTransferResource(organization, project string) (string, bool) {
 }
 
 func providerTransferPayloadToUsage(item providerTransferPayload) (usage.ProviderEvent, error) {
-	direction := strings.ToLower(strings.TrimSpace(item.Direction))
-	switch direction {
-	case usage.ProviderTransferDirectionDownload, usage.ProviderTransferDirectionUpload:
-	default:
-		return usage.ProviderEvent{}, fmt.Errorf("invalid direction")
-	}
-	if strings.TrimSpace(item.ProviderEventID) == "" || strings.TrimSpace(item.Provider) == "" || strings.TrimSpace(item.Bucket) == "" {
-		return usage.ProviderEvent{}, fmt.Errorf("provider_event_id, provider, and bucket are required")
-	}
-	if item.BytesTransferred < 0 {
-		return usage.ProviderEvent{}, fmt.Errorf("bytes_transferred cannot be negative")
-	}
-	status := strings.TrimSpace(item.ReconciliationStatus)
-	switch status {
-	case "", usage.ProviderTransferMatched, usage.ProviderTransferAmbiguous, usage.ProviderTransferUnmatched:
-	default:
-		return usage.ProviderEvent{}, fmt.Errorf("invalid reconciliation_status")
-	}
-	when := time.Now().UTC()
+	when := time.Time{}
 	if strings.TrimSpace(item.EventTime) != "" {
 		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(item.EventTime))
 		if err != nil {
 			return usage.ProviderEvent{}, fmt.Errorf("invalid event_time")
 		}
-		when = parsed.UTC()
+		when = parsed
 	}
-	return usage.ProviderEvent{
-		ProviderEventID:      strings.TrimSpace(item.ProviderEventID),
-		AccessGrantID:        strings.TrimSpace(item.AccessGrantID),
-		Direction:            direction,
+	event := usage.ProviderEvent{
+		ProviderEventID:      item.ProviderEventID,
+		AccessGrantID:        item.AccessGrantID,
+		Direction:            item.Direction,
 		EventTime:            when,
-		RequestID:            strings.TrimSpace(item.RequestID),
-		ProviderRequestID:    strings.TrimSpace(item.ProviderRequestID),
-		ObjectID:             strings.TrimSpace(item.ObjectID),
-		SHA256:               strings.TrimSpace(item.SHA256),
+		RequestID:            item.RequestID,
+		ProviderRequestID:    item.ProviderRequestID,
+		ObjectID:             item.ObjectID,
+		SHA256:               item.SHA256,
 		ObjectSize:           item.ObjectSize,
-		Organization:         strings.TrimSpace(item.Organization),
-		Project:              strings.TrimSpace(item.Project),
-		AccessID:             strings.TrimSpace(item.AccessID),
-		Provider:             strings.TrimSpace(item.Provider),
-		Bucket:               strings.TrimSpace(item.Bucket),
-		ObjectKey:            strings.TrimLeft(strings.TrimSpace(item.ObjectKey), "/"),
-		StorageURL:           strings.TrimSpace(item.StorageURL),
+		Organization:         item.Organization,
+		Project:              item.Project,
+		AccessID:             item.AccessID,
+		Provider:             item.Provider,
+		Bucket:               item.Bucket,
+		ObjectKey:            item.ObjectKey,
+		StorageURL:           item.StorageURL,
 		RangeStart:           item.RangeStart,
 		RangeEnd:             item.RangeEnd,
 		BytesTransferred:     item.BytesTransferred,
-		HTTPMethod:           strings.ToUpper(strings.TrimSpace(item.HTTPMethod)),
+		HTTPMethod:           item.HTTPMethod,
 		HTTPStatus:           item.HTTPStatus,
-		RequesterPrincipal:   strings.TrimSpace(item.RequesterPrincipal),
-		SourceIP:             strings.TrimSpace(item.SourceIP),
-		UserAgent:            strings.TrimSpace(item.UserAgent),
-		RawEventRef:          strings.TrimSpace(item.RawEventRef),
-		ActorEmail:           strings.TrimSpace(item.ActorEmail),
-		ActorSubject:         strings.TrimSpace(item.ActorSubject),
-		AuthMode:             strings.TrimSpace(item.AuthMode),
-		ReconciliationStatus: status,
-	}, nil
+		RequesterPrincipal:   item.RequesterPrincipal,
+		SourceIP:             item.SourceIP,
+		UserAgent:            item.UserAgent,
+		RawEventRef:          item.RawEventRef,
+		ActorEmail:           item.ActorEmail,
+		ActorSubject:         item.ActorSubject,
+		AuthMode:             item.AuthMode,
+		ReconciliationStatus: item.ReconciliationStatus,
+	}
+	return usage.NormalizeProviderEvent(event)
 }
 
 func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode int) metricsapi.RecordProviderTransferEventsResponseObject {

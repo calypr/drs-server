@@ -2,9 +2,12 @@ package usage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 var (
@@ -89,6 +92,8 @@ type Reporter interface {
 	GetFileUsage(ctx context.Context, objectID string) (*FileUsage, error)
 	ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]FileUsage, error)
 	ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error)
+	ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]FileUsage, error)
+	GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*FileUsage, error)
 	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]FileUsage, error)
 	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (FileUsageSummary, error)
 	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (Summary, error)
@@ -177,6 +182,70 @@ func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, r
 		}
 	}
 	return out, nil
+}
+
+// ListFileUsageBatch normalizes requested IDs, filters them through the
+// authorized scope, queries persistence once, and applies inactivity filtering
+// without changing persistence order.
+func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]FileUsage, error) {
+	requested := uniqueNonEmptyStrings(query.ObjectIDs)
+	readable, err := s.ListReadableObjectIDs(ctx, query.Scope, requested)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.ListFileUsageByObjectIDs(ctx, readable)
+	if err != nil {
+		return nil, err
+	}
+	if query.InactiveSince == nil {
+		return items, nil
+	}
+	filtered := make([]FileUsage, 0, len(items))
+	for _, item := range items {
+		if item.LastDownloadTime == nil || item.LastDownloadTime.Before(*query.InactiveSince) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
+}
+
+// GetScopedFileUsage enforces object membership before exposing a single
+// report. Inaccessible objects intentionally look absent at the HTTP boundary.
+func (s *Service) GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*FileUsage, error) {
+	if scope.isSingle() || scope.isAggregate() {
+		readable, err := s.ListReadableObjectIDs(ctx, scope, []string{objectID})
+		if err != nil {
+			if errorsIsNotFoundOrDenied(err) {
+				return nil, errorapi.ErrNotFound
+			}
+			return nil, err
+		}
+		if len(readable) == 0 {
+			return nil, errorapi.ErrNotFound
+		}
+	}
+	return s.GetFileUsage(ctx, objectID)
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func errorsIsNotFoundOrDenied(err error) bool {
+	return errors.Is(err, errorapi.ErrNotFound) || errors.Is(err, errorapi.ErrAccessDenied)
 }
 
 // ListFileUsage routes scoped reports through the required Store capability.

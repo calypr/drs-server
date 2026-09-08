@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -222,6 +223,62 @@ func TestServiceListsReadableObjectIDsByScopeInRequestOrder(t *testing.T) {
 	}
 	if !reflect.DeepEqual(unscoped, requested) {
 		t.Fatalf("unscoped readable IDs = %v, want %v", unscoped, requested)
+	}
+}
+
+func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testing.T) {
+	old := time.Now().UTC().Add(-48 * time.Hour)
+	recent := time.Now().UTC().Add(-2 * time.Hour)
+	objects := &objectReaderSpy{ids: map[string][]string{"org/project": {"a", "b"}}}
+	store := &reportStoreSpy{files: []FileUsage{
+		{ObjectID: "a", LastDownloadTime: &old},
+		{ObjectID: "b", LastDownloadTime: &recent},
+	}}
+	service := NewService(Dependencies{Reports: store, Objects: objects})
+	cutoff := time.Now().UTC().Add(-24 * time.Hour)
+	items, err := service.ListFileUsageBatch(context.Background(), FileUsageBatchQuery{
+		Scope:         ScopeQuery{Organization: "org", Project: "project"},
+		ObjectIDs:     []string{" b ", "missing", "a", "b"},
+		InactiveSince: &cutoff,
+	})
+	if err != nil {
+		t.Fatalf("ListFileUsageBatch error: %v", err)
+	}
+	if !reflect.DeepEqual(items, []FileUsage{{ObjectID: "a", LastDownloadTime: &old}}) {
+		t.Fatalf("items = %+v", items)
+	}
+	if _, err := service.GetScopedFileUsage(context.Background(), "missing", ScopeQuery{Organization: "org", Project: "project"}); !errors.Is(err, errorapi.ErrNotFound) {
+		t.Fatalf("missing scoped file error = %v", err)
+	}
+}
+
+func TestProviderEventNormalizationPreservesValidationAndCounts(t *testing.T) {
+	event, err := NormalizeProviderEvent(ProviderEvent{
+		ProviderEventID:      " event-1 ",
+		Direction:            " DOWNLOAD ",
+		Provider:             " s3 ",
+		Bucket:               " bucket ",
+		ObjectKey:            "///key",
+		HTTPMethod:           " get ",
+		BytesTransferred:     4,
+		ReconciliationStatus: " matched ",
+		EventTime:            time.Date(2026, 9, 8, 1, 2, 3, 0, time.FixedZone("PDT", -7*60*60)),
+	})
+	if err != nil {
+		t.Fatalf("NormalizeProviderEvent error: %v", err)
+	}
+	if event.ProviderEventID != "event-1" || event.Direction != ProviderTransferDirectionDownload || event.ObjectKey != "key" || event.HTTPMethod != "GET" || event.ReconciliationStatus != ProviderTransferMatched || !event.EventTime.Equal(event.EventTime.UTC()) {
+		t.Fatalf("normalized event = %+v", event)
+	}
+	for _, invalid := range []ProviderEvent{
+		{ProviderEventID: "id", Direction: "bad", Provider: "s3", Bucket: "b"},
+		{Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b"},
+		{ProviderEventID: "id", Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b", BytesTransferred: -1},
+		{ProviderEventID: "id", Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b", ReconciliationStatus: "bad"},
+	} {
+		if _, err := NormalizeProviderEvent(invalid); err == nil {
+			t.Fatalf("NormalizeProviderEvent(%+v) unexpectedly succeeded", invalid)
+		}
 	}
 }
 

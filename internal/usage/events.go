@@ -1,6 +1,10 @@
 package usage
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 const (
 	TransferEventAccessIssued = "access_issued"
@@ -90,4 +94,54 @@ type ProviderEvent struct {
 	ActorSubject         string
 	AuthMode             string
 	ReconciliationStatus string
+}
+
+// NormalizeProviderEvent validates and canonicalizes one provider event before
+// it reaches a persistence writer.
+func NormalizeProviderEvent(event ProviderEvent) (ProviderEvent, error) {
+	event.ProviderEventID = strings.TrimSpace(event.ProviderEventID)
+	event.AccessGrantID = strings.TrimSpace(event.AccessGrantID)
+	event.Direction = strings.ToLower(strings.TrimSpace(event.Direction))
+	switch event.Direction {
+	case ProviderTransferDirectionDownload, ProviderTransferDirectionUpload:
+	default:
+		return ProviderEvent{}, fmt.Errorf("invalid direction")
+	}
+	if event.ProviderEventID == "" || strings.TrimSpace(event.Provider) == "" || strings.TrimSpace(event.Bucket) == "" {
+		return ProviderEvent{}, fmt.Errorf("provider_event_id, provider, and bucket are required")
+	}
+	if event.BytesTransferred < 0 {
+		return ProviderEvent{}, fmt.Errorf("bytes_transferred cannot be negative")
+	}
+	event.ReconciliationStatus = strings.TrimSpace(event.ReconciliationStatus)
+	switch event.ReconciliationStatus {
+	case "", ProviderTransferMatched, ProviderTransferAmbiguous, ProviderTransferUnmatched:
+	default:
+		return ProviderEvent{}, fmt.Errorf("invalid reconciliation_status")
+	}
+	if event.EventTime.IsZero() {
+		event.EventTime = time.Now().UTC()
+	} else {
+		event.EventTime = event.EventTime.UTC()
+	}
+	event.RequestID = strings.TrimSpace(event.RequestID)
+	event.ProviderRequestID = strings.TrimSpace(event.ProviderRequestID)
+	event.ObjectID = strings.TrimSpace(event.ObjectID)
+	event.SHA256 = strings.TrimSpace(event.SHA256)
+	event.Organization = strings.TrimSpace(event.Organization)
+	event.Project = strings.TrimSpace(event.Project)
+	event.AccessID = strings.TrimSpace(event.AccessID)
+	event.Provider = strings.TrimSpace(event.Provider)
+	event.Bucket = strings.TrimSpace(event.Bucket)
+	event.ObjectKey = strings.TrimLeft(strings.TrimSpace(event.ObjectKey), "/")
+	event.StorageURL = strings.TrimSpace(event.StorageURL)
+	event.HTTPMethod = strings.ToUpper(strings.TrimSpace(event.HTTPMethod))
+	event.RequesterPrincipal = strings.TrimSpace(event.RequesterPrincipal)
+	event.SourceIP = strings.TrimSpace(event.SourceIP)
+	event.UserAgent = strings.TrimSpace(event.UserAgent)
+	event.RawEventRef = strings.TrimSpace(event.RawEventRef)
+	event.ActorEmail = strings.TrimSpace(event.ActorEmail)
+	event.ActorSubject = strings.TrimSpace(event.ActorSubject)
+	event.AuthMode = strings.TrimSpace(event.AuthMode)
+	return event, nil
 }
