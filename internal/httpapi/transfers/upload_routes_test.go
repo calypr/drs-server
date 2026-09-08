@@ -21,7 +21,46 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func TestHandleInternalUploadBlank(t *testing.T) {
+func TestHandleInternalUploadMatrix(t *testing.T) {
+	cases := []struct {
+		name string
+		test func(*testing.T)
+	}{
+		{"TestHandleInternalUploadBlank", uploadCaseBlank},
+		{"TestHandleInternalUploadBlank_ResolvesOrganizationProjectScope", uploadCaseBlankResolvesOrganizationProjectScope},
+		{"TestHandleInternalUploadBlank_RequiresScope", uploadCaseBlankRequiresScope},
+		{"TestHandleInternalUploadURL_MissingObjectResolvesOrganizationProjectScope", uploadCaseURLMissingObjectResolvesOrganizationProjectScope},
+		{"TestHandleInternalMultipartInit", uploadCaseMultipartInit},
+		{"TestHandleInternalMultipartInit_RequiresScopeForNewUpload", uploadCaseMultipartInitRequiresScopeForNewUpload},
+		{"TestHandleInternalMultipartInit_ResolvesOrganizationProjectScope", uploadCaseMultipartInitResolvesOrganizationProjectScope},
+		{"TestHandleInternalMultipartInit_PreservesRequestedKey", uploadCaseMultipartInitPreservesRequestedKey},
+		{"TestHandleInternalMultipartInit_MintsUUIDForChecksumInput", uploadCaseMultipartInitMintsUUIDForChecksumInput},
+		{"TestHandleInternalMultipartInit_ResolvesExistingByChecksumGUID", uploadCaseMultipartInitResolvesExistingByChecksumGUID},
+		{"TestHandleInternalMultipartInit_ExistingScopedObjectUsesMappedLocation", uploadCaseMultipartInitExistingScopedObjectUsesMappedLocation},
+		{"TestHandleInternalMultipartUpload", uploadCaseMultipartUpload},
+		{"TestHandleInternalMultipartComplete", uploadCaseMultipartComplete},
+		{"TestHandleInternalUploadURL_Gen3Unauthorized", uploadCaseURLGen3Unauthorized},
+		{"TestHandleInternalUploadURL_Branches", uploadCaseURLBranches},
+		{"TestHandleInternalUploadURL_MissingObjectRequiresScope", uploadCaseURLMissingObjectRequiresScope},
+		{"TestHandleInternalUploadURL_RewritesScopedObjectURL", uploadCaseURLRewritesScopedObjectURL},
+		{"TestHandleInternalUploadURL_ResolvesRegisteredScopedObjectID", uploadCaseURLResolvesRegisteredScopedObjectID},
+		{"TestHandleInternalUploadURL_ResolvesRegisteredProjectScopedObjectWithoutQueryHints", uploadCaseURLResolvesRegisteredProjectScopedObjectWithoutQueryHints},
+		{"TestHandleInternalUploadURL_RepairsMalformedScopedObjectURL", uploadCaseURLRepairsMalformedScopedObjectURL},
+		{"TestHandleInternalUploadURL_UsesScopedPathForMalformedObjectURL", uploadCaseURLUsesScopedPathForMalformedObjectURL},
+		{"TestHandleInternalUploadURL_UsesExplicitObjectKeyForExistingObject", uploadCaseURLUsesExplicitObjectKeyForExistingObject},
+		{"TestHandleInternalUploadURL_ExplicitScopeOverridesMalformedExistingObjectURL", uploadCaseURLExplicitScopeOverridesMalformedExistingObjectURL},
+		{"TestHandleInternalUploadURL_ExplicitScopeIgnoresConflictingObjectMetadata", uploadCaseURLExplicitScopeIgnoresConflictingObjectMetadata},
+		{"TestHandleInternalUploadURL_RejectsMalformedUnscopedObjectURL", uploadCaseURLRejectsMalformedUnscopedObjectURL},
+		{"TestHandleInternalUploadBulk_MixedResults", uploadCaseBulkMixedResults},
+		{"TestHandleInternalUploadBulk_Gen3UnauthorizedPerItem", uploadCaseBulkGen3UnauthorizedPerItem},
+		{"TestHandleInternalMultipartValidationErrors", uploadCaseMultipartValidationErrors},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, tc.test)
+	}
+}
+
+func uploadCaseBlank(t *testing.T) {
 	guid := "new-guid"
 	org := "syfon"
 	project := "e2e"
@@ -43,7 +82,7 @@ func TestHandleInternalUploadBlank(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadBlank_ResolvesOrganizationProjectScope(t *testing.T) {
+func uploadCaseBlankResolvesOrganizationProjectScope(t *testing.T) {
 	guid := "00000000-0000-4000-8000-000000000001"
 	org := "syfon"
 	project := "e2e"
@@ -78,7 +117,7 @@ func TestHandleInternalUploadBlank_ResolvesOrganizationProjectScope(t *testing.T
 	}
 }
 
-func TestHandleInternalUploadBlank_RequiresScope(t *testing.T) {
+func uploadCaseBlankRequiresScope(t *testing.T) {
 	guid := "new-guid"
 	body, _ := json.Marshal(internalapi.InternalUploadBlankRequest{Guid: &guid})
 	rr := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload", bytes.NewBuffer(body)), newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
@@ -87,7 +126,7 @@ func TestHandleInternalUploadBlank_RequiresScope(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_MissingObjectResolvesOrganizationProjectScope(t *testing.T) {
+func uploadCaseURLMissingObjectResolvesOrganizationProjectScope(t *testing.T) {
 	mockUM := &internalDRSStorageFake{}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/new-guid?organization=syfon&project=e2e&key=payload.bin", nil)
 	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&transferHTTPFixture{
@@ -116,7 +155,7 @@ func TestHandleInternalUploadURL_MissingObjectResolvesOrganizationProjectScope(t
 	}
 }
 
-func TestHandleInternalMultipartInit(t *testing.T) {
+func uploadCaseMultipartInit(t *testing.T) {
 	fileName := "test.bam"
 	guid := "multipart-guid"
 	org := "syfon"
@@ -134,7 +173,7 @@ func TestHandleInternalMultipartInit(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartInit_RequiresScopeForNewUpload(t *testing.T) {
+func uploadCaseMultipartInitRequiresScopeForNewUpload(t *testing.T) {
 	fileName := "test.bam"
 	guid := "multipart-guid"
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Guid: &guid, Key: &fileName})
@@ -144,7 +183,7 @@ func TestHandleInternalMultipartInit_RequiresScopeForNewUpload(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartInit_ResolvesOrganizationProjectScope(t *testing.T) {
+func uploadCaseMultipartInitResolvesOrganizationProjectScope(t *testing.T) {
 	key := "multipart/new.bin"
 	org := "syfon"
 	project := "e2e"
@@ -175,7 +214,7 @@ func TestHandleInternalMultipartInit_ResolvesOrganizationProjectScope(t *testing
 	}
 }
 
-func TestHandleInternalMultipartInit_PreservesRequestedKey(t *testing.T) {
+func uploadCaseMultipartInitPreservesRequestedKey(t *testing.T) {
 	key := "programs/programs/projects/e2e/sha256-value"
 	org := "syfon"
 	project := "e2e"
@@ -193,7 +232,7 @@ func TestHandleInternalMultipartInit_PreservesRequestedKey(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartInit_MintsUUIDForChecksumInput(t *testing.T) {
+func uploadCaseMultipartInitMintsUUIDForChecksumInput(t *testing.T) {
 	checksum := strings.Repeat("a", 64)
 	body, _ := json.Marshal(internalapi.InternalMultipartInitRequest{Key: &checksum})
 	mockDB := &transferHTTPFixture{Objects: map[string]*objects.Record{}}
@@ -203,7 +242,7 @@ func TestHandleInternalMultipartInit_MintsUUIDForChecksumInput(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartInit_ResolvesExistingByChecksumGUID(t *testing.T) {
+func uploadCaseMultipartInitResolvesExistingByChecksumGUID(t *testing.T) {
 	checksum := strings.Repeat("b", 64)
 	existingID := "ee53f5ce-8069-4f99-bd59-0517e6a2f1ea"
 	mockDB := &transferHTTPFixture{
@@ -225,7 +264,7 @@ func TestHandleInternalMultipartInit_ResolvesExistingByChecksumGUID(t *testing.T
 	}
 }
 
-func TestHandleInternalMultipartInit_ExistingScopedObjectUsesMappedLocation(t *testing.T) {
+func uploadCaseMultipartInitExistingScopedObjectUsesMappedLocation(t *testing.T) {
 	checksum := strings.Repeat("c", 64)
 	existingID := "ee53f5ce-8069-4f99-bd59-0517e6a2f1ea"
 	mockDB := &transferHTTPFixture{
@@ -263,7 +302,7 @@ func TestHandleInternalMultipartInit_ExistingScopedObjectUsesMappedLocation(t *t
 	}
 }
 
-func TestHandleInternalMultipartUpload(t *testing.T) {
+func uploadCaseMultipartUpload(t *testing.T) {
 	fake := &internalDRSStorageFake{}
 	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
@@ -282,7 +321,7 @@ func TestHandleInternalMultipartUpload(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartComplete(t *testing.T) {
+func uploadCaseMultipartComplete(t *testing.T) {
 	fake := &internalDRSStorageFake{}
 	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
@@ -301,7 +340,7 @@ func TestHandleInternalMultipartComplete(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_Gen3Unauthorized(t *testing.T) {
+func uploadCaseURLGen3Unauthorized(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/some-id?organization=syfon&project=e2e", nil)
 	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", false, nil))
 	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{}))
@@ -310,7 +349,7 @@ func TestHandleInternalUploadURL_Gen3Unauthorized(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_Branches(t *testing.T) {
+func uploadCaseURLBranches(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects:     map[string]*objects.Record{},
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}},
@@ -325,7 +364,7 @@ func TestHandleInternalUploadURL_Branches(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_MissingObjectRequiresScope(t *testing.T) {
+func uploadCaseURLMissingObjectRequiresScope(t *testing.T) {
 	db := &transferHTTPFixture{Objects: map[string]*objects.Record{}, Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1"}}}
 	req := httptest.NewRequest(http.MethodGet, "/data/upload/abc", nil)
 	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(db, &internalDRSStorageFake{}))
@@ -334,7 +373,7 @@ func TestHandleInternalUploadURL_MissingObjectRequiresScope(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_RewritesScopedObjectURL(t *testing.T) {
+func uploadCaseURLRewritesScopedObjectURL(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
 			"scoped-obj": {
@@ -373,7 +412,7 @@ func TestHandleInternalUploadURL_RewritesScopedObjectURL(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_ResolvesRegisteredScopedObjectID(t *testing.T) {
+func uploadCaseURLResolvesRegisteredScopedObjectID(t *testing.T) {
 	ctx := t.Context()
 	database := &transferHTTPFixture{}
 	om := newInternalDRSObjectManager(database, &internalDRSStorageFake{})
@@ -427,7 +466,7 @@ func TestHandleInternalUploadURL_ResolvesRegisteredScopedObjectID(t *testing.T) 
 	}
 }
 
-func TestHandleInternalUploadURL_ResolvesRegisteredProjectScopedObjectWithoutQueryHints(t *testing.T) {
+func uploadCaseURLResolvesRegisteredProjectScopedObjectWithoutQueryHints(t *testing.T) {
 	ctx := t.Context()
 	database := &transferHTTPFixture{}
 	om := newInternalDRSObjectManager(database, &internalDRSStorageFake{})
@@ -490,7 +529,7 @@ func TestHandleInternalUploadURL_ResolvesRegisteredProjectScopedObjectWithoutQue
 	}
 }
 
-func TestHandleInternalUploadURL_RepairsMalformedScopedObjectURL(t *testing.T) {
+func uploadCaseURLRepairsMalformedScopedObjectURL(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
 			"scoped-obj": {
@@ -540,7 +579,7 @@ func TestHandleInternalUploadURL_RepairsMalformedScopedObjectURL(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadURL_UsesScopedPathForMalformedObjectURL(t *testing.T) {
+func uploadCaseURLUsesScopedPathForMalformedObjectURL(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
 			"scoped-obj": {
@@ -589,7 +628,7 @@ func TestHandleInternalUploadURL_UsesScopedPathForMalformedObjectURL(t *testing.
 	}
 }
 
-func TestHandleInternalUploadURL_UsesExplicitObjectKeyForExistingObject(t *testing.T) {
+func uploadCaseURLUsesExplicitObjectKeyForExistingObject(t *testing.T) {
 	const checksum = "3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
@@ -634,7 +673,7 @@ func TestHandleInternalUploadURL_UsesExplicitObjectKeyForExistingObject(t *testi
 	}
 }
 
-func TestHandleInternalUploadURL_ExplicitScopeOverridesMalformedExistingObjectURL(t *testing.T) {
+func uploadCaseURLExplicitScopeOverridesMalformedExistingObjectURL(t *testing.T) {
 	const checksum = "412f8568bfb0e62937ee40c6fcdeaa1cf55910c558c0152250340356c8829a47"
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
@@ -684,7 +723,7 @@ func TestHandleInternalUploadURL_ExplicitScopeOverridesMalformedExistingObjectUR
 	}
 }
 
-func TestHandleInternalUploadURL_ExplicitScopeIgnoresConflictingObjectMetadata(t *testing.T) {
+func uploadCaseURLExplicitScopeIgnoresConflictingObjectMetadata(t *testing.T) {
 	const checksum = "45be10b3fe5163b6f11155fb46027878d23e3dc99d525d7079180b9dd9b832e9"
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
@@ -729,7 +768,7 @@ func TestHandleInternalUploadURL_ExplicitScopeIgnoresConflictingObjectMetadata(t
 	}
 }
 
-func TestHandleInternalUploadURL_RejectsMalformedUnscopedObjectURL(t *testing.T) {
+func uploadCaseURLRejectsMalformedUnscopedObjectURL(t *testing.T) {
 	const checksum = "412f8568bfb0e62937ee40c6fcdeaa1cf55910c558c0152250340356c8829a47"
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{
@@ -759,7 +798,7 @@ func TestHandleInternalUploadURL_RejectsMalformedUnscopedObjectURL(t *testing.T)
 	}
 }
 
-func TestHandleInternalUploadBulk_MixedResults(t *testing.T) {
+func uploadCaseBulkMixedResults(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects: map[string]*objects.Record{"obj-1": {Id: "obj-1", AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{
 			Url: "s3://b1/prefix/from-existing.bin"}}}}},
@@ -772,7 +811,7 @@ func TestHandleInternalUploadBulk_MixedResults(t *testing.T) {
 	}
 }
 
-func TestHandleInternalUploadBulk_Gen3UnauthorizedPerItem(t *testing.T) {
+func uploadCaseBulkGen3UnauthorizedPerItem(t *testing.T) {
 	db := &transferHTTPFixture{
 		Objects:     map[string]*objects.Record{"secure-id": {Id: "secure-id"}},
 		ObjectAuthz: map[string]map[string][]string{"secure-id": {"p": {"q"}}},
@@ -786,7 +825,7 @@ func TestHandleInternalUploadBulk_Gen3UnauthorizedPerItem(t *testing.T) {
 	}
 }
 
-func TestHandleInternalMultipartValidationErrors(t *testing.T) {
+func uploadCaseMultipartValidationErrors(t *testing.T) {
 	om := newInternalDRSObjectManager(&transferHTTPFixture{Objects: map[string]*objects.Record{}}, &internalDRSStorageFake{})
 	rrUpload := doInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/multipart/upload", strings.NewReader(`{}`)), om)
 	if rrUpload.Code != http.StatusBadRequest {
