@@ -6,7 +6,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/storage/address"
 	"github.com/gofiber/fiber/v3"
 	"io"
 	"strings"
@@ -30,13 +29,6 @@ func (s *bucketServer) DeleteProjectData(c fiber.Ctx, organization, projectID st
 
 func bucketPointer[T any](value T) *T {
 	return &value
-}
-
-func bucketStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
@@ -71,11 +63,6 @@ func (s *bucketServer) PutBucket(c fiber.Ctx) error {
 	var req bucketapi.PutBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
-	}
-
-	rawProvider := strings.TrimSpace(bucketStringValue(req.Provider))
-	if _, err := address.ParseBucketProvider(rawProvider); err != nil {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "provider must be one of: s3, gcs, azure")
 	}
 
 	req.Bucket = strings.TrimSpace(req.Bucket)
