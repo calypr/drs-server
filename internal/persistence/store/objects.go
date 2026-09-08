@@ -1,10 +1,11 @@
-package sqlite
+package store
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +25,85 @@ type objectRow struct {
 	Description string
 }
 
-func (db *SqliteDB) GetObject(ctx context.Context, id string) (*objects.Record, error) {
+// queryContext and queryRowContext apply the selected SQL dialect to shared statements.
+func (db *Store) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.db.QueryContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+func (db *Store) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return db.db.QueryRowContext(ctx, db.dialect.Rebind(query), args...)
+}
+
+type bulkObjectDialect interface {
+	BulkObjectCondition([]string, []string, []string, []string, int) (string, []any)
+}
+
+func ptr[T any](value T) *T {
+	return &value
+}
+
+func stringVal(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func normalizeChecksumLookup(value string) string {
+	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "sha256:")
+}
+
+func uniqueObjectsByID(objs []objects.Record) []objects.Record {
+	seen := make(map[string]struct{}, len(objs))
+	out := make([]objects.Record, 0, len(objs))
+	for _, obj := range objs {
+		if _, ok := seen[string(obj.Id)]; ok {
+			continue
+		}
+		seen[string(obj.Id)] = struct{}{}
+		out = append(out, obj)
+	}
+	return out
+}
+
+func safeSliceCapacity(parts ...int) (int, error) {
+	total := int64(0)
+	for _, part := range parts {
+		if part < 0 {
+			return 0, fmt.Errorf("negative capacity component: %d", part)
+		}
+		total += int64(part)
+		if total > int64(math.MaxInt) {
+			return 0, fmt.Errorf("capacity too large: %d", total)
+		}
+	}
+	return int(total), nil
+}
+
+func (db *Store) publicReadForObject(ctx context.Context, id string, inferred bool) (bool, bool, error) {
+	var public bool
+	err := db.queryRowContext(ctx, `SELECT public_read FROM drs_object_read_policy WHERE object_id = ?`, id).Scan(&public)
+	if err == sql.ErrNoRows {
+		return inferred, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return public, true, nil
+}
+
+func makePlaceholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = "?"
+	}
+	return strings.Join(parts, ",")
+}
+
+func (db *Store) GetObject(ctx context.Context, id string) (*objects.Record, error) {
 	requestID := strings.TrimSpace(id)
 	lookupID := requestID
 	resolvedAlias := false
@@ -33,7 +112,7 @@ retryLookup:
 	// 1. Fetch main record
 	var r objectRow
 	var name, version, description sql.NullString
-	err := db.db.QueryRowContext(ctx, `
+	err := db.queryRowContext(ctx, `
 		SELECT id, size, created_time, updated_time, name, version, description
 		FROM drs_object WHERE id = ?`, lookupID).Scan(
 		&r.ID, &r.Size, &r.CreatedTime, &r.UpdatedTime, &name, &version, &description,
@@ -68,16 +147,16 @@ retryLookup:
 		Id:          objects.RecordID(objectID),
 		Size:        r.Size,
 		CreatedTime: r.CreatedTime,
-		UpdatedTime: sqlitePtr(r.UpdatedTime),
-		Version:     sqlitePtr(r.Version),
-		Description: sqlitePtr(r.Description),
-		Name:        sqlitePtr(r.Name),
+		UpdatedTime: ptr(r.UpdatedTime),
+		Version:     ptr(r.Version),
+		Description: ptr(r.Description),
+		Name:        ptr(r.Name),
 		SelfUri:     "drs://" + objectID,
 		NameAliases: nameAliases,
 	}
 
 	// 2. Fetch storage access methods.
-	urlRows, err := db.db.QueryContext(ctx, "SELECT url, type FROM drs_object_access_method WHERE object_id = ?", lookupID)
+	urlRows, err := db.queryContext(ctx, "SELECT url, type FROM drs_object_access_method WHERE object_id = ?", lookupID)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +179,7 @@ retryLookup:
 		am := objects.AccessMethod{
 			AccessUrl: &objects.AccessURL{Url: u},
 			Type:      t,
-			AccessId:  sqlitePtr(objects.AccessMethodID(t, u)),
+			AccessId:  ptr(objects.AccessMethodID(t, u)),
 		}
 		*obj.AccessMethods = append(*obj.AccessMethods, am)
 	}
@@ -117,7 +196,7 @@ retryLookup:
 	}
 
 	// 3. Fetch Checksums
-	hashRows, err := db.db.QueryContext(ctx, "SELECT type, checksum FROM drs_object_checksum WHERE object_id = ?", lookupID)
+	hashRows, err := db.queryContext(ctx, "SELECT type, checksum FROM drs_object_checksum WHERE object_id = ?", lookupID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,12 +218,11 @@ retryLookup:
 	return obj, nil
 }
 
-func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string, checksums []string) (map[string]*objects.Record, error) {
+func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string, checksums []string) (map[string]*objects.Record, error) {
 	if len(ids) == 0 && len(checksums) == 0 {
 		return map[string]*objects.Record{}, nil
 	}
 
-	conditions := make([]string, 0, 2)
 	shaQueries := make([]string, 0, len(checksums))
 	genericQueries := make([]string, 0, len(checksums))
 	for _, checksum := range checksums {
@@ -154,39 +232,47 @@ func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []stri
 			genericQueries = append(genericQueries, strings.TrimSpace(checksum))
 		}
 	}
-	capArgs, err := safeSliceCapacity(len(ids), len(checksums), len(shaQueries)+len(genericQueries))
-	if err != nil {
-		return nil, err
-	}
-	args := make([]interface{}, 0, capArgs)
-	if len(ids) > 0 {
-		conditions = append(conditions, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(ids))))
-		for _, id := range ids {
-			args = append(args, id)
+	var condition string
+	var args []any
+	if d, ok := db.dialect.(bulkObjectDialect); ok {
+		condition, args = d.BulkObjectCondition(ids, checksums, shaQueries, genericQueries, 1)
+	} else {
+		capArgs, capErr := safeSliceCapacity(len(ids), len(checksums), len(shaQueries)+len(genericQueries))
+		if capErr != nil {
+			return nil, capErr
 		}
-	}
-	if len(checksums) > 0 {
-		parts := make([]string, 0, 3)
-		parts = append(parts, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(checksums))))
-		for _, cs := range checksums {
-			args = append(args, strings.TrimSpace(cs))
-		}
-		if len(shaQueries) > 0 {
-			parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
-				WHERE c2.object_id = o.id AND replace(lower(trim(c2.type)), '-', '') = 'sha256'
-				AND replace(lower(trim(c2.checksum)), 'sha256:', '') IN (%s))`, makePlaceholders(len(shaQueries))))
-			for _, checksum := range shaQueries {
-				args = append(args, checksum)
+		args = make([]any, 0, capArgs)
+		conditions := make([]string, 0, 2)
+		if len(ids) > 0 {
+			conditions = append(conditions, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(ids))))
+			for _, id := range ids {
+				args = append(args, id)
 			}
 		}
-		if len(genericQueries) > 0 {
-			parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
-				WHERE c2.object_id = o.id AND c2.checksum IN (%s))`, makePlaceholders(len(genericQueries))))
-			for _, checksum := range genericQueries {
-				args = append(args, checksum)
+		if len(checksums) > 0 {
+			parts := make([]string, 0, 3)
+			parts = append(parts, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(checksums))))
+			for _, cs := range checksums {
+				args = append(args, strings.TrimSpace(cs))
 			}
+			if len(shaQueries) > 0 {
+				parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
+					WHERE c2.object_id = o.id AND replace(lower(trim(c2.type)), '-', '') = 'sha256'
+					AND replace(lower(trim(c2.checksum)), 'sha256:', '') IN (%s))`, makePlaceholders(len(shaQueries))))
+				for _, checksum := range shaQueries {
+					args = append(args, checksum)
+				}
+			}
+			if len(genericQueries) > 0 {
+				parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
+					WHERE c2.object_id = o.id AND c2.checksum IN (%s))`, makePlaceholders(len(genericQueries))))
+				for _, checksum := range genericQueries {
+					args = append(args, checksum)
+				}
+			}
+			conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 		}
-		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+		condition = strings.Join(conditions, " OR ")
 	}
 
 	query := fmt.Sprintf(`
@@ -199,9 +285,9 @@ func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []stri
 			o.version,
 			o.description
 		FROM drs_object o
-		WHERE %s`, strings.Join(conditions, " OR "))
+		WHERE %s`, condition)
 
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch bulk objects: %w", err)
 	}
@@ -226,10 +312,10 @@ func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []stri
 			Id:          objects.RecordID(id),
 			Size:        size,
 			CreatedTime: createdTime,
-			UpdatedTime: sqlitePtr(updatedTime),
-			Name:        sqlitePtr(strings.TrimSpace(name.String)),
-			Version:     sqlitePtr(version.String),
-			Description: sqlitePtr(description.String),
+			UpdatedTime: ptr(updatedTime),
+			Name:        ptr(strings.TrimSpace(name.String)),
+			Version:     ptr(version.String),
+			Description: ptr(description.String),
 			SelfUri:     "drs://" + id,
 		}
 	}
@@ -259,18 +345,15 @@ func (db *SqliteDB) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []stri
 	return objectsByID, nil
 }
 
-func (db *SqliteDB) attachBulkAccessMethods(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[string]*objects.Record) error {
 	ids := sortedObjectIDs(objectsByID)
+	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
 		SELECT object_id, url, type
 		FROM drs_object_access_method
-		WHERE object_id IN (%s)
-		ORDER BY object_id`, makePlaceholders(len(ids)))
-	args := make([]any, 0, len(ids))
-	for _, id := range ids {
-		args = append(args, id)
-	}
-	rows, err := db.db.QueryContext(ctx, query, args...)
+		WHERE %s
+		ORDER BY object_id`, condition)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to fetch bulk object access methods: %w", err)
 	}
@@ -300,24 +383,21 @@ func (db *SqliteDB) attachBulkAccessMethods(ctx context.Context, objectsByID map
 		*obj.AccessMethods = append(*obj.AccessMethods, objects.AccessMethod{
 			AccessUrl: &objects.AccessURL{Url: accessURL},
 			Type:      accessType,
-			AccessId:  sqlitePtr(objects.AccessMethodID(accessType, accessURL)),
+			AccessId:  ptr(objects.AccessMethodID(accessType, accessURL)),
 		})
 	}
 	return rows.Err()
 }
 
-func (db *SqliteDB) attachBulkChecksums(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachBulkChecksums(ctx context.Context, objectsByID map[string]*objects.Record) error {
 	ids := sortedObjectIDs(objectsByID)
+	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
 		SELECT object_id, type, checksum
 		FROM drs_object_checksum
-		WHERE object_id IN (%s)
-		ORDER BY object_id`, makePlaceholders(len(ids)))
-	args := make([]any, 0, len(ids))
-	for _, id := range ids {
-		args = append(args, id)
-	}
-	rows, err := db.db.QueryContext(ctx, query, args...)
+		WHERE %s
+		ORDER BY object_id`, condition)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to fetch bulk object checksums: %w", err)
 	}
@@ -365,8 +445,8 @@ func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
 	return ids
 }
 
-func (db *SqliteDB) controlledAccessForObject(ctx context.Context, objectID string) ([]string, error) {
-	rows, err := db.db.QueryContext(ctx, `SELECT resource FROM drs_object_controlled_access WHERE object_id = ? ORDER BY resource`, objectID)
+func (db *Store) controlledAccessForObject(ctx context.Context, objectID string) ([]string, error) {
+	rows, err := db.queryContext(ctx, `SELECT resource FROM drs_object_controlled_access WHERE object_id = ? ORDER BY resource`, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -385,8 +465,8 @@ func (db *SqliteDB) controlledAccessForObject(ctx context.Context, objectID stri
 	return clientaccess.NormalizeAccessResources(resources), nil
 }
 
-func (db *SqliteDB) nameAliasesForObject(ctx context.Context, objectID string) ([]string, error) {
-	rows, err := db.db.QueryContext(ctx, `SELECT name_alias FROM drs_object_name_alias WHERE object_id = ? ORDER BY name_alias`, objectID)
+func (db *Store) nameAliasesForObject(ctx context.Context, objectID string) ([]string, error) {
+	rows, err := db.queryContext(ctx, `SELECT name_alias FROM drs_object_name_alias WHERE object_id = ? ORDER BY name_alias`, objectID)
 	if err != nil {
 		return nil, err
 	}
@@ -406,21 +486,17 @@ func (db *SqliteDB) nameAliasesForObject(ctx context.Context, objectID string) (
 	return objects.NormalizeNameAliases("", aliases), nil
 }
 
-func (db *SqliteDB) attachControlledAccess(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachControlledAccess(ctx context.Context, objectsByID map[string]*objects.Record) error {
 	if len(objectsByID) == 0 {
 		return nil
 	}
-	ids := make([]any, 0, len(objectsByID))
-	placeholders := make([]string, 0, len(objectsByID))
-	for id := range objectsByID {
-		ids = append(ids, id)
-		placeholders = append(placeholders, "?")
-	}
-	rows, err := db.db.QueryContext(ctx, `
+	ids := sortedObjectIDs(objectsByID)
+	condition, args := db.dialect.ListArgs("object_id", ids)
+	rows, err := db.queryContext(ctx, `
 		SELECT object_id, resource
 		FROM drs_object_controlled_access
-		WHERE object_id IN (`+strings.Join(placeholders, ",")+`)
-		ORDER BY object_id, resource`, ids...)
+		WHERE `+condition+`
+		ORDER BY object_id, resource`, args...)
 	if err != nil {
 		return err
 	}
@@ -452,19 +528,16 @@ func (db *SqliteDB) attachControlledAccess(ctx context.Context, objectsByID map[
 	return nil
 }
 
-func (db *SqliteDB) attachPublicRead(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachPublicRead(ctx context.Context, objectsByID map[string]*objects.Record) error {
 	if len(objectsByID) == 0 {
 		return nil
 	}
 	ids := sortedObjectIDs(objectsByID)
-	args := make([]any, 0, len(ids))
-	for _, id := range ids {
-		args = append(args, id)
-	}
-	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
+	condition, args := db.dialect.ListArgs("object_id", ids)
+	rows, err := db.queryContext(ctx, fmt.Sprintf(`
 		SELECT object_id, public_read
 		FROM drs_object_read_policy
-		WHERE object_id IN (%s)`, makePlaceholders(len(ids))), args...)
+		WHERE %s`, condition), args...)
 	if err != nil {
 		return err
 	}
@@ -492,21 +565,18 @@ func (db *SqliteDB) attachPublicRead(ctx context.Context, objectsByID map[string
 	return nil
 }
 
-func (db *SqliteDB) attachNameAliases(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachNameAliases(ctx context.Context, objectsByID map[string]*objects.Record) error {
 	if len(objectsByID) == 0 {
 		return nil
 	}
 	ids := sortedObjectIDs(objectsByID)
+	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
 		SELECT object_id, name_alias
 		FROM drs_object_name_alias
-		WHERE object_id IN (%s)
-		ORDER BY object_id, name_alias`, makePlaceholders(len(ids)))
-	args := make([]any, 0, len(ids))
-	for _, id := range ids {
-		args = append(args, id)
-	}
-	rows, err := db.db.QueryContext(ctx, query, args...)
+		WHERE %s
+		ORDER BY object_id, name_alias`, condition)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to fetch bulk object name aliases: %w", err)
 	}
@@ -529,7 +599,7 @@ func (db *SqliteDB) attachNameAliases(ctx context.Context, objectsByID map[strin
 		if obj == nil {
 			continue
 		}
-		obj.NameAliases = objects.NormalizeNameAliases(sqliteStringVal(obj.Name), aliases)
+		obj.NameAliases = objects.NormalizeNameAliases(stringVal(obj.Name), aliases)
 	}
 	return nil
 }

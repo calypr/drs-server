@@ -137,7 +137,7 @@ func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Reco
 
 func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
 	return serverBackend{
-		objectStore: database,
+		objectStore: database.Store,
 		bucketDependencies: buckets.Dependencies{
 			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},
@@ -149,7 +149,7 @@ func sqliteServerBackend(database *sqlite.SqliteDB) serverBackend {
 
 func postgresServerBackend(database *postgres.PostgresDB) serverBackend {
 	return serverBackend{
-		objectStore: database,
+		objectStore: database.Store,
 		bucketDependencies: buckets.Dependencies{
 			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 		},

@@ -1,4 +1,4 @@
-package sqlite
+package store
 
 import (
 	"context"
@@ -13,13 +13,17 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-func (db *SqliteDB) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
+type resourceFilterDialect interface {
+	ResourceFilter(string, []string, bool, int) (string, []any)
+}
+
+func (db *Store) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
 		return "", errorapi.ErrObjectNotFound
 	}
 	var canonicalID string
-	err := db.db.QueryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&canonicalID)
+	err := db.queryRowContext(ctx, "SELECT object_id FROM drs_object_alias WHERE alias_id = ?", aliasID).Scan(&canonicalID)
 	if err == sql.ErrNoRows {
 		return "", errorapi.ErrObjectNotFound
 	}
@@ -29,7 +33,7 @@ func (db *SqliteDB) ResolveObjectAlias(ctx context.Context, aliasID string) (str
 	return canonicalID, nil
 }
 
-func (db *SqliteDB) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
+func (db *Store) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -68,7 +72,7 @@ func (db *SqliteDB) GetBulkObjects(ctx context.Context, ids []string) ([]objects
 	return objects, nil
 }
 
-func (db *SqliteDB) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
+func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
 	if len(checksums) == 0 {
 		return nil, nil
 	}
@@ -109,7 +113,7 @@ func (db *SqliteDB) GetObjectsByChecksums(ctx context.Context, checksums []strin
 	return result, nil
 }
 
-func (db *SqliteDB) ListScopedObjectIDsByChecksums(ctx context.Context, organization, project string, checksums []string) (map[string][]string, error) {
+func (db *Store) ListScopedObjectIDsByChecksums(ctx context.Context, organization, project string, checksums []string) (map[string][]string, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" || project == "" || len(checksums) == 0 {
@@ -137,7 +141,7 @@ func (db *SqliteDB) ListScopedObjectIDsByChecksums(ctx context.Context, organiza
 	}
 	// Keep the checksum predicate below within SQLite's bound-parameter limit.
 	// The two fixed parameters are the project resource and checksum type.
-	maxChecksums := sqliteMaxParams - 2
+	maxChecksums := db.dialect.MaxParameters() - 2
 	if len(normalized) > maxChecksums {
 		out := make(map[string][]string, len(normalized))
 		for start := 0; start < len(normalized); start += maxChecksums {
@@ -157,17 +161,15 @@ func (db *SqliteDB) ListScopedObjectIDsByChecksums(ctx context.Context, organiza
 	}
 	args := make([]any, 0, len(normalized)+2)
 	args = append(args, resource, "sha256")
-	placeholders := makePlaceholders(len(normalized))
-	for _, checksum := range normalized {
-		args = append(args, checksum)
-	}
-	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
+	checksumCondition, checksumArgs := db.dialect.ListArgs("replace(lower(trim(c.checksum)), 'sha256:', '')", normalized)
+	args = append(args, checksumArgs...)
+	rows, err := db.queryContext(ctx, fmt.Sprintf(`
 		SELECT DISTINCT replace(lower(trim(c.checksum)), 'sha256:', ''), c.object_id
 		FROM drs_object_checksum c
 		INNER JOIN drs_object_controlled_access ca ON ca.object_id = c.object_id
 		WHERE ca.resource = ? AND replace(lower(trim(c.type)), '-', '') = ?
-		  AND replace(lower(trim(c.checksum)), 'sha256:', '') IN (%s)
-		ORDER BY 1, 2`, placeholders), args...)
+		  AND %s
+		ORDER BY 1, 2`, checksumCondition), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -203,11 +205,11 @@ func (db *SqliteDB) ListScopedObjectIDsByChecksums(ctx context.Context, organiza
 	return out, nil
 }
 
-func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error) {
+func (db *Store) ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
-		rows, err := db.db.QueryContext(ctx, `SELECT id FROM drs_object ORDER BY id`)
+		rows, err := db.queryContext(ctx, `SELECT id FROM drs_object ORDER BY id`)
 		if err != nil {
 			return nil, err
 		}
@@ -236,18 +238,18 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 		if resourceErr != nil {
 			return nil, resourceErr
 		}
-		rows, err = db.db.QueryContext(ctx, `
+		rows, err = db.queryContext(ctx, `
 			SELECT DISTINCT ca.object_id
 			FROM drs_object_controlled_access ca
 			INNER JOIN drs_object o ON o.id = ca.object_id
 			WHERE ca.resource = ?
 			ORDER BY ca.object_id`, resource)
 	} else {
-		condition, scopeArgs, scopeErr := sqliteScopeResourceCondition("ca.resource", organization, "")
+		condition, scopeArgs, scopeErr := scopeResourceCondition("ca.resource", organization, "")
 		if scopeErr != nil {
 			return nil, scopeErr
 		}
-		rows, err = db.db.QueryContext(ctx, `
+		rows, err = db.queryContext(ctx, `
 			SELECT DISTINCT ca.object_id
 			FROM drs_object_controlled_access ca
 			INNER JOIN drs_object o ON o.id = ca.object_id
@@ -273,7 +275,7 @@ func (db *SqliteDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 	return ids, nil
 }
 
-func (db *SqliteDB) ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error) {
+func (db *Store) ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error) {
 	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
 		return []string{}, nil
@@ -301,7 +303,7 @@ func (db *SqliteDB) ListObjectIDsByResources(ctx context.Context, resources []st
 		)`)
 	}
 
-	rows, err := db.db.QueryContext(ctx, `
+	rows, err := db.queryContext(ctx, `
 		SELECT DISTINCT o.id
 		FROM drs_object o
 		WHERE `+strings.Join(parts, " OR ")+`
@@ -325,7 +327,7 @@ func (db *SqliteDB) ListObjectIDsByResources(ctx context.Context, resources []st
 	return ids, nil
 }
 
-func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
+func (db *Store) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	startAfter = strings.TrimSpace(startAfter)
@@ -343,7 +345,7 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	objectIDExpr := "id"
 
 	if organization != "" {
-		condition, scopeArgs, err := sqliteScopeResourceCondition("ca.resource", organization, project)
+		condition, scopeArgs, err := scopeResourceCondition("ca.resource", organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -367,7 +369,7 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	}
 	query += orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +377,7 @@ func (db *SqliteDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	return scanObjectIDs(rows)
 }
 
-func (db *SqliteDB) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
+func (db *Store) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
 	resources = clientaccess.NormalizeAccessResources(resources)
 	startAfter = strings.TrimSpace(startAfter)
 	if limit <= 0 || (len(resources) == 0 && !includeUnscoped) {
@@ -418,7 +420,7 @@ func (db *SqliteDB) ListObjectIDsPageByResources(ctx context.Context, resources 
 	}
 	query += ` ORDER BY o.id LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -426,12 +428,12 @@ func (db *SqliteDB) ListObjectIDsPageByResources(ctx context.Context, resources 
 	return scanObjectIDs(rows)
 }
 
-func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, restrictToResources bool) ([]string, error) {
+func (db *Store) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, restrictToResources bool) ([]string, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
 		if !restrictToResources {
-			rows, err := db.db.QueryContext(ctx, `SELECT id FROM drs_object ORDER BY id`)
+			rows, err := db.queryContext(ctx, `SELECT id FROM drs_object ORDER BY id`)
 			if err != nil {
 				return nil, err
 			}
@@ -441,7 +443,7 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 		return db.ListObjectIDsByResources(ctx, resources, false)
 	}
 
-	scopeCondition, scopeArgs, err := sqliteScopeResourceCondition("ca_scope.resource", organization, project)
+	scopeCondition, scopeArgs, err := scopeResourceCondition("ca_scope.resource", organization, project)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +475,7 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 		)`
 	}
 	query += ` ORDER BY o.id`
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +483,7 @@ func (db *SqliteDB) ListObjectIDsByScopeAndResources(ctx context.Context, organi
 	return scanObjectIDs(rows)
 }
 
-func (db *SqliteDB) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums []string, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
+func (db *Store) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums []string, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
 	normalized := make([]string, 0, len(checksums))
 	for _, checksum := range checksums {
 		if trimmed := strings.TrimSpace(checksum); trimmed != "" {
@@ -545,7 +547,7 @@ func (db *SqliteDB) ListObjectIDsByChecksumsAndResources(ctx context.Context, ch
 		query += ` WHERE (` + strings.Join(parts, " OR ") + `)`
 	}
 	query += ` ORDER BY m.match_key, m.object_id`
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +555,7 @@ func (db *SqliteDB) ListObjectIDsByChecksumsAndResources(ctx context.Context, ch
 	return scanChecksumMatchRows(rows)
 }
 
-func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
+func (db *Store) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
 	objectURL = strings.TrimSpace(objectURL)
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
@@ -568,7 +570,7 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 	args := []any{objectURL}
 	conditions := []string{"am.url = ?"}
 	if organization != "" {
-		scopeCondition, scopeArgs, err := sqliteScopeResourceCondition("ca_scope.resource", organization, project)
+		scopeCondition, scopeArgs, err := scopeResourceCondition("ca_scope.resource", organization, project)
 		if err != nil {
 			return nil, err
 		}
@@ -584,27 +586,30 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 		if len(resources) == 0 && !includeUnscoped {
 			return []string{}, nil
 		}
-		parts := make([]string, 0, 2)
-		if len(resources) > 0 {
-			placeholders := make([]string, 0, len(resources))
-			for _, resource := range resources {
-				args = append(args, resource)
-				placeholders = append(placeholders, "?")
+		if filter, ok := db.dialect.(resourceFilterDialect); ok {
+			filterSQL, filterArgs := filter.ResourceFilter("ca_auth.resource", resources, includeUnscoped, len(args)+1)
+			conditions = append(conditions, filterSQL)
+			args = append(args, filterArgs...)
+		} else {
+			parts := make([]string, 0, 2)
+			if len(resources) > 0 {
+				resourceCondition, resourceArgs := db.dialect.ListArgs("ca_auth.resource", resources)
+				parts = append(parts, `EXISTS (
+					SELECT 1
+					FROM drs_object_controlled_access ca_auth
+					WHERE ca_auth.object_id = o.id AND `+resourceCondition+`
+				)`)
+				args = append(args, resourceArgs...)
 			}
-			parts = append(parts, `EXISTS (
-				SELECT 1
-				FROM drs_object_controlled_access ca_auth
-				WHERE ca_auth.object_id = o.id AND ca_auth.resource IN (`+strings.Join(placeholders, ",")+`)
-			)`)
+			if includeUnscoped {
+				parts = append(parts, `NOT EXISTS (
+					SELECT 1
+					FROM drs_object_controlled_access ca_auth
+					WHERE ca_auth.object_id = o.id
+				)`)
+			}
+			conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 		}
-		if includeUnscoped {
-			parts = append(parts, `NOT EXISTS (
-				SELECT 1
-				FROM drs_object_controlled_access ca_auth
-				WHERE ca_auth.object_id = o.id
-			)`)
-		}
-		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 	}
 	if startAfter != "" {
 		args = append(args, startAfter)
@@ -619,7 +624,7 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 		ORDER BY o.id
 		LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.queryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -627,7 +632,7 @@ func (db *SqliteDB) ListObjectIDsPageByURL(ctx context.Context, objectURL, organ
 	return scanObjectIDs(rows)
 }
 
-func (db *SqliteDB) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
+func (db *Store) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
 	checksum = strings.TrimSpace(checksum)
 	if checksum == "" {
 		return []objects.Record{}, nil
@@ -646,7 +651,7 @@ func (db *SqliteDB) GetObjectsByChecksum(ctx context.Context, checksum string) (
 	return uniqueObjectsByID(out), nil
 }
 
-func sqliteScopeResourceCondition(column, organization, project string) (string, []any, error) {
+func scopeResourceCondition(column, organization, project string) (string, []any, error) {
 	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
 		return "", nil, err
@@ -654,10 +659,10 @@ func sqliteScopeResourceCondition(column, organization, project string) (string,
 	if strings.TrimSpace(project) != "" {
 		return column + " = ?", []any{resource}, nil
 	}
-	return "(" + column + " = ? OR " + column + " LIKE ? ESCAPE '\\')", []any{resource, sqliteLikeEscape(resource+"/project/") + "%"}, nil
+	return "(" + column + " = ? OR " + column + " LIKE ? ESCAPE '\\')", []any{resource, likeEscape(resource+"/project/") + "%"}, nil
 }
 
-func sqliteLikeEscape(value string) string {
+func likeEscape(value string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return replacer.Replace(value)
 }

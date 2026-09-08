@@ -26,6 +26,47 @@ func (postgresDialect) ListArgs(column string, values []string) (string, []any) 
 	return fmt.Sprintf("%s = ANY(?)", column), []any{pq.Array(values)}
 }
 
+func (postgresDialect) BulkObjectCondition(ids, checksums, shaQueries, genericQueries []string, start int) (string, []any) {
+	first := fmt.Sprintf("$%d", start)
+	second := fmt.Sprintf("$%d", start+1)
+	third := fmt.Sprintf("$%d", start+2)
+	fourth := fmt.Sprintf("$%d", start+3)
+	return fmt.Sprintf(`(
+		(COALESCE(array_length(%s::text[], 1), 0) > 0 AND o.id = ANY(%s))
+		OR
+		(COALESCE(array_length(%s::text[], 1), 0) > 0 AND (
+			o.id = ANY(%s)
+			OR EXISTS (SELECT 1 FROM drs_object_checksum c2
+				WHERE c2.object_id = o.id
+				  AND replace(lower(trim(c2.type)), '-', '') = 'sha256'
+				  AND replace(lower(trim(c2.checksum)), 'sha256:', '') = ANY(%s))
+			OR EXISTS (SELECT 1 FROM drs_object_checksum c2
+				WHERE c2.object_id = o.id AND c2.checksum = ANY(%s))
+		))`, first, first, second, second, third, fourth), []any{pq.Array(ids), pq.Array(checksums), pq.Array(shaQueries), pq.Array(genericQueries)}
+}
+
+func (postgresDialect) ResourceFilter(column string, resources []string, includeUnscoped bool, start int) (string, []any) {
+	arrayPlaceholder := fmt.Sprintf("$%d", start)
+	boolPlaceholder := fmt.Sprintf("$%d", start+1)
+	return fmt.Sprintf(`(
+		(
+			COALESCE(array_length(%s::text[], 1), 0) > 0
+			AND EXISTS (
+				SELECT 1
+				FROM drs_object_controlled_access ca_auth
+				WHERE ca_auth.object_id = o.id AND ca_auth.resource = ANY(%s)
+			)
+		) OR (
+			%s
+			AND NOT EXISTS (
+				SELECT 1
+				FROM drs_object_controlled_access ca_auth
+				WHERE ca_auth.object_id = o.id
+			)
+		)
+	)`, arrayPlaceholder, arrayPlaceholder, boolPlaceholder), []any{pq.Array(resources), includeUnscoped}
+}
+
 func (postgresDialect) MaxParameters() int {
 	return 65535
 }

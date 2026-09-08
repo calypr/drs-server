@@ -10,6 +10,7 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -31,8 +32,16 @@ func newMockPostgresDB(t *testing.T) (*PostgresDB, sqlmock.Sqlmock, *sql.DB) {
 	if err != nil {
 		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
 	}
-	return &PostgresDB{db: db, cipher: cipher}, mock, db
+	shared, err := store.Open(db, mockPostgresDialect{}, cipher)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	return &PostgresDB{Store: shared, db: db, cipher: cipher}, mock, db
 }
+
+type mockPostgresDialect struct{ postgresDialect }
+
+func (mockPostgresDialect) Bootstrap(context.Context, *sql.DB) error { return nil }
 
 func TestGetS3Credential(t *testing.T) {
 	pg, mock, rawDB := newMockPostgresDB(t)
