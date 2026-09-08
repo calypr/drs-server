@@ -2,14 +2,14 @@ package records
 
 import (
 	"context"
-	"time"
-
+	"fmt"
+	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	objectmodel "github.com/calypr/syfon/internal/objects"
+	"strings"
+	"time"
 )
 
-// writeNow returns the service clock in UTC. The fallback keeps a manually
-// constructed Service safe in same-package tests while NewService remains the
-// production constructor.
 func (s *Service) writeNow() time.Time {
 	clock := s.now
 	if clock == nil {
@@ -134,4 +134,155 @@ func (s *Service) BulkUpdateAccessMethodsAndRead(ctx context.Context, updates []
 		read = append(read, *obj)
 	}
 	return read, nil
+}
+
+func (s *Service) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objectmodel.AccessMethod) error {
+	obj, err := s.store.GetObject(ctx, objectID)
+	if err != nil {
+		return err
+	}
+	if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+		return err
+	}
+	return s.store.UpdateObjectAccessMethods(ctx, objectID, accessMethods)
+}
+
+func (s *Service) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objectmodel.AccessMethod) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(updates))
+	for objectID := range updates {
+		ids = append(ids, objectID)
+	}
+	objects, err := s.store.GetBulkObjects(ctx, ids)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]*objectmodel.Record, len(objects))
+	for i := range objects {
+		byID[string(objects[i].Id)] = &objects[i]
+	}
+	for _, objectID := range ids {
+		obj, ok := byID[objectID]
+		if !ok {
+			return errorapi.ErrObjectNotFound
+		}
+		if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+			return err
+		}
+	}
+	return s.store.BulkUpdateAccessMethods(ctx, updates)
+}
+
+func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*objectmodel.Record, error) {
+	obj, err := s.store.GetObject(ctx, objectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+		return nil, err
+	}
+
+	normalized := clientaccess.NormalizeAccessResources([]string{resource})
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("resource is required")
+	}
+	resource = normalized[0]
+
+	resources := objectmodel.AccessResources(obj)
+	found := false
+	for _, existing := range resources {
+		if strings.TrimSpace(existing) == resource {
+			found = true
+		}
+	}
+	if !found {
+		return nil, errorapi.ErrObjectNotFound
+	}
+
+	if err := s.store.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.store.GetObject(ctx, objectID)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (s *Service) CreateObjectAlias(ctx context.Context, aliasID, canonicalID string) error {
+	obj, err := s.store.GetObject(ctx, canonicalID)
+	if err != nil {
+		return err
+	}
+	if err := requireObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+		return err
+	}
+	return s.store.CreateObjectAlias(ctx, aliasID, canonicalID)
+}
+
+func (s *Service) RegisterObjects(ctx context.Context, objs []objectmodel.Record) error {
+	if err := s.validateExistingContentRead(ctx, objs); err != nil {
+		return err
+	}
+	if err := bulkObjectMethodError(ctx, objs, objectMethodCreate); err != nil {
+		return err
+	}
+	return s.store.RegisterObjects(ctx, objs)
+}
+
+func (s *Service) validateExistingContentRead(ctx context.Context, objs []objectmodel.Record) error {
+	seen := make(map[string]struct{})
+	for i := range objs {
+		sha, ok := objectmodel.CanonicalSHA256(objs[i].Checksums)
+		if !ok || sha == "" {
+			continue
+		}
+		if _, done := seen[sha]; done {
+			continue
+		}
+		seen[sha] = struct{}{}
+		existing, err := s.store.GetObjectsByChecksum(ctx, sha)
+		if err != nil {
+			return err
+		}
+		for j := range existing {
+			if existing[j].PublicRead || hasObjectMethod(ctx, &existing[j], objectMethodRead) {
+				continue
+			}
+			return errorapi.ErrAccessDenied
+		}
+	}
+	return nil
+}
+
+func (s *Service) UpdateRecord(ctx context.Context, id string, update objectmodel.Record, explicitSize *int64, now time.Time) (objectmodel.Record, error) {
+	existing, err := s.GetObject(ctx, id, objectMethodUpdate)
+	if err != nil {
+		return objectmodel.Record{}, err
+	}
+	if explicitSize != nil && *explicitSize != existing.Size {
+		return objectmodel.Record{}, errorapi.ErrObjectSizeImmutable
+	}
+	if incomingSHA, ok := objectmodel.CanonicalSHA256(update.Checksums); ok {
+		storedSHA, stored := objectmodel.CanonicalSHA256(existing.Checksums)
+		if stored && incomingSHA != storedSHA {
+			return objectmodel.Record{}, errorapi.ErrObjectChecksumImmutable
+		}
+	}
+	merged, err := objectmodel.MergeRecordUpdate(*existing, update, id, now.UTC())
+	if err != nil {
+		return objectmodel.Record{}, err
+	}
+	if err := s.store.ReplaceObjects(ctx, []objectmodel.Record{merged}); err != nil {
+		return objectmodel.Record{}, err
+	}
+	return merged, nil
+}
+
+func (s *Service) ReplaceObjects(ctx context.Context, objs []objectmodel.Record) error {
+	return s.store.ReplaceObjects(ctx, objs)
 }

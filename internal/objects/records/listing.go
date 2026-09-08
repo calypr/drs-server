@@ -120,64 +120,6 @@ func (s *Service) LookupChecksumQueries(ctx context.Context, queries []objectmod
 	return matches, nil
 }
 
-func (s *Service) GetObjectsByChecksums(ctx context.Context, hashes []string, requiredMethod string) (map[string][]objectmodel.Record, error) {
-	objectsByChecksum, err := s.store.GetObjectsByChecksums(ctx, hashes)
-	if err != nil {
-		return nil, err
-	}
-	filtered := make(map[string][]objectmodel.Record, len(objectsByChecksum))
-	for checksum, objects := range objectsByChecksum {
-		matching := objectsWithSHA256(objects, checksum)
-		filtered[checksum] = filterObjectsByMethod(ctx, canonicalizeContentObjects(matching), requiredMethod)
-	}
-	return filtered, nil
-}
-
-func (s *Service) GetObjectsByChecksum(ctx context.Context, checksum string, requiredMethod string) ([]objectmodel.Record, error) {
-	objects, err := s.store.GetObjectsByChecksum(ctx, checksum)
-	if err != nil {
-		return nil, err
-	}
-	matching := objectsWithSHA256(objects, checksum)
-	return filterObjectsByMethod(ctx, canonicalizeContentObjects(matching), requiredMethod), nil
-}
-
-func (s *Service) GetBulkObjects(ctx context.Context, ids []string, requiredMethod string) ([]objectmodel.Record, error) {
-	objects, err := s.store.GetBulkObjects(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	hashes := make([]string, 0, len(objects))
-	for _, obj := range objects {
-		if sha, ok := objectmodel.CanonicalSHA256(obj.Checksums); ok {
-			hashes = append(hashes, sha)
-		}
-	}
-	siblingsByChecksum, err := s.store.GetObjectsByChecksums(ctx, hashes)
-	if err != nil {
-		return nil, err
-	}
-	canonical := make([]objectmodel.Record, 0, len(objects))
-	seen := make(map[string]struct{}, len(objects))
-	for _, obj := range objects {
-		resolved := cloneObject(obj)
-		if sha, ok := objectmodel.CanonicalSHA256(obj.Checksums); ok {
-			matching := objectsWithSHA256(siblingsByChecksum[sha], sha)
-			family := canonicalizeContentObjects(matching)
-			if len(family) == 0 {
-				return nil, errorapi.ErrObjectNotFound
-			}
-			resolved = family[0]
-		}
-		if _, ok := seen[string(string(resolved.Id))]; ok {
-			continue
-		}
-		seen[string(string(resolved.Id))] = struct{}{}
-		canonical = append(canonical, resolved)
-	}
-	return filterObjectsByMethod(ctx, canonical, requiredMethod), nil
-}
-
 func (s *Service) GetPreparedScopedObjects(ctx context.Context, ids []string, organization, project, requiredMethod string) ([]objectmodel.Record, error) {
 	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
@@ -548,18 +490,6 @@ func (s *Service) expandProjectChecksumSiblingObjects(ctx context.Context, objec
 	hydrateDuration := time.Since(hydrateStart)
 	log.Printf("INFO: syfon_expand_scoped_checksum_siblings organization=%s project=%s checksums=%d input_count=%d missing_ids=%d output_count=%d list_scoped_sibling_ids_ms=%d hydrate_missing_siblings_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), len(checksums), len(objects), len(missingIDs), len(expanded), listDuration.Milliseconds(), hydrateDuration.Milliseconds())
 	return expanded, nil
-}
-
-func objectHasAccessURL(obj *objectmodel.Record, objectURL string) bool {
-	if obj == nil || obj.AccessMethods == nil {
-		return false
-	}
-	for _, method := range *obj.AccessMethods {
-		if method.AccessUrl != nil && strings.TrimSpace(method.AccessUrl.Url) == objectURL {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) listReadableObjectIDs(ctx context.Context) ([]string, bool, error) {

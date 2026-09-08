@@ -2,95 +2,15 @@ package records
 
 import (
 	"context"
-	"fmt"
-	"sort"
-	"strings"
-
-	objectmodel "github.com/calypr/syfon/internal/objects"
-
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
+	objectmodel "github.com/calypr/syfon/internal/objects"
+	"sort"
+	"strings"
 )
 
 const maxDeniedAccessResources = 25
-
-func (s *Service) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objectmodel.AccessMethod) error {
-	obj, err := s.store.GetObject(ctx, objectID)
-	if err != nil {
-		return err
-	}
-	if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-		return err
-	}
-	return s.store.UpdateObjectAccessMethods(ctx, objectID, accessMethods)
-}
-
-func (s *Service) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objectmodel.AccessMethod) error {
-	if len(updates) == 0 {
-		return nil
-	}
-
-	ids := make([]string, 0, len(updates))
-	for objectID := range updates {
-		ids = append(ids, objectID)
-	}
-	objects, err := s.store.GetBulkObjects(ctx, ids)
-	if err != nil {
-		return err
-	}
-	byID := make(map[string]*objectmodel.Record, len(objects))
-	for i := range objects {
-		byID[string(objects[i].Id)] = &objects[i]
-	}
-	for _, objectID := range ids {
-		obj, ok := byID[objectID]
-		if !ok {
-			return errorapi.ErrObjectNotFound
-		}
-		if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-			return err
-		}
-	}
-	return s.store.BulkUpdateAccessMethods(ctx, updates)
-}
-
-func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*objectmodel.Record, error) {
-	obj, err := s.store.GetObject(ctx, objectID)
-	if err != nil {
-		return nil, err
-	}
-	if err := requireObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-		return nil, err
-	}
-
-	normalized := clientaccess.NormalizeAccessResources([]string{resource})
-	if len(normalized) == 0 {
-		return nil, fmt.Errorf("resource is required")
-	}
-	resource = normalized[0]
-
-	resources := objectmodel.AccessResources(obj)
-	found := false
-	for _, existing := range resources {
-		if strings.TrimSpace(existing) == resource {
-			found = true
-		}
-	}
-	if !found {
-		return nil, errorapi.ErrObjectNotFound
-	}
-
-	if err := s.store.RemoveObjectControlledAccess(ctx, objectID, resource); err != nil {
-		return nil, err
-	}
-
-	updated, err := s.store.GetObject(ctx, objectID)
-	if err != nil {
-		return nil, err
-	}
-	return updated, nil
-}
 
 func (s *Service) RequireObjectResources(ctx context.Context, method string, resources []string) error {
 	if strings.TrimSpace(method) == "" {

@@ -5,6 +5,7 @@ package objects
 
 import (
 	"fmt"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"strings"
 	"time"
 )
@@ -154,4 +155,14 @@ type CanonicalContent struct {
 	ContentID ContentID
 	Record    Record
 	Records   []Record
+}
+
+func AccessResources(obj *Record) []string {
+	if obj == nil {
+		return nil
+	}
+	if obj.ControlledAccess != nil {
+		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
+	}
+	return nil
 }
