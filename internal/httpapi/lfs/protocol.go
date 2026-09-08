@@ -1,15 +1,33 @@
 package lfs
 
 import (
+	"context"
+	"github.com/calypr/syfon/apigen/lfsapi"
+	"github.com/calypr/syfon/internal/requestid"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
+	"github.com/gofiber/fiber/v3"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/calypr/syfon/apigen/lfsapi"
-	"github.com/calypr/syfon/internal/requestid"
-	"github.com/gofiber/fiber/v3"
 )
+
+// baseURLKey is intentionally private to this HTTP adapter.  A request's
+// reverse-proxy prefix is protocol state and must not leak into transfers or
+// the object domain.
+type baseURLKey struct{}
+
+// WithBaseURL attaches the Fiber request base URL to a request context.
+func WithBaseURL(ctx context.Context, baseURL string) context.Context {
+	return context.WithValue(ctx, baseURLKey{}, baseURL)
+}
+
+// GetBaseURL returns the request base URL previously attached by the route
+// adapter.
+func GetBaseURL(ctx context.Context) string {
+	value, _ := ctx.Value(baseURLKey{}).(string)
+	return value
+}
 
 type windowCounter struct {
 	Minute int64
@@ -180,4 +198,41 @@ func ValidateLFSRequestHeaders(c fiber.Ctx, requireAccept, requireContentType bo
 		}
 	}
 	return true
+}
+
+type Options struct {
+	MaxBatchObjects              int
+	MaxBatchBodyBytes            int64
+	RequestLimitPerMinute        int
+	BandwidthLimitBytesPerMinute int64
+}
+
+type Dependencies struct {
+	Service *transferlfs.Service
+}
+
+// DefaultOptions returns the historical Git LFS limits.
+func DefaultOptions() Options {
+	return Options{
+		MaxBatchObjects:              1000,
+		MaxBatchBodyBytes:            10 * 1024 * 1024,
+		RequestLimitPerMinute:        1200,
+		BandwidthLimitBytesPerMinute: 0,
+	}
+}
+
+func RegisterLFSRoutes(router fiber.Router, deps Dependencies, opts ...Options) {
+	effective := DefaultOptions()
+	if len(opts) > 0 {
+		effective = opts[0]
+	}
+	server := NewLFSServer(deps.Service, effective)
+	strict := lfsapi.NewStrictHandler(server, []lfsapi.StrictMiddlewareFunc{
+		LFSRequestMiddleware(effective),
+	})
+	router.Use(func(c fiber.Ctx) error {
+		c.SetContext(WithBaseURL(c.Context(), c.BaseURL()))
+		return c.Next()
+	})
+	lfsapi.RegisterHandlers(router, strict)
 }

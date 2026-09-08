@@ -1,12 +1,8 @@
-// Package drs translates object-domain values to and from the generated DRS
-// contract at the HTTP boundary.
 package drs
 
 import (
 	"encoding/json"
-
 	generated "github.com/calypr/syfon/apigen/drs"
-
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -228,4 +224,15 @@ func fromGeneratedContent(content generated.ContentsObject) objects.Content {
 		out.Contents = &nested
 	}
 	return out
+}
+
+func drsPtr[T any](value T) *T {
+	return &value
+}
+
+func drsStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
