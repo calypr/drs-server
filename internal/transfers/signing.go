@@ -13,16 +13,18 @@ import (
 // SignURL signs an already-resolved storage URL. S3 bucket names are passed
 // as the storage access ID; arbitrary provider URLs retain an empty access ID.
 func (s *Service) SignURL(ctx context.Context, accessURL string, options storage.AccessOptions) (string, error) {
-	if s == nil || s.access == nil {
+	if s == nil || (s.storage == nil && s.access == nil) {
 		return "", fmt.Errorf("storage access is not configured")
 	}
-	access, err := s.access.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{
-			AccessID: resolveSigningBucket(accessURL),
-			Location: accessURL,
-		},
-		Options: options,
-	})
+	if s.storage == nil {
+		access, err := s.access.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{AccessID: resolveSigningBucket(accessURL), Location: accessURL}, Options: options})
+		if err != nil {
+			return "", err
+		}
+		return access.Location, nil
+	}
+	target := targetFromURL(accessURL)
+	access, err := s.storage.Sign(ctx, storage.SignRequest{Target: target, Method: options.Method, ExpiresIn: options.ExpiresIn, DownloadFilename: options.DownloadFilename})
 	if err != nil {
 		return "", err
 	}
@@ -52,14 +54,22 @@ func (s *Service) SignObjectURL(ctx context.Context, obj *objects.Record, access
 // SignDownloadPart signs an inclusive byte range against an already-resolved
 // URL. Range validation remains at the HTTP boundary.
 func (s *Service) SignDownloadPart(ctx context.Context, bucket, accessURL string, start, end int64, options storage.AccessOptions) (string, error) {
-	if s == nil || s.access == nil {
+	if s == nil || (s.storage == nil && s.access == nil) {
 		return "", fmt.Errorf("storage access is not configured")
 	}
-	access, err := s.access.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{AccessID: bucket, Location: accessURL},
-		Options: options,
-		Range:   &storage.ByteRange{Start: start, End: end},
-	})
+	target := targetFromURL(accessURL)
+	if bucket != "" {
+		target.LookupKey = bucket
+		target.LookupCandidates = []string{bucket}
+	}
+	if s.storage == nil {
+		access, err := s.access.Access(ctx, storage.AccessRequest{Target: storage.AccessTarget{AccessID: bucket, Location: accessURL}, Options: options, Range: &storage.ByteRange{Start: start, End: end}})
+		if err != nil {
+			return "", err
+		}
+		return access.Location, nil
+	}
+	access, err := s.storage.Sign(ctx, storage.SignRequest{Target: target, Method: options.Method, ExpiresIn: options.ExpiresIn, DownloadFilename: options.DownloadFilename, Range: &storage.ByteRange{Start: start, End: end}})
 	if err != nil {
 		return "", err
 	}
@@ -84,4 +94,9 @@ func resolveSigningBucket(accessURL string) string {
 		return bucket
 	}
 	return ""
+}
+
+func targetFromURL(raw string) storage.Target {
+	parsed, _ := address.ParseLocation(raw)
+	return storage.Target{Provider: parsed.Provider, LookupKey: parsed.Bucket, PhysicalBucket: parsed.Bucket, Key: parsed.Key, Path: parsed.Path, OriginalURL: parsed.URL, CanonicalURL: parsed.URL, LookupCandidates: uniqueStrings(parsed.Bucket)}
 }

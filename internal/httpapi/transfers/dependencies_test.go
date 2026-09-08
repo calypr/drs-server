@@ -32,11 +32,13 @@ func newInternalDRSObjectManager(store *transferHTTPFixture, storageDependency t
 
 	objectService := objectrecords.NewService(objectStore)
 	transferService := domaintransfers.NewService(domaintransfers.Dependencies{
-		Access:      storageDependency,
-		Multipart:   storageDependency,
-		Scopes:      bucketService,
-		Credentials: bucketService,
-		Events:      eventStore,
+		Objects:      objectService,
+		Access:       storageDependency,
+		Multipart:    storageDependency,
+		FileCounters: fileCounters,
+		Scopes:       bucketService,
+		Credentials:  bucketService,
+		Events:       eventStore,
 	})
 	return internalDRSTestFixture{
 		ObjectService:   objectService,

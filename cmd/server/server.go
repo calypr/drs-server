@@ -287,11 +287,12 @@ var Cmd = &cobra.Command{
 			Objects: objectService,
 		})
 		transferService := transfers.NewService(transfers.Dependencies{
-			Access:      storageManager,
-			Multipart:   storageManager,
-			Scopes:      bucketService,
-			Credentials: bucketService,
-			Events:      backend.usageIngest,
+			Objects:      objectService,
+			Storage:      storageManager,
+			FileCounters: backend.usageIngest,
+			Scopes:       bucketService,
+			Credentials:  bucketService,
+			Events:       backend.usageIngest,
 		})
 		projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 			Catalog: projectStorageCatalog{

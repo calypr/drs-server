@@ -11,6 +11,7 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -31,6 +32,64 @@ type CanonicalStorageTarget struct {
 	Bucket string
 	Key    string
 	URL    string
+}
+
+func (s *Service) resolveDownloadTarget(ctx context.Context, obj *objects.Record, sourceURL string) (storage.Target, error) {
+	canonical, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, AccessURL: sourceURL})
+	if err != nil {
+		return storage.Target{}, err
+	}
+	return storageTargetFromCanonical(sourceURL, canonical), nil
+}
+
+func storageTargetFromCanonical(original string, canonical CanonicalStorageTarget) storage.Target {
+	target := storage.Target{OriginalURL: strings.TrimSpace(original), CanonicalURL: strings.TrimSpace(canonical.URL), PhysicalBucket: strings.TrimSpace(canonical.Bucket), Key: strings.Trim(strings.TrimSpace(canonical.Key), "/")}
+	if target.OriginalURL == "" {
+		target.OriginalURL = target.CanonicalURL
+	}
+	parsed, err := address.ParseLocation(target.CanonicalURL)
+	if err == nil {
+		target.Provider = parsed.Provider
+		if target.PhysicalBucket == "" {
+			target.PhysicalBucket = parsed.Bucket
+		}
+		if target.Key == "" {
+			target.Key = parsed.Key
+		}
+		target.Path = parsed.Path
+	}
+	if target.Provider == "" {
+		parsed, _ = address.ParseLocation(target.OriginalURL)
+		target.Provider = parsed.Provider
+		target.Path = parsed.Path
+		if target.PhysicalBucket == "" {
+			target.PhysicalBucket = parsed.Bucket
+		}
+		if target.Key == "" {
+			target.Key = parsed.Key
+		}
+	}
+	target.LookupCandidates = uniqueStrings(target.PhysicalBucket)
+	if target.LookupKey == "" && len(target.LookupCandidates) > 0 {
+		target.LookupKey = target.LookupCandidates[0]
+	}
+	return target
+}
+
+func (s *Service) resolveScopedTarget(ctx context.Context, organization, project, key string) (storage.Target, error) {
+	canonical, err := s.ResolveScopedUploadTarget(ctx, organization, project, key)
+	if err != nil {
+		return storage.Target{}, err
+	}
+	return storageTargetFromCanonical(canonical.URL, canonical), nil
+}
+
+func uniqueStrings(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return []string{value}
 }
 
 // ResolveCanonicalStorageTarget selects the physical target for an object.

@@ -11,6 +11,7 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
+	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -20,6 +21,7 @@ import (
 // perform another object lookup.
 type AccessRequest struct {
 	Object *objects.Record
+	Target storage.Target
 	// Scope is an operation-selected attribution scope. It is optional because
 	// most transfer paths do not select a project independently of the object.
 	// RecordAccessIssued validates it against the object's canonical resources
@@ -82,6 +84,12 @@ func eventFromObject(ctx context.Context, request AccessRequest) usage.Event {
 		}
 	}
 	provider, bucket := providerBucket(storageURL)
+	if request.Target.Provider != "" {
+		provider = request.Target.Provider
+	}
+	if request.Target.PhysicalBucket != "" {
+		bucket = request.Target.PhysicalBucket
+	}
 	direction := strings.ToLower(strings.TrimSpace(request.Direction))
 	if direction != usage.ProviderTransferDirectionUpload {
 		direction = usage.ProviderTransferDirectionDownload

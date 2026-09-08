@@ -1,17 +1,16 @@
 package drs
 
 import (
-	"strings"
-
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
+	"strings"
 )
 
 func (s *server) GetAccessURL(c fiber.Ctx, objectID generated.ObjectId, accessID generated.AccessId) error {
-	workflow := transfers.NewAccessWorkflow(s.objectService, s.accessService)
-	result, err := workflow.Issue(c.Context(), string(objectID), string(accessID))
+	s.accessService.BindLegacyDependencies(s.objectService, nil)
+	result, err := s.accessService.IssueAccess(c.Context(), transfers.AccessLookupRequest{ObjectID: string(objectID), AccessID: string(accessID)})
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
@@ -26,7 +25,7 @@ func (s *server) PostAccessURL(c fiber.Ctx, objectID generated.ObjectId, accessI
 }
 
 func (s *server) GetBulkAccessURL(c fiber.Ctx) error {
-	workflow := transfers.NewAccessWorkflow(s.objectService, s.accessService)
+	s.accessService.BindLegacyDependencies(s.objectService, nil)
 	var body generated.BulkObjectAccessId
 	if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
@@ -43,7 +42,17 @@ func (s *server) GetBulkAccessURL(c fiber.Ctx) error {
 			AccessIDs: accessIDs,
 		})
 	}
-	result := workflow.IssueBulk(c.Context(), requests)
+	lookup := make([]transfers.AccessLookupRequest, 0, len(requests))
+	for _, request := range requests {
+		if len(request.AccessIDs) == 0 {
+			lookup = append(lookup, transfers.AccessLookupRequest{ObjectID: request.ObjectID})
+			continue
+		}
+		for _, accessID := range request.AccessIDs {
+			lookup = append(lookup, transfers.AccessLookupRequest{ObjectID: request.ObjectID, AccessID: accessID})
+		}
+	}
+	result := s.accessService.IssueAccessBulk(c.Context(), lookup)
 	resolved := make([]generated.BulkAccessURL, 0, len(result.Resolved))
 	for _, item := range result.Resolved {
 		resolved = append(resolved, generated.BulkAccessURL{

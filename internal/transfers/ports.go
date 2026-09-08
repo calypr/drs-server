@@ -2,18 +2,37 @@ package transfers
 
 import (
 	"context"
+	"time"
 
 	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
 )
 
+// ObjectPort is the catalog capability required by transfer operations.
+type ObjectPort interface {
+	GetObject(context.Context, string, string) (*objects.Record, error)
+	GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error)
+	RequireObjectResources(context.Context, string, []string) error
+}
+
+// StoragePort is the provider-neutral storage capability required by
+// transfer operations. Target selection and credential binding stay below
+// this boundary.
+type StoragePort interface {
+	Sign(context.Context, storage.SignRequest) (storage.SignedAccess, error)
+	BeginMultipart(context.Context, storage.Target) (storage.UploadID, error)
+	SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error)
+	CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error
+}
+
+// Deprecated compatibility seams remain until the multipart/LFS consumer
+// migration lands. New transfer operations use StoragePort directly.
 type AccessPort interface {
 	Access(context.Context, storage.AccessRequest) (storage.Access, error)
 }
 
-// MultipartPort owns provider-specific multipart operations. Upload IDs are
-// intentionally opaque and are never parsed or normalized by transfers.
 type MultipartPort interface {
 	BeginMultipart(context.Context, storage.Target) (storage.UploadID, error)
 	SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error)
@@ -29,16 +48,17 @@ type CredentialReader interface {
 }
 
 type EventRecorder interface {
-	RecordTransferAttributionEvents(ctx context.Context, events []usage.Event) error
+	RecordTransferAttributionEvents(context.Context, []usage.Event) error
 }
 
-// Dependencies are the consumer-owned ports used by Service. Each field is
-// optional until the corresponding workflow is invoked, which lets callers
-// compose only the capabilities they expose.
 type Dependencies struct {
-	Access      AccessPort
-	Multipart   MultipartPort
-	Scopes      ScopeReader
-	Credentials CredentialReader
-	Events      EventRecorder
+	Objects      ObjectPort
+	Storage      StoragePort
+	FileCounters usage.FileCounterRecorder
+	Scopes       ScopeReader
+	Credentials  CredentialReader
+	Events       EventRecorder
+	Now          func() time.Time
+	Access       AccessPort
+	Multipart    MultipartPort
 }
