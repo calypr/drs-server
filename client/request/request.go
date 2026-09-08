@@ -110,6 +110,16 @@ func newRequestor(
 		logger = logs.NewGen3Logger(nil, "", "")
 	}
 	retryClient := retryablehttp.NewClient()
+	// Keep the final HTTP response available for the shared API error decoder.
+	retryClient.ErrorHandler = func(resp *http.Response, err error, _ int) (*http.Response, error) {
+		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			return nil, err
+		}
+		return resp, nil
+	}
 	retryClient.RetryMax = 5
 	retryClient.Logger = logger
 	retryClient.RetryWaitMin = defaultRetryWaitMin
