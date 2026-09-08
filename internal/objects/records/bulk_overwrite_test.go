@@ -70,7 +70,6 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 	}{
 		{name: "missing did", db: &bulkOverwriteStore{}, candidates: []objects.Record{candidate(" ")}, want: "did is required"},
 		{name: "duplicate source did", db: &bulkOverwriteStore{}, candidates: []objects.Record{candidate("same"), candidate("same")}, want: "duplicate source did", conflict: true},
-		{name: "missing target scope", db: &bulkOverwriteStore{}, candidates: []objects.Record{{Id: "did"}}, want: "must include target project"},
 		{
 			name:       "did exists outside project",
 			db:         &bulkOverwriteStore{Objects: map[string]*objects.Record{"did": {Id: "did", ControlledAccess: &[]string{"/organization/org/project/other"}}}},
@@ -97,6 +96,28 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 				t.Fatalf("conflict classification = %v, want %v", errors.Is(err, errorapi.ErrBulkOverwriteConflict), tc.conflict)
 			}
 		})
+	}
+}
+
+func TestBulkOverwriteObjects_NormalizesTargetScope(t *testing.T) {
+	resource, err := clientaccess.ResourcePath("org", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := &bulkOverwriteStore{Objects: map[string]*objects.Record{}}
+	service := newTestService(db)
+	result, err := service.BulkOverwriteObjects(buildGen3Context(map[string]map[string]bool{
+		resource: {"create": true},
+	}), "org", "project", []objects.Record{{Id: "did"}})
+	if err != nil {
+		t.Fatalf("BulkOverwriteObjects returned error: %v", err)
+	}
+	if result.Created != 1 {
+		t.Fatalf("result = %+v, want one created record", result)
+	}
+	stored := db.Objects["did"]
+	if stored == nil || !recordInScope(stored, "org", "project") {
+		t.Fatalf("target scope was not normalized: %+v", stored)
 	}
 }
 

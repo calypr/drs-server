@@ -14,22 +14,22 @@ import (
 
 func handleInternalCreateFiber(objectService *objectrecords.Service) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		candidates, err := decodeInternalCreateCandidates(c, time.Now().UTC())
+		candidates, err := decodeInternalCreateCandidates(c)
 		if err != nil {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
-		if err := objectService.RegisterObjects(c.Context(), candidates); err != nil {
+		if err := objectService.RegisterScopedObjects(c.Context(), candidates); err != nil {
 			return middleware.HandleError(c, err)
 		}
 
 		if strings.HasSuffix(c.Path(), "/bulk") {
 			records := make([]internalapi.InternalRecord, len(candidates))
-			for i, cand := range candidates {
-				records[i] = ToInternalRecord(cand)
+			for i, scoped := range candidates {
+				records[i] = ToInternalRecord(scoped.Record)
 			}
 			return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &records})
 		}
-		return c.Status(fiber.StatusCreated).JSON(ToInternalRecordResponse(candidates[0]))
+		return c.Status(fiber.StatusCreated).JSON(ToInternalRecordResponse(candidates[0].Record))
 	}
 }
 
@@ -37,27 +37,35 @@ func handleInternalBulkCreateFiber(objectService *objectrecords.Service) fiber.H
 	return handleInternalCreateFiber(objectService)
 }
 
-func decodeInternalCreateCandidates(c fiber.Ctx, now time.Time) ([]objects.Record, error) {
+func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error) {
 	var bulkReq internalapi.BulkCreateRequest
-	candidates := make([]objects.Record, 0)
+	candidates := make([]objects.ScopedRecord, 0)
 	if err := c.Bind().JSON(&bulkReq); err == nil && len(bulkReq.Records) > 0 {
 		for i, r := range bulkReq.Records {
-			obj, err := internalRecordToObject(r, now)
+			obj, err := FromInternalRecord(r, time.Time{})
 			if err != nil {
 				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
 			}
-			candidates = append(candidates, obj)
+			scope, err := internalRecordScope(r)
+			if err != nil {
+				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
+			}
+			candidates = append(candidates, objects.ScopedRecord{Record: obj, Scope: scope})
 		}
 		return candidates, nil
 	}
 
 	var singleReq internalapi.InternalRecord
 	if err := c.Bind().JSON(&singleReq); err == nil && singleReq.Did != "" {
-		obj, err := internalRecordToObject(singleReq, now)
+		obj, err := FromInternalRecord(singleReq, time.Time{})
 		if err != nil {
 			return nil, fmt.Errorf("record invalid: %w", err)
 		}
-		candidates = append(candidates, obj)
+		scope, err := internalRecordScope(singleReq)
+		if err != nil {
+			return nil, fmt.Errorf("record invalid: %w", err)
+		}
+		candidates = append(candidates, objects.ScopedRecord{Record: obj, Scope: scope})
 	}
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no records found")
@@ -65,10 +73,6 @@ func decodeInternalCreateCandidates(c fiber.Ctx, now time.Time) ([]objects.Recor
 	return candidates, nil
 }
 
-func internalRecordToObject(value internalapi.InternalRecord, now time.Time) (objects.Record, error) {
-	obj, err := FromInternalRecord(value, now)
-	if err != nil {
-		return objects.Record{}, err
-	}
-	return objects.EnforceCanonicalProjectScope(obj, recordStringValue(value.Organization), recordStringValue(value.Project))
+func internalRecordScope(value internalapi.InternalRecord) (objects.Scope, error) {
+	return objects.NewScope(recordStringValue(value.Organization), recordStringValue(value.Project))
 }

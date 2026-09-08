@@ -38,20 +38,21 @@ func handleInternalBulkOverwriteFiber(objectService *objectrecords.Service) fibe
 		if len(req.Records) > maxInternalBulkOverwrite {
 			return middleware.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many records: maximum is %d", maxInternalBulkOverwrite))
 		}
+		scope, err := objects.NewScope(req.Organization, req.Project)
+		if err != nil {
+			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+		}
 
 		candidates := make([]objects.Record, 0, len(req.Records))
-		now := time.Now().UTC()
 		for i, record := range req.Records {
-			record.Organization = &req.Organization
-			record.Project = &req.Project
-			obj, err := internalRecordToObject(record, now)
+			obj, err := FromInternalRecord(record, time.Time{})
 			if err != nil {
 				return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 			}
 			candidates = append(candidates, obj)
 		}
 
-		result, err := objectService.BulkOverwriteObjects(c.Context(), req.Organization, req.Project, candidates)
+		result, err := objectService.BulkOverwriteObjects(c.Context(), scope.Organization, scope.Project, candidates)
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}

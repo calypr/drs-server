@@ -28,10 +28,25 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 	if len(candidates) == 0 {
 		return result, nil
 	}
-	resource, err := clientaccess.ResourcePath(organization, project)
+	scope, err := objectmodel.NewScope(organization, project)
 	if err != nil {
 		return result, err
 	}
+	resource, err := clientaccess.ResourcePath(scope.Organization, scope.Project)
+	if err != nil {
+		return result, err
+	}
+
+	now := s.writeNow()
+	prepared := make([]objectmodel.Record, len(candidates))
+	for i, candidate := range candidates {
+		normalized, err := objectmodel.EnforceCanonicalProjectScope(candidate, scope.Organization, scope.Project)
+		if err != nil {
+			return result, err
+		}
+		prepared[i] = materializeRecordTime(normalized, now)
+	}
+	candidates = prepared
 
 	byDID := make(map[string]int, len(candidates))
 	hashes := make([]string, 0, len(candidates))
@@ -44,9 +59,6 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 			return result, fmt.Errorf("%w: duplicate source did %q", errorapi.ErrBulkOverwriteConflict, did)
 		}
 		byDID[did] = i
-		if !containsResource(objectmodel.AccessResources(&candidates[i]), resource) {
-			return result, fmt.Errorf("record %q must include target project %s", did, resource)
-		}
 		if sha, ok := objectmodel.CanonicalSHA256(candidates[i].Checksums); ok {
 			hashes = append(hashes, sha)
 		}

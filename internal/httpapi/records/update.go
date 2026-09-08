@@ -35,12 +35,16 @@ func handleInternalUpdateFiber(objectService *objectrecords.Service) fiber.Handl
 		if strings.TrimSpace(req.Did) == "" {
 			req.Did = id
 		}
-		update, err := internalRecordToObject(req, time.Now().UTC())
+		scope, err := internalRecordScope(req)
+		if err != nil {
+			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		}
+		update, err := FromInternalRecord(req, time.Time{})
 		if err != nil {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 
-		merged, err := objectService.UpdateRecord(c.Context(), id, update, req.Size, time.Now().UTC())
+		merged, err := objectService.UpdateRecordInScope(c.Context(), id, scope, update, req.Size)
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}

@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -64,5 +65,30 @@ func TestUpdateRecordPreservesSizePresenceAndReplacement(t *testing.T) {
 	}
 	if len(store.replaced) != 1 {
 		t.Fatalf("conflicting update replaced object: %+v", store.replaced)
+	}
+}
+
+func TestUpdateRecordInScopeUsesServiceClockAndNormalizesScope(t *testing.T) {
+	db, err := sqlite.NewSqliteDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &updateOperationStore{SqliteDB: db, object: objectmodel.Record{Id: "object", Size: 7}}
+	service := newUpdateOperationService(store)
+	fixed := time.Date(2026, time.September, 8, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return fixed }
+
+	merged, err := service.UpdateRecordInScope(context.Background(), "object", objectmodel.Scope{
+		Organization: "org",
+		Project:      "project",
+	}, objectmodel.Record{}, nil)
+	if err != nil {
+		t.Fatalf("UpdateRecordInScope() error = %v", err)
+	}
+	if merged.ControlledAccess == nil || !slices.Contains(*merged.ControlledAccess, "/organization/org/project/project") {
+		t.Fatalf("scope was not normalized: %+v", merged.ControlledAccess)
+	}
+	if merged.UpdatedTime == nil || !merged.UpdatedTime.Equal(fixed) {
+		t.Fatalf("updated time = %v, want %v", merged.UpdatedTime, fixed)
 	}
 }

@@ -1,5 +1,7 @@
 package records
 
+import "time"
+
 const (
 	objectMethodRead   = "read"
 	objectMethodCreate = "create"
@@ -12,8 +14,9 @@ const (
 // store and no optional fallback path can silently change behavior.
 type Service struct {
 	store ObjectStore
+	now   func() time.Time
 }
 
 func NewService(store ObjectStore) *Service {
-	return &Service{store: store}
+	return &Service{store: store, now: time.Now}
 }
