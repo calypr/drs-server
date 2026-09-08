@@ -71,7 +71,8 @@ func (s *Inspector) probeOne(ctx context.Context, request InspectRequest) ProbeR
 	metadata, err := s.ProbeObject(ctx, request)
 	if err != nil {
 		result.Status, result.ErrorKind = classifyError(err)
-		result.Error = strings.TrimSpace(err.Error())
+		logStorageDiagnostic(ctx, err, "probe")
+		result.Error = safeStorageErrorMessage(err, "probe")
 		if cache := cacheFromContext(ctx); cache != nil {
 			cache.setProbe(key, result)
 		}
@@ -241,6 +242,10 @@ func classifyError(err error) (ProbeStatus, string) {
 			return ProbeUnsupported, string(inspectErr.Kind)
 		}
 		return ProbeError, string(inspectErr.Kind)
+	}
+	var operation *storage.OperationError
+	if errors.As(err, &operation) {
+		return ProbeError, string(operation.ErrorCode())
 	}
 	return ProbeError, "error"
 }

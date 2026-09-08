@@ -67,6 +67,9 @@ jobs:
       - name: Compile the client README example
         run: scripts/check-client-readme.sh
 
+      - name: Test modules without the workspace
+        run: make test-modules
+
       - name: Run server endpoint router tests
         run: |
           CGO_ENABLED=1 go test ./cmd/server \
@@ -276,7 +279,7 @@ jobs:
         run: go vet ./... ./client/... ./apigen/...
 
       - name: Run Staticcheck
-        run: $(go env GOPATH)/bin/staticcheck ./... ./client/...
+        run: $(go env GOPATH)/bin/staticcheck ./... ./client/... ./apigen/errorapi/...
 
       - name: Check for Go CVEs - Root module
         run: $(go env GOPATH)/bin/govulncheck ./...

@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -86,6 +89,42 @@ func TestHandleError(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestClassifyErrorKeepsCauseOutOfServerPayload(t *testing.T) {
+	ctx := requestid.WithRequestID(context.Background(), "request-789")
+	payload := ClassifyError(ctx, errors.New("database lookup failed: private provider detail"))
+	if payload.Code != errorapi.ErrorCodeInternalError || payload.Category != errorapi.ErrorCategoryInternalError || payload.Status != http.StatusInternalServerError {
+		t.Fatalf("unexpected classification: %+v", payload)
+	}
+	if payload.Message != "Internal Server Error" || payload.RequestId == nil || *payload.RequestId != "request-789" {
+		t.Fatalf("unexpected public payload: %+v", payload)
+	}
+}
+
+func TestHandleErrorLogsRequestContextAndCause(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(previous)
+
+	app := fiber.New()
+	app.Post("/bulk", func(c fiber.Ctx) error {
+		c.SetContext(requestid.WithRequestID(c.Context(), "request-logging"))
+		return HandleError(c, errors.New("provider detail"))
+	})
+	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/bulk", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+	for _, want := range []string{"request_id=request-logging", "method=POST", "path=/bulk", "err=\"provider detail\""} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("log %q missing %q", logs.String(), want)
+		}
 	}
 }
 

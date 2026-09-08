@@ -52,7 +52,7 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
-		return metricsapi.ListMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 
 	items := make([]metricsapi.FileUsage, 0, len(data))
@@ -95,11 +95,11 @@ func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 
 	readableObjectIDs, err := s.readableBulkObjectIDs(ctx, access, objectIDs)
 	if err != nil {
-		return metricsapi.BulkMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	data, err := s.reporter.ListFileUsageByObjectIDs(ctx, readableObjectIDs)
 	if err != nil {
-		return metricsapi.BulkMetricsFiles500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	items := make([]metricsapi.FileUsage, 0, len(data))
 	for _, usage := range data {
@@ -144,7 +144,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 	if access.isScoped() || access.hasScopeAggregate() {
 		inside, err := s.objectInScope(ctx, objectID, access)
 		if err != nil {
-			return metricsapi.GetMetricsFile500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+			return nil, err
 		}
 		if !inside {
 			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
@@ -153,10 +153,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 
 	fileUsage, err := s.reporter.GetFileUsage(ctx, objectID)
 	if err != nil {
-		if errors.Is(err, errorapi.ErrNotFound) {
-			return metricsapi.GetMetricsFile404JSONResponse(metricsAPIError(ctx, http.StatusNotFound)), nil
-		}
-		return metricsapi.GetMetricsFile500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 
 	return metricsapi.GetMetricsFile200JSONResponse(toMetricsFileUsage(*fileUsage)), nil
@@ -185,7 +182,7 @@ func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
-		return metricsapi.GetMetricsSummary500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 
 	return metricsapi.GetMetricsSummary200JSONResponse{

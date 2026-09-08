@@ -2,7 +2,6 @@ package buckets
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -44,7 +43,7 @@ func (f *fakeCredentialStore) GetS3Credential(_ context.Context, bucket string) 
 			return &copy, nil
 		}
 	}
-	return nil, errors.New("credential not found")
+	return nil, errorapi.ErrStorageCredentialMissing
 }
 
 func (f *fakeCredentialStore) ListS3Credentials(context.Context) ([]Credential, error) {

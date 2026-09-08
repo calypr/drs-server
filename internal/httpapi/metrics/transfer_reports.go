@@ -17,14 +17,14 @@ func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsa
 	filter := transferSummaryParamsToFilter(request.Params)
 	freshness, _, err := s.transferFreshness(ctx, filter)
 	if err != nil {
-		return metricsapi.GetTransferSummary500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	summary, err := s.reporter.GetTransferAttributionSummary(ctx, usage.TransferSummaryQuery{
 		Filter: filter,
 		Scope:  access.scopeQuery(),
 	})
 	if err != nil {
-		return metricsapi.GetTransferSummary500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	generated := toGeneratedTransferSummary(summary)
 	generated.Freshness = &freshness
@@ -39,7 +39,7 @@ func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	filter := transferBreakdownParamsToFilter(request.Params)
 	freshness, _, err := s.transferFreshness(ctx, filter)
 	if err != nil {
-		return metricsapi.GetTransferBreakdown500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	groupBy := "scope"
 	if request.Params.GroupBy != nil {
@@ -56,7 +56,7 @@ func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metric
 		Scope:   access.scopeQuery(),
 	})
 	if err != nil {
-		return metricsapi.GetTransferBreakdown500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	generatedItems := make([]metricsapi.TransferAttributionBreakdown, 0, len(items))
 	for _, item := range items {

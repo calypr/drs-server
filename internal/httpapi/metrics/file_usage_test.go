@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/metricsapi"
+	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
@@ -113,7 +114,7 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 }
 
 func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
 	objectReader := newMetricsObjectReader(nil, nil)
 	state := &metricsTransferState{}
 	registerMetricsRoutesForTest(app, &metricsIngestFake{state: state}, newMetricsReport(objectReader, nil, state), objectReader)

@@ -34,7 +34,7 @@ func (f *bucketTestStore) GetS3Credential(_ context.Context, bucket string) (*do
 			return &copy, nil
 		}
 	}
-	return nil, errors.New("credential not found")
+	return nil, errorapi.ErrStorageCredentialMissing
 }
 
 func (f *bucketTestStore) ListS3Credentials(context.Context) ([]domainbuckets.Credential, error) {

@@ -93,6 +93,20 @@ func (e *OperationError) Error() string {
 	return message
 }
 
+func (e *OperationError) PublicMessage() string {
+	if e == nil {
+		return "storage operation failed"
+	}
+	switch e.Kind {
+	case ErrorInvalid:
+		return "storage request is invalid"
+	case ErrorUnsupported:
+		return "storage operation is unsupported"
+	default:
+		return "storage operation failed"
+	}
+}
+
 func (e *OperationError) Unwrap() error {
 	if e == nil {
 		return nil

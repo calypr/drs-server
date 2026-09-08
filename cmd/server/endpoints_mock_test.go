@@ -185,7 +185,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 			SecretKey: "mock-secret",
 		},
 	}}
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	authRuntime := authentication.NewRuntime(logger, "local", "", "")

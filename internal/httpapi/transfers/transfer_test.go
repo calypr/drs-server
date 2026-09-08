@@ -38,7 +38,7 @@ func TestHandleInternalMultipartUpload_NotFound(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if responseBody.Code != "not_found" || responseBody.Message != "Upload ID not found" {
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
 		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
@@ -67,7 +67,7 @@ func TestHandleInternalMultipartComplete_NotFound(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if responseBody.Code != "not_found" || responseBody.Message != "Upload ID not found" {
+	if responseBody.Code != errorapi.ErrorCodeMultipartUploadNotFound || responseBody.Message != "Upload ID not found" {
 		t.Errorf("unexpected not-found body: %+v", responseBody)
 	}
 }
@@ -102,7 +102,7 @@ func TestHandleInternalMultipartCompletePreservesPartOrderAndOpaqueETags(t *test
 	}
 }
 
-func TestHandleInternalMultipartCompleteDeletesSessionBeforeProviderError(t *testing.T) {
+func TestHandleInternalMultipartCompleteRetainsSessionAfterProviderError(t *testing.T) {
 	fake := &internalDRSStorageFake{completeErr: errors.New("provider completion failed")}
 	om := newInternalDRSObjectManager(&transferHTTPFixture{}, fake)
 	lifecycle := domaintransfers.NewMultipartLifecycle(om.TransferService)
@@ -121,7 +121,17 @@ func TestHandleInternalMultipartCompleteDeletesSessionBeforeProviderError(t *tes
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("expected provider failure to map to 500, got %d", resp.StatusCode)
 	}
+	resp.Body.Close()
+	fake.completeErr = nil
+	resp, err = app.Test(httptest.NewRequest(http.MethodPost, "/multipart/complete", bytes.NewBuffer(body)))
+	if err != nil {
+		t.Fatalf("retry complete request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected successful retry after provider recovery, got %d", resp.StatusCode)
+	}
 	if err := lifecycle.Complete(t.Context(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
-		t.Fatalf("expected consumed upload ID after provider failure, got %v", err)
+		t.Fatalf("expected consumed upload ID after successful completion, got %v", err)
 	}
 }

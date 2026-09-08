@@ -101,8 +101,47 @@ func TestGetS3CredentialNotFound(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}))
 
 	_, err := pg.GetS3Credential(context.Background(), "missing")
-	if err == nil || err.Error() != "credential not found" {
-		t.Fatalf("expected credential not found error, got %v", err)
+	if !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		t.Fatalf("expected credential missing error, got %v", err)
+	}
+}
+
+func TestGetS3CredentialPreservesFallbackDatabaseFailure(t *testing.T) {
+	pg, mock, rawDB := newMockPostgresDB(t)
+	defer rawDB.Close()
+	fallbackErr := errors.New("database unavailable")
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE credential_id = $1`)).
+		WithArgs("missing").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE bucket = $1`)).
+		WithArgs("missing").
+		WillReturnError(fallbackErr)
+
+	_, err := pg.GetS3Credential(context.Background(), "missing")
+	if !errors.Is(err, fallbackErr) || errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		t.Fatalf("GetS3Credential error=%v, want fallback database failure", err)
+	}
+}
+
+func TestGetS3CredentialDecryptionFailureIsNotMissing(t *testing.T) {
+	pg, mock, rawDB := newMockPostgresDB(t)
+	defer rawDB.Close()
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE credential_id = $1`)).
+		WithArgs("b1").
+		WillReturnRows(sqlmock.NewRows([]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}).
+			AddRow("b1", "b1", "s3", "us-east-1", "enc:v2:not-valid", "", ""))
+
+	_, err := pg.GetS3Credential(context.Background(), "b1")
+	if err == nil || errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		t.Fatalf("GetS3Credential error=%v, want decryption failure", err)
 	}
 }
 
@@ -207,8 +246,8 @@ func TestDeleteS3Credential(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}))
 
 		err := pg.DeleteS3Credential(context.Background(), "missing")
-		if err == nil || err.Error() != "credential not found" {
-			t.Fatalf("expected credential not found, got %v", err)
+		if !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+			t.Fatalf("expected credential missing, got %v", err)
 		}
 	})
 }

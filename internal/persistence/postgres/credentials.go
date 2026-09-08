@@ -67,7 +67,7 @@ func (db *PostgresDB) getS3CredentialByPhysicalBucket(ctx context.Context, bucke
 	}
 	switch len(matches) {
 	case 0:
-		return nil, fmt.Errorf("credential not found")
+		return nil, errorapi.ErrStorageCredentialMissing
 	case 1:
 		parsed, err := credentialcipher.ParseS3CredentialFromStorage(ctx, &matches[0])
 		if err != nil {
@@ -165,9 +165,8 @@ func (db *PostgresDB) DeleteS3Credential(ctx context.Context, credentialID strin
 		return err
 	}
 	if rows == 0 {
-		notFoundErr := fmt.Errorf("credential not found")
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, notFoundErr)
-		return notFoundErr
+		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, errorapi.ErrStorageCredentialMissing)
+		return errorapi.ErrStorageCredentialMissing
 	}
 	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, nil)
 	return nil
@@ -176,7 +175,7 @@ func (db *PostgresDB) DeleteS3Credential(ctx context.Context, credentialID strin
 func (db *PostgresDB) resolveCredentialID(ctx context.Context, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", fmt.Errorf("credential not found")
+		return "", errorapi.ErrStorageCredentialMissing
 	}
 	var exact string
 	err := db.db.QueryRowContext(ctx, "SELECT credential_id FROM s3_credential WHERE credential_id = $1", raw).Scan(&exact)

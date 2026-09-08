@@ -15,23 +15,11 @@ func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
 
 func metricsErrorCode(status int) errorapi.ErrorCode {
 	switch status {
-	case http.StatusBadRequest, http.StatusUnprocessableEntity, http.StatusRequestEntityTooLarge:
-		return errorapi.ErrorCodeInvalidInput
 	case http.StatusUnauthorized:
 		return errorapi.ErrorCodeAuthenticationRequired
 	case http.StatusForbidden:
 		return errorapi.ErrorCodeAccessDenied
-	case http.StatusNotFound:
-		return errorapi.ErrorCodeNotFound
-	case http.StatusConflict:
-		return errorapi.ErrorCodeConflict
-	case http.StatusTooManyRequests:
-		return errorapi.ErrorCodeRateLimited
-	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return errorapi.ErrorCodeUnavailable
-	case http.StatusInternalServerError:
-		return errorapi.ErrorCodeInternalError
 	default:
-		return errorapi.ErrorCodeRequestFailed
+		return errorapi.CodeForStatus(status)
 	}
 }

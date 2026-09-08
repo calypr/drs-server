@@ -1,12 +1,10 @@
 package records
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
@@ -55,9 +53,6 @@ func handleInternalBulkOverwriteFiber(objectService *objectrecords.Service) fibe
 
 		result, err := objectService.BulkOverwriteObjects(c.Context(), req.Organization, req.Project, candidates)
 		if err != nil {
-			if errors.Is(err, errorapi.ErrBulkOverwriteConflict) {
-				return middleware.Reject(c, fiber.StatusConflict, err.Error())
-			}
 			return middleware.HandleError(c, err)
 		}
 		return c.JSON(bulkOverwriteResponse{

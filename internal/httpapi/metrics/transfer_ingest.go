@@ -64,7 +64,7 @@ func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, reques
 		events = append(events, ev)
 	}
 	if err := s.ingestor.RecordProviderTransferEvents(ctx, events); err != nil {
-		return metricsapi.RecordProviderTransferEvents500JSONResponse(metricsAPIError(ctx, http.StatusInternalServerError)), nil
+		return nil, err
 	}
 	recorded := len(events)
 	return metricsapi.RecordProviderTransferEvents201JSONResponse{Recorded: &recorded}, nil

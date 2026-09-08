@@ -17,9 +17,12 @@ type publicError interface {
 	PublicMessage() string
 }
 
-func HandleError(c fiber.Ctx, err error) error {
+// ClassifyError converts an application error into the public API error
+// envelope. The original error remains available to the boundary logger and
+// is never used as a response message for server failures.
+func ClassifyError(ctx context.Context, err error) errorapi.APIError {
 	if err == nil {
-		return nil
+		return errorapi.APIError{}
 	}
 
 	code, ok := errorapi.CodeOf(err)
@@ -39,12 +42,15 @@ func HandleError(c fiber.Ctx, err error) error {
 	switch category {
 	case errorapi.ErrorCategoryNotFound:
 		msg = "Resource not found"
+		if code == errorapi.ErrorCodeMultipartUploadNotFound {
+			msg = "Upload ID not found"
+		}
 	case errorapi.ErrorCategoryUnauthorized:
 		if code == errorapi.ErrorCodeUnauthorized {
 			code = errorapi.ErrorCodeAccessDenied
 			category = errorapi.ErrorCategoryForbidden
 			status = http.StatusForbidden
-			if access.IsGen3Mode(c.Context()) && !access.HasAuthHeader(c.Context()) {
+			if access.IsGen3Mode(ctx) && !access.HasAuthHeader(ctx) {
 				code = errorapi.ErrorCodeAuthenticationRequired
 				category = errorapi.ErrorCategoryUnauthorized
 				status = http.StatusUnauthorized
@@ -71,22 +77,50 @@ func HandleError(c fiber.Ctx, err error) error {
 			msg = "A valid SHA256 checksum is required"
 		case errorapi.ErrorCodeAccessMethodsRequired:
 			msg = err.Error()
+		default:
+			var publicErr publicError
+			if errors.As(err, &publicErr) {
+				msg = publicErr.PublicMessage()
+			}
+		}
+	case errorapi.ErrorCategoryConflict:
+		var publicErr publicError
+		if errors.As(err, &publicErr) {
+			msg = publicErr.PublicMessage()
 		}
 	case errorapi.ErrorCategoryInternalError:
 		msg = http.StatusText(http.StatusInternalServerError)
 	}
-	if status >= http.StatusInternalServerError {
-		msg = http.StatusText(status)
-	}
+	return newAPIError(ctx, code, category, status, msg)
+}
 
+// LogError records the original cause separately from its public API value.
+func LogError(c fiber.Ctx, err error, payload errorapi.APIError) {
 	requestID := requestid.GetRequestID(c.Context())
-	if status >= 500 {
-		slog.Error("request failed", "request_id", requestID, "method", c.Method(), "path", c.Path(), "status", status, "err", err)
+	args := []any{
+		"request_id", requestID,
+		"method", c.Method(),
+		"path", c.Path(),
+		"status", payload.Status,
+		"code", payload.Code,
+		"category", payload.Category,
+		"err", err,
+	}
+	if payload.Status >= http.StatusInternalServerError {
+		slog.Error("request failed", args...)
 	} else {
-		slog.Warn("request rejected", "request_id", requestID, "method", c.Method(), "path", c.Path(), "status", status, "msg", msg, "err", err)
+		slog.Warn("request rejected", args...)
+	}
+}
+
+func HandleError(c fiber.Ctx, err error) error {
+	if err == nil {
+		return nil
 	}
 
-	return sendWithCategory(c, code, category, status, msg, requestID)
+	payload := ClassifyError(c.Context(), err)
+	LogError(c, err, payload)
+	return c.Status(payload.Status).JSON(payload)
 }
 
 func Reject(c fiber.Ctx, status int, msg string) error {

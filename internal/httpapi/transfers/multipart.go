@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
@@ -55,7 +54,11 @@ func handleInternalMultipartInitFiber(objectService *objectrecords.Service, tran
 			multipartKey string
 		)
 		if objects.LooksLikeSHA256(key) {
-			if existing, err := objectService.GetObjectsByChecksum(c.Context(), key, "read"); err == nil && len(existing) > 0 {
+			existing, err := objectService.GetObjectsByChecksum(c.Context(), key, "read")
+			if err != nil {
+				return middleware.HandleError(c, err)
+			}
+			if len(existing) > 0 {
 				obj := &existing[0]
 				internalID = string(obj.Id)
 				target, err := transferService.ResolveCanonicalStorageTarget(c.Context(), domaintransfers.CanonicalStorageTargetRequest{
@@ -108,9 +111,6 @@ func handleInternalMultipartUploadFiber(lifecycle *domaintransfers.MultipartLife
 		}
 
 		urlStr, err := lifecycle.SignPart(c.Context(), req.UploadId, req.PartNumber)
-		if errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
-			return middleware.Reject(c, fiber.StatusNotFound, "Upload ID not found")
-		}
 		if err != nil {
 			return middleware.HandleError(c, err)
 		}
@@ -132,9 +132,7 @@ func handleInternalMultipartCompleteFiber(lifecycle *domaintransfers.MultipartLi
 		for i, p := range req.Parts {
 			parts[i] = storage.CompletedPart{ETag: p.ETag, PartNumber: p.PartNumber}
 		}
-		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
-			return middleware.Reject(c, fiber.StatusNotFound, "Upload ID not found")
-		} else if err != nil {
+		if err := lifecycle.Complete(c.Context(), req.UploadId, parts); err != nil {
 			return middleware.HandleError(c, err)
 		}
 		return c.SendStatus(fiber.StatusOK)

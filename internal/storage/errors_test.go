@@ -16,3 +16,14 @@ func TestOperationErrorExposesExactCodeAndBroadCategory(t *testing.T) {
 		t.Fatal("storage not-found must match the broad not-found sentinel")
 	}
 }
+
+func TestOperationErrorPublicMessageOmitsCause(t *testing.T) {
+	err := &OperationError{Kind: ErrorInvalid, Provider: "s3", Capability: "sign", Cause: errors.New("private provider detail")}
+	public := err.PublicMessage()
+	if public != "storage request is invalid" {
+		t.Fatalf("PublicMessage() = %q", public)
+	}
+	if err.Error() == public {
+		t.Fatal("test setup did not retain a private cause")
+	}
+}

@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -104,5 +105,5 @@ func (s *Service) GetS3Credential(ctx context.Context, bucket string) (*Credenti
 }
 
 func isCredentialNotFoundError(err error) bool {
-	return errorapi.IsNotFoundError(err) || strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
+	return err != nil && errors.Is(err, errorapi.ErrStorageCredentialMissing)
 }

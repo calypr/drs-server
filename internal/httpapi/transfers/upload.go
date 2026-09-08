@@ -196,25 +196,14 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 		for _, item := range req.Requests {
 			res := internalapi.InternalUploadBulkResult{FileId: item.FileId, Key: item.Key}
 			if item.FileId == "" {
-				errMsg := "FileId is required"
-				res.Error = &errMsg
-				res.Status = http.StatusBadRequest
+				setBulkUploadError(c, &res, errorapi.Define(errorapi.ErrorCodeInvalidInput, errorapi.ErrorCategoryInvalidInput, "FileId is required"))
 				results = append(results, res)
 				continue
 			}
 
 			obj, err := objectService.GetObject(c.Context(), item.FileId, "update")
 			if err != nil {
-				errMsg := err.Error()
-				res.Error = &errMsg
-				switch {
-				case errors.Is(err, errorapi.ErrAccessDenied):
-					res.Status = http.StatusForbidden
-				case errors.Is(err, errorapi.ErrNotFound):
-					res.Status = http.StatusNotFound
-				default:
-					res.Status = http.StatusInternalServerError
-				}
+				setBulkUploadError(c, &res, err)
 				results = append(results, res)
 				continue
 			}
@@ -225,9 +214,7 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 				PreferChecksum: true,
 			})
 			if err != nil {
-				errMsg := err.Error()
-				res.Error = &errMsg
-				res.Status = http.StatusBadRequest
+				setBulkUploadError(c, &res, err)
 				results = append(results, res)
 				continue
 			}
@@ -238,17 +225,13 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 			}
 			signedURL, err := transferService.SignURL(c.Context(), target.URL, storage.AccessOptions{Method: http.MethodPut})
 			if err != nil {
-				errMsg := err.Error()
-				res.Error = &errMsg
-				res.Status = http.StatusInternalServerError
+				setBulkUploadError(c, &res, err)
 			} else if err := transferService.RecordAccessIssued(c.Context(), domaintransfers.AccessRequest{
 				Object:     obj,
 				Direction:  usage.ProviderTransferDirectionUpload,
 				StorageURL: target.URL,
 			}); err != nil {
-				errMsg := err.Error()
-				res.Error = &errMsg
-				res.Status = http.StatusInternalServerError
+				setBulkUploadError(c, &res, err)
 			} else {
 				res.Url = &signedURL
 				res.Bucket = &bucket
@@ -267,4 +250,11 @@ func handleInternalUploadBulkFiber(objectService *objectrecords.Service, transfe
 		}
 		return c.Status(status).JSON(internalapi.InternalUploadBulkOutput{Results: &results})
 	}
+}
+
+func setBulkUploadError(c fiber.Ctx, result *internalapi.InternalUploadBulkResult, err error) {
+	payload := apimiddleware.ClassifyError(c.Context(), err)
+	apimiddleware.LogError(c, err, payload)
+	result.Error = &payload.Message
+	result.Status = int32(payload.Status)
 }

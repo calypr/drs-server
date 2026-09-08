@@ -59,6 +59,12 @@ func (s *LFSServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequest
 	hashAlgorithm := "sha256"
 	for _, input := range req.Objects {
 		objectResponse := lfsapi.BatchResponseObject{Oid: input.Oid, Size: input.Size}
+		if input.Size < 0 {
+			objectResponse.Size = 0
+			objectResponse.Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "size must be non-negative"}
+			responseObjects = append(responseObjects, objectResponse)
+			continue
+		}
 		oid := clienthash.NormalizeOid(input.Oid)
 		if oid == "" {
 			objectResponse.Error = &lfsapi.ObjectError{Code: int32(http.StatusBadRequest), Message: "invalid oid"}
@@ -103,6 +109,9 @@ func (s *LFSServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 	if oid == "" {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "invalid oid"}, nil
 	}
+	if request.Body.Size < 0 {
+		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "size must be non-negative"}, nil
+	}
 
 	if err := s.metadataWorkflow.Verify(ctx, oid); err != nil {
 		var candidateErr *transferlfs.MetadataCandidateError
@@ -126,6 +135,11 @@ func (s *LFSServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 	}
 	if input == nil || len(input.Candidates) == 0 {
 		return lfsapi.LfsStageMetadata400JSONResponse{Message: "candidates cannot be empty"}, nil
+	}
+	for index, candidate := range input.Candidates {
+		if candidate.Size != nil && *candidate.Size < 0 {
+			return lfsapi.LfsStageMetadata400JSONResponse{Message: fmt.Sprintf("candidate[%d] size must be non-negative", index)}, nil
+		}
 	}
 
 	candidates := make([]objects.Candidate, 0, len(input.Candidates))

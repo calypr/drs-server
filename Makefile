@@ -111,6 +111,10 @@ gen-api:
 test:
 	CGO_ENABLED=1 GOCACHE="$(GOCACHE)" go test -count=1 ./... ./client/... ./apigen/...
 
+.PHONY: test-modules
+test-modules:
+	./scripts/check-independent-modules.sh
+
 .PHONY: test-unit
 test-unit:
 	@PKGS=$$(go list ./... ./client/... ./apigen/... | grep -Ev '/cmd/server$$|/tests/endpoints$$'); \

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func TestNewServiceRequiresTheCompletePolicyGraph(t *testing.T) {
@@ -121,8 +123,8 @@ func TestGetS3CredentialPreservesExactSuccessAndAbsentError(t *testing.T) {
 	}
 
 	got, err = service.GetS3Credential(context.Background(), "missing")
-	if got != nil || err == nil || err.Error() != "credential not found" {
-		t.Fatalf("absent GetS3Credential()=(%+v,%v), want credential not found", got, err)
+	if got != nil || !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		t.Fatalf("absent GetS3Credential()=(%+v,%v), want credential missing", got, err)
 	}
 }
 
@@ -145,6 +147,28 @@ func TestGetS3CredentialReturnsMeaningfulListErrorAfterExactMiss(t *testing.T) {
 	}
 	if credentials.getCalls != 1 || credentials.listCalls != 1 {
 		t.Fatalf("lookup calls get=%d list=%d, want get=1 list=1", credentials.getCalls, credentials.listCalls)
+	}
+}
+
+func TestGetS3CredentialDoesNotTreatLegacyTextAsMissing(t *testing.T) {
+	lookupErr := errors.New("credential not found")
+	credentials := &fakeCredentialStore{getErr: lookupErr}
+	service, err := NewService(Dependencies{
+		Credentials:     credentials,
+		CredentialAdmin: credentials,
+		Scopes:          &fakeScopeStore{},
+		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	got, err := service.GetS3Credential(context.Background(), "missing")
+	if got != nil || !errors.Is(err, lookupErr) {
+		t.Fatalf("GetS3Credential()=(%+v,%v), want lookup error %v", got, err, lookupErr)
+	}
+	if credentials.listCalls != 0 {
+		t.Fatalf("legacy text error should not trigger alias fallback, list calls=%d", credentials.listCalls)
 	}
 }
 

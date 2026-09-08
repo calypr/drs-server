@@ -216,9 +216,21 @@ const (
 type Error struct {
 	Kind    ErrorKind
 	Message string
+	Cause   error
 }
 
 func (e *Error) Error() string {
+	if e == nil {
+		return "project storage operation failed"
+	}
+	message := e.PublicMessage()
+	if e.Cause != nil {
+		return message + ": " + e.Cause.Error()
+	}
+	return message
+}
+
+func (e *Error) PublicMessage() string {
 	if e == nil {
 		return "project storage operation failed"
 	}
@@ -226,6 +238,13 @@ func (e *Error) Error() string {
 		return e.Message
 	}
 	return string(e.Kind)
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }
 
 func (e *Error) ErrorCode() errorapi.ErrorCode {

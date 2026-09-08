@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -104,6 +105,9 @@ func handleInternalPutBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Serv
 	}
 	if existingCred == nil {
 		existingCred, credErr = bucketService.GetS3Credential(c.Context(), credentialID)
+		if credErr != nil && !isCredentialNotFoundError(credErr) {
+			return apimiddleware.HandleError(c, credErr)
+		}
 	}
 	hasExistingCred := credErr == nil && existingCred != nil
 	if hasExistingCred && rawProvider == "" {
@@ -168,7 +172,7 @@ func handleInternalPutBucketFiber(c fiber.Ctx, bucketService *domainbuckets.Serv
 }
 
 func isCredentialNotFoundError(err error) bool {
-	return err != nil && strings.EqualFold(strings.TrimSpace(err.Error()), "credential not found")
+	return err != nil && errors.Is(err, errorapi.ErrStorageCredentialMissing)
 }
 
 func authorizeBucketDelete(ctx context.Context, bucketService *domainbuckets.Service, bucket string) error {

@@ -157,7 +157,7 @@ func WriteLFSError(c fiber.Ctx, status int, message string, challenge bool) erro
 	}
 	documentationURL := "https://github.com/git-lfs/git-lfs/blob/main/docs/api"
 	payload.DocumentationUrl = &documentationURL
-	return c.Status(status).JSON(payload)
+	return c.Status(status).JSON(payload, "application/vnd.git-lfs+json")
 }
 
 // ValidateLFSRequestHeaders validates the media contract for a strict LFS

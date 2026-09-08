@@ -13,17 +13,25 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/calypr/syfon/apigen/bucketapi"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/requestid"
 )
 
 type recordingBucketCredentialStore struct {
-	events *[]string
+	events  *[]string
+	getErrs []error
 }
 
 func (s *recordingBucketCredentialStore) GetS3Credential(_ context.Context, bucket string) (*buckets.Credential, error) {
 	*s.events = append(*s.events, "get:"+bucket)
-	return nil, errors.New("credential not found")
+	if len(s.getErrs) > 0 {
+		err := s.getErrs[0]
+		s.getErrs = s.getErrs[1:]
+		return nil, err
+	}
+	return nil, errorapi.ErrStorageCredentialMissing
 }
 
 func (s *recordingBucketCredentialStore) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
@@ -116,6 +124,62 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 	}
 	if scopeIndex == -1 || saveIndex == -1 || scopeIndex >= saveIndex {
 		t.Fatalf("expected scope creation before credential save, events=%v", events)
+	}
+}
+
+func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testing.T) {
+	dbErr := errors.New("database unavailable")
+	events := []string{}
+	credentials := &recordingBucketCredentialStore{
+		events:  &events,
+		getErrs: []error{errorapi.ErrStorageCredentialMissing, dbErr},
+	}
+	scopes := &recordingBucketScopeStore{events: &events}
+	bucketService, err := buckets.NewService(buckets.Dependencies{
+		Credentials:     credentials,
+		CredentialAdmin: credentials,
+		Scopes:          scopes,
+		Fallback: func(context.Context) ([]buckets.VisibilityRow, error) {
+			return nil, nil
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("construct bucket service: %v", err)
+	}
+
+	provider := "file"
+	body, err := json.Marshal(bucketapi.PutBucketRequest{Bucket: "bucket-db-error", Provider: &provider})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/data/buckets", bytes.NewReader(body))
+	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", true, nil))
+	req = req.WithContext(requestid.WithRequestID(req.Context(), "request-derived-lookup"))
+
+	app := fiber.New()
+	app.Put("/data/buckets", func(c fiber.Ctx) error {
+		c.SetContext(requestid.WithRequestID(c.Context(), "request-derived-lookup"))
+		return handleInternalPutBucketFiber(c, bucketService)
+	})
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500 for derived credential lookup failure, got %d", resp.StatusCode)
+	}
+	var response errorapi.APIError
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != errorapi.ErrorCodeInternalError || response.Category != errorapi.ErrorCategoryInternalError || response.Status != http.StatusInternalServerError || response.Message != http.StatusText(http.StatusInternalServerError) || response.RequestId == nil || *response.RequestId != "request-derived-lookup" {
+		t.Fatalf("unexpected error response: %+v", response)
+	}
+	for _, event := range events {
+		if event == "save" || event == "scope" {
+			t.Fatalf("derived lookup failure caused side effect %q, events=%v", event, events)
+		}
 	}
 }
 
