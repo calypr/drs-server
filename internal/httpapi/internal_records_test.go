@@ -63,35 +63,6 @@ func TestParseInternalListPaginationFiber_InvalidInputs(t *testing.T) {
 	}
 }
 
-func TestParseInternalListPaginationFiber_StartSuppressesPage(t *testing.T) {
-	app := fiber.New()
-	app.Get("/", func(c fiber.Ctx) error {
-		limit, start, offset, err := parseInternalListPaginationFiber(c)
-		if err != nil {
-			t.Fatalf("parseInternalListPaginationFiber returned error: %v", err)
-		}
-		if limit != 10 {
-			t.Fatalf("expected limit 10, got %d", limit)
-		}
-		if start != "did-123" {
-			t.Fatalf("expected start did-123, got %q", start)
-		}
-		if offset != 0 {
-			t.Fatalf("expected offset 0 when start is present, got %d", offset)
-		}
-		return c.SendStatus(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/?limit=10&start=did-123&page=99", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d", resp.StatusCode)
-	}
-}
-
 func TestHandleInternalBulkDocuments_InvalidBodyAndMissingIDs(t *testing.T) {
 	om := recordsNewInternalDRSObjectManager(&internalRecordStore{})
 

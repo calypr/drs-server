@@ -1454,7 +1454,7 @@ func TestBulkUploadProviderFailuresRedactCauseAndKeepSuccess(t *testing.T) {
 				events = bulkEventFailure{failID: "never", err: errors.New("unused")}
 			}
 			objectService := objectrecords.NewService(reader)
-			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Storage: access, Scopes: scopes, Events: events})
+			transferService := domaintransfers.NewService(domaintransfers.Dependencies{Objects: objectService, Storage: access, Scopes: scopes, Events: events})
 			body := strings.NewReader(`{"requests":[{"file_id":"` + failID + `"},{"file_id":"success"}]}`)
 			rr := transfersDoInternalDRSTestRequest(httptest.NewRequest(http.MethodPost, "/data/upload/bulk", body), transfersInternalDRSTestFixture{ObjectService: objectService, TransferService: transferService})
 			var output internalapi.InternalUploadBulkOutput
