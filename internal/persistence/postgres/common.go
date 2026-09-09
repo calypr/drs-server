@@ -5,15 +5,7 @@ import (
 	"strings"
 
 	clientaccess "github.com/calypr/syfon/client/access"
-	"github.com/calypr/syfon/internal/objects"
 )
-
-func postgresStringVal(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
 
 // postgresScopeResourceCondition remains a dialect test helper. Shared Store
 // reads use the same question-mark form and let Dialect.Rebind apply $n.
@@ -61,11 +53,4 @@ func postgresRebindQuestionPlaceholders(query string, start int) string {
 		b.WriteRune(r)
 	}
 	return b.String()
-}
-
-func normalizeObjectNameAliases(obj *objects.Record) []string {
-	if obj == nil {
-		return nil
-	}
-	return objects.NormalizeNameAliases(postgresStringVal(obj.Name), obj.NameAliases)
 }

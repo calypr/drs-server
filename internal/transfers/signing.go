@@ -84,13 +84,6 @@ func (s *Service) SignObjectDownloadPart(ctx context.Context, obj *objects.Recor
 	return s.SignDownloadPart(ctx, bucket, resolved, start, end, options)
 }
 
-func resolveSigningBucket(accessURL string) string {
-	if bucket, _, ok := address.ParseS3URL(accessURL); ok {
-		return bucket
-	}
-	return ""
-}
-
 func targetFromURL(raw string) storage.Target {
 	parsed, _ := address.ParseLocation(raw)
 	return storage.Target{Provider: parsed.Provider, LookupKey: parsed.Bucket, PhysicalBucket: parsed.Bucket, Key: parsed.Key, Path: parsed.Path, OriginalURL: parsed.URL, CanonicalURL: parsed.URL, LookupCandidates: uniqueStrings(parsed.Bucket)}

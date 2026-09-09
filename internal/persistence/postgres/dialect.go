@@ -43,7 +43,7 @@ func (postgresDialect) BulkObjectCondition(ids, checksums, shaQueries, genericQu
 				  AND replace(lower(trim(c2.checksum)), 'sha256:', '') = ANY(%s))
 			OR EXISTS (SELECT 1 FROM drs_object_checksum c2
 				WHERE c2.object_id = o.id AND c2.checksum = ANY(%s))
-		))`, first, first, second, second, third, fourth), []any{pq.Array(ids), pq.Array(checksums), pq.Array(shaQueries), pq.Array(genericQueries)}
+		)))`, first, first, second, second, third, fourth), []any{pq.Array(ids), pq.Array(checksums), pq.Array(shaQueries), pq.Array(genericQueries)}
 }
 
 func (postgresDialect) ResourceFilter(column string, resources []string, includeUnscoped bool, start int) (string, []any) {

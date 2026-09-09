@@ -97,11 +97,7 @@ func (value ObjectResponse) MarshalJSON() ([]byte, error) {
 		Did         string    `json:"did,omitempty"`
 		NameAliases *[]string `json:"name_aliases,omitempty"`
 	}
-	encoded, err := json.Marshal(response{
-		DrsObject:   value.DrsObject,
-		Did:         value.Did,
-		NameAliases: value.NameAliases,
-	})
+	encoded, err := json.Marshal(response(value))
 	if err == nil {
 		return encoded, nil
 	}

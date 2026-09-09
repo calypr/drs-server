@@ -201,7 +201,7 @@ func TestPutPreservesCredentialReuseAndScopeBeforeCredentialOrder(t *testing.T) 
 }
 
 func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *testing.T) {
-	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
 	provider := "file"
 	endpoint := "/file-root"
 	if err := service.Put(context.Background(), PutRequest{Bucket: "new-bucket", Provider: &provider, Endpoint: &endpoint}); err != nil {
@@ -215,7 +215,7 @@ func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *test
 		t.Fatalf("saved credential=%+v, want derived ID %q and endpoint %q", *credentials.lastSaved, wantID, endpoint)
 	}
 
-	service, credentials, scopes = newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
 	scopes.createErr = errors.New("scope write failed")
 	if err := service.Put(context.Background(), PutRequest{Bucket: "blocked-bucket", Provider: &provider, Endpoint: &endpoint, Organization: "org"}); !errors.Is(err, scopes.createErr) {
 		t.Fatalf("Put scope error=%v, want %v", err, scopes.createErr)

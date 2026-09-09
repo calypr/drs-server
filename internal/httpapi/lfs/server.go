@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
-	generated "github.com/calypr/syfon/apigen/lfsapi"
 	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
@@ -19,7 +18,7 @@ import (
 // FromGeneratedCandidate converts the LFS metadata shape to the plain value
 // stored by the transfer workflow. The selected fields preserve the legacy
 // DRS candidate JSON written by the previous LFS adapter.
-func FromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidate {
+func FromGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidate {
 	aliases := append([]string(nil), stringSliceValue(value.Aliases)...)
 	explicitID := strings.TrimSpace(stringValue(value.Id))
 	if explicitID == "" {
@@ -69,7 +68,7 @@ func FromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidat
 	return out
 }
 
-func checksumValues(value *[]generated.Checksum) []generated.Checksum {
+func checksumValues(value *[]lfsapi.Checksum) []lfsapi.Checksum {
 	if value == nil {
 		return nil
 	}

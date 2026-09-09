@@ -12,7 +12,6 @@ import (
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	apimiddleware "github.com/calypr/syfon/internal/httpapi/middleware"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -20,8 +19,8 @@ import (
 
 func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.InternalDownloadParams) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
-	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+	if middleware.MissingGen3AuthHeader(c.Context()) {
+		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	expires := parseDownloadExpiry(c.Query("expires_in"))
 	result, err := s.transfers.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: expires, Accounting: domaintransfers.AccountingDownloadBeforeEvent})
@@ -36,20 +35,20 @@ func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.I
 
 func (s *internalServer) InternalDownloadPart(c fiber.Ctx, _ string, _ internalapi.InternalDownloadPartParams) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
-	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+	if middleware.MissingGen3AuthHeader(c.Context()) {
+		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	startStr, endStr := c.Query("start"), c.Query("end")
 	if startStr == "" || endStr == "" {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Missing 'start' or 'end' query parameter")
+		return middleware.Reject(c, fiber.StatusBadRequest, "Missing 'start' or 'end' query parameter")
 	}
 	start, err := strconv.ParseInt(startStr, 10, 64)
 	if err != nil || start < 0 {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid 'start' parameter")
+		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid 'start' parameter")
 	}
 	end, err := strconv.ParseInt(endStr, 10, 64)
 	if err != nil || end < start {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
+		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
 	}
 	result, err := s.transfers.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: time.Duration(config.DefaultSigningExpirySeconds) * time.Second, Range: &domaintransfers.ByteRange{Start: start, End: end}, Accounting: domaintransfers.AccountingEventOnly})
 	if err != nil {
@@ -69,9 +68,9 @@ func parseDownloadExpiry(raw string) time.Duration {
 
 func mapDownloadError(c fiber.Ctx, err error) error {
 	if errors.Is(err, errorapi.ErrObjectLocationUnavailable) {
-		return apimiddleware.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
+		return middleware.Reject(c, fiber.StatusNotFound, "No supported cloud location found for this file")
 	}
-	return apimiddleware.HandleError(c, err)
+	return middleware.HandleError(c, err)
 }
 
 func (s *internalServer) InternalMultipartInit(c fiber.Ctx) error {
@@ -120,12 +119,12 @@ func (s *internalServer) InternalMultipartComplete(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
-	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	if middleware.MissingGen3AuthHeader(c.Context()) {
+		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalUploadBlankRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	guid := ""
 	if req.Guid != nil {
@@ -138,15 +137,15 @@ func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
 	}
 	result, err := s.transfers.UploadURL(c.Context(), domaintransfers.UploadRequest{Organization: stringValue(req.Organization), Project: stringValue(req.Project), Key: guid})
 	if err != nil {
-		return apimiddleware.HandleError(c, err)
+		return middleware.HandleError(c, err)
 	}
 	bucket := result.Target.PhysicalBucket
 	return c.Status(fiber.StatusCreated).JSON(internalapi.InternalUploadBlankOutput{Url: &result.URL, Guid: &guid, Bucket: &bucket})
 }
 
 func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params internalapi.InternalUploadURLParams) error {
-	if apimiddleware.MissingGen3AuthHeader(c.Context()) {
-		return apimiddleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	if middleware.MissingGen3AuthHeader(c.Context()) {
+		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	request := domaintransfers.UploadRequest{ObjectID: c.Params("file_id"), Organization: stringValue(params.Organization), Project: stringValue(params.Project), Key: stringValue(params.Key), Scope: uploadScope(params.Organization, params.Project)}
 	if params.ExpiresIn != nil {
@@ -154,7 +153,7 @@ func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params interna
 	}
 	result, err := s.transfers.UploadURL(c.Context(), request)
 	if err != nil {
-		return apimiddleware.HandleError(c, err)
+		return middleware.HandleError(c, err)
 	}
 	return c.JSON(internalapi.InternalSignedURL{Url: &result.URL})
 }
@@ -162,7 +161,7 @@ func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params interna
 func (s *internalServer) InternalUploadBulk(c fiber.Ctx) error {
 	var req internalapi.InternalUploadBulkRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		return apimiddleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if len(req.Requests) == 0 {
 		empty := []internalapi.InternalUploadBulkResult{}
@@ -214,8 +213,8 @@ func uploadScope(organization, project *string) *domaintransfers.AccessScope {
 }
 
 func setBulkUploadError(c fiber.Ctx, result *internalapi.InternalUploadBulkResult, err error) {
-	payload := apimiddleware.ClassifyError(c.Context(), err)
-	apimiddleware.LogError(c, err, payload)
+	payload := middleware.ClassifyError(c.Context(), err)
+	middleware.LogError(c, err, payload)
 	result.Error = &payload.Message
 	result.Status = int32(payload.Status)
 }

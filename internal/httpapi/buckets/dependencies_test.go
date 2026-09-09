@@ -224,8 +224,7 @@ var _ domainbuckets.ScopeStore = (*bucketTestStore)(nil)
 var _ objectrecords.ObjectStore = (*bucketTestStore)(nil)
 
 var (
-	errBucketVisibilityScopeQuery   = errors.New("bucket visibility fallback requires an object scope query")
-	errBucketVisibilityRecordReader = errors.New("bucket visibility fallback requires an object record reader")
+	errBucketVisibilityScopeQuery = errors.New("bucket visibility fallback requires an object scope query")
 )
 
 func newBucketVisibilityFallback(store objectrecords.ObjectStore) domainbuckets.VisibilityFallback {
