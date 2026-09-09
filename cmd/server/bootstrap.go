@@ -129,7 +129,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		return nil, fmt.Errorf("failed to load configured bucket scopes: %w", err)
 	}
 
-	objectService := objects.NewService(backend.objectStore)
+	objectService := objects.NewService(backend.objectStore, bucketService)
 	usageService := usage.NewService(usage.Dependencies{
 		Reports: backend.usageReports,
 		Objects: objectService,
@@ -146,11 +146,10 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
 		Catalog: projectStorageCatalog{
-			CredentialReader:    bucketService,
-			VisibilityReader:    bucketService,
-			PhysicalScopeReader: objectService,
-			ObjectScopeDeleter:  objectService,
-			ScopeCatalog:        bucketService,
+			CredentialReader:   bucketService,
+			VisibilityReader:   bucketService,
+			ObjectScopeDeleter: objectService,
+			ScopeCatalog:       bucketService,
 		},
 		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})

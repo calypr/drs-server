@@ -202,7 +202,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 	oid := strings.Repeat("d", 64)
 	newTransferService := func(ports *lfsTestServicePorts, storageFake *lfsTestStorage) *transfers.Service {
 		return transfers.NewService(transfers.Dependencies{
-			Objects:     objects.NewService(ports),
+			Objects:     objects.NewService(ports, nil),
 			Storage:     storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
 			Credentials: ports,

@@ -31,7 +31,6 @@ type Inspector struct {
 	visibility  VisibilityReader
 	inventory   InventoryPort
 	probe       ProbePort
-	physical    PhysicalScopeReader
 }
 
 type ProjectCleanup struct {
@@ -53,7 +52,6 @@ func NewService(deps Dependencies) *Service {
 		visibility:  deps.Catalog,
 		inventory:   deps.Providers.Inventory,
 		probe:       deps.Providers.Probe,
-		physical:    deps.Catalog,
 	}
 	return &Service{
 		Inspector: inspector,
@@ -99,14 +97,6 @@ func (s *Inspector) InspectProjectStorage(ctx context.Context, organization, pro
 		normalized = []StorageObject{}
 	}
 	return &InspectionResult{Summary: summary, Items: normalized}, nil
-}
-
-func (s *Inspector) ResolvePathPrefix(ctx context.Context, organization, project, requestPrefix string) (string, error) {
-	target, err := s.resolveScope(withRequestCache(ctx), organization, project, readMethod)
-	if err != nil {
-		return "", err
-	}
-	return strings.Trim(strings.TrimSpace(target.withPathPrefix(requestPrefix).Prefix), "/"), nil
 }
 
 func (s *Inspector) inventoryObjects(ctx context.Context, bucket, prefix string, options InventoryOptions) ([]StorageObject, error) {

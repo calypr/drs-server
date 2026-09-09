@@ -451,6 +451,127 @@ func TestPrepareScopedObjects_HydratesOnlyMissingSiblingIDs(t *testing.T) {
 	}
 }
 
+type projectRecordAuditStore struct {
+	objects.ObjectStore
+	records []objects.Record
+	events  *[]string
+}
+
+func (s *projectRecordAuditStore) ListObjectIDsByScope(context.Context, string, string) ([]string, error) {
+	if s.events != nil {
+		*s.events = append(*s.events, "list")
+	}
+	ids := make([]string, 0, len(s.records))
+	for _, record := range s.records {
+		ids = append(ids, string(record.Id))
+	}
+	return ids, nil
+}
+
+func (s *projectRecordAuditStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
+	byID := make(map[string]objects.Record, len(s.records))
+	for _, record := range s.records {
+		byID[string(record.Id)] = record
+	}
+	result := make([]objects.Record, 0, len(ids))
+	for _, id := range ids {
+		if record, ok := byID[id]; ok {
+			result = append(result, record)
+		}
+	}
+	return result, nil
+}
+
+type projectRecordAuditPrefixResolver struct {
+	resolved string
+	events   *[]string
+}
+
+func (r projectRecordAuditPrefixResolver) ResolvePathPrefix(context.Context, string, string, string) (string, error) {
+	if r.events != nil {
+		*r.events = append(*r.events, "resolve")
+	}
+	return r.resolved, nil
+}
+
+func TestAuditProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *testing.T) {
+	first := objects.Record{
+		Id:        "one",
+		Checksums: []objects.Checksum{{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		AccessMethods: &[]objects.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
+		}},
+	}
+	duplicate := first
+	duplicate.Id = "two"
+	falsePrefix := objects.Record{
+		Id:        "three",
+		Checksums: []objects.Checksum{{Type: "sha256", Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+		AccessMethods: &[]objects.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIGURATION/file"},
+		}},
+	}
+	missingChecksum := objects.Record{Id: "four", AccessMethods: first.AccessMethods}
+	events := []string{}
+	service := objects.NewService(
+		&projectRecordAuditStore{records: []objects.Record{first, duplicate, falsePrefix, missingChecksum}, events: &events},
+		projectRecordAuditPrefixResolver{resolved: "prefix/project/CONFIG", events: &events},
+	)
+
+	result, err := service.AuditProjectRecords(context.Background(), objects.ProjectRecordAuditQuery{
+		Organization: " org ",
+		Project:      " project ",
+		PathPrefix:   " /CONFIG/ ",
+	})
+	if err != nil {
+		t.Fatalf("AuditProjectRecords() error = %v", err)
+	}
+	if len(result) != 2 || result[0].Id != "one" || result[1].Id != "two" {
+		t.Fatalf("audit records = %+v", result)
+	}
+	if len(*result[0].AccessMethods) != 1 || result[0].Checksums[0].Checksum != first.Checksums[0].Checksum {
+		t.Fatalf("audit record = %+v", result[0])
+	}
+	if len(events) != 2 || events[0] != "list" || events[1] != "resolve" {
+		t.Fatalf("audit operation order = %v, want list then resolve", events)
+	}
+}
+
+func TestAuditProjectRecordsSkipsPhysicalResolutionWithoutProjectRead(t *testing.T) {
+	projectResource := "/organization/org/project/project"
+	otherResource := "/organization/org/project/other"
+	record := objects.Record{
+		Id:               "visible-via-other",
+		ControlledAccess: &[]string{projectResource, otherResource},
+		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
+		AccessMethods: &[]objects.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
+		}},
+	}
+	events := []string{}
+	service := objects.NewService(
+		&projectRecordAuditStore{records: []objects.Record{record}, events: &events},
+		projectRecordAuditPrefixResolver{resolved: "prefix/project/CONFIG", events: &events},
+	)
+
+	result, err := service.AuditProjectRecords(
+		buildLocalAuthzContext(map[string]map[string]bool{otherResource: {"read": true}}),
+		objects.ProjectRecordAuditQuery{Organization: "org", Project: "project", PathPrefix: "CONFIG"},
+	)
+	if err != nil {
+		t.Fatalf("AuditProjectRecords() error = %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("audit records = %+v, want no records without project-scope read", result)
+	}
+	if len(events) != 1 || events[0] != "list" {
+		t.Fatalf("audit operation order = %v, want list only", events)
+	}
+}
+
 func drsISOTime(raw string) time.Time {
 	tm, err := time.Parse(time.RFC3339, raw)
 	if err != nil {

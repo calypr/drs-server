@@ -355,7 +355,7 @@ func TestServiceUpdateRecordMergesRecordState(t *testing.T) {
 		"/organization/org/project/proj": {"update": true},
 	}, true)
 	ctx := access.WithSession(context.Background(), session)
-	got, err := NewService(store).UpdateRecord(ctx, "new-id", Record{
+	got, err := NewService(store, nil).UpdateRecord(ctx, "new-id", Record{
 		Name:             &name,
 		Description:      &description,
 		ControlledAccess: &controlled,

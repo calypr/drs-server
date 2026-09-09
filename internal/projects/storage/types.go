@@ -1,12 +1,10 @@
 package storage
 
 import (
-	"context"
 	"errors"
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
 )
 
 // InspectionMode controls the amount of inventory returned by InspectProjectStorage.
@@ -62,33 +60,6 @@ type Summary struct {
 type InspectionResult struct {
 	Summary Summary
 	Items   []StorageObject
-}
-
-type PhysicalScopeReader interface {
-	ListPhysicalObjectsByScope(context.Context, string, string, string) ([]objects.Record, error)
-}
-
-type ProjectAccessMethod struct {
-	Type     string
-	AccessID string
-	URL      string
-	Headers  []string
-}
-
-// ProjectRecordAudit is the plain projection used by project-record
-// inspection. It intentionally retains physical duplicate rows and carries
-// time values until the HTTP adapter chooses its wire format.
-type ProjectRecordAudit struct {
-	ObjectID      string
-	Checksum      string
-	Organization  string
-	Project       string
-	Name          string
-	Size          int64
-	AccessURLs    []string
-	AccessMethods []ProjectAccessMethod
-	CreatedTime   time.Time
-	UpdatedTime   *time.Time
 }
 
 type ListValidationRequest struct {

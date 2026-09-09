@@ -8,6 +8,7 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
+	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -419,13 +420,20 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 	if organization == "" || project == "" {
 		return middleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 	}
-	objects, err := s.inspector.AuditProjectRecords(c.Context(), organization, project, strings.Trim(strings.TrimSpace(req.PathPrefix), "/"))
+	if s.objects == nil {
+		return middleware.HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnsupported, errorapi.ErrorCategoryInvalidInput, "object service is not configured"))
+	}
+	records, err := s.objects.AuditProjectRecords(c.Context(), objects.ProjectRecordAuditQuery{
+		Organization: organization,
+		Project:      project,
+		PathPrefix:   req.PathPrefix,
+	})
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	out := internalInspectProjectRecordsResponse{Items: make([]internalInspectProjectRecordItem, 0, len(objects))}
-	for _, obj := range objects {
-		out.Items = append(out.Items, projectRecordAuditItemFromProjectStorage(obj))
+	out := internalInspectProjectRecordsResponse{Items: make([]internalInspectProjectRecordItem, 0, len(records))}
+	for _, record := range records {
+		out.Items = append(out.Items, projectRecordAuditItemFromObjects(record, organization, project))
 	}
 	return c.JSON(out)
 }
@@ -593,25 +601,40 @@ func projectBucketInventoryResponseFromProjectStorage(result *projectstorage.Ins
 	return out
 }
 
-func projectRecordAuditItemFromProjectStorage(record projectstorage.ProjectRecordAudit) internalInspectProjectRecordItem {
-	accessMethods := make([]internalProjectAccessMethod, 0, len(record.AccessMethods))
-	for _, method := range record.AccessMethods {
-		accessMethods = append(accessMethods, internalProjectAccessMethod{
-			AccessID: method.AccessID,
-			Type:     method.Type,
-			URL:      method.URL,
-			Headers:  append([]string(nil), method.Headers...),
-		})
+func projectRecordAuditItemFromObjects(record objects.Record, organization, project string) internalInspectProjectRecordItem {
+	accessURLs := []string{}
+	accessMethods := []internalProjectAccessMethod{}
+	if record.AccessMethods != nil {
+		accessMethods = make([]internalProjectAccessMethod, 0, len(*record.AccessMethods))
+		for _, method := range *record.AccessMethods {
+			item := internalProjectAccessMethod{Type: strings.TrimSpace(method.Type)}
+			if method.AccessId != nil {
+				item.AccessID = strings.TrimSpace(*method.AccessId)
+			}
+			if method.AccessUrl != nil {
+				item.URL = strings.TrimSpace(method.AccessUrl.Url)
+				if item.URL != "" {
+					accessURLs = append(accessURLs, item.URL)
+				}
+				if method.AccessUrl.Headers != nil {
+					item.Headers = append([]string(nil), (*method.AccessUrl.Headers)...)
+				}
+			}
+			accessMethods = append(accessMethods, item)
+		}
 	}
+	checksum, _ := objects.CanonicalSHA256(record.Checksums)
 	item := internalInspectProjectRecordItem{
-		ObjectID:      record.ObjectID,
-		Name:          record.Name,
-		Checksum:      record.Checksum,
-		Organization:  record.Organization,
-		Project:       record.Project,
+		ObjectID:      string(record.Id),
+		Checksum:      checksum,
+		Organization:  organization,
+		Project:       project,
 		Size:          record.Size,
-		AccessURLs:    append([]string{}, record.AccessURLs...),
+		AccessURLs:    accessURLs,
 		AccessMethods: accessMethods,
+	}
+	if record.Name != nil {
+		item.Name = strings.TrimSpace(*record.Name)
 	}
 	if !record.CreatedTime.IsZero() {
 		item.CreatedTime = record.CreatedTime.Format(time.RFC3339Nano)

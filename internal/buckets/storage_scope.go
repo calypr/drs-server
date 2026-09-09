@@ -147,6 +147,24 @@ func (s *Service) ResolveStorageScope(ctx context.Context, organization, project
 	}, nil
 }
 
+// ResolvePathPrefix composes a request prefix with the configured physical
+// scope prefix. Authorization is intentionally handled by the caller before
+// this storage configuration lookup.
+func (s *Service) ResolvePathPrefix(ctx context.Context, organization, project, requestPrefix string) (string, error) {
+	scope, err := s.ResolveStorageScope(ctx, organization, project)
+	if err != nil {
+		return "", err
+	}
+	prefix := strings.Trim(strings.TrimSpace(requestPrefix), "/")
+	if prefix == "" {
+		return strings.Trim(strings.TrimSpace(scope.Prefix), "/"), nil
+	}
+	if scope.Prefix == "" {
+		return prefix, nil
+	}
+	return strings.Trim(strings.TrimSpace(scope.Prefix), "/") + "/" + prefix, nil
+}
+
 func normalizedStoragePrefixes(scopes []Scope) []string {
 	prefixes := make([]string, 0, len(scopes))
 	for _, scope := range scopes {

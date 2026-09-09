@@ -10,7 +10,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 )
 
@@ -93,10 +92,6 @@ func (f *fakeDelete) DeleteExact(_ context.Context, targets []storage.DeleteTarg
 	return nil
 }
 
-type fakePhysical struct {
-	records []objects.Record
-}
-
 type fakeCleanupObjects struct {
 	deleted []string
 	count   int
@@ -117,7 +112,6 @@ type fakeCleanupScopes struct {
 type testCatalog struct {
 	CredentialReader
 	VisibilityReader
-	PhysicalScopeReader
 	ObjectScopeDeleter
 	ScopeCatalog
 }
@@ -129,10 +123,6 @@ func (f *fakeCleanupScopes) ListBucketScopes(context.Context) ([]buckets.Scope, 
 func (f *fakeCleanupScopes) DeleteBucketScope(_ context.Context, organization, project, credential, prefix string) error {
 	f.deleted = append(f.deleted, strings.Join([]string{organization, project, credential, prefix}, "/"))
 	return f.err
-}
-
-func (f fakePhysical) ListPhysicalObjectsByScope(context.Context, string, string, string) ([]objects.Record, error) {
-	return f.records, nil
 }
 
 func projectService(inventory *fakeInventory, deletePort DeletePort) (*Service, *fakeVisibility) {
@@ -265,22 +255,6 @@ func TestDeleteProjectObjectsPreservesPolicyOrderAndConflictSafety(t *testing.T)
 	}
 	if len(deletePort.locations) != 1 || deletePort.locations[0] != "s3://bucket/prefix/project/a" {
 		t.Fatalf("delete locations = %+v", deletePort.locations)
-	}
-}
-
-func TestAuditProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *testing.T) {
-	first := objects.Record{Id: "one", Checksums: []objects.Checksum{{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}, AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"}}}}
-	duplicate := first
-	duplicate.Id = "two"
-	falsePrefix := objects.Record{Id: "three", Checksums: []objects.Checksum{{Type: "sha256", Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}, AccessMethods: &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIGURATION/file"}}}}
-	service, _ := projectService(&fakeInventory{}, nil)
-	service.physical = fakePhysical{records: []objects.Record{first, duplicate, falsePrefix}}
-	result, err := service.AuditProjectRecords(context.Background(), "org", "project", "CONFIG")
-	if err != nil {
-		t.Fatalf("AuditProjectRecords() error = %v", err)
-	}
-	if len(result) != 2 || result[0].ObjectID != "one" || result[1].ObjectID != "two" {
-		t.Fatalf("audit records = %+v", result)
 	}
 }
 

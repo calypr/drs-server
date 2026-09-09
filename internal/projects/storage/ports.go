@@ -44,7 +44,6 @@ type ScopeCatalog interface {
 type Catalog interface {
 	CredentialReader
 	VisibilityReader
-	PhysicalScopeReader
 	ObjectScopeDeleter
 	ScopeCatalog
 }

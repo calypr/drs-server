@@ -230,7 +230,7 @@ var _ usage.FileCounterRecorder = (*lfsTestServicePorts)(nil)
 
 func newLFSTransferService(storageFake *lfsTestStorage, ports *lfsTestServicePorts) *transfers.Service {
 	return transfers.NewService(transfers.Dependencies{
-		Objects:      objects.NewService(ports),
+		Objects:      objects.NewService(ports, nil),
 		Storage:      storageFake,
 		Credentials:  ports,
 		Events:       ports,
@@ -298,7 +298,7 @@ func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStor
 }
 
 func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) *transferlfs.Service {
-	objectService := objects.NewService(ports)
+	objectService := objects.NewService(ports, nil)
 	lfsService := transferlfs.NewService(transferService, objectService, ports, ports, ports, storageFakeUploader(storageFake))
 	return lfsService
 }

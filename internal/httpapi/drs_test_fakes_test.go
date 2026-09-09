@@ -17,7 +17,7 @@ type testDRSServicesFixture struct {
 }
 
 func testDRSServices(store *drsObjectStore, storageAccess transfers.StoragePort) *testDRSServicesFixture {
-	objectService := objects.NewService(store)
+	objectService := objects.NewService(store, nil)
 	return &testDRSServicesFixture{
 		objectService: objectService,
 		transferService: transfers.NewService(transfers.Dependencies{

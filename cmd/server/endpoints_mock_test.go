@@ -193,7 +193,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
 	cfg := &config.Config{Routes: routes}
 	dependencies := mockServerDependencies(objectStore, bucketStore)
-	objectService := objects.NewService(dependencies.objects)
+	objectService := objects.NewService(dependencies.objects, nil)
 	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService,

@@ -16,7 +16,7 @@ import (
 )
 
 func newTestService(backend objects.ObjectStore) *objects.Service {
-	return objects.NewService(backend)
+	return objects.NewService(backend, nil)
 }
 
 func buildGen3Context(privileges map[string]map[string]bool) context.Context {

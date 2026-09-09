@@ -40,7 +40,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	}
 
 	newName := "new"
-	service := objects.NewService(db)
+	service := objects.NewService(db, nil)
 	result, err := service.BulkOverwriteObjects(context.Background(), "ci-overwrite", "project", []objects.Record{{
 		Id:               "ci-overwrite-source",
 		Name:             &newName,

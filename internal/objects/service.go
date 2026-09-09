@@ -14,12 +14,13 @@ const (
 
 // Service owns stateful object lookup and mutation operations.
 type Service struct {
-	store ObjectStore
-	now   func() time.Time
+	store    ObjectStore
+	resolver PathPrefixResolver
+	now      func() time.Time
 }
 
-func NewService(store ObjectStore) *Service {
-	return &Service{store: store, now: time.Now}
+func NewService(store ObjectStore, resolver PathPrefixResolver) *Service {
+	return &Service{store: store, resolver: resolver, now: time.Now}
 }
 
 // ObjectStore is the persistence capability required by Service.

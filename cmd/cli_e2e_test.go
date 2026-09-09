@@ -301,7 +301,6 @@ type cliFileStorageAccess struct {
 type cliProjectStorageCatalog struct {
 	projectstorage.CredentialReader
 	projectstorage.VisibilityReader
-	projectstorage.PhysicalScopeReader
 	projectstorage.ObjectScopeDeleter
 	projectstorage.ScopeCatalog
 }
@@ -377,7 +376,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
 	}
-	objectService := objects.NewService(database)
+	objectService := objects.NewService(database, bucketService)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService, Storage: cliFileStorageAccess{root: storageDir}, FileCounters: database,
@@ -400,11 +399,10 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
 		Catalog: cliProjectStorageCatalog{
-			CredentialReader:    bucketService,
-			VisibilityReader:    bucketService,
-			PhysicalScopeReader: objectService,
-			ObjectScopeDeleter:  objectService,
-			ScopeCatalog:        bucketService,
+			CredentialReader:   bucketService,
+			VisibilityReader:   bucketService,
+			ObjectScopeDeleter: objectService,
+			ScopeCatalog:       bucketService,
 		},
 		Providers: projectstorage.Providers{},
 	})
