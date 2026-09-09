@@ -26,6 +26,22 @@ const (
 	listFallbackObjectLimit = 5000
 )
 
+// InspectionMode controls the amount of inventory returned by
+// InspectProjectStorage.
+type InspectionMode string
+
+const (
+	ModeItems   InspectionMode = "items"
+	ModeExists  InspectionMode = "exists"
+	ModeSummary InspectionMode = "summary"
+)
+
+type InspectionOptions struct {
+	Mode        InspectionMode
+	IncludeHead bool
+	PathPrefix  string
+}
+
 type Service struct {
 	resolver       ScopeResolver
 	credentials    CredentialReader
@@ -62,7 +78,7 @@ func (s *Service) InspectProjectStorage(ctx context.Context, organization, proje
 	}
 	target = target.withPathPrefix(options.PathPrefix)
 	mode := normalizeMode(options.Mode)
-	listOptions := InventoryOptions{IncludeHead: options.IncludeHead}
+	listOptions := inventoryOptions{IncludeHead: options.IncludeHead}
 	if mode == ModeExists {
 		listOptions.MaxKeys = 1
 	}
@@ -90,7 +106,13 @@ func (s *Service) InspectProjectStorage(ctx context.Context, organization, proje
 	return &internalapi.InternalInspectProjectBucketResponse{Summary: &summary, Items: normalized}, nil
 }
 
-func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, options InventoryOptions) ([]internalapi.InternalInspectProjectBucketItem, error) {
+type inventoryOptions struct {
+	IncludeHead bool
+	ExactPrefix bool
+	MaxKeys     int32
+}
+
+func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, options inventoryOptions) ([]internalapi.InternalInspectProjectBucketItem, error) {
 	if s.inventory == nil {
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage inventory is not configured"}
 	}

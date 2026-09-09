@@ -13,6 +13,15 @@ import (
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
+type validationStatus string
+
+const (
+	validationNotRequested validationStatus = "not_requested"
+	validationMatched      validationStatus = "matched"
+	validationMismatched   validationStatus = "mismatched"
+	validationUnverifiable validationStatus = "unverifiable"
+)
+
 type validationWork struct {
 	bucket         string
 	key            string
@@ -172,7 +181,7 @@ func (s *Service) runCoalescedValidation(ctx context.Context, group []*validatio
 		requested[validationTargetKey(work.bucket, work.key)] = work
 	}
 	prefix := validationDirectoryPrefix(group[0].key)
-	items, err := s.inventoryObjects(ctx, group[0].bucket, prefix, InventoryOptions{ExactPrefix: true})
+	items, err := s.inventoryObjects(ctx, group[0].bucket, prefix, inventoryOptions{ExactPrefix: true})
 	if err != nil {
 		return
 	}
@@ -221,7 +230,7 @@ func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]
 			defer wg.Done()
 			for key := range workCh {
 				work := unresolved[key]
-				items, err := s.inventoryObjects(ctx, work.bucket, work.key, InventoryOptions{ExactPrefix: true, MaxKeys: 1})
+				items, err := s.inventoryObjects(ctx, work.bucket, work.key, inventoryOptions{ExactPrefix: true, MaxKeys: 1})
 				outcome := work.base
 				var present *internalapi.InternalInspectProjectBucketItem
 				if err != nil {

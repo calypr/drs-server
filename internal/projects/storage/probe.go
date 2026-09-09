@@ -15,6 +15,41 @@ import (
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
+type InspectRequest struct {
+	ID                string
+	Organization      string
+	Project           string
+	Key               string
+	Scheme            string
+	ObjectURL         string
+	ExpectedSizeBytes *int64
+	ExpectedSHA256    string
+	ExpectedName      string
+}
+
+type objectMetadata struct {
+	ObjectURL   string
+	Provider    string
+	Bucket      string
+	Key         string
+	Path        string
+	SizeBytes   int64
+	MetaSHA256  string
+	ETag        string
+	LastModTime time.Time
+}
+
+type probeStatus string
+
+const (
+	probePresent     probeStatus = "present"
+	probeNotFound    probeStatus = "not_found"
+	probeForbidden   probeStatus = "forbidden"
+	probeInvalid     probeStatus = "invalid"
+	probeUnsupported probeStatus = "unsupported"
+	probeError       probeStatus = "error"
+)
+
 const maxProbeWorkers = 8
 
 func (s *Service) ProbeObject(ctx context.Context, request InspectRequest) (*internalapi.InternalInspectObjectResponse, error) {
