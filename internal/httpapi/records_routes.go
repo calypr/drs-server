@@ -10,6 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/gofiber/fiber/v3"
@@ -177,7 +178,7 @@ func (s *internalServer) InternalDelete(c fiber.Ctx, _ string) error {
 }
 
 func (s *internalServer) InternalDeleteByQuery(c fiber.Ctx, _ internalapi.InternalDeleteByQueryParams) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	scope, err := scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
@@ -196,7 +197,7 @@ func (s *internalServer) InternalDeleteByQuery(c fiber.Ctx, _ internalapi.Intern
 }
 
 func (s *internalServer) InternalBulkDeleteHashes(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 

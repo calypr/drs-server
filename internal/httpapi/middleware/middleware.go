@@ -17,17 +17,12 @@ type Options struct {
 }
 
 type AuthzMiddleware struct {
-	logger    *slog.Logger
 	mode      string
 	evaluator access.Evaluator
 }
 
-func NewAuthzMiddleware(logger *slog.Logger, options Options) *AuthzMiddleware {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func NewAuthzMiddleware(_ *slog.Logger, options Options) *AuthzMiddleware {
 	return &AuthzMiddleware{
-		logger:    logger,
 		mode:      strings.ToLower(strings.TrimSpace(options.Mode)),
 		evaluator: options.Evaluator,
 	}

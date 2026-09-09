@@ -7,6 +7,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
@@ -22,7 +23,7 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 	if organization == "" || projectID == "" {
 		return middleware.Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
 	}
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	result, err := s.projectStorage.DeleteProjectDataAuthorized(c.Context(), organization, projectID)
@@ -34,7 +35,7 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 }
 
 func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.ScopeRepairOptions
@@ -55,7 +56,7 @@ func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.ScopeRepairOptions
@@ -76,7 +77,7 @@ func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectObjectRequest
@@ -100,7 +101,7 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectObjectsBulkRequest
@@ -130,7 +131,7 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 
 func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	started := time.Now()
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectObjectsBulkRequest
@@ -157,7 +158,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 
 func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 	started := time.Now()
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectProjectBucketRequest
@@ -190,7 +191,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 
 func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) error {
 	started := time.Now()
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectProjectBucketRequest
@@ -221,7 +222,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 }
 
 func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectProjectRecordsRequest
@@ -252,7 +253,7 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalInspectProjectScopes(c fiber.Ctx, _ internalapi.InternalInspectProjectScopesParams) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalInspectProjectScopesRequest
@@ -292,7 +293,7 @@ func (s *internalServer) InternalInspectProjectScopesPost(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalDeleteProjectBucketObjectsRequest

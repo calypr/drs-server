@@ -10,6 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
@@ -19,7 +20,7 @@ import (
 
 func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.InternalDownloadParams) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	expires := time.Duration(config.DefaultSigningExpirySeconds) * time.Second
@@ -40,7 +41,7 @@ func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.I
 
 func (s *internalServer) InternalDownloadPart(c fiber.Ctx, _ string, _ internalapi.InternalDownloadPartParams) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	startStr, endStr := c.Query("start"), c.Query("end")
@@ -115,7 +116,7 @@ func (s *internalServer) InternalMultipartComplete(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalapi.InternalUploadBlankRequest
@@ -140,7 +141,7 @@ func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params internalapi.InternalUploadURLParams) error {
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	request := domaintransfers.UploadRequest{ObjectID: c.Params("file_id"), Organization: stringValue(params.Organization), Project: stringValue(params.Project), Key: stringValue(params.Key), Scope: uploadScope(params.Organization, params.Project)}

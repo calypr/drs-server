@@ -77,6 +77,27 @@ func TestAuthHeaderAndMode(t *testing.T) {
 	}
 }
 
+func TestMissingGen3AuthHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		ctx    context.Context
+		misses bool
+	}{
+		{name: "empty context", ctx: context.Background()},
+		{name: "local mode without header", ctx: testSessionContext("local", false, true, nil, nil)},
+		{name: "gen3 mode without header", ctx: testSessionContext("gen3", false, true, nil, nil), misses: true},
+		{name: "gen3 mode with header", ctx: testSessionContext("gen3", true, true, nil, nil)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MissingGen3AuthHeader(tc.ctx); got != tc.misses {
+				t.Fatalf("expected missing header=%v, got %v", tc.misses, got)
+			}
+		})
+	}
+}
+
 func TestGetUserPrivileges(t *testing.T) {
 	t.Run("missing key returns empty map", func(t *testing.T) {
 		got := GetUserPrivileges(context.Background())

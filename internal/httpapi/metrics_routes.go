@@ -59,7 +59,7 @@ func (s *metricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool
 	if err != nil {
 		return metricsAccess{}, http.StatusBadRequest, false
 	}
-	if access.IsAuthzEnforced(ctx) && middleware.MissingGen3AuthHeader(ctx) {
+	if access.IsAuthzEnforced(ctx) && access.MissingGen3AuthHeader(ctx) {
 		return metricsAccess{}, http.StatusUnauthorized, false
 	}
 	scope, err := usage.ResolveMetricsScope(ctx, usage.ScopeSelection{
@@ -369,7 +369,7 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 	if !access.IsGen3Mode(ctx) {
 		return 0, true
 	}
-	if middleware.MissingGen3AuthHeader(ctx) {
+	if access.MissingGen3AuthHeader(ctx) {
 		return http.StatusUnauthorized, false
 	}
 	if body == nil || len(body.Events) == 0 {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	generated "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
@@ -86,7 +87,7 @@ func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 
 func (s *drsServer) PostUploadRequest(c fiber.Ctx) error {
 	const uploadRequestRoutingError = "upload-request requires explicit upload routing; default bucket selection is disabled"
-	if middleware.MissingGen3AuthHeader(c.Context()) {
+	if access.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 

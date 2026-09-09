@@ -41,6 +41,10 @@ func HasAuthHeader(ctx context.Context) bool {
 	return FromContext(ctx).AuthHeaderPresent
 }
 
+func MissingGen3AuthHeader(ctx context.Context) bool {
+	return IsGen3Mode(ctx) && !HasAuthHeader(ctx)
+}
+
 func IsGen3Mode(ctx context.Context) bool {
 	return FromContext(ctx).Mode == "gen3"
 }
