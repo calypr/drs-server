@@ -187,7 +187,10 @@ func (s *internalServer) InternalUploadBulk(c fiber.Ctx) error {
 			out[i].Bucket = &bucket
 		}
 		if result.Err != nil {
-			setBulkUploadError(c, &out[i], result.Err)
+			payload := middleware.ClassifyError(c.Context(), result.Err)
+			middleware.LogError(c, result.Err, payload)
+			out[i].Error = &payload.Message
+			out[i].Status = int32(payload.Status)
 			status = fiber.StatusMultiStatus
 		}
 	}
@@ -206,11 +209,4 @@ func uploadScope(organization, project *string) *domaintransfers.AccessScope {
 		return nil
 	}
 	return &domaintransfers.AccessScope{Organization: stringValue(organization), Project: stringValue(project)}
-}
-
-func setBulkUploadError(c fiber.Ctx, result *internalapi.InternalUploadBulkResult, err error) {
-	payload := middleware.ClassifyError(c.Context(), err)
-	middleware.LogError(c, err, payload)
-	result.Error = &payload.Message
-	result.Status = int32(payload.Status)
 }

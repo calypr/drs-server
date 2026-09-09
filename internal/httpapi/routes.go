@@ -45,6 +45,23 @@ type Options struct {
 	LFSProtocol lfs.Options
 }
 
+type internalServer struct {
+	objects   *objects.Service
+	transfers *transfers.Service
+	inspector *projectstorage.Inspector
+	cleanup   *projectstorage.ProjectCleanup
+	buckets   *buckets.Service
+	repair    *scoperepair.Service
+}
+
+var _ internalapi.ServerInterface = (*internalServer)(nil)
+
+func projectCleanupHandler(server *internalServer) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		return server.InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
+	}
+}
+
 func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	app.Get(RouteHealthz, func(c fiber.Ctx) error {
 		return c.SendString("OK")

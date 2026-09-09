@@ -76,20 +76,6 @@ type Service struct {
 	multipartSessions map[string]*multipartSession
 }
 
-// BindLegacyDependencies keeps older HTTP fixture composition executable while
-// callers migrate to Dependencies.Objects/FileCounters.
-func (s *Service) BindLegacyDependencies(objects ObjectPort, counters usage.FileCounterRecorder) {
-	if s == nil {
-		return
-	}
-	if s.objects == nil {
-		s.objects = objects
-	}
-	if s.fileCounters == nil {
-		s.fileCounters = counters
-	}
-}
-
 func NewService(deps Dependencies) *Service {
 	now := deps.Now
 	if now == nil {

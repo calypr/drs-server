@@ -11,7 +11,6 @@ import (
 )
 
 func (s *server) GetAccessURL(c fiber.Ctx, objectID generated.ObjectId, accessID generated.AccessId) error {
-	s.accessService.BindLegacyDependencies(s.objectService, nil)
 	result, err := s.accessService.IssueAccess(c.Context(), transfers.AccessLookupRequest{ObjectID: string(objectID), AccessID: string(accessID)})
 	if err != nil {
 		return middleware.HandleError(c, err)
@@ -27,7 +26,6 @@ func (s *server) PostAccessURL(c fiber.Ctx, objectID generated.ObjectId, accessI
 }
 
 func (s *server) GetBulkAccessURL(c fiber.Ctx) error {
-	s.accessService.BindLegacyDependencies(s.objectService, nil)
 	var body generated.BulkObjectAccessId
 	if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")

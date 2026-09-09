@@ -17,8 +17,8 @@ func RegisterSwaggerRoutes(router fiber.Router) {
 	router.Get(RouteSwaggerUI, handleSwaggerUI)
 	router.Get(RouteSwaggerUIAlt, handleSwaggerUI)
 	router.Get(RouteOpenAPISpec, handleOpenAPISpec)
-	router.Get(RouteLFSSpec, handleLFSOpenAPISpec)
-	router.Get(RouteBucketSpec, handleBucketOpenAPISpec)
-	router.Get(RouteInternalSpec, handleInternalOpenAPISpec)
-	router.Get(RouteErrorSpec, handleErrorOpenAPISpec)
+	router.Get(RouteLFSSpec, handleNamedOpenAPISpec("lfs.openapi.yaml", "LFS"))
+	router.Get(RouteBucketSpec, handleNamedOpenAPISpec("bucket.openapi.yaml", "Bucket"))
+	router.Get(RouteInternalSpec, handleNamedOpenAPISpec("internal.openapi.yaml", "Internal"))
+	router.Get(RouteErrorSpec, handleNamedOpenAPISpec("error.openapi.yaml", "Error"))
 }

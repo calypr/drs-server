@@ -57,18 +57,6 @@ func TestRetiredHTTPPackagesAreAbsent(t *testing.T) {
 			t.Errorf("retired HTTP package contains production file %s", file)
 		}
 	}
-	for _, required := range []string{
-		"internal_decode.go",
-		"internal_maintenance.go",
-		"internal_projection.go",
-		"internal_records.go",
-		"internal_routes.go",
-		"internal_transfers.go",
-	} {
-		if _, err := os.Stat(required); err != nil {
-			t.Errorf("root HTTP adapter file %s is missing: %v", required, err)
-		}
-	}
 }
 
 func TestDomainPackagesDoNotImportHTTPAdapters(t *testing.T) {
