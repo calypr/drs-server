@@ -15,13 +15,13 @@ const deleteMethod = "delete"
 // DeleteProjectObjects authorizes each URL against the resolved S3 scope,
 // deduplicates in first-seen order, and dispatches exact physical URLs one at
 // a time. This preserves per-item provider failures and retry ordering.
-func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization, project string, objectURLs []string) []DeleteResult {
+func (s *Service) DeleteProjectObjects(ctx context.Context, organization, project string, objectURLs []string) []DeleteResult {
 	ctx = withRequestCache(ctx)
 	unique := uniqueURLs(objectURLs)
 	if len(unique) == 0 {
 		return []DeleteResult{}
 	}
-	target, err := s.inspector.resolveScope(ctx, organization, project, deleteMethod)
+	target, err := s.resolveScope(ctx, organization, project, deleteMethod)
 	if err != nil {
 		results := make([]DeleteResult, 0, len(unique))
 		logStorageDiagnostic(ctx, err, "delete")
@@ -34,7 +34,7 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 	results := make([]DeleteResult, 0, len(unique))
 	for _, objectURL := range unique {
 		result := DeleteResult{ObjectURL: objectURL, Status: "deleted"}
-		candidate, parseStatus, parseErr := parseDeleteURL(ctx, s.inspector, objectURL)
+		candidate, parseStatus, parseErr := parseDeleteURL(ctx, s, objectURL)
 		switch {
 		case parseErr != nil:
 			result.Status = "error"
@@ -63,7 +63,7 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 
 // DeleteProjectDataAuthorized applies the maintenance write policy before
 // entering the trusted cleanup sequence.
-func (s *ProjectCleanup) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+func (s *Service) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
 	result := ProjectCleanupResult{Organization: strings.TrimSpace(organization), ProjectID: strings.TrimSpace(project)}
 	if err := buckets.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectID, "delete", "update"); err != nil {
 		return result, err
@@ -71,7 +71,7 @@ func (s *ProjectCleanup) DeleteProjectDataAuthorized(ctx context.Context, organi
 	return s.deleteProjectData(ctx, result.Organization, result.ProjectID)
 }
 
-func (s *ProjectCleanup) deleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+func (s *Service) deleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
 	result := ProjectCleanupResult{Organization: organization, ProjectID: project}
 	if s.cleanupObjects == nil || s.cleanupScopes == nil {
 		return result, &Error{Kind: ErrorUnsupported, Message: "project cleanup dependencies are not configured"}
@@ -110,7 +110,7 @@ type deleteCandidate struct {
 	key      string
 }
 
-func parseDeleteURL(ctx context.Context, service *Inspector, raw string) (deleteCandidate, string, error) {
+func parseDeleteURL(ctx context.Context, service *Service, raw string) (deleteCandidate, string, error) {
 	parsed, err := address.ParseLocation(strings.TrimSpace(raw))
 	if err != nil {
 		return deleteCandidate{}, "", fmt.Errorf("parse access url %q: %w", raw, err)

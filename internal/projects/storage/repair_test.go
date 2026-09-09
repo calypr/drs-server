@@ -127,8 +127,8 @@ func repairBuckets() fakeRepairBuckets {
 	}
 }
 
-func repairInspector(buckets fakeRepairBuckets, probe *fakeRepairProbe) *Inspector {
-	return &Inspector{credentials: buckets, visibility: buckets, probe: probe}
+func repairStorage(buckets fakeRepairBuckets, probe *fakeRepairProbe) *Service {
+	return &Service{credentials: buckets, visibility: buckets, probe: probe}
 }
 
 func repairRecord(id, sha, accessURL string) objects.Record {
@@ -187,7 +187,7 @@ func TestRepairAuditStorageFindingsDistinguishNotFound(t *testing.T) {
 	record := repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/current")
 	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{"s3://repair-bucket/current": true}}
-	service := NewRepairService(records, repairBuckets(), repairInspector(repairBuckets(), probe))
+	service := NewRepairService(records, repairBuckets(), repairStorage(repairBuckets(), probe))
 	state, err := service.audit(context.Background(), RepairOptions{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
 		t.Fatalf("audit() error = %v", err)
@@ -211,7 +211,7 @@ func TestRepairAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
 	pathStyle := "s3://repair-bucket/prefix/dir/file.bin"
 	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{canonical: true}}
-	service := NewRepairService(records, repairBuckets(), repairInspector(repairBuckets(), probe))
+	service := NewRepairService(records, repairBuckets(), repairStorage(repairBuckets(), probe))
 	state, err := service.audit(context.Background(), RepairOptions{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
 		t.Fatalf("audit() error = %v", err)

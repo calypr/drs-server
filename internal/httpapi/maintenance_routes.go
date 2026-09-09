@@ -21,7 +21,7 @@ type projectCleanupResponse struct {
 }
 
 func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
-	if s.cleanup == nil {
+	if s.projectStorage == nil {
 		return middleware.HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
 	}
 	organization := strings.TrimSpace(c.Params("organization"))
@@ -32,7 +32,7 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	result, err := s.cleanup.DeleteProjectDataAuthorized(c.Context(), organization, projectID)
+	result, err := s.projectStorage.DeleteProjectDataAuthorized(c.Context(), organization, projectID)
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
@@ -251,7 +251,7 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	resp, err := s.inspector.ProbeObject(c.Context(), projectstorage.InspectRequest{
+	resp, err := s.projectStorage.ProbeObject(c.Context(), projectstorage.InspectRequest{
 		ID:                strings.TrimSpace(req.ID),
 		Organization:      strings.TrimSpace(req.Organization),
 		Project:           strings.TrimSpace(req.Project),
@@ -304,7 +304,7 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 			ExpectedSHA256:    strings.TrimSpace(item.ExpectedSHA256),
 		})
 	}
-	results := s.inspector.ProbeObjects(c.Context(), items)
+	results := s.projectStorage.ProbeObjects(c.Context(), items)
 	out := internalInspectObjectBulkResponse{Items: make([]internalInspectObjectBulkItem, 0, len(results))}
 	for _, result := range results {
 		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
@@ -333,7 +333,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 			ExpectedName:      strings.TrimSpace(item.ExpectedName),
 		})
 	}
-	results := s.inspector.ValidateInventoryObjects(c.Context(), items)
+	results := s.projectStorage.ValidateInventoryObjects(c.Context(), items)
 	out := internalInspectObjectBulkResponse{Items: make([]internalInspectObjectBulkItem, 0, len(results))}
 	for _, result := range results {
 		out.Items = append(out.Items, bulkListInspectItemFromProjectStorage(result))
@@ -351,7 +351,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	result, err := s.inspector.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
+	result, err := s.projectStorage.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
 		Mode:        projectstorage.InspectionMode(strings.TrimSpace(req.Mode)),
 		IncludeHead: req.IncludeHead,
 		PathPrefix:  strings.TrimSpace(req.PathPrefix),
@@ -384,7 +384,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	result, err := s.inspector.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
+	result, err := s.projectStorage.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
 		Mode:       projectstorage.ModeItems,
 		PathPrefix: strings.TrimSpace(req.PathPrefix),
 	})
@@ -489,7 +489,7 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 	if len(req.ObjectURLs) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: object_urls are required")
 	}
-	results := s.cleanup.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectURLs)
+	results := s.projectStorage.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectURLs)
 	out := internalDeleteProjectBucketObjectsResponse{
 		Items: make([]internalDeleteProjectBucketObjectsItem, 0, len(results)),
 	}

@@ -267,7 +267,7 @@ func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 	session.SetAuthorizations(nil, nil, true)
 	ctx := access.WithSession(context.Background(), session)
 
-	result, err := service.ProjectCleanup.DeleteProjectDataAuthorized(ctx, " org ", " project ")
+	result, err := service.DeleteProjectDataAuthorized(ctx, " org ", " project ")
 	if !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("DeleteProjectDataAuthorized() error = %v, want access denied", err)
 	}
@@ -290,7 +290,7 @@ func TestDeleteProjectDataAuthorizedPreservesTrustedCleanupOrder(t *testing.T) {
 	}, true)
 	ctx := access.WithSession(context.Background(), session)
 
-	result, err := service.ProjectCleanup.DeleteProjectDataAuthorized(ctx, " org ", " project ")
+	result, err := service.DeleteProjectDataAuthorized(ctx, " org ", " project ")
 	if err != nil {
 		t.Fatalf("DeleteProjectDataAuthorized() error = %v", err)
 	}

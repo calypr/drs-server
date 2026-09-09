@@ -25,7 +25,7 @@ func (s failingDeleteScopes) ResolveStorageScope(context.Context, string, string
 
 func TestDeleteProjectObjectsRedactsScopeDatabaseFailure(t *testing.T) {
 	service, _ := projectService(&fakeInventory{}, &markerDelete{})
-	service.inspector.resolver = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
+	service.resolver = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
 	ctx := requestid.WithRequestID(context.Background(), "scope-failure-request")
 	var logs bytes.Buffer
 	previous := slog.Default()

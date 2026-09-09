@@ -17,18 +17,17 @@ import (
 const RouteHealthz = "/healthz"
 
 type Dependencies struct {
-	ServiceInfo      generated.Service
-	Objects          *objects.Service
-	Transfers        *transfers.Service
-	LFS              *transferlfs.Service
-	UsageIngest      usage.Ingestor
-	UsageReports     usage.Reporter
-	Buckets          *buckets.Service
-	ProjectInspector *projectstorage.Inspector
-	ProjectCleanup   *projectstorage.ProjectCleanup
-	ScopeRepair      *projectstorage.RepairService
-	Authorization    *middleware.AuthzMiddleware
-	RequestIDs       *middleware.RequestIDMiddleware
+	ServiceInfo    generated.Service
+	Objects        *objects.Service
+	Transfers      *transfers.Service
+	LFS            *transferlfs.Service
+	UsageIngest    usage.Ingestor
+	UsageReports   usage.Reporter
+	Buckets        *buckets.Service
+	ProjectStorage *projectstorage.Service
+	ScopeRepair    *projectstorage.RepairService
+	Authorization  *middleware.AuthzMiddleware
+	RequestIDs     *middleware.RequestIDMiddleware
 }
 
 type Options struct {
@@ -41,12 +40,11 @@ type Options struct {
 }
 
 type internalServer struct {
-	objects   *objects.Service
-	transfers *transfers.Service
-	inspector *projectstorage.Inspector
-	cleanup   *projectstorage.ProjectCleanup
-	buckets   *buckets.Service
-	repair    *projectstorage.RepairService
+	objects        *objects.Service
+	transfers      *transfers.Service
+	projectStorage *projectstorage.Service
+	buckets        *buckets.Service
+	repair         *projectstorage.RepairService
 }
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)
@@ -99,11 +97,10 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 
 func newInternalServer(deps Dependencies) *internalServer {
 	return &internalServer{
-		objects:   deps.Objects,
-		transfers: deps.Transfers,
-		inspector: deps.ProjectInspector,
-		cleanup:   deps.ProjectCleanup,
-		buckets:   deps.Buckets,
-		repair:    deps.ScopeRepair,
+		objects:        deps.Objects,
+		transfers:      deps.Transfers,
+		projectStorage: deps.ProjectStorage,
+		buckets:        deps.Buckets,
+		repair:         deps.ScopeRepair,
 	}
 }

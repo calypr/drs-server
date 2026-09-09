@@ -23,8 +23,7 @@ type serverRuntime struct {
 	lfsService          *transferlfs.Service
 	usageService        *usage.Service
 	usageIngest         usage.Ingestor
-	projectInspector    *projectstorage.Inspector
-	projectCleanup      *projectstorage.ProjectCleanup
+	projectStorage      *projectstorage.Service
 	scopeRepairService  *projectstorage.RepairService
 	bucketService       *buckets.Service
 	authzMiddleware     *middleware.AuthzMiddleware
@@ -33,18 +32,17 @@ type serverRuntime struct {
 
 func registerServerRoutes(rt *serverRuntime) {
 	httpapi.RegisterRoutes(rt.app, httpapi.Dependencies{
-		ServiceInfo:      rt.serviceInfo,
-		Objects:          rt.objectService,
-		Transfers:        rt.transferService,
-		LFS:              rt.lfsService,
-		UsageIngest:      rt.usageIngest,
-		UsageReports:     rt.usageService.Reports(),
-		Buckets:          rt.bucketService,
-		ProjectInspector: rt.projectInspector,
-		ProjectCleanup:   rt.projectCleanup,
-		ScopeRepair:      rt.scopeRepairService,
-		Authorization:    rt.authzMiddleware,
-		RequestIDs:       rt.requestIDMiddleware,
+		ServiceInfo:    rt.serviceInfo,
+		Objects:        rt.objectService,
+		Transfers:      rt.transferService,
+		LFS:            rt.lfsService,
+		UsageIngest:    rt.usageIngest,
+		UsageReports:   rt.usageService.Reports(),
+		Buckets:        rt.bucketService,
+		ProjectStorage: rt.projectStorage,
+		ScopeRepair:    rt.scopeRepairService,
+		Authorization:  rt.authzMiddleware,
+		RequestIDs:     rt.requestIDMiddleware,
 	}, httpapi.Options{
 		Docs:     rt.cfg.Routes.Docs,
 		GA4GH:    rt.cfg.Routes.Ga4gh,

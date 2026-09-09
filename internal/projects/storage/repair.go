@@ -17,9 +17,9 @@ import (
 const defaultPageSize = 500
 
 type RepairService struct {
-	records   repairRecordService
-	buckets   repairBucketService
-	inspector *Inspector
+	records repairRecordService
+	buckets repairBucketService
+	storage *Service
 }
 
 type repairRecordService interface {
@@ -33,8 +33,8 @@ type repairBucketService interface {
 	ListBucketScopes(context.Context) ([]buckets.Scope, error)
 }
 
-func NewRepairService(records repairRecordService, buckets repairBucketService, inspector *Inspector) *RepairService {
-	return &RepairService{records: records, buckets: buckets, inspector: inspector}
+func NewRepairService(records repairRecordService, buckets repairBucketService, storage *Service) *RepairService {
+	return &RepairService{records: records, buckets: buckets, storage: storage}
 }
 
 type repairScopeTarget struct {

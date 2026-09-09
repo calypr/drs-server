@@ -72,7 +72,7 @@ func (s *RepairService) classifyAccessMethods(ctx context.Context, object *audit
 }
 
 func (s *RepairService) addStorageFindings(ctx context.Context, object *auditedObject) {
-	if s.inspector == nil {
+	if s.storage == nil {
 		return
 	}
 	for _, raw := range object.currentURLs {
@@ -93,7 +93,7 @@ func (s *RepairService) addStorageFindings(ctx context.Context, object *auditedO
 }
 
 func (s *RepairService) checkURLExists(ctx context.Context, object *auditedObject, raw string) bool {
-	if s.inspector == nil || strings.TrimSpace(raw) == "" {
+	if s.storage == nil || strings.TrimSpace(raw) == "" {
 		return false
 	}
 	err := s.inspectStorageURL(ctx, raw)
@@ -101,10 +101,10 @@ func (s *RepairService) checkURLExists(ctx context.Context, object *auditedObjec
 }
 
 func (s *RepairService) inspectStorageURL(ctx context.Context, rawURL string) error {
-	if s.inspector == nil {
+	if s.storage == nil {
 		return fmt.Errorf("storage inspector is not configured")
 	}
-	_, err := s.inspector.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
+	_, err := s.storage.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
 	if err == nil {
 		return nil
 	}

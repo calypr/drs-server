@@ -407,15 +407,14 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 		Providers: projectstorage.Providers{},
 	})
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
-		LFS:              transferlfs.NewService(transferService, objectService, bucketService, database, database, nil),
-		ServiceInfo:      serviceInfo,
-		Objects:          objectService,
-		Transfers:        transferService,
-		UsageIngest:      database,
-		UsageReports:     usageService.Reports(),
-		Buckets:          bucketService,
-		ProjectInspector: projectStorageService.Inspector,
-		ProjectCleanup:   projectStorageService.ProjectCleanup,
+		LFS:            transferlfs.NewService(transferService, objectService, bucketService, database, database, nil),
+		ServiceInfo:    serviceInfo,
+		Objects:        objectService,
+		Transfers:      transferService,
+		UsageIngest:    database,
+		UsageReports:   usageService.Reports(),
+		Buckets:        bucketService,
+		ProjectStorage: projectStorageService,
 	}, httpapi.Options{Docs: true, GA4GH: true, Metrics: true, Internal: true})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
