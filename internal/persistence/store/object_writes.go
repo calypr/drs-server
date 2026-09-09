@@ -107,13 +107,6 @@ func (db *Store) RegisterObjects(ctx context.Context, objects []objects.Record) 
 		return nil
 	})
 }
-func (db *Store) CreateObject(ctx context.Context, obj *objects.Record) error {
-	if obj == nil {
-		return fmt.Errorf("object is required")
-	}
-	return db.RegisterObjects(ctx, []objects.Record{*obj})
-}
-
 func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (string, error) {
 	id := strings.TrimSpace(string(obj.Id))
 	if id == "" {

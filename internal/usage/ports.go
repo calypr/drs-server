@@ -46,8 +46,8 @@ type ProviderEventRecorder interface {
 
 // TransferQuery reads transfer attribution reports.
 type TransferQuery interface {
-	GetTransferAttributionSummary(ctx context.Context, filter Filter) (Summary, error)
-	GetTransferAttributionBreakdown(ctx context.Context, filter Filter, groupBy string) ([]Breakdown, error)
+	QueryTransferSummary(ctx context.Context, filter Filter, resources []string) (Summary, error)
+	QueryTransferBreakdown(ctx context.Context, filter Filter, groupBy string, resources []string) ([]Breakdown, error)
 }
 
 type ReportStore interface {
@@ -58,6 +58,4 @@ type ReportStore interface {
 	GetFileUsageSummaryByScope(ctx context.Context, organization, project string, inactiveSince *time.Time) (FileUsageSummary, error)
 	GetFileUsageSummaryByResources(ctx context.Context, resources []string, includeUnscoped bool, inactiveSince *time.Time) (FileUsageSummary, error)
 	GetProjectRecordSummaryByScope(ctx context.Context, organization, project string) (FileUsageSummary, error)
-	GetTransferAttributionSummaryByResources(ctx context.Context, filter Filter, resources []string) (Summary, error)
-	GetTransferAttributionBreakdownByResources(ctx context.Context, filter Filter, groupBy string, resources []string) ([]Breakdown, error)
 }

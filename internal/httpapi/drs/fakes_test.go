@@ -101,11 +101,6 @@ func (s *drsObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates ma
 	return nil
 }
 
-func (s *drsObjectStore) DeleteObjectAlias(_ context.Context, aliasID string) error {
-	delete(s.aliases, aliasID)
-	return nil
-}
-
 func (s *drsObjectStore) CreateObjectAlias(_ context.Context, aliasID, canonicalObjectID string) error {
 	s.aliases[aliasID] = canonicalObjectID
 	return nil

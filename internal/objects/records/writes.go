@@ -213,17 +213,6 @@ func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, re
 	return updated, nil
 }
 
-func (s *Service) CreateObjectAlias(ctx context.Context, aliasID, canonicalID string) error {
-	obj, err := s.store.GetObject(ctx, canonicalID)
-	if err != nil {
-		return err
-	}
-	if err := requireObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-		return err
-	}
-	return s.store.CreateObjectAlias(ctx, aliasID, canonicalID)
-}
-
 func (s *Service) RegisterObjects(ctx context.Context, objs []objectmodel.Record) error {
 	if err := s.validateExistingContentRead(ctx, objs); err != nil {
 		return err

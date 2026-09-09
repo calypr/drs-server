@@ -20,7 +20,7 @@ func TestGetTransferAttributionReports_MapAggregatesAndBreakdown(t *testing.T) {
 			"bytes_requested", "bytes_downloaded", "bytes_uploaded",
 		}).AddRow(int64(5), int64(3), int64(4), int64(1), int64(100), int64(80), int64(20)))
 
-	summary, err := pg.GetTransferAttributionSummary(context.Background(), usage.Filter{Organization: "org"})
+	summary, err := pg.QueryTransferSummary(context.Background(), usage.Filter{Organization: "org"}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary returned error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestGetTransferAttributionReports_MapAggregatesAndBreakdown(t *testing.T) {
 			"event_count", "bytes_requested", "bytes_downloaded", "bytes_uploaded", "last_transfer_time",
 		}).AddRow("s3:bucket", "", "", "s3", "bucket", "", "", "", int64(2), int64(40), int64(30), int64(10), when))
 
-	breakdown, err := pg.GetTransferAttributionBreakdown(context.Background(), usage.Filter{Organization: "org"}, "provider")
+	breakdown, err := pg.QueryTransferBreakdown(context.Background(), usage.Filter{Organization: "org"}, "provider", nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown returned error: %v", err)
 	}

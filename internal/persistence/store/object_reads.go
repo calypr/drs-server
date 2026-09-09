@@ -214,19 +214,7 @@ func (db *Store) ListObjectIDsByScope(ctx context.Context, organization, project
 			return nil, err
 		}
 		defer rows.Close()
-
-		ids := make([]string, 0)
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return nil, err
-			}
-			ids = append(ids, id)
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		return ids, nil
+		return scanObjectIDs(rows)
 	}
 
 	var (
@@ -260,19 +248,7 @@ func (db *Store) ListObjectIDsByScope(ctx context.Context, organization, project
 		return nil, err
 	}
 	defer rows.Close()
-
-	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return ids, nil
+	return scanObjectIDs(rows)
 }
 
 func (db *Store) ListObjectIDsByResources(ctx context.Context, resources []string, includeUnscoped bool) ([]string, error) {
@@ -312,19 +288,7 @@ func (db *Store) ListObjectIDsByResources(ctx context.Context, resources []strin
 		return nil, err
 	}
 	defer rows.Close()
-
-	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return ids, nil
+	return scanObjectIDs(rows)
 }
 
 func (db *Store) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {

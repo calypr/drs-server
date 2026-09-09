@@ -15,16 +15,6 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-type objectRow struct {
-	ID          string
-	Size        int64
-	CreatedTime time.Time
-	UpdatedTime time.Time
-	Name        string
-	Version     string
-	Description string
-}
-
 // queryContext and queryRowContext apply the selected SQL dialect to shared statements.
 func (db *Store) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return db.db.QueryContext(ctx, db.dialect.Rebind(query), args...)
@@ -80,18 +70,6 @@ func safeSliceCapacity(parts ...int) (int, error) {
 	return int(total), nil
 }
 
-func (db *Store) publicReadForObject(ctx context.Context, id string, inferred bool) (bool, bool, error) {
-	var public bool
-	err := db.queryRowContext(ctx, `SELECT public_read FROM drs_object_read_policy WHERE object_id = ?`, id).Scan(&public)
-	if err == sql.ErrNoRows {
-		return inferred, false, nil
-	}
-	if err != nil {
-		return false, false, err
-	}
-	return public, true, nil
-}
-
 func makePlaceholders(n int) string {
 	if n <= 0 {
 		return ""
@@ -105,117 +83,33 @@ func makePlaceholders(n int) string {
 
 func (db *Store) GetObject(ctx context.Context, id string) (*objects.Record, error) {
 	requestID := strings.TrimSpace(id)
-	lookupID := requestID
-	resolvedAlias := false
+	objectsByID, err := db.fetchObjectsByIDsOrChecksums(ctx, []string{requestID}, nil)
+	if err != nil {
+		return nil, err
+	}
+	if obj, ok := objectsByID[requestID]; ok {
+		return obj, nil
+	}
 
-retryLookup:
-	// 1. Fetch main record
-	var r objectRow
-	var name, version, description sql.NullString
-	err := db.queryRowContext(ctx, `
-		SELECT id, size, created_time, updated_time, name, version, description
-		FROM drs_object WHERE id = ?`, lookupID).Scan(
-		&r.ID, &r.Size, &r.CreatedTime, &r.UpdatedTime, &name, &version, &description,
-	)
-	if err == sql.ErrNoRows {
-		if !resolvedAlias {
-			canonicalID, aliasErr := db.ResolveObjectAlias(ctx, requestID)
-			if aliasErr == nil && strings.TrimSpace(canonicalID) != "" {
-				lookupID = strings.TrimSpace(canonicalID)
-				resolvedAlias = true
-				goto retryLookup
-			}
-			if aliasErr != nil && !errors.Is(aliasErr, errorapi.ErrNotFound) {
-				return nil, aliasErr
-			}
+	canonicalID, aliasErr := db.ResolveObjectAlias(ctx, requestID)
+	if aliasErr != nil {
+		if !errors.Is(aliasErr, errorapi.ErrNotFound) {
+			return nil, aliasErr
 		}
 		return nil, errorapi.ErrObjectNotFound
 	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch record: %w", err)
+	canonicalID = strings.TrimSpace(canonicalID)
+	if canonicalID == "" {
+		return nil, errorapi.ErrObjectNotFound
 	}
-	r.Name = strings.TrimSpace(name.String)
-	r.Version = version.String
-	r.Description = description.String
-	nameAliases, err := db.nameAliasesForObject(ctx, lookupID)
+	objectsByID, err = db.fetchObjectsByIDsOrChecksums(ctx, []string{canonicalID}, nil)
 	if err != nil {
 		return nil, err
 	}
-	objectID := r.ID
-
-	obj := &objects.Record{
-		Id:          objects.RecordID(objectID),
-		Size:        r.Size,
-		CreatedTime: r.CreatedTime,
-		UpdatedTime: ptr(r.UpdatedTime),
-		Version:     ptr(r.Version),
-		Description: ptr(r.Description),
-		Name:        ptr(r.Name),
-		SelfUri:     "drs://" + objectID,
-		NameAliases: nameAliases,
+	if obj, ok := objectsByID[canonicalID]; ok {
+		return obj, nil
 	}
-
-	// 2. Fetch storage access methods.
-	urlRows, err := db.queryContext(ctx, "SELECT url, type FROM drs_object_access_method WHERE object_id = ?", lookupID)
-	if err != nil {
-		return nil, err
-	}
-	defer urlRows.Close()
-
-	seenAccess := make(map[string]struct{})
-	for urlRows.Next() {
-		var u, t string
-		if err := urlRows.Scan(&u, &t); err != nil {
-			return nil, err
-		}
-		k := t + "|" + u
-		if _, ok := seenAccess[k]; ok {
-			continue
-		}
-		seenAccess[k] = struct{}{}
-		if obj.AccessMethods == nil {
-			obj.AccessMethods = &[]objects.AccessMethod{}
-		}
-		am := objects.AccessMethod{
-			AccessUrl: &objects.AccessURL{Url: u},
-			Type:      t,
-			AccessId:  ptr(objects.AccessMethodID(t, u)),
-		}
-		*obj.AccessMethods = append(*obj.AccessMethods, am)
-	}
-	controlled, err := db.controlledAccessForObject(ctx, lookupID)
-	if err != nil {
-		return nil, err
-	}
-	if len(controlled) > 0 {
-		obj.ControlledAccess = &controlled
-	}
-	obj.PublicRead, obj.PublicReadPolicyKnown, err = db.publicReadForObject(ctx, lookupID, len(controlled) == 0)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Fetch Checksums
-	hashRows, err := db.queryContext(ctx, "SELECT type, checksum FROM drs_object_checksum WHERE object_id = ?", lookupID)
-	if err != nil {
-		return nil, err
-	}
-	defer hashRows.Close()
-	seenChecksum := make(map[string]struct{})
-	for hashRows.Next() {
-		var t, v string
-		if err := hashRows.Scan(&t, &v); err != nil {
-			return nil, err
-		}
-		key := t + "|" + v
-		if _, ok := seenChecksum[key]; ok {
-			continue
-		}
-		seenChecksum[key] = struct{}{}
-		obj.Checksums = append(obj.Checksums, objects.Checksum{Type: t, Checksum: v})
-	}
-
-	return obj, nil
+	return nil, errorapi.ErrObjectNotFound
 }
 
 func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string, checksums []string) (map[string]*objects.Record, error) {
@@ -450,47 +344,6 @@ func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-func (db *Store) controlledAccessForObject(ctx context.Context, objectID string) ([]string, error) {
-	rows, err := db.queryContext(ctx, `SELECT resource FROM drs_object_controlled_access WHERE object_id = ? ORDER BY resource`, objectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var resources []string
-	for rows.Next() {
-		var resource string
-		if err := rows.Scan(&resource); err != nil {
-			return nil, err
-		}
-		resources = append(resources, resource)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return clientaccess.NormalizeAccessResources(resources), nil
-}
-
-func (db *Store) nameAliasesForObject(ctx context.Context, objectID string) ([]string, error) {
-	rows, err := db.queryContext(ctx, `SELECT name_alias FROM drs_object_name_alias WHERE object_id = ? ORDER BY name_alias`, objectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	aliases := make([]string, 0)
-	for rows.Next() {
-		var alias string
-		if err := rows.Scan(&alias); err != nil {
-			return nil, err
-		}
-		aliases = append(aliases, alias)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return objects.NormalizeNameAliases("", aliases), nil
 }
 
 func (db *Store) attachControlledAccess(ctx context.Context, objectsByID map[string]*objects.Record) error {

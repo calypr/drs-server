@@ -52,16 +52,8 @@ type auditState struct {
 	objects []*auditedObject
 }
 
-func (s *Service) Audit(ctx context.Context, options Options) (Report, error) {
-	state, err := s.audit(ctx, options)
-	if err != nil {
-		return Report{}, err
-	}
-	return state.report, nil
-}
-
 // AuditAuthorized applies the HTTP maintenance read policy before running the
-// trusted audit state machine. Trusted callers should continue using Audit.
+// trusted audit state machine.
 func (s *Service) AuditAuthorized(ctx context.Context, options Options) (Report, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
@@ -78,18 +70,8 @@ func (s *Service) AuditAuthorized(ctx context.Context, options Options) (Report,
 	return state.report, nil
 }
 
-func (s *Service) Apply(ctx context.Context, options Options) (ApplyResult, error) {
-	options.Organization = strings.TrimSpace(options.Organization)
-	options.Project = strings.TrimSpace(options.Project)
-	if options.Organization == "" || options.Project == "" {
-		return ApplyResult{}, fmt.Errorf("apply requires --organization and --project")
-	}
-	return s.apply(ctx, options)
-}
-
 // ApplyAuthorized performs read authorization before update authorization and
-// before entering the trusted collapse/audit/write state machine. Trusted
-// callers should continue using Apply.
+// before entering the trusted collapse/audit/write state machine.
 func (s *Service) ApplyAuthorized(ctx context.Context, options Options) (ApplyResult, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)

@@ -65,9 +65,6 @@ func NewScope(organization, project string) (Scope, error) {
 // to the same content while retaining distinct record IDs.
 type RecordID string
 
-// ContentID identifies content by its canonical checksum.
-type ContentID string
-
 // Checksum is the persistence-independent checksum value carried by a record.
 type Checksum struct {
 	Type     string `json:"type"`
@@ -146,15 +143,6 @@ type Record struct {
 	Size                  int64           `json:"size"`
 	UpdatedTime           *time.Time      `json:"updated_time,omitempty"`
 	Version               *string         `json:"version,omitempty"`
-}
-
-// CanonicalContent is the prepared same-content view returned by
-// checksum-aware reads.  Record is the merged presentation and Records keeps
-// the physical replicas available to callers that need them.
-type CanonicalContent struct {
-	ContentID ContentID
-	Record    Record
-	Records   []Record
 }
 
 func AccessResources(obj *Record) []string {

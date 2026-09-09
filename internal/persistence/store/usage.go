@@ -311,20 +311,11 @@ func (db *Store) flushObjectUsageEvents(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ids := make([]string, 0)
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
+	ids, err := scanObjectIDs(rows)
+	rows.Close()
+	if err != nil {
 		return err
 	}
-	rows.Close()
 	maxIDs := db.dialect.MaxParameters() - 1
 	if maxIDs <= 0 {
 		maxIDs = len(ids)

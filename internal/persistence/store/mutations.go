@@ -290,23 +290,6 @@ func (db *Store) DeleteObject(ctx context.Context, id string) error {
 	})
 }
 
-func (db *Store) DeleteObjectAlias(ctx context.Context, aliasID string) error {
-	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
-		result, err := db.txExecContext(ctx, tx, "DELETE FROM drs_object_alias WHERE alias_id = ?", aliasID)
-		if err != nil {
-			return err
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if rows == 0 {
-			return errorapi.ErrObjectNotFound
-		}
-		return nil
-	})
-}
-
 func (db *Store) CreateObjectAlias(ctx context.Context, aliasID, canonicalObjectID string) error {
 	aliasID = strings.TrimSpace(aliasID)
 	canonicalObjectID = strings.TrimSpace(canonicalObjectID)

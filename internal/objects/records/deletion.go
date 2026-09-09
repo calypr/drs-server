@@ -61,9 +61,6 @@ func (s *Service) DeleteObjectWithOptions(ctx context.Context, id string, opts D
 	if err := requireAllObjectMethod(ctx, obj, objectMethodDelete); err != nil {
 		return err
 	}
-	if opts.DeleteStorageData && (obj.PublicRead || len(objectmodel.AccessResources(obj)) > 0) {
-		return fmt.Errorf("%w: cannot delete shared content storage without exclusive ownership", errorapi.ErrConflict)
-	}
 	return s.store.DeleteObject(ctx, id)
 }
 

@@ -143,11 +143,6 @@ func (s *serverObjectStore) RemoveObjectControlledAccessBulk(ctx context.Context
 	return count, nil
 }
 
-func (s *serverObjectStore) DeleteObjectAlias(_ context.Context, aliasID string) error {
-	delete(s.aliases, aliasID)
-	return nil
-}
-
 func (s *serverObjectStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := s.records[canonicalID]; !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
@@ -540,16 +535,10 @@ func (serverUsageStore) GetFileUsageSummaryByResources(context.Context, []string
 func (serverUsageStore) GetProjectRecordSummaryByScope(context.Context, string, string) (usage.FileUsageSummary, error) {
 	return usage.FileUsageSummary{}, nil
 }
-func (serverUsageStore) GetTransferAttributionSummary(context.Context, usage.Filter) (usage.Summary, error) {
+func (serverUsageStore) QueryTransferSummary(context.Context, usage.Filter, []string) (usage.Summary, error) {
 	return usage.Summary{}, nil
 }
-func (serverUsageStore) GetTransferAttributionBreakdown(context.Context, usage.Filter, string) ([]usage.Breakdown, error) {
-	return []usage.Breakdown{}, nil
-}
-func (serverUsageStore) GetTransferAttributionSummaryByResources(context.Context, usage.Filter, []string) (usage.Summary, error) {
-	return usage.Summary{}, nil
-}
-func (serverUsageStore) GetTransferAttributionBreakdownByResources(context.Context, usage.Filter, string, []string) ([]usage.Breakdown, error) {
+func (serverUsageStore) QueryTransferBreakdown(context.Context, usage.Filter, string, []string) ([]usage.Breakdown, error) {
 	return []usage.Breakdown{}, nil
 }
 

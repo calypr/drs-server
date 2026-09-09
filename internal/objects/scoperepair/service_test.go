@@ -100,10 +100,11 @@ func TestAuditUsesS3ScopeAndPreservesCanonicalRepairReport(t *testing.T) {
 	prepared := &fakePrepared{pages: [][]objects.Record{{repairRecord("did-1", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "s3://repair-bucket/legacy")}, nil}}
 	probe := &fakeProbe{}
 	service := NewService(prepared, nil, repairScopeReader(), probe, nil)
-	report, err := service.Audit(context.Background(), Options{Organization: " org ", Project: " project ", PageSize: 1})
+	reportState, err := service.audit(context.Background(), Options{Organization: " org ", Project: " project ", PageSize: 1})
 	if err != nil {
-		t.Fatalf("Audit() error = %v", err)
+		t.Fatalf("audit() error = %v", err)
 	}
+	report := reportState.report
 	if report.Scanned != 1 || len(report.Objects) != 1 {
 		t.Fatalf("report = %+v", report)
 	}
@@ -127,9 +128,9 @@ func TestApplyCollapsesBeforeAuditAndContinuesAfterWriteFailure(t *testing.T) {
 	writer := &fakeWriter{failNext: true}
 	collapser := &fakeCollapser{}
 	service := NewService(prepared, writer, repairScopeReader(), nil, collapser)
-	result, err := service.Apply(context.Background(), Options{Organization: "org", Project: "project", PageSize: 10})
+	result, err := service.apply(context.Background(), Options{Organization: "org", Project: "project", PageSize: 10})
 	if err != nil {
-		t.Fatalf("Apply() error = %v", err)
+		t.Fatalf("apply() error = %v", err)
 	}
 	if len(collapser.calls) != 1 || collapser.calls[0] != "org/project" {
 		t.Fatalf("collapse calls = %v", collapser.calls)
@@ -147,10 +148,11 @@ func TestAuditStorageFindingsDistinguishNotFoundFromProbeFailure(t *testing.T) {
 	prepared := &fakePrepared{pages: [][]objects.Record{{record}}}
 	probe := &fakeProbe{missing: map[string]bool{"s3://repair-bucket/current": true}}
 	service := NewService(prepared, nil, repairScopeReader(), probe, nil)
-	report, err := service.Audit(context.Background(), Options{Organization: "org", Project: "project", CheckStorage: true})
+	reportState, err := service.audit(context.Background(), Options{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
-		t.Fatalf("Audit() error = %v", err)
+		t.Fatalf("audit() error = %v", err)
 	}
+	report := reportState.report
 	if len(report.Objects) != 1 || len(report.Objects[0].Findings) < 2 {
 		t.Fatalf("storage report = %+v", report)
 	}
@@ -174,10 +176,11 @@ func TestAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
 	prepared := &fakePrepared{pages: [][]objects.Record{{record}}}
 	probe := &fakeProbe{missing: map[string]bool{canonical: true}}
 	service := NewService(prepared, nil, repairScopeReader(), probe, nil)
-	report, err := service.Audit(context.Background(), Options{Organization: "org", Project: "project", CheckStorage: true})
+	reportState, err := service.audit(context.Background(), Options{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
-		t.Fatalf("Audit() error = %v", err)
+		t.Fatalf("audit() error = %v", err)
 	}
+	report := reportState.report
 	if len(report.Objects) != 1 || len(report.Objects[0].Findings) != 1 || report.Objects[0].Findings[0].ProposedCanonicalURL != pathStyle {
 		t.Fatalf("report = %+v, want path-style URL %q", report, pathStyle)
 	}
@@ -197,9 +200,9 @@ func TestApplyRequiresProjectScopeBeforeCallingPorts(t *testing.T) {
 	prepared := &fakePrepared{}
 	collapser := &fakeCollapser{}
 	service := NewService(prepared, nil, repairScopeReader(), nil, collapser)
-	_, err := service.Apply(context.Background(), Options{Organization: "org"})
+	_, err := service.ApplyAuthorized(context.Background(), Options{Organization: "org"})
 	if err == nil || len(collapser.calls) != 0 || len(prepared.queries) != 0 {
-		t.Fatalf("Apply() validation err=%v collapse=%v queries=%v", err, collapser.calls, prepared.queries)
+		t.Fatalf("ApplyAuthorized() validation err=%v collapse=%v queries=%v", err, collapser.calls, prepared.queries)
 	}
 }
 

@@ -341,38 +341,6 @@ func toMetricsFileUsage(v usage.FileUsage) metricsapi.FileUsage {
 	}
 }
 
-type providerTransferPayload struct {
-	ProviderEventID      string `json:"provider_event_id"`
-	AccessGrantID        string `json:"access_grant_id"`
-	Direction            string `json:"direction"`
-	EventTime            string `json:"event_time"`
-	RequestID            string `json:"request_id"`
-	ProviderRequestID    string `json:"provider_request_id"`
-	ObjectID             string `json:"object_id"`
-	SHA256               string `json:"sha256"`
-	ObjectSize           int64  `json:"object_size"`
-	Organization         string `json:"organization"`
-	Project              string `json:"project"`
-	AccessID             string `json:"access_id"`
-	Provider             string `json:"provider"`
-	Bucket               string `json:"bucket"`
-	ObjectKey            string `json:"object_key"`
-	StorageURL           string `json:"storage_url"`
-	RangeStart           *int64 `json:"range_start"`
-	RangeEnd             *int64 `json:"range_end"`
-	BytesTransferred     int64  `json:"bytes_transferred"`
-	HTTPMethod           string `json:"http_method"`
-	HTTPStatus           int    `json:"http_status"`
-	RequesterPrincipal   string `json:"requester_principal"`
-	SourceIP             string `json:"source_ip"`
-	UserAgent            string `json:"user_agent"`
-	RawEventRef          string `json:"raw_event_ref"`
-	ActorEmail           string `json:"actor_email"`
-	ActorSubject         string `json:"actor_subject"`
-	AuthMode             string `json:"auth_mode"`
-	ReconciliationStatus string `json:"reconciliation_status"`
-}
-
 func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, request metricsapi.RecordProviderTransferEventsRequestObject) (metricsapi.RecordProviderTransferEventsResponseObject, error) {
 	statusCode, ok := checkProviderMetricsIngestAuth(ctx, request.Body)
 	if !ok {
@@ -383,7 +351,7 @@ func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, reques
 	}
 	events := make([]usage.ProviderEvent, 0, len(request.Body.Events))
 	for _, item := range request.Body.Events {
-		ev, err := providerTransferPayloadToUsage(providerTransferGeneratedEventToPayload(item))
+		ev, err := providerTransferGeneratedEventToUsage(item)
 		if err != nil {
 			return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
@@ -426,45 +394,49 @@ func providerTransferResource(organization, project string) (string, bool) {
 	return resource, true
 }
 
-func providerTransferPayloadToUsage(item providerTransferPayload) (usage.ProviderEvent, error) {
+func providerTransferGeneratedEventToUsage(item metricsapi.ProviderTransferEvent) (usage.ProviderEvent, error) {
 	when := time.Time{}
-	if strings.TrimSpace(item.EventTime) != "" {
-		parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(item.EventTime))
-		if err != nil {
-			return usage.ProviderEvent{}, fmt.Errorf("invalid event_time")
-		}
-		when = parsed
+	if item.EventTime != nil {
+		when = *item.EventTime
+	}
+	objectSize := int64(0)
+	if item.ObjectSize != nil {
+		objectSize = *item.ObjectSize
+	}
+	httpStatus := 0
+	if item.HttpStatus != nil {
+		httpStatus = *item.HttpStatus
 	}
 	event := usage.ProviderEvent{
-		ProviderEventID:      item.ProviderEventID,
-		AccessGrantID:        item.AccessGrantID,
-		Direction:            item.Direction,
+		ProviderEventID:      item.ProviderEventId,
+		AccessGrantID:        generatedString(item.AccessGrantId),
+		Direction:            string(item.Direction),
 		EventTime:            when,
-		RequestID:            item.RequestID,
-		ProviderRequestID:    item.ProviderRequestID,
-		ObjectID:             item.ObjectID,
-		SHA256:               item.SHA256,
-		ObjectSize:           item.ObjectSize,
-		Organization:         item.Organization,
-		Project:              item.Project,
-		AccessID:             item.AccessID,
+		RequestID:            generatedString(item.RequestId),
+		ProviderRequestID:    generatedString(item.ProviderRequestId),
+		ObjectID:             generatedString(item.ObjectId),
+		SHA256:               generatedString(item.Sha256),
+		ObjectSize:           objectSize,
+		Organization:         generatedString(item.Organization),
+		Project:              generatedString(item.Project),
+		AccessID:             generatedString(item.AccessId),
 		Provider:             item.Provider,
 		Bucket:               item.Bucket,
-		ObjectKey:            item.ObjectKey,
-		StorageURL:           item.StorageURL,
+		ObjectKey:            generatedString(item.ObjectKey),
+		StorageURL:           generatedString(item.StorageUrl),
 		RangeStart:           item.RangeStart,
 		RangeEnd:             item.RangeEnd,
 		BytesTransferred:     item.BytesTransferred,
-		HTTPMethod:           item.HTTPMethod,
-		HTTPStatus:           item.HTTPStatus,
-		RequesterPrincipal:   item.RequesterPrincipal,
-		SourceIP:             item.SourceIP,
-		UserAgent:            item.UserAgent,
-		RawEventRef:          item.RawEventRef,
-		ActorEmail:           item.ActorEmail,
-		ActorSubject:         item.ActorSubject,
-		AuthMode:             item.AuthMode,
-		ReconciliationStatus: item.ReconciliationStatus,
+		HTTPMethod:           generatedString(item.HttpMethod),
+		HTTPStatus:           httpStatus,
+		RequesterPrincipal:   generatedString(item.RequesterPrincipal),
+		SourceIP:             generatedString(item.SourceIp),
+		UserAgent:            generatedString(item.UserAgent),
+		RawEventRef:          generatedString(item.RawEventRef),
+		ActorEmail:           generatedString(item.ActorEmail),
+		ActorSubject:         generatedString(item.ActorSubject),
+		AuthMode:             generatedString(item.AuthMode),
+		ReconciliationStatus: generatedString(item.ReconciliationStatus),
 	}
 	return usage.NormalizeProviderEvent(event)
 }
@@ -478,85 +450,6 @@ func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode in
 	default:
 		return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest))
 	}
-}
-
-func providerTransferGeneratedEventToPayload(item metricsapi.ProviderTransferEvent) providerTransferPayload {
-	out := providerTransferPayload{
-		ProviderEventID:  item.ProviderEventId,
-		Direction:        string(item.Direction),
-		Provider:         item.Provider,
-		Bucket:           item.Bucket,
-		BytesTransferred: item.BytesTransferred,
-	}
-	if item.AccessGrantId != nil {
-		out.AccessGrantID = *item.AccessGrantId
-	}
-	if item.EventTime != nil {
-		out.EventTime = item.EventTime.Format(time.RFC3339Nano)
-	}
-	if item.RequestId != nil {
-		out.RequestID = *item.RequestId
-	}
-	if item.ProviderRequestId != nil {
-		out.ProviderRequestID = *item.ProviderRequestId
-	}
-	if item.ObjectId != nil {
-		out.ObjectID = *item.ObjectId
-	}
-	if item.Sha256 != nil {
-		out.SHA256 = *item.Sha256
-	}
-	if item.ObjectSize != nil {
-		out.ObjectSize = *item.ObjectSize
-	}
-	if item.Organization != nil {
-		out.Organization = *item.Organization
-	}
-	if item.Project != nil {
-		out.Project = *item.Project
-	}
-	if item.AccessId != nil {
-		out.AccessID = *item.AccessId
-	}
-	if item.ObjectKey != nil {
-		out.ObjectKey = *item.ObjectKey
-	}
-	if item.StorageUrl != nil {
-		out.StorageURL = *item.StorageUrl
-	}
-	out.RangeStart = item.RangeStart
-	out.RangeEnd = item.RangeEnd
-	if item.HttpMethod != nil {
-		out.HTTPMethod = *item.HttpMethod
-	}
-	if item.HttpStatus != nil {
-		out.HTTPStatus = *item.HttpStatus
-	}
-	if item.RequesterPrincipal != nil {
-		out.RequesterPrincipal = *item.RequesterPrincipal
-	}
-	if item.SourceIp != nil {
-		out.SourceIP = *item.SourceIp
-	}
-	if item.UserAgent != nil {
-		out.UserAgent = *item.UserAgent
-	}
-	if item.RawEventRef != nil {
-		out.RawEventRef = *item.RawEventRef
-	}
-	if item.ActorEmail != nil {
-		out.ActorEmail = *item.ActorEmail
-	}
-	if item.ActorSubject != nil {
-		out.ActorSubject = *item.ActorSubject
-	}
-	if item.AuthMode != nil {
-		out.AuthMode = *item.AuthMode
-	}
-	if item.ReconciliationStatus != nil {
-		out.ReconciliationStatus = string(*item.ReconciliationStatus)
-	}
-	return out
 }
 
 func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsapi.GetTransferSummaryRequestObject) (metricsapi.GetTransferSummaryResponseObject, error) {

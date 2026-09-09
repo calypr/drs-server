@@ -169,8 +169,8 @@ func TestBulkOverwriteObjects_RejectsAliasTarget(t *testing.T) {
 		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
 	}
-	if err := database.CreateObject(context.Background(), &canonical); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	if err := database.RegisterObjects(context.Background(), []objects.Record{canonical}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 	if err := database.CreateObjectAlias(context.Background(), "alias-did", string(canonical.Id)); err != nil {
 		t.Fatalf("CreateObjectAlias failed: %v", err)

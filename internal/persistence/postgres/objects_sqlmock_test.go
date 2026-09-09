@@ -101,11 +101,9 @@ func TestGetObject_NotFound(t *testing.T) {
 	pg, mock, rawDB := newMockPostgresDB(t)
 	defer rawDB.Close()
 
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, size, created_time, updated_time, name, version, description
-		FROM drs_object WHERE id = $1`)).
-		WithArgs("missing").
-		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(`SELECT o\.id, o\.size, o\.created_time, o\.updated_time, o\.name, o\.version, o\.description FROM drs_object o WHERE`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "size", "created_time", "updated_time", "name", "version", "description"}))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id FROM drs_object_alias WHERE alias_id = $1")).
 		WithArgs("missing").
 		WillReturnError(sql.ErrNoRows)
@@ -122,39 +120,35 @@ func TestGetObject_DeduplicatesAndPropagatesAuthz(t *testing.T) {
 
 	created := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	updated := created.Add(2 * time.Hour)
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, size, created_time, updated_time, name, version, description
-		FROM drs_object WHERE id = $1`)).
-		WithArgs("obj-1").
+	mock.ExpectQuery(`SELECT o\.id, o\.size, o\.created_time, o\.updated_time, o\.name, o\.version, o\.description FROM drs_object o WHERE`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "size", "created_time", "updated_time", "name", "version", "description",
 		}).AddRow("obj-1", int64(123), created, updated, "file.txt", "v1", "desc"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT name_alias FROM drs_object_name_alias WHERE object_id = $1 ORDER BY name_alias")).
-		WithArgs("obj-1").
-		WillReturnRows(sqlmock.NewRows([]string{"name_alias"}).
-			AddRow("file-old.txt"))
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT url, type FROM drs_object_access_method WHERE object_id = $1")).
-		WithArgs("obj-1").
-		WillReturnRows(sqlmock.NewRows([]string{"url", "type"}).
-			AddRow("s3://bucket/key-1", "s3").
-			AddRow("s3://bucket/key-1", "s3").
-			AddRow("gs://bucket/key-2", "gs"))
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT resource FROM drs_object_controlled_access WHERE object_id = $1 ORDER BY resource")).
-		WithArgs("obj-1").
-		WillReturnRows(sqlmock.NewRows([]string{"resource"}).
-			AddRow("/programs/p1/projects/a").
-			AddRow("/programs/p1/projects/b"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT public_read FROM drs_object_read_policy WHERE object_id = $1")).
-		WithArgs("obj-1").WillReturnError(sql.ErrNoRows)
-
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT type, checksum FROM drs_object_checksum WHERE object_id = $1")).
-		WithArgs("obj-1").
-		WillReturnRows(sqlmock.NewRows([]string{"type", "checksum"}).
-			AddRow("sha256", "abc").
-			AddRow("sha256", "abc").
-			AddRow("md5", "def"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, url, type\n\t\tFROM drs_object_access_method\n\t\tWHERE object_id = ANY($1)\n\t\tORDER BY object_id")).
+		WithArgs(pq.Array([]string{"obj-1"})).
+		WillReturnRows(sqlmock.NewRows([]string{"object_id", "url", "type"}).
+			AddRow("obj-1", "s3://bucket/key-1", "s3").
+			AddRow("obj-1", "s3://bucket/key-1", "s3").
+			AddRow("obj-1", "gs://bucket/key-2", "gs"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, type, checksum\n\t\tFROM drs_object_checksum\n\t\tWHERE object_id = ANY($1)\n\t\tORDER BY object_id")).
+		WithArgs(pq.Array([]string{"obj-1"})).
+		WillReturnRows(sqlmock.NewRows([]string{"object_id", "type", "checksum"}).
+			AddRow("obj-1", "sha256", "abc").
+			AddRow("obj-1", "sha256", "abc").
+			AddRow("obj-1", "md5", "def"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, resource\n\t\tFROM drs_object_controlled_access\n\t\tWHERE object_id = ANY($1)\n\t\tORDER BY object_id, resource")).
+		WithArgs(pq.Array([]string{"obj-1"})).
+		WillReturnRows(sqlmock.NewRows([]string{"object_id", "resource"}).
+			AddRow("obj-1", "/programs/p1/projects/a").
+			AddRow("obj-1", "/programs/p1/projects/b"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, public_read\n\t\tFROM drs_object_read_policy\n\t\tWHERE object_id = ANY($1)")).
+		WithArgs(pq.Array([]string{"obj-1"})).
+		WillReturnRows(sqlmock.NewRows([]string{"object_id", "public_read"}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, name_alias\n\t\tFROM drs_object_name_alias\n\t\tWHERE object_id = ANY($1)\n\t\tORDER BY object_id, name_alias")).
+		WithArgs(pq.Array([]string{"obj-1"})).
+		WillReturnRows(sqlmock.NewRows([]string{"object_id", "name_alias"}).
+			AddRow("obj-1", "file-old.txt"))
 
 	obj, err := pg.GetObject(context.Background(), "obj-1")
 	if err != nil {

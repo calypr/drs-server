@@ -34,7 +34,7 @@ func seedDeletionRecords(t *testing.T) *store.Store {
 			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: strings.Repeat(seed.hash, 64)}},
 			ControlledAccess: &seed.resources,
 		}
-		if err := db.CreateObject(context.Background(), &record); err != nil {
+		if err := db.RegisterObjects(context.Background(), []objects.Record{record}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -102,7 +102,7 @@ func TestBulkDeleteFiltersUnauthorizedAndDuplicateIDs(t *testing.T) {
 func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.CreateObjectAlias(deletionContext(), "alias", "owned"); err != nil {
+	if err := db.CreateObjectAlias(context.Background(), "alias", "owned"); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}); !errors.Is(err, errorapi.ErrConflict) {
@@ -114,65 +114,43 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 	}
 }
 
-func TestCreateObjectAliasRequiresUpdateAccess(t *testing.T) {
+func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.CreateObjectAlias(deletionContext(), "denied", "other"); !errors.Is(err, errorapi.ErrAccessDenied) {
-		t.Fatalf("unauthorized alias: %v", err)
+	hashes := []string{strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), "missing"}
+	count, err := service.DeleteObjectsByChecksums(deletionContext(), hashes)
+	if err != nil || count != 1 {
+		t.Fatalf("delete checksums = %d, %v", count, err)
 	}
-	if _, err := db.ResolveObjectAlias(context.Background(), "denied"); !errors.Is(err, errorapi.ErrNotFound) {
-		t.Fatalf("unauthorized alias persisted: %v", err)
-	}
-	if err := service.CreateObjectAlias(deletionContext(), "missing", "missing"); !errors.Is(err, errorapi.ErrNotFound) {
-		t.Fatalf("missing alias target: %v", err)
-	}
-}
-
-func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
-	for _, optimized := range []bool{true} {
-		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
-			db := seedDeletionRecords(t)
-			service := newTestService(db)
-			hashes := []string{strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), "missing"}
-			count, err := service.DeleteObjectsByChecksums(deletionContext(), hashes)
-			if err != nil || count != 1 {
-				t.Fatalf("delete checksums = %d, %v", count, err)
-			}
-			assertRecordExists(t, db, "owned", false)
-			assertRecordExists(t, db, "shared", true)
-			assertRecordExists(t, db, "other", true)
-			count, err = service.DeleteObjectsByChecksums(deletionContext(), hashes)
-			if err != nil || count != 0 {
-				t.Fatalf("repeat delete = %d, %v", count, err)
-			}
-		})
+	assertRecordExists(t, db, "owned", false)
+	assertRecordExists(t, db, "shared", true)
+	assertRecordExists(t, db, "other", true)
+	count, err = service.DeleteObjectsByChecksums(deletionContext(), hashes)
+	if err != nil || count != 0 {
+		t.Fatalf("repeat delete = %d, %v", count, err)
 	}
 }
 
 func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
-	for _, optimized := range []bool{true} {
-		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
-			db := seedDeletionRecords(t)
-			service := newTestService(db)
-			count, err := service.DeleteBulkByScope(deletionContext(), "org", "owned")
-			if err != nil || count != 2 {
-				t.Fatalf("scope delete = %d, %v", count, err)
-			}
-			shared, err := db.GetObject(context.Background(), "shared")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := objects.AccessResources(shared); !slices.Equal(got, []string{otherResource}) {
-				t.Fatalf("remaining shared resources = %v", got)
-			}
-			assertRecordExists(t, db, "other", true)
-			count, err = service.DeleteBulkByScope(deletionContext(), "org", "owned")
-			if err != nil || count != 0 {
-				t.Fatalf("repeat scope delete = %d, %v", count, err)
-			}
-			if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, errorapi.ErrAccessDenied) {
-				t.Fatalf("unauthorized scope delete: %v", err)
-			}
-		})
+	db := seedDeletionRecords(t)
+	service := newTestService(db)
+	count, err := service.DeleteBulkByScope(deletionContext(), "org", "owned")
+	if err != nil || count != 2 {
+		t.Fatalf("scope delete = %d, %v", count, err)
+	}
+	shared, err := db.GetObject(context.Background(), "shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := objects.AccessResources(shared); !slices.Equal(got, []string{otherResource}) {
+		t.Fatalf("remaining shared resources = %v", got)
+	}
+	assertRecordExists(t, db, "other", true)
+	count, err = service.DeleteBulkByScope(deletionContext(), "org", "owned")
+	if err != nil || count != 0 {
+		t.Fatalf("repeat scope delete = %d, %v", count, err)
+	}
+	if _, err := service.DeleteBulkByScope(deletionContext(), "org", "other"); !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("unauthorized scope delete: %v", err)
 	}
 }

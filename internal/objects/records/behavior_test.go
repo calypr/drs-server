@@ -9,7 +9,7 @@ import (
 	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
-func TestCanonicalContentMetadataIsDeterministicOnTimestampTie(t *testing.T) {
+func TestCanonicalRecordMetadataIsDeterministicOnTimestampTie(t *testing.T) {
 	created := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	lowName := "low"
 	highName := "high"

@@ -109,11 +109,6 @@ func (p *lfsTestServicePorts) BulkUpdateAccessMethods(ctx context.Context, updat
 	return nil
 }
 
-func (p *lfsTestServicePorts) DeleteObjectAlias(_ context.Context, id string) error {
-	delete(p.aliases, id)
-	return nil
-}
-
 func (p *lfsTestServicePorts) CreateObjectAlias(_ context.Context, id, canonical string) error {
 	p.aliases[id] = canonical
 	return nil

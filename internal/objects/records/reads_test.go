@@ -82,8 +82,8 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 			}},
 		},
 	} {
-		if err := database.CreateObject(context.Background(), &obj); err != nil {
-			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
+		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
@@ -103,14 +103,6 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject(checksum) failed: %v", err)
 	}
-	canonical, err := om.GetCanonicalContent(ctx, "uuid-a", "read")
-	if err != nil {
-		t.Fatalf("GetCanonicalContent(uuid-a) failed: %v", err)
-	}
-	if canonical.ContentID != objects.ContentID(checksum) || canonical.Record.Id != "uuid-a" || len(canonical.Records) != 1 {
-		t.Fatalf("canonical content view lost identity distinction: %+v", canonical)
-	}
-
 	for lookup, got := range map[string]*objects.Record{
 		"uuid-a":   byFirstUUID,
 		"uuid-b":   bySecondUUID,
@@ -128,7 +120,7 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 	}
 }
 
-func TestGetObjectKeepsCanonicalContentPublicWhenAnySiblingIsPublic(t *testing.T) {
+func TestGetObjectPreservesPublicSiblingAccess(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	checksum := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	controlledResource := "/organization/org/project/controlled"
@@ -156,8 +148,8 @@ func TestGetObjectKeepsCanonicalContentPublicWhenAnySiblingIsPublic(t *testing.T
 			}},
 		},
 	} {
-		if err := database.CreateObject(context.Background(), &obj); err != nil {
-			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
+		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
@@ -179,8 +171,8 @@ func TestGetObjectPrefersSHAIdentityOverCollidingPhysicalID(t *testing.T) {
 		{Id: objects.RecordID(requestedSHA), Checksums: []objects.Checksum{{Type: "sha256", Checksum: otherSHA}}},
 		{Id: "checksum-record", Checksums: []objects.Checksum{{Type: "sha256", Checksum: requestedSHA}}},
 	} {
-		if err := database.CreateObject(context.Background(), &obj); err != nil {
-			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
+		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
@@ -217,16 +209,9 @@ func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
 	if len(got) != 1 || got[0].Id != "bulk-a" || got[0].ControlledAccess == nil || len(*got[0].ControlledAccess) != 2 {
 		t.Fatalf("bulk read did not return the merged checksum identity: %+v", got)
 	}
-	view, err := service.GetCanonicalContent(ctx, checksum, "read")
-	if err != nil {
-		t.Fatalf("GetCanonicalContent(checksum) failed: %v", err)
-	}
-	if len(view.Records) != 2 {
-		t.Fatalf("checksum lookup lost physical siblings: got %d records", len(view.Records))
-	}
 }
 
-func TestListObjectIDsPageByChecksum_ReturnsCanonicalContentID(t *testing.T) {
+func TestListObjectIDsPageByChecksum_ReturnsCanonicalObjectID(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	om := newTestService(database)
 	checksum := "1111111111111111111111111111111111111111111111111111111111111111"

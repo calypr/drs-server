@@ -66,6 +66,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		"access_id":"s3",
 		"provider":"s3",
 		"bucket":"bucket-a",
+		"object_key":"root/sha-1",
 		"storage_url":"s3://bucket-a/root/sha-1",
 		"range_start":0,
 		"range_end":41,
@@ -85,6 +86,10 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	}
 	if len(ingest.events) != 1 {
 		t.Fatalf("expected one provider transfer event, got %+v", ingest.events)
+	}
+	event := ingest.events[0]
+	if event.ProviderEventID != "event-download-1" || event.AccessGrantID != "grant-1" || event.ObjectID != "did-1" || event.ObjectKey != "root/sha-1" || event.HTTPMethod != "GET" || event.HTTPStatus != 200 || event.RangeStart == nil || *event.RangeStart != 0 || event.RangeEnd == nil || *event.RangeEnd != 41 {
+		t.Fatalf("unexpected provider transfer event: %+v", event)
 	}
 
 	summaryReq := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/transfers/summary?organization=calypr&project=proj-a&direction=download&allow_stale=true", nil)
@@ -122,35 +127,6 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	}
 	if breakdown.GroupBy != "user" || len(breakdown.Data) != 1 || breakdown.Data[0].Key != "user@example.com" || breakdown.Data[0].BytesDownloaded != 42 {
 		t.Fatalf("unexpected breakdown: %+v", breakdown)
-	}
-}
-
-func TestProviderTransferPayloadValidation(t *testing.T) {
-	base := providerTransferPayload{ProviderEventID: "event-1", Direction: usage.ProviderTransferDirectionDownload, Provider: "s3", Bucket: "bucket"}
-	for _, tc := range []struct {
-		name string
-		edit func(*providerTransferPayload)
-	}{
-		{name: "direction", edit: func(v *providerTransferPayload) { v.Direction = "copy" }},
-		{name: "required field", edit: func(v *providerTransferPayload) { v.ProviderEventID = "" }},
-		{name: "negative bytes", edit: func(v *providerTransferPayload) { v.BytesTransferred = -1 }},
-		{name: "reconciliation status", edit: func(v *providerTransferPayload) { v.ReconciliationStatus = "unknown" }},
-		{name: "event time", edit: func(v *providerTransferPayload) { v.EventTime = "not-a-time" }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			value := base
-			tc.edit(&value)
-			if _, err := providerTransferPayloadToUsage(value); err == nil {
-				t.Fatal("expected validation error")
-			}
-		})
-	}
-	value := base
-	value.ObjectKey = " /root/object "
-	value.HTTPMethod = " get "
-	converted, err := providerTransferPayloadToUsage(value)
-	if err != nil || converted.ObjectKey != "root/object" || converted.HTTPMethod != "GET" {
-		t.Fatalf("normalized provider event = %+v, err=%v", converted, err)
 	}
 }
 

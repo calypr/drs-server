@@ -436,8 +436,8 @@ func providerStorageURL(provider, bucket, key string) string {
 	}
 }
 
-func (db *Store) GetTransferAttributionSummary(ctx context.Context, filter usage.Filter) (usage.Summary, error) {
-	where, args := transferAttributionWhere(filter)
+func (db *Store) QueryTransferSummary(ctx context.Context, filter usage.Filter, resources []string) (usage.Summary, error) {
+	where, args := db.transferAttributionWhere(filter, resources)
 	var out usage.Summary
 	err := db.queryRowContext(ctx, `
 		SELECT
@@ -460,9 +460,9 @@ func (db *Store) GetTransferAttributionSummary(ctx context.Context, filter usage
 	return out, err
 }
 
-func (db *Store) GetTransferAttributionBreakdown(ctx context.Context, filter usage.Filter, groupBy string) ([]usage.Breakdown, error) {
+func (db *Store) QueryTransferBreakdown(ctx context.Context, filter usage.Filter, groupBy string, resources []string) ([]usage.Breakdown, error) {
 	keyExpr, selectExpr := transferAttributionGroupExpr(groupBy)
-	where, args := transferAttributionWhere(filter)
+	where, args := db.transferAttributionWhere(filter, resources)
 	query := fmt.Sprintf(`
 		SELECT %s,
 			COUNT(*),
@@ -483,54 +483,7 @@ func (db *Store) GetTransferAttributionBreakdown(ctx context.Context, filter usa
 	return scanTransferAttributionBreakdown(rows)
 }
 
-func (db *Store) GetTransferAttributionSummaryByResources(ctx context.Context, filter usage.Filter, resources []string) (usage.Summary, error) {
-	where, args := db.transferAttributionWhereByResources(filter, resources)
-	var out usage.Summary
-	err := db.queryRowContext(ctx, `
-		SELECT
-			COUNT(*),
-			COALESCE(SUM(CASE WHEN event_type = 'access_issued' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN direction = 'download' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN direction = 'upload' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(bytes_requested), 0),
-			COALESCE(SUM(CASE WHEN direction = 'download' THEN bytes_requested ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN direction = 'upload' THEN bytes_requested ELSE 0 END), 0)
-		FROM transfer_attribution_event`+where, args...).Scan(
-		&out.EventCount,
-		&out.AccessIssuedCount,
-		&out.DownloadEventCount,
-		&out.UploadEventCount,
-		&out.BytesRequested,
-		&out.BytesDownloaded,
-		&out.BytesUploaded,
-	)
-	return out, err
-}
-
-func (db *Store) GetTransferAttributionBreakdownByResources(ctx context.Context, filter usage.Filter, groupBy string, resources []string) ([]usage.Breakdown, error) {
-	keyExpr, selectExpr := transferAttributionGroupExpr(groupBy)
-	where, args := db.transferAttributionWhereByResources(filter, resources)
-	query := fmt.Sprintf(`
-		SELECT %s,
-			COUNT(*),
-			COALESCE(SUM(bytes_requested), 0),
-			COALESCE(SUM(CASE WHEN direction = 'download' THEN bytes_requested ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN direction = 'upload' THEN bytes_requested ELSE 0 END), 0),
-			MAX(event_time)
-		FROM transfer_attribution_event%s
-		GROUP BY %s
-		ORDER BY MAX(event_time) DESC, key ASC
-		LIMIT 1000
-	`, selectExpr, where, keyExpr)
-	rows, err := db.queryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanTransferAttributionBreakdown(rows)
-}
-
-func transferAttributionWhere(filter usage.Filter) (string, []any) {
+func (db *Store) transferAttributionWhere(filter usage.Filter, resources []string) (string, []any) {
 	parts := make([]string, 0)
 	args := make([]any, 0)
 	add := func(clause string, value any) {
@@ -578,25 +531,19 @@ func transferAttributionWhere(filter usage.Filter) (string, []any) {
 		parts = append(parts, "(actor_email = ? OR actor_subject = ?)")
 		args = append(args, user, user)
 	}
+	if resources != nil {
+		clause, clauseArgs := db.transferResourceClause(resources)
+		if clause == "" {
+			parts = append(parts, "1 = 0")
+		} else {
+			parts = append(parts, "("+clause+")")
+			args = append(args, clauseArgs...)
+		}
+	}
 	if len(parts) == 0 {
 		return "", args
 	}
 	return " WHERE " + strings.Join(parts, " AND "), args
-}
-
-func (db *Store) transferAttributionWhereByResources(filter usage.Filter, resources []string) (string, []any) {
-	where, args := transferAttributionWhere(filter)
-	clause, clauseArgs := db.transferResourceClause(resources)
-	if clause == "" {
-		if where == "" {
-			return " WHERE 1 = 0", args
-		}
-		return where + " AND 1 = 0", args
-	}
-	if where == "" {
-		return " WHERE " + clause, append(args, clauseArgs...)
-	}
-	return where + " AND (" + clause + ")", append(args, clauseArgs...)
 }
 
 func (db *Store) transferResourceClause(resources []string) (string, []any) {

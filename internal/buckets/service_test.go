@@ -64,27 +64,6 @@ func TestNewServiceNilInvalidatorIsSafe(t *testing.T) {
 	}
 }
 
-func TestServiceDelegatesCredentialAndScopeReads(t *testing.T) {
-	credential := Credential{CredentialID: "id-a", Bucket: "bucket-a"}
-	service, credentials, scopes := newFakeService([]Credential{credential}, []Scope{{Organization: "org", ProjectID: "project"}}, &fakeVisibilityQuery{}, nil, nil)
-
-	gotCredentials, err := service.ListS3Credentials(context.Background())
-	if err != nil || len(gotCredentials) != 1 || gotCredentials[0] != credential {
-		t.Fatalf("ListS3Credentials()=(%v,%v)", gotCredentials, err)
-	}
-	gotCredential, err := service.GetS3Credential(context.Background(), "id-a")
-	if err != nil || gotCredential == nil || gotCredential.Bucket != "bucket-a" {
-		t.Fatalf("GetS3Credential()=(%v,%v)", gotCredential, err)
-	}
-	gotScopes, err := service.ListBucketScopes(context.Background())
-	if err != nil || len(gotScopes) != 1 {
-		t.Fatalf("ListBucketScopes()=(%v,%v)", gotScopes, err)
-	}
-	if credentials.listCalls != 1 || credentials.getCalls != 1 || scopes.listCalls != 1 {
-		t.Fatalf("unexpected delegation counts: credentials list=%d get=%d scopes list=%d", credentials.listCalls, credentials.getCalls, scopes.listCalls)
-	}
-}
-
 func TestGetS3CredentialFallsBackToCaseInsensitiveAliases(t *testing.T) {
 	cases := []struct {
 		name       string

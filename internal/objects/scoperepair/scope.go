@@ -79,9 +79,6 @@ func parseScopePath(raw string) (string, string, bool) {
 	if err != nil || parsed.Scheme == "" {
 		return "", "", false
 	}
-	if address.ProviderFromScheme(parsed.Scheme) != address.S3Provider {
-		return strings.TrimSpace(parsed.Host), strings.Trim(strings.TrimSpace(parsed.Path), "/"), true
-	}
 	return strings.TrimSpace(parsed.Host), strings.Trim(strings.TrimSpace(parsed.Path), "/"), true
 }
 

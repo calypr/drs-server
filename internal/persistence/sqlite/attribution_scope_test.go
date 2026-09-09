@@ -32,7 +32,7 @@ func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
 		t.Fatalf("RecordTransferAttributionEvents failed: %v", err)
 	}
 
-	all, err := db.GetTransferAttributionSummary(ctx, usage.Filter{})
+	all, err := db.QueryTransferSummary(ctx, usage.Filter{}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary failed: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
 		t.Fatalf("empty-scope event was not retained: %+v", all)
 	}
 
-	project, err := db.GetTransferAttributionSummaryByResources(ctx, usage.Filter{}, []string{"/organization/org/project/project"})
+	project, err := db.QueryTransferSummary(ctx, usage.Filter{}, []string{"/organization/org/project/project"})
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummaryByResources failed: %v", err)
 	}

@@ -85,22 +85,14 @@ func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ str
 	return result, nil
 }
 
-func (s *reportStoreSpy) GetTransferAttributionSummary(_ context.Context, filter Filter) (Summary, error) {
+func (s *reportStoreSpy) QueryTransferSummary(_ context.Context, filter Filter, _ []string) (Summary, error) {
 	s.transferCalls++
 	return s.transfer[filter.Organization], nil
 }
 
-func (s *reportStoreSpy) GetTransferAttributionBreakdown(_ context.Context, filter Filter, _ string) ([]Breakdown, error) {
+func (s *reportStoreSpy) QueryTransferBreakdown(_ context.Context, filter Filter, _ string, _ []string) ([]Breakdown, error) {
 	s.breakdownCalls++
 	return append([]Breakdown(nil), s.breakdowns[filter.Organization]...), nil
-}
-
-func (s *reportStoreSpy) GetTransferAttributionSummaryByResources(ctx context.Context, filter Filter, _ []string) (Summary, error) {
-	return s.GetTransferAttributionSummary(ctx, filter)
-}
-
-func (s *reportStoreSpy) GetTransferAttributionBreakdownByResources(ctx context.Context, filter Filter, groupBy string, _ []string) ([]Breakdown, error) {
-	return s.GetTransferAttributionBreakdown(ctx, filter, groupBy)
 }
 
 type optimizedReportStore struct {
@@ -145,13 +137,13 @@ func (s *optimizedReportStore) GetProjectRecordSummaryByScope(context.Context, s
 	return FileUsageSummary{RecordCount: 7}, nil
 }
 
-func (s *optimizedReportStore) GetTransferAttributionSummaryByResources(_ context.Context, _ Filter, resources []string) (Summary, error) {
+func (s *optimizedReportStore) QueryTransferSummary(_ context.Context, _ Filter, resources []string) (Summary, error) {
 	s.transferByResources++
 	s.lastResources = append([]string(nil), resources...)
 	return Summary{EventCount: 9}, nil
 }
 
-func (s *optimizedReportStore) GetTransferAttributionBreakdownByResources(_ context.Context, _ Filter, _ string, resources []string) ([]Breakdown, error) {
+func (s *optimizedReportStore) QueryTransferBreakdown(_ context.Context, _ Filter, _ string, resources []string) ([]Breakdown, error) {
 	s.breakdownByResources++
 	s.lastResources = append([]string(nil), resources...)
 	return []Breakdown{{Key: "resource-fast-path"}}, nil

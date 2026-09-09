@@ -72,11 +72,6 @@ func (f *bulkOverwriteStore) ReplaceObjects(ctx context.Context, records []objec
 	return f.RegisterObjects(ctx, records)
 }
 
-func (f *bulkOverwriteStore) DeleteObjectAlias(_ context.Context, aliasID string) error {
-	delete(f.Aliases, aliasID)
-	return nil
-}
-
 func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := f.Objects[canonicalID]; !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)

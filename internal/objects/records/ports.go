@@ -19,7 +19,6 @@ type ObjectStore interface {
 	BulkUpdateAccessMethods(context.Context, map[string][]objectmodel.AccessMethod) error
 	RemoveObjectControlledAccess(context.Context, string, string) error
 	RemoveObjectControlledAccessBulk(context.Context, []string, string) (int, error)
-	DeleteObjectAlias(context.Context, string) error
 	CreateObjectAlias(context.Context, string, string) error
 	ResolveObjectAlias(context.Context, string) (string, error)
 	GetObjectsByChecksum(context.Context, string) ([]objectmodel.Record, error)

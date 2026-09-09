@@ -295,10 +295,11 @@ func (s *Service) GetTransferAttributionSummary(ctx context.Context, query Trans
 	if err := s.requireReports(); err != nil {
 		return Summary{}, err
 	}
+	var resources []string
 	if query.Scope.isAggregate() && strings.TrimSpace(query.Filter.Organization) == "" {
-		return s.reports.GetTransferAttributionSummaryByResources(ctx, query.Filter, query.Scope.resources())
+		resources = query.Scope.resources()
 	}
-	return s.reports.GetTransferAttributionSummary(ctx, query.Filter)
+	return s.reports.QueryTransferSummary(ctx, query.Filter, resources)
 }
 
 // GetTransferAttributionBreakdown preserves group validation and routes
@@ -310,10 +311,11 @@ func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query Tra
 	if !validBreakdownGroup(query.GroupBy) {
 		return nil, ErrInvalidGroupBy
 	}
+	var resources []string
 	if query.Scope.isAggregate() && strings.TrimSpace(query.Filter.Organization) == "" {
-		return s.reports.GetTransferAttributionBreakdownByResources(ctx, query.Filter, query.GroupBy, query.Scope.resources())
+		resources = query.Scope.resources()
 	}
-	return s.reports.GetTransferAttributionBreakdown(ctx, query.Filter, query.GroupBy)
+	return s.reports.QueryTransferBreakdown(ctx, query.Filter, query.GroupBy, resources)
 }
 
 func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (Freshness, error) {
