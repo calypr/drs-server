@@ -29,6 +29,7 @@ type Service struct {
 	resolver       ScopeResolver
 	credentials    CredentialReader
 	visibility     VisibilityReader
+	records        RecordRepairer
 	inventory      InventoryPort
 	probe          ProbePort
 	delete         DeletePort
@@ -41,6 +42,7 @@ func NewService(deps Dependencies) *Service {
 		resolver:       deps.ScopeResolver,
 		credentials:    deps.Credentials,
 		visibility:     deps.Visibility,
+		records:        deps.Records,
 		inventory:      deps.Providers.Inventory,
 		probe:          deps.Providers.Probe,
 		delete:         deps.Providers.Delete,

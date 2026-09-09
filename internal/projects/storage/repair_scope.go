@@ -13,27 +13,34 @@ import (
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
-func (s *RepairService) loadScopeTargets(ctx context.Context) (map[string][]repairScopeTarget, error) {
-	if s.buckets == nil {
+func (s *Service) loadScopeTargets(ctx context.Context) (map[string][]repairScopeTarget, error) {
+	if s.credentials == nil {
 		return nil, fmt.Errorf("scope reader is not configured")
 	}
-	credentials, err := s.buckets.ListS3Credentials(ctx)
+	credentials, err := s.credentials.ListS3Credentials(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list buckets: %w", err)
 	}
-	out := make(map[string][]repairScopeTarget)
+	usable := make([]buckets.Credential, 0, len(credentials))
 	for _, credential := range credentials {
-		if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {
+		if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider || strings.TrimSpace(credential.Bucket) == "" {
 			continue
 		}
+		usable = append(usable, credential)
+	}
+	out := make(map[string][]repairScopeTarget)
+	if len(usable) == 0 {
+		return out, nil
+	}
+	if s.cleanupScopes == nil {
+		return nil, fmt.Errorf("scope reader is not configured")
+	}
+	scopes, err := s.cleanupScopes.ListBucketScopes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list bucket scopes: %w", err)
+	}
+	for _, credential := range usable {
 		bucket := strings.TrimSpace(credential.Bucket)
-		if bucket == "" {
-			continue
-		}
-		scopes, err := s.buckets.ListBucketScopes(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list bucket scopes for %s: %w", bucket, err)
-		}
 		for _, scope := range scopes {
 			if !scopeBelongsToCredential(scope, credential) {
 				continue
@@ -137,23 +144,4 @@ func recordProjectResources(record objects.Record, inferred string) []string {
 	}
 	sort.Strings(result)
 	return result
-}
-
-func recordMatchesResource(record objects.Record, resource string) bool {
-	for _, candidate := range objects.AccessResources(&record) {
-		if candidate == resource {
-			return true
-		}
-	}
-	return false
-}
-
-func addControlledAccess(controlled *[]string, resource string) *[]string {
-	values := make([]string, 0)
-	if controlled != nil {
-		values = append(values, (*controlled)...)
-	}
-	values = append(values, resource)
-	normalized := clientaccess.NormalizeAccessResources(values)
-	return &normalized
 }

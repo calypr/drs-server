@@ -25,7 +25,7 @@ type Dependencies struct {
 	UsageReports   usage.Reporter
 	Buckets        *buckets.Service
 	ProjectStorage *projectstorage.Service
-	ScopeRepair    *projectstorage.RepairService
+	ScopeRepair    *projectstorage.Service
 	Authorization  *middleware.AuthzMiddleware
 	RequestIDs     *middleware.RequestIDMiddleware
 }
@@ -44,7 +44,7 @@ type internalServer struct {
 	transfers      *transfers.Service
 	projectStorage *projectstorage.Service
 	buckets        *buckets.Service
-	repair         *projectstorage.RepairService
+	repair         *projectstorage.Service
 }
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)

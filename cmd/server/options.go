@@ -24,7 +24,6 @@ type serverRuntime struct {
 	usageService        *usage.Service
 	usageIngest         usage.Ingestor
 	projectStorage      *projectstorage.Service
-	scopeRepairService  *projectstorage.RepairService
 	bucketService       *buckets.Service
 	authzMiddleware     *middleware.AuthzMiddleware
 	requestIDMiddleware *middleware.RequestIDMiddleware
@@ -40,7 +39,7 @@ func registerServerRoutes(rt *serverRuntime) {
 		UsageReports:   rt.usageService.Reports(),
 		Buckets:        rt.bucketService,
 		ProjectStorage: rt.projectStorage,
-		ScopeRepair:    rt.scopeRepairService,
+		ScopeRepair:    rt.projectStorage,
 		Authorization:  rt.authzMiddleware,
 		RequestIDs:     rt.requestIDMiddleware,
 	}, httpapi.Options{

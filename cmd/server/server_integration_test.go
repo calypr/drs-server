@@ -153,11 +153,11 @@ s3_credentials:
 		ScopeResolver: bucketService,
 		Credentials:   bucketService,
 		Visibility:    bucketService,
+		Records:       objectService,
 		ObjectCleanup: objectService,
 		ScopeCatalog:  bucketService,
 		Providers:     projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
-	scopeRepairService := projectstorage.NewRepairService(objectService, bucketService, projectStorageService)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
 		LFS:            lfsService,
 		Objects:        objectService,
@@ -166,7 +166,7 @@ s3_credentials:
 		UsageReports:   usageService.Reports(),
 		Buckets:        bucketService,
 		ProjectStorage: projectStorageService,
-		ScopeRepair:    scopeRepairService,
+		ScopeRepair:    projectStorageService,
 	}, httpapi.Options{Internal: true})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

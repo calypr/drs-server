@@ -11,7 +11,7 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-func (s *RepairService) classifyAccessMethods(ctx context.Context, object *auditedObject, checkStorage bool) {
+func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObject, checkStorage bool) {
 	if object.record.AccessMethods == nil {
 		return
 	}
@@ -23,8 +23,8 @@ func (s *RepairService) classifyAccessMethods(ctx context.Context, object *audit
 	pathStyleURL := pathStyleAccessURL(object.scope, name)
 	targetURL := object.canonicalURL
 	if checkStorage {
-		canonicalExists := s.checkURLExists(ctx, object, object.canonicalURL)
-		pathStyleExists := s.checkURLExists(ctx, object, pathStyleURL)
+		canonicalExists := strings.TrimSpace(object.canonicalURL) != "" && s.inspectStorageURL(ctx, object.canonicalURL) == nil
+		pathStyleExists := strings.TrimSpace(pathStyleURL) != "" && s.inspectStorageURL(ctx, pathStyleURL) == nil
 		if !canonicalExists && pathStyleExists {
 			targetURL = pathStyleURL
 		}
@@ -49,7 +49,10 @@ func (s *RepairService) classifyAccessMethods(ctx context.Context, object *audit
 			continue
 		}
 		object.findings = append(object.findings, newFinding(FindingLegacyAccessURLRewritable, SeverityWarn, object.record, object.sha256, object.currentURLs, targetURL, true, fmt.Sprintf("URL %q can be rewritten to target URL %q", raw, targetURL)))
-		setAccessMethodURL(&methods[index], targetURL)
+		if methods[index].AccessUrl == nil {
+			methods[index].AccessUrl = &objects.AccessURL{}
+		}
+		methods[index].AccessUrl.Url = targetURL
 		changed = true
 		hasTarget = true
 	}
@@ -71,8 +74,8 @@ func (s *RepairService) classifyAccessMethods(ctx context.Context, object *audit
 	object.updated = &updated
 }
 
-func (s *RepairService) addStorageFindings(ctx context.Context, object *auditedObject) {
-	if s.storage == nil {
+func (s *Service) addStorageFindings(ctx context.Context, object *auditedObject) {
+	if s.probe == nil {
 		return
 	}
 	for _, raw := range object.currentURLs {
@@ -92,19 +95,11 @@ func (s *RepairService) addStorageFindings(ctx context.Context, object *auditedO
 	}
 }
 
-func (s *RepairService) checkURLExists(ctx context.Context, object *auditedObject, raw string) bool {
-	if s.storage == nil || strings.TrimSpace(raw) == "" {
-		return false
-	}
-	err := s.inspectStorageURL(ctx, raw)
-	return err == nil
-}
-
-func (s *RepairService) inspectStorageURL(ctx context.Context, rawURL string) error {
-	if s.storage == nil {
+func (s *Service) inspectStorageURL(ctx context.Context, rawURL string) error {
+	if s.probe == nil {
 		return fmt.Errorf("storage inspector is not configured")
 	}
-	_, err := s.storage.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
+	_, err := s.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
 	if err == nil {
 		return nil
 	}
@@ -115,7 +110,7 @@ func (s *RepairService) inspectStorageURL(ctx context.Context, rawURL string) er
 	return err
 }
 
-func (s *RepairService) addDuplicateFindings(objectsToAudit []*auditedObject) {
+func (s *Service) addDuplicateFindings(objectsToAudit []*auditedObject) {
 	byKey := make(map[string][]*auditedObject)
 	for _, object := range objectsToAudit {
 		if object.sha256 == "" {
@@ -160,13 +155,6 @@ func accessMethodURL(method objects.AccessMethod) string {
 		return ""
 	}
 	return strings.TrimSpace(method.AccessUrl.Url)
-}
-
-func setAccessMethodURL(method *objects.AccessMethod, raw string) {
-	if method.AccessUrl == nil {
-		method.AccessUrl = &objects.AccessURL{}
-	}
-	method.AccessUrl.Url = raw
 }
 
 func cloneAccessMethods(input []objects.AccessMethod) []objects.AccessMethod {
