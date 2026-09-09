@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"
@@ -71,15 +72,9 @@ func NewScope(organization, project string) (Scope, error) {
 // to the same content while retaining distinct record IDs.
 type RecordID string
 
-type Checksum struct {
-	Type     string `json:"type"`
-	Checksum string `json:"checksum"`
-}
-
-type AccessURL struct {
-	Headers *[]string `json:"headers,omitempty"`
-	Url     string    `json:"url"`
-}
+// Transport-shaped values use the generated DRS models as their canonical shape.
+type Checksum = generated.Checksum
+type AccessURL = generated.AccessURL
 
 // AccessAuthorizations describes optional authorization issuers attached to
 // an access method.  The fields mirror the DRS contract without importing it.
@@ -100,15 +95,7 @@ type AccessMethod struct {
 	Type           string                `json:"type"`
 }
 
-// Content is a nested bundle entry.  It is intentionally independent of the
-// generated API's ContentsObject so persistence and object services can share
-// it without importing HTTP code.
-type Content struct {
-	Contents *[]Content `json:"contents,omitempty"`
-	DrsUri   *[]string  `json:"drs_uri,omitempty"`
-	Id       *string    `json:"id,omitempty"`
-	Name     string     `json:"name"`
-}
+type Content = generated.ContentsObject
 
 // Candidate is the plain request value accepted by object registration and
 // LFS metadata staging. HTTP adapters translate generated request models into

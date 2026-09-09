@@ -32,6 +32,32 @@ func TestToGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
 	}
 }
 
+func TestContentsConversionNormalizesNilSlices(t *testing.T) {
+	nilDomainContents := []objects.Content(nil)
+	record := objects.Record{
+		Contents: &[]objects.Content{{Name: "bundle", Contents: &nilDomainContents}},
+	}
+	generatedRecord := drsToGenerated(record)
+	if generatedRecord.Contents == nil || *generatedRecord.Contents == nil || (*generatedRecord.Contents)[0].Contents == nil || *(*generatedRecord.Contents)[0].Contents == nil {
+		t.Fatalf("generated contents did not normalize nonnil nil slices: %#v", generatedRecord.Contents)
+	}
+	wire, err := json.Marshal(generatedRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(wire, []byte(`"contents":[{"contents":[]`)) {
+		t.Fatalf("generated contents wire shape = %s", wire)
+	}
+
+	nilGeneratedContents := []generated.ContentsObject(nil)
+	candidate := drsFromGeneratedCandidate(generated.DrsObjectCandidate{
+		Contents: &[]generated.ContentsObject{{Name: "bundle", Contents: &nilGeneratedContents}},
+	})
+	if candidate.Contents == nil || *candidate.Contents == nil || (*candidate.Contents)[0].Contents == nil || *(*candidate.Contents)[0].Contents == nil {
+		t.Fatalf("candidate contents did not normalize nonnil nil slices: %#v", candidate.Contents)
+	}
+}
+
 func TestObjectPayloadUsesTypedNestedResponse(t *testing.T) {
 	name := "sample"
 	aliases := []string{"sample.alias"}

@@ -339,11 +339,7 @@ func drsFromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candi
 		Size:             &value.Size,
 	}
 	if value.Checksums != nil {
-		checksums := make([]objects.Checksum, 0, len(value.Checksums))
-		for _, checksum := range value.Checksums {
-			checksums = append(checksums, objects.Checksum{Type: checksum.Type, Checksum: checksum.Checksum})
-		}
-		out.Checksums = &checksums
+		out.Checksums = &value.Checksums
 	}
 	if value.AccessMethods != nil {
 		methods := make([]objects.AccessMethod, 0, len(*value.AccessMethods))
@@ -353,11 +349,7 @@ func drsFromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candi
 		out.AccessMethods = &methods
 	}
 	if value.Contents != nil {
-		contents := make([]objects.Content, 0, len(*value.Contents))
-		for _, content := range *value.Contents {
-			contents = append(contents, drsFromGeneratedContent(content))
-		}
-		out.Contents = &contents
+		out.Contents = cloneGeneratedContents(value.Contents)
 	}
 	return out
 }
@@ -375,12 +367,7 @@ func drsToGenerated(record objects.Record) generated.DrsObject {
 		UpdatedTime:      record.UpdatedTime,
 		Version:          record.Version,
 	}
-	if record.Checksums != nil {
-		out.Checksums = make([]generated.Checksum, 0, len(record.Checksums))
-	}
-	for _, checksum := range record.Checksums {
-		out.Checksums = append(out.Checksums, generated.Checksum{Type: checksum.Type, Checksum: checksum.Checksum})
-	}
+	out.Checksums = record.Checksums
 	if record.AccessMethods != nil {
 		methods := make([]generated.AccessMethod, 0, len(*record.AccessMethods))
 		for _, method := range *record.AccessMethods {
@@ -392,11 +379,7 @@ func drsToGenerated(record objects.Record) generated.DrsObject {
 		out.Aliases = record.Aliases
 	}
 	if record.Contents != nil {
-		contents := make([]generated.ContentsObject, 0, len(*record.Contents))
-		for _, content := range *record.Contents {
-			contents = append(contents, drsToGeneratedContent(content))
-		}
-		out.Contents = &contents
+		out.Contents = cloneGeneratedContents(record.Contents)
 	}
 	return out
 }
@@ -510,28 +493,16 @@ func drsFromGeneratedAccessMethod(method generated.AccessMethod) objects.AccessM
 	return out
 }
 
-func drsToGeneratedContent(content objects.Content) generated.ContentsObject {
-	out := generated.ContentsObject{DrsUri: content.DrsUri, Id: content.Id, Name: content.Name}
-	if content.Contents != nil {
-		nested := make([]generated.ContentsObject, 0, len(*content.Contents))
-		for _, child := range *content.Contents {
-			nested = append(nested, drsToGeneratedContent(child))
-		}
-		out.Contents = &nested
+func cloneGeneratedContents(contents *[]generated.ContentsObject) *[]generated.ContentsObject {
+	if contents == nil {
+		return nil
 	}
-	return out
-}
-
-func drsFromGeneratedContent(content generated.ContentsObject) objects.Content {
-	out := objects.Content{DrsUri: content.DrsUri, Id: content.Id, Name: content.Name}
-	if content.Contents != nil {
-		nested := make([]objects.Content, 0, len(*content.Contents))
-		for _, child := range *content.Contents {
-			nested = append(nested, drsFromGeneratedContent(child))
-		}
-		out.Contents = &nested
+	cloned := make([]generated.ContentsObject, len(*contents))
+	for i, content := range *contents {
+		cloned[i] = content
+		cloned[i].Contents = cloneGeneratedContents(content.Contents)
 	}
-	return out
+	return &cloned
 }
 
 func drsPtr[T any](value T) *T {
