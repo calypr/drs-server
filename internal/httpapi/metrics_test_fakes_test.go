@@ -1,4 +1,4 @@
-package metrics
+package httpapi
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func newMetricsTestApp(reporter usage.Reporter, ingest usage.ProviderEventRecord
 		c.SetContext(metricsTestContext(c.Context(), mode, header != "", header == "true", privileges))
 		return c.Next()
 	})
-	RegisterMetricsRoutes(app, reporter, ingest)
+	registerMetricsRoutes(app, reporter, ingest)
 	return app
 }
 

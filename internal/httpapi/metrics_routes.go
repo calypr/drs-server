@@ -1,9 +1,14 @@
-package metrics
+package httpapi
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -11,10 +16,6 @@ import (
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
-	"log"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type metricsQueryContextKey struct{}
@@ -25,19 +26,19 @@ type metricsQueryParams struct {
 	project      string
 }
 
-type MetricsServer struct {
+type metricsServer struct {
 	reporter usage.Reporter
 	ingestor usage.ProviderEventRecorder
 }
 
-func NewMetricsServer(reporter usage.Reporter, ingestor usage.ProviderEventRecorder) *MetricsServer {
-	return &MetricsServer{
+func newMetricsServer(reporter usage.Reporter, ingestor usage.ProviderEventRecorder) *metricsServer {
+	return &metricsServer{
 		reporter: reporter,
 		ingestor: ingestor,
 	}
 }
 
-func RegisterMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingestor usage.ProviderEventRecorder) {
+func registerMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingestor usage.ProviderEventRecorder) {
 	router.Use(func(c fiber.Ctx) error {
 		params := metricsQueryParams{
 			organization: strings.TrimSpace(c.Query("organization")),
@@ -48,12 +49,12 @@ func RegisterMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingesto
 		return c.Next()
 	})
 
-	server := NewMetricsServer(reporter, ingestor)
+	server := newMetricsServer(reporter, ingestor)
 	strict := metricsapi.NewStrictHandler(server, nil)
 	metricsapi.RegisterHandlers(router, strict)
 }
 
-func (s *MetricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {
+func (s *metricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {
 	organization, project, _, err := parseScopeQuery(ctx)
 	if err != nil {
 		return metricsAccess{}, http.StatusBadRequest, false
@@ -130,7 +131,7 @@ func metricsErrorCode(status int) errorapi.ErrorCode {
 	}
 }
 
-func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi.ListMetricsFilesRequestObject) (metricsapi.ListMetricsFilesResponseObject, error) {
+func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi.ListMetricsFilesRequestObject) (metricsapi.ListMetricsFilesResponseObject, error) {
 	limit := 200
 	if request.Params.Limit != nil {
 		limit = *request.Params.Limit
@@ -183,7 +184,7 @@ func (s *MetricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 	}, nil
 }
 
-func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi.BulkMetricsFilesRequestObject) (metricsapi.BulkMetricsFilesResponseObject, error) {
+func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi.BulkMetricsFilesRequestObject) (metricsapi.BulkMetricsFilesResponseObject, error) {
 	started := time.Now()
 	if request.Body == nil {
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
@@ -242,7 +243,7 @@ func (s *MetricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	}, nil
 }
 
-func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.GetMetricsFileRequestObject) (metricsapi.GetMetricsFileResponseObject, error) {
+func (s *metricsServer) GetMetricsFile(ctx context.Context, request metricsapi.GetMetricsFileRequestObject) (metricsapi.GetMetricsFileResponseObject, error) {
 	objectID := request.ObjectId
 	if objectID == "" {
 		return metricsapi.GetMetricsFile400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
@@ -278,7 +279,7 @@ func (s *MetricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 	return metricsapi.GetMetricsFile200JSONResponse(toMetricsFileUsage(*fileUsage)), nil
 }
 
-func (s *MetricsServer) GetMetricsSummary(ctx context.Context, request metricsapi.GetMetricsSummaryRequestObject) (metricsapi.GetMetricsSummaryResponseObject, error) {
+func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsapi.GetMetricsSummaryRequestObject) (metricsapi.GetMetricsSummaryResponseObject, error) {
 	inactiveSince, err := usage.ParseInactiveSince(time.Now().UTC(), request.Params.InactiveDays)
 	if err != nil {
 		return metricsapi.GetMetricsSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
@@ -341,7 +342,7 @@ func toMetricsFileUsage(v usage.FileUsage) metricsapi.FileUsage {
 	}
 }
 
-func (s *MetricsServer) RecordProviderTransferEvents(ctx context.Context, request metricsapi.RecordProviderTransferEventsRequestObject) (metricsapi.RecordProviderTransferEventsResponseObject, error) {
+func (s *metricsServer) RecordProviderTransferEvents(ctx context.Context, request metricsapi.RecordProviderTransferEventsRequestObject) (metricsapi.RecordProviderTransferEventsResponseObject, error) {
 	statusCode, ok := checkProviderMetricsIngestAuth(ctx, request.Body)
 	if !ok {
 		return recordProviderTransferEventsAuthResponse(ctx, statusCode), nil
@@ -452,7 +453,7 @@ func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode in
 	}
 }
 
-func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsapi.GetTransferSummaryRequestObject) (metricsapi.GetTransferSummaryResponseObject, error) {
+func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsapi.GetTransferSummaryRequestObject) (metricsapi.GetTransferSummaryResponseObject, error) {
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		return getTransferSummaryAuthResponse(ctx, statusCode), nil
@@ -474,7 +475,7 @@ func (s *MetricsServer) GetTransferSummary(ctx context.Context, request metricsa
 	return metricsapi.GetTransferSummary200JSONResponse(generated), nil
 }
 
-func (s *MetricsServer) GetTransferBreakdown(ctx context.Context, request metricsapi.GetTransferBreakdownRequestObject) (metricsapi.GetTransferBreakdownResponseObject, error) {
+func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metricsapi.GetTransferBreakdownRequestObject) (metricsapi.GetTransferBreakdownResponseObject, error) {
 	access, statusCode, ok := s.checkAuth(ctx)
 	if !ok {
 		return getTransferBreakdownAuthResponse(ctx, statusCode), nil
@@ -610,7 +611,7 @@ func toGeneratedTransferBreakdown(item usage.Breakdown) metricsapi.TransferAttri
 	}
 }
 
-func (s *MetricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, bool, error) {
+func (s *metricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, bool, error) {
 	domainFreshness, err := s.reporter.GetTransferFreshness(ctx, filter)
 	if err != nil {
 		return metricsapi.TransferMetricsFreshness{}, false, err

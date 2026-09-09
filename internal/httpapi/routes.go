@@ -5,7 +5,6 @@ import (
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
-	"github.com/calypr/syfon/internal/httpapi/metrics"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
@@ -87,7 +86,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		registerDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo)
 	}
 	if options.Metrics {
-		metrics.RegisterMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
+		registerMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
 	}
 	if options.Internal {
 		server := newInternalServer(deps)

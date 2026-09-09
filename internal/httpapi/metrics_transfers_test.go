@@ -1,4 +1,4 @@
-package metrics
+package httpapi
 
 import (
 	"context"
@@ -15,30 +15,30 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type providerErrorIngestor struct {
+type metricsProviderErrorIngestor struct {
 	err error
 }
 
-type transferErrorReporter struct {
+type metricsTransferErrorReporter struct {
 	usage.Reporter
 	freshnessErr error
 	summaryErr   error
 	breakdownErr error
 }
 
-func (r transferErrorReporter) GetTransferFreshness(context.Context, usage.Filter) (usage.Freshness, error) {
+func (r metricsTransferErrorReporter) GetTransferFreshness(context.Context, usage.Filter) (usage.Freshness, error) {
 	return usage.Freshness{}, r.freshnessErr
 }
 
-func (r transferErrorReporter) GetTransferAttributionSummary(context.Context, usage.TransferSummaryQuery) (usage.Summary, error) {
+func (r metricsTransferErrorReporter) GetTransferAttributionSummary(context.Context, usage.TransferSummaryQuery) (usage.Summary, error) {
 	return usage.Summary{}, r.summaryErr
 }
 
-func (r transferErrorReporter) GetTransferAttributionBreakdown(context.Context, usage.TransferBreakdownQuery) ([]usage.Breakdown, error) {
+func (r metricsTransferErrorReporter) GetTransferAttributionBreakdown(context.Context, usage.TransferBreakdownQuery) ([]usage.Breakdown, error) {
 	return nil, r.breakdownErr
 }
 
-func (i providerErrorIngestor) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
+func (i metricsProviderErrorIngestor) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
 	return i.err
 }
 
@@ -49,7 +49,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		transferBreakdown: []usage.Breakdown{{Key: "user@example.com", BytesDownloaded: 42}},
 	}
 	app := fiber.New()
-	RegisterMetricsRoutes(app, reports, ingest)
+	registerMetricsRoutes(app, reports, ingest)
 
 	body := `{"events":[{
 		"provider_event_id":"event-download-1",
@@ -137,7 +137,7 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 		Provider:        "s3",
 		Bucket:          "bucket",
 	}}}
-	server := NewMetricsServer(nil, &metricsIngestFake{})
+	server := newMetricsServer(nil, &metricsIngestFake{})
 
 	response, err := server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", false, false, nil), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 		t.Fatalf("invalid event response = %T", response)
 	}
 	wantErr := errors.New("ingest failed")
-	failing := NewMetricsServer(nil, providerErrorIngestor{err: wantErr})
+	failing := newMetricsServer(nil, metricsProviderErrorIngestor{err: wantErr})
 	_, err = failing.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("dependency error = %v, want %v", err, wantErr)
@@ -170,14 +170,14 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 
 func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing.T) {
 	wantErr := errors.New("transfer report unavailable")
-	server := NewMetricsServer(transferErrorReporter{freshnessErr: wantErr}, nil)
+	server := newMetricsServer(metricsTransferErrorReporter{freshnessErr: wantErr}, nil)
 	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("summary freshness error = %v", err)
 	}
 	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("breakdown freshness error = %v", err)
 	}
-	server = NewMetricsServer(transferErrorReporter{summaryErr: wantErr, breakdownErr: wantErr}, nil)
+	server = newMetricsServer(metricsTransferErrorReporter{summaryErr: wantErr, breakdownErr: wantErr}, nil)
 	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("summary dependency error = %v", err)
 	}
@@ -194,7 +194,7 @@ func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing
 		t.Fatalf("breakdown dependency error = %v", err)
 	}
 	unauthorized := metricsTestContext(context.Background(), "gen3", false, false, nil)
-	server = NewMetricsServer(transferErrorReporter{}, nil)
+	server = newMetricsServer(metricsTransferErrorReporter{}, nil)
 	if _, err := server.GetTransferSummary(unauthorized, metricsapi.GetTransferSummaryRequestObject{}); err != nil {
 		t.Fatalf("unauthorized summary error = %v", err)
 	}
@@ -302,7 +302,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 
 func TestMetricsRoutes_NoLegacyDownloadAttributionRoutes(t *testing.T) {
 	app := fiber.New()
-	RegisterMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
+	registerMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
 
 	for _, tc := range []struct {
 		method string
