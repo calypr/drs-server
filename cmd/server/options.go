@@ -5,7 +5,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi"
-	"github.com/calypr/syfon/internal/httpapi/lfs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
@@ -53,7 +52,7 @@ func registerServerRoutes(rt *serverRuntime) {
 		Metrics:  rt.cfg.Routes.Metrics,
 		Internal: rt.cfg.Routes.Internal,
 		LFS:      rt.cfg.Routes.LFS,
-		LFSProtocol: lfs.Options{
+		LFSProtocol: httpapi.LFSOptions{
 			MaxBatchObjects:              rt.cfg.LFS.MaxBatchObjects,
 			MaxBatchBodyBytes:            rt.cfg.LFS.MaxBatchBodyBytes,
 			RequestLimitPerMinute:        rt.cfg.LFS.RequestLimitPerMinute,

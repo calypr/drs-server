@@ -1,4 +1,4 @@
-package lfs
+package httpapi
 
 import (
 	"context"
@@ -128,7 +128,7 @@ func (p *lfsTestServicePorts) ResolveObjectAlias(_ context.Context, id string) (
 func (p *lfsTestServicePorts) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
 	result := make([]objects.Record, 0)
 	for _, record := range p.records {
-		if recordMatchesChecksum(record, checksum) {
+		if lfsRecordMatchesChecksum(record, checksum) {
 			result = append(result, *record)
 		}
 	}
@@ -147,7 +147,7 @@ func (p *lfsTestServicePorts) GetObjectsByChecksums(ctx context.Context, checksu
 	return result, nil
 }
 
-func recordMatchesChecksum(record *objects.Record, checksum string) bool {
+func lfsRecordMatchesChecksum(record *objects.Record, checksum string) bool {
 	if record == nil {
 		return false
 	}
@@ -292,17 +292,15 @@ func (f *lfsTestStorage) CompleteMultipart(_ context.Context, request storage.Co
 	return nil
 }
 
-func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStorage) Dependencies {
+func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStorage) *transferlfs.Service {
 	transferService := newLFSTransferService(storageFake, ports)
 	return newLFSTestDependenciesWithTransfer(ports, storageFake, transferService)
 }
 
-func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) Dependencies {
+func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) *transferlfs.Service {
 	objectService := objects.NewService(ports)
 	lfsService := transferlfs.NewService(transferService, objectService, ports, ports, ports, storageFakeUploader(storageFake))
-	return Dependencies{
-		Service: lfsService,
-	}
+	return lfsService
 }
 
 func storageFakeUploader(fake *lfsTestStorage) storage.SignedPartUploader {
@@ -314,9 +312,9 @@ func storageFakeUploader(fake *lfsTestStorage) storage.SignedPartUploader {
 	}
 }
 
-func newLFSTestRouter(ports *lfsTestServicePorts, storageFake *lfsTestStorage, opts Options) *lfsTestRouter {
+func newLFSTestRouter(ports *lfsTestServicePorts, storageFake *lfsTestStorage, opts LFSOptions) *lfsTestRouter {
 	app := fiber.New()
-	RegisterLFSRoutes(app, newLFSTestDependencies(ports, storageFake), opts)
+	registerLFSRoutes(app, newLFSTestDependencies(ports, storageFake), opts)
 	return &lfsTestRouter{app: app}
 }
 
@@ -329,11 +327,11 @@ func (r lfsTestScopeReader) LookupBucketScope(_ context.Context, organization, p
 	return scope, ok, nil
 }
 
-func newLFSTestServerForNumericValidation() *LFSServer {
+func newLFSTestServerForNumericValidation() *lfsServer {
 	ports := newLFSTestPorts(nil, nil)
-	return NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
+	return newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
 }
 
-func stringPtr(value string) *string { return &value }
+func lfsStringPtr(value string) *string { return &value }
 
-func stringSlicePtr(value []string) *[]string { return &value }
+func lfsStringSlicePtr(value []string) *[]string { return &value }

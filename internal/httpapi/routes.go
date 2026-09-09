@@ -6,7 +6,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
-	"github.com/calypr/syfon/internal/httpapi/lfs"
 	"github.com/calypr/syfon/internal/httpapi/metrics"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
@@ -41,7 +40,7 @@ type Options struct {
 	Metrics     bool
 	Internal    bool
 	LFS         bool
-	LFSProtocol lfs.Options
+	LFSProtocol LFSOptions
 }
 
 type internalServer struct {
@@ -97,9 +96,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		httpbuckets.RegisterRoutes(api, deps.Buckets, projectCleanupHandler(server))
 	}
 	if options.LFS {
-		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
-			Service: deps.LFS,
-		}, options.LFSProtocol)
+		registerLFSRoutes(api, deps.LFS, options.LFSProtocol)
 	}
 }
 
