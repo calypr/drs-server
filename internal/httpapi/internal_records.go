@@ -75,9 +75,28 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and sha256 values are required")
 	}
 
-	normalized, err := normalizeMissingSHA256(req.Sha256)
-	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+	normalized := make([]string, 0, len(req.Sha256))
+	seen := make(map[string]struct{}, len(req.Sha256))
+	for _, raw := range req.Sha256 {
+		value := strings.TrimSpace(raw)
+		value = strings.TrimPrefix(strings.ToLower(value), "sha256:")
+		if value == "" {
+			continue
+		}
+		if len(value) != 64 {
+			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
+		}
+		if _, err := hex.DecodeString(value); err != nil {
+			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return middleware.Reject(c, fiber.StatusBadRequest, "invalid request body: sha256 values are required")
 	}
 	if len(normalized) > maxInternalBulkMissingSHA256 {
 		return middleware.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many sha256 values: maximum is %d", maxInternalBulkMissingSHA256))
@@ -88,33 +107,6 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 		return middleware.HandleError(c, err)
 	}
 	return c.JSON(internalapi.BulkMissingSHA256Response{Checked: int32(len(normalized)), MissingSha256: missing})
-}
-
-func normalizeMissingSHA256(values []string) ([]string, error) {
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, raw := range values {
-		value := strings.TrimSpace(raw)
-		value = strings.TrimPrefix(strings.ToLower(value), "sha256:")
-		if value == "" {
-			continue
-		}
-		if len(value) != 64 {
-			return nil, fmt.Errorf("invalid sha256 checksum %q", raw)
-		}
-		if _, err := hex.DecodeString(value); err != nil {
-			return nil, fmt.Errorf("invalid sha256 checksum %q", raw)
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("invalid request body: sha256 values are required")
-	}
-	return out, nil
 }
 
 func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
@@ -189,18 +181,6 @@ func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-func normalizeNonEmptyBulkHashes(hashes []string) []string {
-	normalized := make([]string, 0, len(hashes))
-	for _, h := range hashes {
-		_, val := objects.ParseHashQuery(h, "")
-		if strings.TrimSpace(val) == "" {
-			continue
-		}
-		normalized = append(normalized, val)
-	}
-	return normalized
-}
-
 func (s *internalServer) InternalDelete(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
 	if err := s.objects.DeleteObject(c.Context(), id); err != nil {
@@ -241,7 +221,14 @@ func (s *internalServer) InternalBulkDeleteHashes(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 	}
 
-	normalized := normalizeNonEmptyBulkHashes(req.Hashes)
+	normalized := make([]string, 0, len(req.Hashes))
+	for _, h := range req.Hashes {
+		_, val := objects.ParseHashQuery(h, "")
+		if strings.TrimSpace(val) == "" {
+			continue
+		}
+		normalized = append(normalized, val)
+	}
 	if len(normalized) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 	}
