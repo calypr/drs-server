@@ -152,3 +152,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 )
+
+replace github.com/calypr/syfon/apigen v0.3.2 => github.com/calypr/syfon/apigen v0.3.1-0.20260908192208-e817f4c871c2
