@@ -5,23 +5,55 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/calypr/syfon/internal/storage"
+	"github.com/google/uuid"
 	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/fileblob"
 )
+
+type backend struct {
+	rootPath   string
+	rootBucket *blob.Bucket
+}
+
+func New(root string) (storage.Registration, error) {
+	b, err := newBackend(root)
+	if err != nil {
+		return storage.Registration{}, err
+	}
+	return storage.NewRegistration("file", b), nil
+}
+
+func newBackend(root string) (*backend, error) {
+	absPath, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path for %s: %w", root, err)
+	}
+	bucket, err := blob.OpenBucket(context.Background(), "file:"+"//"+filepath.ToSlash(absPath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file bucket at %s: %w", absPath, err)
+	}
+	return &backend{rootPath: absPath, rootBucket: bucket}, nil
+}
+
+func (b *backend) Sign(_ context.Context, _ storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(b.rootPath, request.Target.Key))}, nil
+}
+
+func (b *backend) BeginMultipart(context.Context, storage.ProviderBinding, storage.Target) (storage.UploadID, error) {
+	return storage.UploadID(uuid.NewString()), nil
+}
 
 func (b *backend) SignMultipartPart(ctx context.Context, _ storage.ProviderBinding, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	partKey := storage.MultipartPartObjectKey(request.Target.Key, request.UploadID, request.PartNumber)
-	signed, err := b.rootBucket.SignedURL(ctx, partKey, &blob.SignedURLOptions{
-		Expiry: 15 * time.Minute,
-		Method: http.MethodPut,
-	})
+	signed, err := b.rootBucket.SignedURL(ctx, partKey, &blob.SignedURLOptions{Expiry: 15 * time.Minute, Method: http.MethodPut})
 	if err != nil {
-		// Preserve the local direct-path fallback when fileblob signing is unavailable.
 		return storage.SignedAccess{Location: b.pathForKey(partKey)}, nil
 	}
 	return storage.SignedAccess{Location: signed}, nil
@@ -66,6 +98,18 @@ func (b *backend) CompleteMultipart(ctx context.Context, _ storage.ProviderBindi
 	for _, partKey := range cleanupKeys {
 		if err := b.rootBucket.Delete(ctx, partKey); err != nil {
 			return fmt.Errorf("failed to delete multipart part %s: %w", partKey, err)
+		}
+	}
+	return nil
+}
+
+func (b *backend) Delete(_ context.Context, _ storage.ProviderBinding, targets []storage.PhysicalTarget) error {
+	for _, target := range targets {
+		if strings.TrimSpace(target.Path) == "" {
+			continue
+		}
+		if err := os.Remove(target.Path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete file %s: %w", target.Path, err)
 		}
 	}
 	return nil
