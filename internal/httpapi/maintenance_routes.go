@@ -13,13 +13,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type projectCleanupResponse struct {
-	Organization        string `json:"organization"`
-	ProjectID           string `json:"project_id"`
-	DeletedObjects      int    `json:"deleted_objects"`
-	DeletedBucketScopes int    `json:"deleted_bucket_scopes"`
-}
-
 func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 	if s.projectStorage == nil {
 		return middleware.HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
@@ -37,9 +30,9 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 		return middleware.HandleError(c, err)
 	}
 
-	return c.JSON(projectCleanupResponse{
+	return c.JSON(internalapi.ProjectCleanupResponse{
 		Organization:        result.Organization,
-		ProjectID:           result.ProjectID,
+		ProjectId:           result.ProjectID,
 		DeletedObjects:      result.DeletedObjects,
 		DeletedBucketScopes: result.DeletedBucketScopes,
 	})
@@ -87,195 +80,39 @@ func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-type internalInspectObjectRequest struct {
-	ID                string `json:"id,omitempty"`
-	Organization      string `json:"organization,omitempty"`
-	Project           string `json:"project,omitempty"`
-	Key               string `json:"key,omitempty"`
-	Scheme            string `json:"scheme,omitempty"`
-	ObjectURL         string `json:"object_url,omitempty"`
-	ExpectedSizeBytes *int64 `json:"expected_size_bytes,omitempty"`
-	ExpectedSHA256    string `json:"expected_sha256,omitempty"`
-	ExpectedName      string `json:"expected_name,omitempty"`
-}
-
-type internalInspectObjectsBulkRequest struct {
-	Items []internalInspectObjectRequest `json:"items"`
-}
-
-type internalInspectProjectBucketRequest struct {
-	Organization string `json:"organization,omitempty"`
-	Project      string `json:"project,omitempty"`
-	IncludeHead  bool   `json:"include_head,omitempty"`
-	Mode         string `json:"mode,omitempty"`
-	PathPrefix   string `json:"path_prefix,omitempty"`
-}
-
-type internalInspectProjectRecordsRequest struct {
-	Organization string `json:"organization,omitempty"`
-	Project      string `json:"project,omitempty"`
-	PathPrefix   string `json:"path_prefix,omitempty"`
-}
-
-type internalInspectProjectScopesRequest struct {
-	Organization string `json:"organization,omitempty"`
-	Project      string `json:"project,omitempty"`
-}
-
-type internalDeleteProjectBucketObjectsRequest struct {
-	Organization string   `json:"organization,omitempty"`
-	Project      string   `json:"project,omitempty"`
-	ObjectURLs   []string `json:"object_urls"`
-}
-
-type internalInspectObjectResponse struct {
-	ObjectURL   string `json:"object_url"`
-	Provider    string `json:"provider"`
-	Bucket      string `json:"bucket"`
-	Key         string `json:"key"`
-	Path        string `json:"path"`
-	SizeBytes   int64  `json:"size_bytes"`
-	MetaSHA256  string `json:"meta_sha256,omitempty"`
-	ETag        string `json:"etag,omitempty"`
-	LastModTime string `json:"last_modified,omitempty"`
-}
-
-type internalInspectObjectBulkResponse struct {
-	Items []internalInspectObjectBulkItem `json:"items"`
-}
-
-type internalInspectProjectBucketResponse struct {
-	Summary *internalInspectProjectBucketSummary `json:"summary,omitempty"`
-	Items   []internalInspectProjectBucketItem   `json:"items"`
-}
-
-type internalInspectProjectRecordsResponse struct {
-	Items []internalInspectProjectRecordItem `json:"items"`
-}
-
-type internalInspectProjectScopesResponse struct {
-	Items []internalInspectProjectScopeItem `json:"items"`
-}
-
-type internalDeleteProjectBucketObjectsResponse struct {
-	Items []internalDeleteProjectBucketObjectsItem `json:"items"`
-}
-
-type internalInspectObjectBulkItem struct {
-	ID                   string   `json:"id,omitempty"`
-	ObjectURL            string   `json:"object_url,omitempty"`
-	Provider             string   `json:"provider,omitempty"`
-	Bucket               string   `json:"bucket,omitempty"`
-	Key                  string   `json:"key,omitempty"`
-	Path                 string   `json:"path,omitempty"`
-	Exists               bool     `json:"exists"`
-	Status               string   `json:"status"`
-	Error                string   `json:"error,omitempty"`
-	ErrorKind            string   `json:"error_kind,omitempty"`
-	SizeBytes            *int64   `json:"size_bytes,omitempty"`
-	MetaSHA256           string   `json:"meta_sha256,omitempty"`
-	ETag                 string   `json:"etag,omitempty"`
-	LastModTime          string   `json:"last_modified,omitempty"`
-	ValidationStatus     string   `json:"validation_status"`
-	SizeMatch            *bool    `json:"size_match,omitempty"`
-	NameMatch            *bool    `json:"name_match,omitempty"`
-	SHA256Match          *bool    `json:"sha256_match,omitempty"`
-	ValidationMismatches []string `json:"validation_mismatches,omitempty"`
-}
-
-type internalInspectProjectBucketSummary struct {
-	Provider          string `json:"provider"`
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	ObjectURL         string `json:"object_url,omitempty"`
-	Exists            bool   `json:"exists"`
-	ObjectCount       int    `json:"object_count"`
-	TotalBytes        int64  `json:"total_bytes"`
-	ComputedAt        string `json:"computed_at"`
-	Mode              string `json:"mode"`
-	InventoryComplete bool   `json:"inventory_complete"`
-	InventoryWarning  string `json:"inventory_warning,omitempty"`
-}
-
-type internalInspectProjectBucketItem struct {
-	ObjectURL         string `json:"object_url"`
-	Provider          string `json:"provider"`
-	Bucket            string `json:"bucket"`
-	Key               string `json:"key"`
-	Path              string `json:"path"`
-	SizeBytes         int64  `json:"size_bytes"`
-	MetaSHA256        string `json:"meta_sha256,omitempty"`
-	ETag              string `json:"etag,omitempty"`
-	LastModTime       string `json:"last_modified,omitempty"`
-	InventoryComplete bool   `json:"inventory_complete,omitempty"`
-}
-
-type internalInspectProjectRecordItem struct {
-	ObjectID      string                        `json:"object_id"`
-	Name          string                        `json:"name,omitempty"`
-	Checksum      string                        `json:"checksum"`
-	Organization  string                        `json:"organization"`
-	Project       string                        `json:"project"`
-	Size          int64                         `json:"size"`
-	CreatedTime   string                        `json:"created_time,omitempty"`
-	UpdatedTime   string                        `json:"updated_time,omitempty"`
-	AccessURLs    []string                      `json:"access_urls"`
-	AccessMethods []internalProjectAccessMethod `json:"access_methods"`
-}
-
-type internalProjectAccessMethod struct {
-	AccessID string   `json:"access_id,omitempty"`
-	Type     string   `json:"type,omitempty"`
-	URL      string   `json:"url,omitempty"`
-	Headers  []string `json:"headers,omitempty"`
-}
-
-type internalInspectProjectScopeItem struct {
-	Bucket       string `json:"bucket"`
-	Organization string `json:"organization"`
-	ProjectID    string `json:"project_id,omitempty"`
-	Path         string `json:"path,omitempty"`
-}
-
-type internalDeleteProjectBucketObjectsItem struct {
-	ObjectURL string `json:"object_url"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-}
-
 func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectObjectRequest
+	var req internalapi.InternalInspectObjectRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	resp, err := s.projectStorage.ProbeObject(c.Context(), projectstorage.InspectRequest{
-		ID:                strings.TrimSpace(req.ID),
+		ID:                strings.TrimSpace(req.Id),
 		Organization:      strings.TrimSpace(req.Organization),
 		Project:           strings.TrimSpace(req.Project),
 		Key:               strings.TrimSpace(req.Key),
 		Scheme:            strings.TrimSpace(req.Scheme),
-		ObjectURL:         strings.TrimSpace(req.ObjectURL),
+		ObjectURL:         strings.TrimSpace(req.ObjectUrl),
 		ExpectedSizeBytes: req.ExpectedSizeBytes,
-		ExpectedSHA256:    strings.TrimSpace(req.ExpectedSHA256),
+		ExpectedSHA256:    strings.TrimSpace(req.ExpectedSha256),
 	})
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	out := internalInspectObjectResponse{
-		ObjectURL:  resp.ObjectURL,
+	out := internalapi.InternalInspectObjectResponse{
+		ObjectUrl:  resp.ObjectURL,
 		Provider:   resp.Provider,
 		Bucket:     resp.Bucket,
 		Key:        resp.Key,
 		Path:       resp.Path,
 		SizeBytes:  resp.SizeBytes,
-		MetaSHA256: resp.MetaSHA256,
-		ETag:       resp.ETag,
+		MetaSha256: resp.MetaSHA256,
+		Etag:       resp.ETag,
 	}
 	if !resp.LastModTime.IsZero() {
-		out.LastModTime = resp.LastModTime.Format("2006-01-02T15:04:05Z07:00")
+		out.LastModified = resp.LastModTime.Format("2006-01-02T15:04:05Z07:00")
 	}
 	return c.JSON(out)
 }
@@ -284,7 +121,7 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectObjectsBulkRequest
+	var req internalapi.InternalInspectObjectsBulkRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -294,18 +131,18 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 	items := make([]projectstorage.InspectRequest, 0, len(req.Items))
 	for _, item := range req.Items {
 		items = append(items, projectstorage.InspectRequest{
-			ID:                strings.TrimSpace(item.ID),
+			ID:                strings.TrimSpace(item.Id),
 			Organization:      strings.TrimSpace(item.Organization),
 			Project:           strings.TrimSpace(item.Project),
 			Key:               strings.TrimSpace(item.Key),
 			Scheme:            strings.TrimSpace(item.Scheme),
-			ObjectURL:         strings.TrimSpace(item.ObjectURL),
+			ObjectURL:         strings.TrimSpace(item.ObjectUrl),
 			ExpectedSizeBytes: item.ExpectedSizeBytes,
-			ExpectedSHA256:    strings.TrimSpace(item.ExpectedSHA256),
+			ExpectedSHA256:    strings.TrimSpace(item.ExpectedSha256),
 		})
 	}
 	results := s.projectStorage.ProbeObjects(c.Context(), items)
-	out := internalInspectObjectBulkResponse{Items: make([]internalInspectObjectBulkItem, 0, len(results))}
+	out := internalapi.InternalInspectObjectBulkResponse{Items: make([]internalapi.InternalInspectObjectBulkItem, 0, len(results))}
 	for _, result := range results {
 		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
 	}
@@ -317,7 +154,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectObjectsBulkRequest
+	var req internalapi.InternalInspectObjectsBulkRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -327,14 +164,14 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	items := make([]projectstorage.InspectRequest, 0, len(req.Items))
 	for _, item := range req.Items {
 		items = append(items, projectstorage.InspectRequest{
-			ID:                strings.TrimSpace(item.ID),
-			ObjectURL:         strings.TrimSpace(item.ObjectURL),
+			ID:                strings.TrimSpace(item.Id),
+			ObjectURL:         strings.TrimSpace(item.ObjectUrl),
 			ExpectedSizeBytes: item.ExpectedSizeBytes,
 			ExpectedName:      strings.TrimSpace(item.ExpectedName),
 		})
 	}
 	results := s.projectStorage.ValidateInventoryObjects(c.Context(), items)
-	out := internalInspectObjectBulkResponse{Items: make([]internalInspectObjectBulkItem, 0, len(results))}
+	out := internalapi.InternalInspectObjectBulkResponse{Items: make([]internalapi.InternalInspectObjectBulkItem, 0, len(results))}
 	for _, result := range results {
 		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
 	}
@@ -347,7 +184,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectProjectBucketRequest
+	var req internalapi.InternalInspectProjectBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -380,7 +217,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectProjectBucketRequest
+	var req internalapi.InternalInspectProjectBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -411,7 +248,7 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectProjectRecordsRequest
+	var req internalapi.InternalInspectProjectRecordsRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -431,7 +268,7 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	out := internalInspectProjectRecordsResponse{Items: make([]internalInspectProjectRecordItem, 0, len(records))}
+	out := internalapi.InternalInspectProjectRecordsResponse{Items: make([]internalapi.InternalInspectProjectRecordItem, 0, len(records))}
 	for _, record := range records {
 		out.Items = append(out.Items, projectRecordAuditItemFromObjects(record, organization, project))
 	}
@@ -442,7 +279,7 @@ func (s *internalServer) InternalInspectProjectScopes(c fiber.Ctx, _ internalapi
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalInspectProjectScopesRequest
+	var req internalapi.InternalInspectProjectScopesRequest
 	switch c.Method() {
 	case fiber.MethodGet:
 		req.Organization = c.Query("organization")
@@ -461,12 +298,12 @@ func (s *internalServer) InternalInspectProjectScopes(c fiber.Ctx, _ internalapi
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	out := internalInspectProjectScopesResponse{Items: make([]internalInspectProjectScopeItem, 0)}
+	out := internalapi.InternalInspectProjectScopesResponse{Items: make([]internalapi.InternalInspectProjectScopeItem, 0)}
 	for _, scope := range scopes {
-		row := internalInspectProjectScopeItem{
+		row := internalapi.InternalInspectProjectScopeItem{
 			Bucket:       scope.Bucket,
 			Organization: scope.Organization,
-			ProjectID:    scope.ProjectID,
+			ProjectId:    scope.ProjectID,
 			Path:         scope.Path,
 		}
 		out.Items = append(out.Items, row)
@@ -482,20 +319,20 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req internalDeleteProjectBucketObjectsRequest
+	var req internalapi.InternalDeleteProjectBucketObjectsRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	if len(req.ObjectURLs) == 0 {
+	if len(req.ObjectUrls) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: object_urls are required")
 	}
-	results := s.projectStorage.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectURLs)
-	out := internalDeleteProjectBucketObjectsResponse{
-		Items: make([]internalDeleteProjectBucketObjectsItem, 0, len(results)),
+	results := s.projectStorage.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectUrls)
+	out := internalapi.InternalDeleteProjectBucketObjectsResponse{
+		Items: make([]internalapi.InternalDeleteProjectBucketObjectsItem, 0, len(results)),
 	}
 	for _, result := range results {
-		out.Items = append(out.Items, internalDeleteProjectBucketObjectsItem{
-			ObjectURL: result.ObjectURL,
+		out.Items = append(out.Items, internalapi.InternalDeleteProjectBucketObjectsItem{
+			ObjectUrl: result.ObjectURL,
 			Status:    result.Status,
 			Error:     result.Error,
 		})
@@ -503,10 +340,10 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) internalInspectObjectBulkItem {
-	out := internalInspectObjectBulkItem{
-		ID:                   result.ID,
-		ObjectURL:            result.ObjectURL,
+func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) internalapi.InternalInspectObjectBulkItem {
+	out := internalapi.InternalInspectObjectBulkItem{
+		Id:                   result.ID,
+		ObjectUrl:            result.ObjectURL,
 		Provider:             result.Provider,
 		Bucket:               result.Bucket,
 		Key:                  result.Key,
@@ -516,26 +353,26 @@ func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) intern
 		Error:                result.Error,
 		ErrorKind:            result.ErrorKind,
 		SizeBytes:            result.SizeBytes,
-		MetaSHA256:           result.MetaSHA256,
-		ETag:                 result.ETag,
+		MetaSha256:           result.MetaSHA256,
+		Etag:                 result.ETag,
 		ValidationStatus:     string(result.ValidationStatus),
 		SizeMatch:            result.SizeMatch,
 		NameMatch:            result.NameMatch,
-		SHA256Match:          result.SHA256Match,
+		Sha256Match:          result.SHA256Match,
 		ValidationMismatches: append([]string(nil), result.ValidationMismatches...),
 	}
 	if !result.LastModTime.IsZero() {
-		out.LastModTime = result.LastModTime.Format(time.RFC3339)
+		out.LastModified = result.LastModTime.Format(time.RFC3339)
 	}
 	return out
 }
 
-func projectBucketSummaryFromProjectStorage(summary projectstorage.Summary) *internalInspectProjectBucketSummary {
-	out := &internalInspectProjectBucketSummary{
+func projectBucketSummaryFromProjectStorage(summary projectstorage.Summary) *internalapi.InternalInspectProjectBucketSummary {
+	out := &internalapi.InternalInspectProjectBucketSummary{
 		Provider:          summary.Provider,
 		Bucket:            summary.Bucket,
 		Prefix:            summary.Prefix,
-		ObjectURL:         summary.ObjectURL,
+		ObjectUrl:         summary.ObjectURL,
 		Exists:            summary.Exists,
 		ObjectCount:       summary.ObjectCount,
 		TotalBytes:        summary.TotalBytes,
@@ -549,48 +386,48 @@ func projectBucketSummaryFromProjectStorage(summary projectstorage.Summary) *int
 	return out
 }
 
-func projectBucketInventoryResponseFromProjectStorage(result *projectstorage.InspectionResult) internalInspectProjectBucketResponse {
+func projectBucketInventoryResponseFromProjectStorage(result *projectstorage.InspectionResult) internalapi.InternalInspectProjectBucketResponse {
 	if result == nil {
-		return internalInspectProjectBucketResponse{Items: []internalInspectProjectBucketItem{}}
+		return internalapi.InternalInspectProjectBucketResponse{Items: []internalapi.InternalInspectProjectBucketItem{}}
 	}
-	out := internalInspectProjectBucketResponse{
+	out := internalapi.InternalInspectProjectBucketResponse{
 		Summary: projectBucketSummaryFromProjectStorage(result.Summary),
-		Items:   make([]internalInspectProjectBucketItem, 0, len(result.Items)),
+		Items:   make([]internalapi.InternalInspectProjectBucketItem, 0, len(result.Items)),
 	}
 	for _, item := range result.Items {
-		row := internalInspectProjectBucketItem{
-			ObjectURL:         item.ObjectURL,
+		row := internalapi.InternalInspectProjectBucketItem{
+			ObjectUrl:         item.ObjectURL,
 			Provider:          item.Provider,
 			Bucket:            item.Bucket,
 			Key:               item.Key,
 			Path:              item.Path,
 			SizeBytes:         item.SizeBytes,
-			MetaSHA256:        item.MetaSHA256,
-			ETag:              item.ETag,
+			MetaSha256:        item.MetaSHA256,
+			Etag:              item.ETag,
 			InventoryComplete: result.Summary.InventoryComplete,
 		}
 		if !item.LastModTime.IsZero() {
-			row.LastModTime = item.LastModTime.Format(time.RFC3339)
+			row.LastModified = item.LastModTime.Format(time.RFC3339)
 		}
 		out.Items = append(out.Items, row)
 	}
 	return out
 }
 
-func projectRecordAuditItemFromObjects(record objects.Record, organization, project string) internalInspectProjectRecordItem {
+func projectRecordAuditItemFromObjects(record objects.Record, organization, project string) internalapi.InternalInspectProjectRecordItem {
 	accessURLs := []string{}
-	accessMethods := []internalProjectAccessMethod{}
+	accessMethods := []internalapi.InternalProjectAccessMethod{}
 	if record.AccessMethods != nil {
-		accessMethods = make([]internalProjectAccessMethod, 0, len(*record.AccessMethods))
+		accessMethods = make([]internalapi.InternalProjectAccessMethod, 0, len(*record.AccessMethods))
 		for _, method := range *record.AccessMethods {
-			item := internalProjectAccessMethod{Type: strings.TrimSpace(method.Type)}
+			item := internalapi.InternalProjectAccessMethod{Type: strings.TrimSpace(method.Type)}
 			if method.AccessId != nil {
-				item.AccessID = strings.TrimSpace(*method.AccessId)
+				item.AccessId = strings.TrimSpace(*method.AccessId)
 			}
 			if method.AccessUrl != nil {
-				item.URL = strings.TrimSpace(method.AccessUrl.Url)
-				if item.URL != "" {
-					accessURLs = append(accessURLs, item.URL)
+				item.Url = strings.TrimSpace(method.AccessUrl.Url)
+				if item.Url != "" {
+					accessURLs = append(accessURLs, item.Url)
 				}
 				if method.AccessUrl.Headers != nil {
 					item.Headers = append([]string(nil), (*method.AccessUrl.Headers)...)
@@ -600,13 +437,13 @@ func projectRecordAuditItemFromObjects(record objects.Record, organization, proj
 		}
 	}
 	checksum, _ := objects.CanonicalSHA256(record.Checksums)
-	item := internalInspectProjectRecordItem{
-		ObjectID:      string(record.Id),
+	item := internalapi.InternalInspectProjectRecordItem{
+		ObjectId:      string(record.Id),
 		Checksum:      checksum,
 		Organization:  organization,
 		Project:       project,
 		Size:          record.Size,
-		AccessURLs:    accessURLs,
+		AccessUrls:    accessURLs,
 		AccessMethods: accessMethods,
 	}
 	if record.Name != nil {
