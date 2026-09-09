@@ -16,21 +16,6 @@ const (
 	ModeSummary InspectionMode = "summary"
 )
 
-// StorageObject is the provider-neutral inventory value exposed by this
-// maintenance service. ObjectURL is always the canonical physical s3:// URL
-// for project inventory.
-type StorageObject struct {
-	ObjectURL   string
-	Provider    string
-	Bucket      string
-	Key         string
-	Path        string
-	SizeBytes   int64
-	MetaSHA256  string
-	ETag        string
-	LastModTime time.Time
-}
-
 type InventoryOptions struct {
 	IncludeHead bool
 	ExactPrefix bool
@@ -43,43 +28,24 @@ type InspectionOptions struct {
 	PathPrefix  string
 }
 
-type Summary struct {
-	Provider          string
-	Bucket            string
-	Prefix            string
-	ObjectURL         string
-	Exists            bool
-	ObjectCount       int
-	TotalBytes        int64
-	ComputedAt        time.Time
-	Mode              InspectionMode
-	InventoryComplete bool
-	InventoryWarning  string
-}
-
-type InspectionResult struct {
-	Summary Summary
-	Items   []StorageObject
-}
-
-type ProbeStatus string
+type probeStatus string
 
 const (
-	ProbePresent     ProbeStatus = "present"
-	ProbeNotFound    ProbeStatus = "not_found"
-	ProbeForbidden   ProbeStatus = "forbidden"
-	ProbeInvalid     ProbeStatus = "invalid"
-	ProbeUnsupported ProbeStatus = "unsupported"
-	ProbeError       ProbeStatus = "error"
+	probePresent     probeStatus = "present"
+	probeNotFound    probeStatus = "not_found"
+	probeForbidden   probeStatus = "forbidden"
+	probeInvalid     probeStatus = "invalid"
+	probeUnsupported probeStatus = "unsupported"
+	probeError       probeStatus = "error"
 )
 
-type ValidationStatus string
+type validationStatus string
 
 const (
-	ValidationNotRequested ValidationStatus = "not_requested"
-	ValidationMatched      ValidationStatus = "matched"
-	ValidationMismatched   ValidationStatus = "mismatched"
-	ValidationUnverifiable ValidationStatus = "unverifiable"
+	validationNotRequested validationStatus = "not_requested"
+	validationMatched      validationStatus = "matched"
+	validationMismatched   validationStatus = "mismatched"
+	validationUnverifiable validationStatus = "unverifiable"
 )
 
 type InspectRequest struct {
@@ -94,7 +60,7 @@ type InspectRequest struct {
 	ExpectedName      string
 }
 
-type ObjectMetadata struct {
+type objectMetadata struct {
 	ObjectURL   string
 	Provider    string
 	Bucket      string
@@ -104,44 +70,6 @@ type ObjectMetadata struct {
 	MetaSHA256  string
 	ETag        string
 	LastModTime time.Time
-}
-
-type ProbeResult struct {
-	ID                   string
-	ObjectURL            string
-	Provider             string
-	Bucket               string
-	Key                  string
-	Path                 string
-	Exists               bool
-	Status               ProbeStatus
-	Error                string
-	ErrorKind            string
-	SizeBytes            *int64
-	MetaSHA256           string
-	ETag                 string
-	LastModTime          time.Time
-	ValidationStatus     ValidationStatus
-	SizeMatch            *bool
-	NameMatch            *bool
-	SHA256Match          *bool
-	ValidationMismatches []string
-}
-
-type DeleteResult struct {
-	ObjectURL string
-	Status    string
-	Error     string
-}
-
-// ProjectCleanupResult is the plain result of deleting a project's catalog
-// rows followed by its configured bucket scopes. HTTP adapters choose the
-// wire representation.
-type ProjectCleanupResult struct {
-	Organization        string
-	ProjectID           string
-	DeletedObjects      int
-	DeletedBucketScopes int
 }
 
 type ErrorKind string

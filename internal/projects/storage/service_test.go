@@ -152,11 +152,29 @@ func TestInspectProjectPreservesPartialInventoryAndCanonicalItems(t *testing.T) 
 	if result.Summary.InventoryComplete || result.Summary.InventoryWarning == "" {
 		t.Fatalf("partial summary = %+v", result.Summary)
 	}
-	if len(result.Items) != 2 || result.Items[0].Key != "prefix/project/a" || result.Items[1].ObjectURL != "s3://bucket/prefix/project/z" {
+	if result.Items[0].InventoryComplete || result.Items[1].InventoryComplete {
+		t.Fatalf("partial items should report incomplete inventory = %+v", result.Items)
+	}
+	if len(result.Items) != 2 || result.Items[0].Key != "prefix/project/a" || result.Items[1].ObjectUrl != "s3://bucket/prefix/project/z" {
 		t.Fatalf("normalized items = %+v", result.Items)
 	}
 	if len(inventory.requests) != 1 || inventory.requests[0].Prefix != "prefix/project" || !inventory.requests[0].IncludeHead {
 		t.Fatalf("inventory requests = %+v", inventory.requests)
+	}
+}
+
+func TestInspectProjectMarksCompleteInventoryItems(t *testing.T) {
+	inventory := &fakeInventory{result: storage.InventoryResult{
+		Items:    []storage.ObjectMetadata{{Key: "prefix/project/a", SizeBytes: 3}},
+		Complete: true,
+	}}
+	service, _ := projectService(inventory, nil)
+	result, err := service.InspectProjectStorage(context.Background(), "org", "project", InspectionOptions{Mode: ModeItems})
+	if err != nil {
+		t.Fatalf("InspectProjectStorage() error = %v", err)
+	}
+	if !result.Summary.InventoryComplete || len(result.Items) != 1 || !result.Items[0].InventoryComplete {
+		t.Fatalf("complete inventory markers = summary:%v items:%+v", result.Summary.InventoryComplete, result.Items)
 	}
 }
 
@@ -178,7 +196,7 @@ func TestProbeObjectNormalizesScopedKeyAgainstEffectivePrefix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ProbeObject() error = %v", err)
 			}
-			if metadata.Key != tt.want || metadata.ObjectURL != "s3://bucket/"+tt.want {
+			if metadata.Key != tt.want || metadata.ObjectUrl != "s3://bucket/"+tt.want {
 				t.Fatalf("metadata = %+v, want key %q", metadata, tt.want)
 			}
 			if len(probe.targets) != 1 || probe.targets[0].PhysicalBucket != "bucket" || probe.targets[0].Key != tt.want {
@@ -200,7 +218,7 @@ func TestProbeObjectNormalizesLegacyOrganizationPrefixAgainstComposedScope(t *te
 	if err != nil {
 		t.Fatalf("ProbeObject() error = %v", err)
 	}
-	if metadata.Key != "prefix/project/file.bin" || metadata.ObjectURL != "s3://bucket/prefix/project/file.bin" {
+	if metadata.Key != "prefix/project/file.bin" || metadata.ObjectUrl != "s3://bucket/prefix/project/file.bin" {
 		t.Fatalf("metadata = %+v, want key %q", metadata, "prefix/project/file.bin")
 	}
 	if len(probe.targets) != 1 || probe.targets[0].PhysicalBucket != "bucket" || probe.targets[0].Key != "prefix/project/file.bin" {
@@ -224,10 +242,10 @@ func TestValidateInventoryDeduplicatesAndRestoresRequestOrder(t *testing.T) {
 	if len(inventory.requests) != 1 || inventory.requests[0].MaxKeys != 1 || !inventory.requests[0].ExactPrefix {
 		t.Fatalf("inventory requests = %+v", inventory.requests)
 	}
-	if results[0].Status != ProbePresent || results[0].ValidationStatus != ValidationMatched || results[1].ValidationStatus != ValidationMismatched {
+	if results[0].Status != "present" || results[0].ValidationStatus != "matched" || results[1].ValidationStatus != "mismatched" {
 		t.Fatalf("validation results = %+v", results)
 	}
-	if results[2].Status != ProbeInvalid || results[2].ID != "invalid" {
+	if results[2].Status != "invalid" || results[2].Id != "invalid" {
 		t.Fatalf("invalid result = %+v", results[2])
 	}
 }
@@ -262,7 +280,7 @@ func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 	if !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("DeleteProjectDataAuthorized() error = %v, want access denied", err)
 	}
-	if result.Organization != "org" || result.ProjectID != "project" {
+	if result.Organization != "org" || result.ProjectId != "project" {
 		t.Fatalf("authorized result = %+v, want trimmed identifiers", result)
 	}
 	if len(objects.deleted) != 0 || len(scopes.deleted) != 0 {

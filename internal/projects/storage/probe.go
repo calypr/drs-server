@@ -7,7 +7,9 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
@@ -15,7 +17,15 @@ import (
 
 const maxProbeWorkers = 8
 
-func (s *Service) ProbeObject(ctx context.Context, request InspectRequest) (*ObjectMetadata, error) {
+func (s *Service) ProbeObject(ctx context.Context, request InspectRequest) (*internalapi.InternalInspectObjectResponse, error) {
+	metadata, err := s.probeObject(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return inspectObjectResponse(metadata), nil
+}
+
+func (s *Service) probeObject(ctx context.Context, request InspectRequest) (*objectMetadata, error) {
 	ctx = withRequestCache(ctx)
 	if strings.TrimSpace(request.ObjectURL) != "" {
 		return s.inspectRaw(ctx, request)
@@ -23,12 +33,12 @@ func (s *Service) ProbeObject(ctx context.Context, request InspectRequest) (*Obj
 	return s.inspectScoped(ctx, request)
 }
 
-func (s *Service) ProbeObjects(ctx context.Context, requests []InspectRequest) []ProbeResult {
+func (s *Service) ProbeObjects(ctx context.Context, requests []InspectRequest) []internalapi.InternalInspectObjectBulkItem {
 	ctx = withRequestCache(ctx)
 	if len(requests) == 0 {
-		return []ProbeResult{}
+		return []internalapi.InternalInspectObjectBulkItem{}
 	}
-	results := make([]ProbeResult, len(requests))
+	results := make([]internalapi.InternalInspectObjectBulkItem, len(requests))
 	workers := len(requests)
 	if workers > maxProbeWorkers {
 		workers = maxProbeWorkers
@@ -52,30 +62,32 @@ func (s *Service) ProbeObjects(ctx context.Context, requests []InspectRequest) [
 	return results
 }
 
-func (s *Service) probeOne(ctx context.Context, request InspectRequest) ProbeResult {
+func (s *Service) probeOne(ctx context.Context, request InspectRequest) internalapi.InternalInspectObjectBulkItem {
 	key := probeCacheKey(request)
 	if cache := cacheFromContext(ctx); cache != nil {
 		if result, ok := cache.probe(key); ok {
-			result.ID = strings.TrimSpace(request.ID)
-			if result.ObjectURL == "" {
-				result.ObjectURL = strings.TrimSpace(request.ObjectURL)
+			result.Id = strings.TrimSpace(request.ID)
+			if result.ObjectUrl == "" {
+				result.ObjectUrl = strings.TrimSpace(request.ObjectURL)
 			}
 			sizeBytes := int64(0)
 			if result.SizeBytes != nil {
 				sizeBytes = *result.SizeBytes
 			}
-			result.ValidationStatus, result.SizeMatch, result.NameMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, &ObjectMetadata{
+			status, sizeMatch, nameMatch, shaMatch, mismatches := validateProbe(request, &objectMetadata{
 				Key:        result.Key,
 				SizeBytes:  sizeBytes,
-				MetaSHA256: result.MetaSHA256,
+				MetaSHA256: result.MetaSha256,
 			})
+			result.ValidationStatus, result.SizeMatch, result.NameMatch, result.Sha256Match, result.ValidationMismatches = string(status), sizeMatch, nameMatch, shaMatch, mismatches
 			return result
 		}
 	}
-	result := ProbeResult{ID: strings.TrimSpace(request.ID), ObjectURL: strings.TrimSpace(request.ObjectURL), Status: ProbeError, ValidationStatus: validationStatusForError(request)}
-	metadata, err := s.ProbeObject(ctx, request)
+	result := internalapi.InternalInspectObjectBulkItem{Id: strings.TrimSpace(request.ID), ObjectUrl: strings.TrimSpace(request.ObjectURL), Status: string(probeError), ValidationStatus: string(validationStatusForError(request))}
+	metadata, err := s.probeObject(ctx, request)
 	if err != nil {
-		result.Status, result.ErrorKind = classifyError(err)
+		status, kind := classifyError(err)
+		result.Status, result.ErrorKind = string(status), kind
 		logStorageDiagnostic(ctx, err, "probe")
 		result.Error = safeStorageErrorMessage(err, "probe")
 		if cache := cacheFromContext(ctx); cache != nil {
@@ -83,20 +95,40 @@ func (s *Service) probeOne(ctx context.Context, request InspectRequest) ProbeRes
 		}
 		return result
 	}
-	result.ObjectURL = metadata.ObjectURL
+	result.ObjectUrl = metadata.ObjectURL
 	result.Provider = metadata.Provider
 	result.Bucket = metadata.Bucket
 	result.Key = metadata.Key
 	result.Path = metadata.Path
 	result.Exists = true
-	result.Status = ProbePresent
+	result.Status = string(probePresent)
 	result.SizeBytes = int64Pointer(metadata.SizeBytes)
-	result.MetaSHA256 = metadata.MetaSHA256
-	result.ETag = metadata.ETag
-	result.LastModTime = metadata.LastModTime
-	result.ValidationStatus, result.SizeMatch, result.NameMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, metadata)
+	result.MetaSha256 = metadata.MetaSHA256
+	result.Etag = metadata.ETag
+	if !metadata.LastModTime.IsZero() {
+		result.LastModified = metadata.LastModTime.Format(time.RFC3339)
+	}
+	status, sizeMatch, nameMatch, shaMatch, mismatches := validateProbe(request, metadata)
+	result.ValidationStatus, result.SizeMatch, result.NameMatch, result.Sha256Match, result.ValidationMismatches = string(status), sizeMatch, nameMatch, shaMatch, mismatches
 	if cache := cacheFromContext(ctx); cache != nil {
 		cache.setProbe(key, result)
+	}
+	return result
+}
+
+func inspectObjectResponse(metadata *objectMetadata) *internalapi.InternalInspectObjectResponse {
+	result := &internalapi.InternalInspectObjectResponse{
+		ObjectUrl:  metadata.ObjectURL,
+		Provider:   metadata.Provider,
+		Bucket:     metadata.Bucket,
+		Key:        metadata.Key,
+		Path:       metadata.Path,
+		SizeBytes:  metadata.SizeBytes,
+		MetaSha256: metadata.MetaSHA256,
+		Etag:       metadata.ETag,
+	}
+	if !metadata.LastModTime.IsZero() {
+		result.LastModified = metadata.LastModTime.Format(time.RFC3339)
 	}
 	return result
 }
@@ -111,7 +143,7 @@ func probeCacheKey(request InspectRequest) string {
 	return key + "|" + strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:"))) + "|" + strings.TrimSpace(request.ExpectedName)
 }
 
-func (s *Service) inspectRaw(ctx context.Context, request InspectRequest) (*ObjectMetadata, error) {
+func (s *Service) inspectRaw(ctx context.Context, request InspectRequest) (*objectMetadata, error) {
 	bucket, key, ok := address.ParseS3URL(strings.TrimSpace(request.ObjectURL))
 	if !ok {
 		return nil, &Error{Kind: ErrorInvalidInput, Message: "object_url must be a valid s3://bucket/key URL"}
@@ -144,7 +176,7 @@ func (s *Service) inspectRaw(ctx context.Context, request InspectRequest) (*Obje
 	return metadata, nil
 }
 
-func (s *Service) inspectScoped(ctx context.Context, request InspectRequest) (*ObjectMetadata, error) {
+func (s *Service) inspectScoped(ctx context.Context, request InspectRequest) (*objectMetadata, error) {
 	organization := strings.TrimSpace(request.Organization)
 	project := strings.TrimSpace(request.Project)
 	key := strings.Trim(strings.TrimSpace(request.Key), "/")
@@ -210,7 +242,7 @@ func trimLeadingStoragePrefix(key, prefix string) string {
 	return strings.TrimPrefix(key, prefix+"/")
 }
 
-func (s *Service) probeStorage(ctx context.Context, bucket, key string) (*ObjectMetadata, error) {
+func (s *Service) probeStorage(ctx context.Context, bucket, key string) (*objectMetadata, error) {
 	if s.probe == nil {
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage probe is not configured"}
 	}
@@ -225,45 +257,45 @@ func (s *Service) probeStorage(ctx context.Context, bucket, key string) (*Object
 		return nil, mapStorageError(result.Err, "probe", bucket, key)
 	}
 	metadata := result.Metadata
-	return &ObjectMetadata{Provider: strings.TrimSpace(metadata.Provider), Bucket: strings.TrimSpace(metadata.Bucket), Key: strings.TrimSpace(metadata.Key), Path: strings.TrimSpace(metadata.Path), SizeBytes: metadata.SizeBytes, MetaSHA256: strings.TrimSpace(metadata.MetaSHA256), ETag: strings.TrimSpace(metadata.ETag), LastModTime: metadata.LastModified}, nil
+	return &objectMetadata{Provider: strings.TrimSpace(metadata.Provider), Bucket: strings.TrimSpace(metadata.Bucket), Key: strings.TrimSpace(metadata.Key), Path: strings.TrimSpace(metadata.Path), SizeBytes: metadata.SizeBytes, MetaSHA256: strings.TrimSpace(metadata.MetaSHA256), ETag: strings.TrimSpace(metadata.ETag), LastModTime: metadata.LastModified}, nil
 }
 
-func classifyError(err error) (ProbeStatus, string) {
+func classifyError(err error) (probeStatus, string) {
 	var inspectErr *Error
 	if errors.As(err, &inspectErr) {
 		switch inspectErr.Kind {
 		case ErrorObjectNotFound:
-			return ProbeNotFound, string(inspectErr.Kind)
+			return probeNotFound, string(inspectErr.Kind)
 		case ErrorPermissionDenied, ErrorBucketUnavailable:
-			return ProbeForbidden, string(inspectErr.Kind)
+			return probeForbidden, string(inspectErr.Kind)
 		case ErrorInvalidInput, ErrorScopeNotFound, ErrorCredentialMissing:
-			return ProbeInvalid, string(inspectErr.Kind)
+			return probeInvalid, string(inspectErr.Kind)
 		case ErrorUnsupported:
-			return ProbeUnsupported, string(inspectErr.Kind)
+			return probeUnsupported, string(inspectErr.Kind)
 		}
-		return ProbeError, string(inspectErr.Kind)
+		return probeError, string(inspectErr.Kind)
 	}
 	var operation *storage.OperationError
 	if errors.As(err, &operation) {
-		return ProbeError, string(operation.ErrorCode())
+		return probeError, string(operation.ErrorCode())
 	}
-	return ProbeError, "error"
+	return probeError, "error"
 }
 
-func validationStatusForError(request InspectRequest) ValidationStatus {
+func validationStatusForError(request InspectRequest) validationStatus {
 	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" && strings.TrimSpace(request.ExpectedName) == "" {
-		return ValidationNotRequested
+		return validationNotRequested
 	}
-	return ValidationUnverifiable
+	return validationUnverifiable
 }
 
-func validateProbe(request InspectRequest, metadata *ObjectMetadata) (ValidationStatus, *bool, *bool, *bool, []string) {
+func validateProbe(request InspectRequest, metadata *objectMetadata) (validationStatus, *bool, *bool, *bool, []string) {
 	return validateObject(request, *metadata)
 }
 
-func validateObject(request InspectRequest, metadata ObjectMetadata) (ValidationStatus, *bool, *bool, *bool, []string) {
+func validateObject(request InspectRequest, metadata objectMetadata) (validationStatus, *bool, *bool, *bool, []string) {
 	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" && strings.TrimSpace(request.ExpectedName) == "" {
-		return ValidationNotRequested, nil, nil, nil, nil
+		return validationNotRequested, nil, nil, nil, nil
 	}
 	mismatches := make([]string, 0, 3)
 	var sizeMatch *bool
@@ -286,7 +318,7 @@ func validateObject(request InspectRequest, metadata ObjectMetadata) (Validation
 	expectedSHA := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:")))
 	if expectedSHA != "" {
 		if strings.TrimSpace(metadata.MetaSHA256) == "" {
-			return ValidationUnverifiable, sizeMatch, nameMatch, nil, append(mismatches, "missing_remote_sha256")
+			return validationUnverifiable, sizeMatch, nameMatch, nil, append(mismatches, "missing_remote_sha256")
 		}
 		matched := strings.EqualFold(strings.TrimSpace(metadata.MetaSHA256), expectedSHA)
 		shaMatch = &matched
@@ -295,9 +327,9 @@ func validateObject(request InspectRequest, metadata ObjectMetadata) (Validation
 		}
 	}
 	if len(mismatches) > 0 {
-		return ValidationMismatched, sizeMatch, nameMatch, shaMatch, mismatches
+		return validationMismatched, sizeMatch, nameMatch, shaMatch, mismatches
 	}
-	return ValidationMatched, sizeMatch, nameMatch, shaMatch, nil
+	return validationMatched, sizeMatch, nameMatch, shaMatch, nil
 }
 
 func int64Pointer(value int64) *int64 {

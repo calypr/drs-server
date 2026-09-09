@@ -177,7 +177,7 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 		{ID: "good", ObjectURL: "s3://bucket/good"},
 		{ID: "bad", ObjectURL: "s3://bucket/bad"},
 	})
-	if probeResults[0].Status != ProbePresent || probeResults[1].Status != ProbeError {
+	if probeResults[0].Status != "present" || probeResults[1].Status != "error" {
 		t.Fatalf("probe results = %+v", probeResults)
 	}
 	if probeResults[1].ErrorKind != "storage_unavailable" || strings.Contains(probeResults[1].Error, "private provider detail") {
@@ -189,7 +189,7 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 		{ID: "good", ObjectURL: "s3://bucket/prefix/project/good"},
 		{ID: "bad", ObjectURL: "s3://bucket/prefix/project/bad"},
 	})
-	if validationResults[0].Status != ProbePresent || validationResults[1].Status != ProbeError {
+	if validationResults[0].Status != "present" || validationResults[1].Status != "error" {
 		t.Fatalf("validation results = %+v", validationResults)
 	}
 	if validationResults[1].ErrorKind != "storage_unavailable" || strings.Contains(validationResults[1].Error, "private provider detail") {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
@@ -53,7 +54,7 @@ func NewService(deps Dependencies) *Service {
 
 // InspectProjectStorage inventories the S3 target selected by the project's
 // configured scope.
-func (s *Service) InspectProjectStorage(ctx context.Context, organization, project string, options InspectionOptions) (*InspectionResult, error) {
+func (s *Service) InspectProjectStorage(ctx context.Context, organization, project string, options InspectionOptions) (*internalapi.InternalInspectProjectBucketResponse, error) {
 	ctx = withRequestCache(ctx)
 	target, err := s.resolveScope(ctx, organization, project, readMethod)
 	if err != nil {
@@ -80,13 +81,16 @@ func (s *Service) InspectProjectStorage(ctx context.Context, organization, proje
 	summary := summarize(normalized, target, mode)
 	summary.InventoryComplete = complete
 	summary.InventoryWarning = warning
-	if mode != ModeItems {
-		normalized = []StorageObject{}
+	for index := range normalized {
+		normalized[index].InventoryComplete = complete
 	}
-	return &InspectionResult{Summary: summary, Items: normalized}, nil
+	if mode != ModeItems {
+		normalized = []internalapi.InternalInspectProjectBucketItem{}
+	}
+	return &internalapi.InternalInspectProjectBucketResponse{Summary: &summary, Items: normalized}, nil
 }
 
-func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, options InventoryOptions) ([]StorageObject, error) {
+func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, options InventoryOptions) ([]internalapi.InternalInspectProjectBucketItem, error) {
 	if s.inventory == nil {
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage inventory is not configured"}
 	}
@@ -97,22 +101,24 @@ func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, o
 		ExactPrefix: options.ExactPrefix,
 		MaxKeys:     options.MaxKeys,
 	})
-	items := make([]StorageObject, 0, len(result.Items))
+	items := make([]internalapi.InternalInspectProjectBucketItem, 0, len(result.Items))
 	for _, metadata := range result.Items {
 		key := strings.Trim(strings.TrimSpace(metadata.Key), "/")
 		if key == "" {
 			continue
 		}
-		item := StorageObject{
-			ObjectURL:   address.BucketToURL(bucket, key),
-			Provider:    strings.TrimSpace(metadata.Provider),
-			Bucket:      strings.TrimSpace(metadata.Bucket),
-			Key:         key,
-			Path:        strings.TrimSpace(metadata.Path),
-			SizeBytes:   metadata.SizeBytes,
-			MetaSHA256:  strings.TrimSpace(metadata.MetaSHA256),
-			ETag:        strings.TrimSpace(metadata.ETag),
-			LastModTime: metadata.LastModified,
+		item := internalapi.InternalInspectProjectBucketItem{
+			ObjectUrl:  address.BucketToURL(bucket, key),
+			Provider:   strings.TrimSpace(metadata.Provider),
+			Bucket:     strings.TrimSpace(metadata.Bucket),
+			Key:        key,
+			Path:       strings.TrimSpace(metadata.Path),
+			SizeBytes:  metadata.SizeBytes,
+			MetaSha256: strings.TrimSpace(metadata.MetaSHA256),
+			Etag:       strings.TrimSpace(metadata.ETag),
+		}
+		if !metadata.LastModified.IsZero() {
+			item.LastModified = metadata.LastModified.Format(time.RFC3339)
 		}
 		if item.Provider == "" {
 			item.Provider = address.S3Provider
@@ -221,13 +227,13 @@ func mapScopeResolutionError(err error) error {
 	}
 }
 
-func normalizeObjects(items []StorageObject, target scopeTarget) []StorageObject {
-	out := make([]StorageObject, 0, len(items))
+func normalizeObjects(items []internalapi.InternalInspectProjectBucketItem, target scopeTarget) []internalapi.InternalInspectProjectBucketItem {
+	out := make([]internalapi.InternalInspectProjectBucketItem, 0, len(items))
 	for _, item := range items {
 		item.Provider = address.S3Provider
 		item.Bucket = target.Bucket
 		item.Key = strings.Trim(strings.TrimSpace(item.Key), "/")
-		item.ObjectURL = address.BucketToURL(target.Bucket, item.Key)
+		item.ObjectUrl = address.BucketToURL(target.Bucket, item.Key)
 		if strings.TrimSpace(item.Path) == "" {
 			item.Path = path.Base(item.Key)
 		}
@@ -237,16 +243,16 @@ func normalizeObjects(items []StorageObject, target scopeTarget) []StorageObject
 	return out
 }
 
-func summarize(items []StorageObject, target scopeTarget, mode InspectionMode) Summary {
-	result := Summary{
+func summarize(items []internalapi.InternalInspectProjectBucketItem, target scopeTarget, mode InspectionMode) internalapi.InternalInspectProjectBucketSummary {
+	result := internalapi.InternalInspectProjectBucketSummary{
 		Provider:          target.Provider,
 		Bucket:            target.Bucket,
 		Prefix:            strings.Trim(strings.TrimSpace(target.Prefix), "/"),
-		ObjectURL:         address.BucketToURL(target.Bucket, strings.Trim(strings.TrimSpace(target.Prefix), "/")),
+		ObjectUrl:         address.BucketToURL(target.Bucket, strings.Trim(strings.TrimSpace(target.Prefix), "/")),
 		Exists:            len(items) > 0,
 		ObjectCount:       len(items),
-		ComputedAt:        time.Now().UTC(),
-		Mode:              mode,
+		ComputedAt:        time.Now().UTC().Format(time.RFC3339),
+		Mode:              string(mode),
 		InventoryComplete: true,
 	}
 	for _, item := range items {

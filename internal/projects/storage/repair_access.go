@@ -100,7 +100,7 @@ func (s *Service) inspectStorageURL(ctx context.Context, rawURL string) error {
 	if s.probe == nil {
 		return fmt.Errorf("storage inspector is not configured")
 	}
-	_, err := s.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
+	_, err := s.probeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
 	if err == nil {
 		return nil
 	}

@@ -30,12 +30,7 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 		return middleware.HandleError(c, err)
 	}
 
-	return c.JSON(internalapi.ProjectCleanupResponse{
-		Organization:        result.Organization,
-		ProjectId:           result.ProjectID,
-		DeletedObjects:      result.DeletedObjects,
-		DeletedBucketScopes: result.DeletedBucketScopes,
-	})
+	return c.JSON(result)
 }
 
 func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
@@ -101,20 +96,7 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	out := internalapi.InternalInspectObjectResponse{
-		ObjectUrl:  resp.ObjectURL,
-		Provider:   resp.Provider,
-		Bucket:     resp.Bucket,
-		Key:        resp.Key,
-		Path:       resp.Path,
-		SizeBytes:  resp.SizeBytes,
-		MetaSha256: resp.MetaSHA256,
-		Etag:       resp.ETag,
-	}
-	if !resp.LastModTime.IsZero() {
-		out.LastModified = resp.LastModTime.Format("2006-01-02T15:04:05Z07:00")
-	}
-	return c.JSON(out)
+	return c.JSON(resp)
 }
 
 func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
@@ -142,10 +124,7 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 		})
 	}
 	results := s.projectStorage.ProbeObjects(c.Context(), items)
-	out := internalapi.InternalInspectObjectBulkResponse{Items: make([]internalapi.InternalInspectObjectBulkItem, 0, len(results))}
-	for _, result := range results {
-		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
-	}
+	out := internalapi.InternalInspectObjectBulkResponse{Items: results}
 	return c.JSON(out)
 }
 
@@ -171,10 +150,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 		})
 	}
 	results := s.projectStorage.ValidateInventoryObjects(c.Context(), items)
-	out := internalapi.InternalInspectObjectBulkResponse{Items: make([]internalapi.InternalInspectObjectBulkItem, 0, len(results))}
-	for _, result := range results {
-		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
-	}
+	out := internalapi.InternalInspectObjectBulkResponse{Items: results}
 	log.Printf("INFO: syfon_inspect_bulk_list_handler items=%d results=%d duration_ms=%d", len(items), len(out.Items), time.Since(started).Milliseconds())
 	return c.JSON(out)
 }
@@ -197,7 +173,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 		log.Printf("INFO: syfon_project_bucket_handler organization=%s project=%s mode=%s path_prefix=%q include_head=%t duration_ms=%d error=%q", req.Organization, req.Project, req.Mode, req.PathPrefix, req.IncludeHead, time.Since(started).Milliseconds(), err.Error())
 		return middleware.HandleError(c, err)
 	}
-	out := projectBucketInventoryResponseFromProjectStorage(result)
+	out := result
 	exists := false
 	objectCount := 0
 	totalBytes := int64(0)
@@ -229,7 +205,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 		log.Printf("INFO: syfon_project_bucket_inventory_handler organization=%s project=%s path_prefix=%q duration_ms=%d error=%q", req.Organization, req.Project, req.PathPrefix, time.Since(started).Milliseconds(), err.Error())
 		return middleware.HandleError(c, err)
 	}
-	out := projectBucketInventoryResponseFromProjectStorage(result)
+	out := result
 	objectCount := 0
 	totalBytes := int64(0)
 	bucket := ""
@@ -327,91 +303,8 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: object_urls are required")
 	}
 	results := s.projectStorage.DeleteProjectObjects(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), req.ObjectUrls)
-	out := internalapi.InternalDeleteProjectBucketObjectsResponse{
-		Items: make([]internalapi.InternalDeleteProjectBucketObjectsItem, 0, len(results)),
-	}
-	for _, result := range results {
-		out.Items = append(out.Items, internalapi.InternalDeleteProjectBucketObjectsItem{
-			ObjectUrl: result.ObjectURL,
-			Status:    result.Status,
-			Error:     result.Error,
-		})
-	}
+	out := internalapi.InternalDeleteProjectBucketObjectsResponse{Items: results}
 	return c.JSON(out)
-}
-
-func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) internalapi.InternalInspectObjectBulkItem {
-	out := internalapi.InternalInspectObjectBulkItem{
-		Id:                   result.ID,
-		ObjectUrl:            result.ObjectURL,
-		Provider:             result.Provider,
-		Bucket:               result.Bucket,
-		Key:                  result.Key,
-		Path:                 result.Path,
-		Exists:               result.Exists,
-		Status:               string(result.Status),
-		Error:                result.Error,
-		ErrorKind:            result.ErrorKind,
-		SizeBytes:            result.SizeBytes,
-		MetaSha256:           result.MetaSHA256,
-		Etag:                 result.ETag,
-		ValidationStatus:     string(result.ValidationStatus),
-		SizeMatch:            result.SizeMatch,
-		NameMatch:            result.NameMatch,
-		Sha256Match:          result.SHA256Match,
-		ValidationMismatches: append([]string(nil), result.ValidationMismatches...),
-	}
-	if !result.LastModTime.IsZero() {
-		out.LastModified = result.LastModTime.Format(time.RFC3339)
-	}
-	return out
-}
-
-func projectBucketSummaryFromProjectStorage(summary projectstorage.Summary) *internalapi.InternalInspectProjectBucketSummary {
-	out := &internalapi.InternalInspectProjectBucketSummary{
-		Provider:          summary.Provider,
-		Bucket:            summary.Bucket,
-		Prefix:            summary.Prefix,
-		ObjectUrl:         summary.ObjectURL,
-		Exists:            summary.Exists,
-		ObjectCount:       summary.ObjectCount,
-		TotalBytes:        summary.TotalBytes,
-		Mode:              string(summary.Mode),
-		InventoryComplete: summary.InventoryComplete,
-		InventoryWarning:  summary.InventoryWarning,
-	}
-	if !summary.ComputedAt.IsZero() {
-		out.ComputedAt = summary.ComputedAt.Format(time.RFC3339)
-	}
-	return out
-}
-
-func projectBucketInventoryResponseFromProjectStorage(result *projectstorage.InspectionResult) internalapi.InternalInspectProjectBucketResponse {
-	if result == nil {
-		return internalapi.InternalInspectProjectBucketResponse{Items: []internalapi.InternalInspectProjectBucketItem{}}
-	}
-	out := internalapi.InternalInspectProjectBucketResponse{
-		Summary: projectBucketSummaryFromProjectStorage(result.Summary),
-		Items:   make([]internalapi.InternalInspectProjectBucketItem, 0, len(result.Items)),
-	}
-	for _, item := range result.Items {
-		row := internalapi.InternalInspectProjectBucketItem{
-			ObjectUrl:         item.ObjectURL,
-			Provider:          item.Provider,
-			Bucket:            item.Bucket,
-			Key:               item.Key,
-			Path:              item.Path,
-			SizeBytes:         item.SizeBytes,
-			MetaSha256:        item.MetaSHA256,
-			Etag:              item.ETag,
-			InventoryComplete: result.Summary.InventoryComplete,
-		}
-		if !item.LastModTime.IsZero() {
-			row.LastModified = item.LastModTime.Format(time.RFC3339)
-		}
-		out.Items = append(out.Items, row)
-	}
-	return out
 }
 
 func projectRecordAuditItemFromObjects(record objects.Record, organization, project string) internalapi.InternalInspectProjectRecordItem {
