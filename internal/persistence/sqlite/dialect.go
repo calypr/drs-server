@@ -9,6 +9,8 @@ import (
 	"github.com/calypr/syfon/internal/persistence/store"
 )
 
+const sqliteMaxParams = 900
+
 type sqliteDialect struct{}
 
 var _ store.Dialect = sqliteDialect{}
@@ -27,6 +29,17 @@ func (sqliteDialect) ListArgs(column string, values []string) (string, []any) {
 		args[i] = value
 	}
 	return fmt.Sprintf("%s IN (%s)", column, placeholders), args
+}
+
+func makePlaceholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = "?"
+	}
+	return strings.Join(parts, ",")
 }
 
 func (sqliteDialect) MaxParameters() int {
