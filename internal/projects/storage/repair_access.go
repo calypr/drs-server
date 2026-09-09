@@ -1,4 +1,4 @@
-package scoperepair
+package storage
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObject, checkStorage bool) {
+func (s *RepairService) classifyAccessMethods(ctx context.Context, object *auditedObject, checkStorage bool) {
 	if object.record.AccessMethods == nil {
 		return
 	}
@@ -71,12 +71,12 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 	object.updated = &updated
 }
 
-func (s *Service) addStorageFindings(ctx context.Context, object *auditedObject) {
-	if s.probe == nil {
+func (s *RepairService) addStorageFindings(ctx context.Context, object *auditedObject) {
+	if s.inspector == nil {
 		return
 	}
 	for _, raw := range object.currentURLs {
-		_, err := s.probe.Inspect(ctx, StorageInspectRequest{Organization: object.scope.Organization, Project: object.scope.Project, ObjectURL: raw})
+		err := s.inspectStorageURL(ctx, raw)
 		if err == nil {
 			continue
 		}
@@ -92,15 +92,30 @@ func (s *Service) addStorageFindings(ctx context.Context, object *auditedObject)
 	}
 }
 
-func (s *Service) checkURLExists(ctx context.Context, object *auditedObject, raw string) bool {
-	if s.probe == nil || strings.TrimSpace(raw) == "" {
+func (s *RepairService) checkURLExists(ctx context.Context, object *auditedObject, raw string) bool {
+	if s.inspector == nil || strings.TrimSpace(raw) == "" {
 		return false
 	}
-	_, err := s.probe.Inspect(ctx, StorageInspectRequest{Organization: object.scope.Organization, Project: object.scope.Project, ObjectURL: raw})
+	err := s.inspectStorageURL(ctx, raw)
 	return err == nil
 }
 
-func (s *Service) addDuplicateFindings(objectsToAudit []*auditedObject) {
+func (s *RepairService) inspectStorageURL(ctx context.Context, rawURL string) error {
+	if s.inspector == nil {
+		return fmt.Errorf("storage inspector is not configured")
+	}
+	_, err := s.inspector.ProbeObject(ctx, InspectRequest{ObjectURL: strings.TrimSpace(rawURL)})
+	if err == nil {
+		return nil
+	}
+	var storageErr *Error
+	if errors.As(err, &storageErr) && storageErr.Kind == ErrorObjectNotFound {
+		return errorapi.ErrStorageNotFound
+	}
+	return err
+}
+
+func (s *RepairService) addDuplicateFindings(objectsToAudit []*auditedObject) {
 	byKey := make(map[string][]*auditedObject)
 	for _, object := range objectsToAudit {
 		if object.sha256 == "" {
@@ -189,7 +204,7 @@ func cloneRecord(record objects.Record) objects.Record {
 	return result
 }
 
-func canonicalAccessURL(target scopeTarget, did, sha string) string {
+func canonicalAccessURL(target repairScopeTarget, did, sha string) string {
 	if strings.TrimSpace(target.Bucket) == "" || strings.TrimSpace(did) == "" || strings.TrimSpace(sha) == "" {
 		return ""
 	}
@@ -201,7 +216,7 @@ func canonicalAccessURL(target scopeTarget, did, sha string) string {
 	return "s3://" + strings.TrimSpace(target.Bucket) + "/" + strings.Join(parts, "/")
 }
 
-func pathStyleAccessURL(target scopeTarget, name string) string {
+func pathStyleAccessURL(target repairScopeTarget, name string) string {
 	if strings.TrimSpace(target.Bucket) == "" || strings.TrimSpace(name) == "" {
 		return ""
 	}
@@ -213,8 +228,8 @@ func pathStyleAccessURL(target scopeTarget, name string) string {
 	return "s3://" + strings.TrimSpace(target.Bucket) + "/" + strings.Join(parts, "/")
 }
 
-func newFinding(kind FindingKind, severity Severity, record objects.Record, sha string, currentURLs []string, canonical string, autoFixable bool, message string) Finding {
-	finding := Finding{Kind: kind, Severity: severity, ObjectID: string(record.Id), SHA256: sha, CurrentAccessURLs: append([]string(nil), currentURLs...), ProposedCanonicalURL: canonical, AutoFixable: autoFixable, Message: message}
+func newFinding(kind RepairFindingKind, severity RepairSeverity, record objects.Record, sha string, currentURLs []string, canonical string, autoFixable bool, message string) RepairFinding {
+	finding := RepairFinding{Kind: kind, Severity: severity, ObjectID: string(record.Id), SHA256: sha, CurrentAccessURLs: append([]string(nil), currentURLs...), ProposedCanonicalURL: canonical, AutoFixable: autoFixable, Message: message}
 	for _, resource := range objects.AccessResources(&record) {
 		organization, project, ok := clientaccess.ResourceScope(resource)
 		if ok && organization != "" {

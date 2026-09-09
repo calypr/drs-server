@@ -24,7 +24,6 @@ var prohibitedHTTPImports = []string{
 var domainRoots = []string{
 	"../buckets",
 	"../objects",
-	"../objects/scoperepair",
 	"../projects/storage",
 	"../usage",
 }

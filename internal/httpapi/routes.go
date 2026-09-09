@@ -7,7 +7,6 @@ import (
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -27,7 +26,7 @@ type Dependencies struct {
 	Buckets          *buckets.Service
 	ProjectInspector *projectstorage.Inspector
 	ProjectCleanup   *projectstorage.ProjectCleanup
-	ScopeRepair      *scoperepair.Service
+	ScopeRepair      *projectstorage.RepairService
 	Authorization    *middleware.AuthzMiddleware
 	RequestIDs       *middleware.RequestIDMiddleware
 }
@@ -47,7 +46,7 @@ type internalServer struct {
 	inspector *projectstorage.Inspector
 	cleanup   *projectstorage.ProjectCleanup
 	buckets   *buckets.Service
-	repair    *scoperepair.Service
+	repair    *projectstorage.RepairService
 }
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)

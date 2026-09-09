@@ -154,7 +154,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		},
 		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
-	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
+	scopeRepairService := projectstorage.NewRepairService(objectService, bucketService, projectStorageService.Inspector)
 
 	// Build Fiber runtime and middleware pipeline.
 	app := fiber.New(fiber.Config{

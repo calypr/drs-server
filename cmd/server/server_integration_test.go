@@ -160,7 +160,7 @@ s3_credentials:
 		},
 		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
-	scopeRepairService := newScopeRepairService(objectService, bucketService, storageManager)
+	scopeRepairService := projectstorage.NewRepairService(objectService, bucketService, projectStorageService.Inspector)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
 		LFS:              lfsService,
 		Objects:          objectService,

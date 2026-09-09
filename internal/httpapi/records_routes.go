@@ -184,7 +184,7 @@ func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 
 func (s *internalServer) InternalDelete(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
-	if err := s.objects.DeleteObject(c.Context(), id); err != nil {
+	if err := s.objects.DeleteObject(c.Context(), id, objects.DeleteOptions{}); err != nil {
 		return middleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

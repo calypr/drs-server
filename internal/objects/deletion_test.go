@@ -61,15 +61,15 @@ func assertRecordExists(t *testing.T, db *store.Store, id string, exists bool) {
 func TestDeleteObjectRequiresEveryResource(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, errorapi.ErrAccessDenied) {
+	if err := service.DeleteObject(deletionContext(), "shared", objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("shared delete: %v", err)
 	}
 	assertRecordExists(t, db, "shared", true)
-	if err := service.DeleteObject(deletionContext(), "owned"); err != nil {
+	if err := service.DeleteObject(deletionContext(), "owned", objects.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	assertRecordExists(t, db, "owned", false)
-	if err := service.DeleteObject(deletionContext(), "missing"); !errors.Is(err, errorapi.ErrNotFound) {
+	if err := service.DeleteObject(deletionContext(), "missing", objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("missing delete: %v", err)
 	}
 }
@@ -78,10 +78,10 @@ func TestDeleteRejectsPhysicalStorageOptionWithoutMutation(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
 	opts := objects.DeleteOptions{DeleteStorageData: true}
-	if err := service.DeleteObjectWithOptions(deletionContext(), "owned", opts); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.DeleteObject(deletionContext(), "owned", opts); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("single delete: %v", err)
 	}
-	if err := service.BulkDeleteObjectsWithOptions(deletionContext(), []string{"owned"}, opts); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned"}, opts); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("bulk delete: %v", err)
 	}
 	assertRecordExists(t, db, "owned", true)
@@ -90,13 +90,13 @@ func TestDeleteRejectsPhysicalStorageOptionWithoutMutation(t *testing.T) {
 func TestBulkDeleteFiltersUnauthorizedAndDuplicateIDs(t *testing.T) {
 	db := seedDeletionRecords(t)
 	service := newTestService(db)
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "owned", "shared", "other", "missing", " "}); err != nil {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "owned", "shared", "other", "missing", " "}, objects.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	assertRecordExists(t, db, "owned", false)
 	assertRecordExists(t, db, "shared", true)
 	assertRecordExists(t, db, "other", true)
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"missing", "shared"}); err != nil {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"missing", "shared"}, objects.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -107,7 +107,7 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 	if err := db.CreateObjectAlias(context.Background(), "alias", "owned"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}, objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("alias delete: %v", err)
 	}
 	assertRecordExists(t, db, "owned", true)
@@ -251,7 +251,7 @@ func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("expected sibling physical UUID %q to remain unchanged, got %q", objectB, got)
 	}
 
-	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}, objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("expected alias bulk deletion to be rejected with conflict, got %v", err)
 	}
 	if _, err := database.GetObject(ctx, objectA); err != nil {
@@ -264,7 +264,7 @@ func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("expected direct database alias bulk deletion to preserve ambiguity guard, got %v", err)
 	}
 
-	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{objectA}); err != nil {
+	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{objectA}, objects.DeleteOptions{}); err != nil {
 		t.Fatalf("BulkDeleteObjects through object service failed: %v", err)
 	}
 	if _, err := database.GetObject(ctx, objectA); err == nil {

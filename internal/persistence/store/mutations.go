@@ -89,7 +89,7 @@ func (db *Store) replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.R
 			}
 		}
 	}
-	incomingResources := objectResources(obj)
+	incomingResources := objects.AccessResources(obj)
 	publicRead, err := db.publicReadTx(ctx, tx, canonicalID, len(currentResources) == 0)
 	if err != nil {
 		return "", err
@@ -196,7 +196,7 @@ func (db *Store) replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, o
 		}
 	}
 	if obj.ControlledAccess != nil {
-		resources := objectResources(obj)
+		resources := objects.AccessResources(obj)
 		if _, err := db.txExecContext(ctx, tx, `DELETE FROM drs_object_controlled_access WHERE object_id = ?`, id); err != nil {
 			return fmt.Errorf("replace controlled access: %w", err)
 		}

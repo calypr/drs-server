@@ -124,7 +124,7 @@ func (s *drsServer) DeleteObject(c fiber.Ctx, objectID generated.ObjectId) error
 	opts := objects.DeleteOptions{
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
-	if err := s.objectService.DeleteObjectWithOptions(c.Context(), string(objectID), opts); err != nil {
+	if err := s.objectService.DeleteObject(c.Context(), string(objectID), opts); err != nil {
 		return middleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -199,7 +199,7 @@ func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 	opts := objects.DeleteOptions{
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
-	if err := s.objectService.BulkDeleteObjectsWithOptions(c.Context(), ids, opts); err != nil {
+	if err := s.objectService.BulkDeleteObjects(c.Context(), ids, opts); err != nil {
 		return middleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)

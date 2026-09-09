@@ -7,7 +7,6 @@ import (
 	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -26,7 +25,7 @@ type serverRuntime struct {
 	usageIngest         usage.Ingestor
 	projectInspector    *projectstorage.Inspector
 	projectCleanup      *projectstorage.ProjectCleanup
-	scopeRepairService  *scoperepair.Service
+	scopeRepairService  *projectstorage.RepairService
 	bucketService       *buckets.Service
 	authzMiddleware     *middleware.AuthzMiddleware
 	requestIDMiddleware *middleware.RequestIDMiddleware

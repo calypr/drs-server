@@ -171,7 +171,7 @@ func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *objects
 	if hasSHA && row.size != 0 && obj.Size != 0 && row.size != obj.Size {
 		return "", identityConflict("SHA %q has conflicting sizes %d and %d", sha, row.size, obj.Size)
 	}
-	resources := objectResources(obj)
+	resources := objects.AccessResources(obj)
 	currentResources, err := db.resourcesTx(ctx, tx, canonicalID)
 	if err != nil {
 		return "", err
@@ -469,16 +469,6 @@ func (db *Store) objectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]str
 		}
 	}
 	return values, rows.Err()
-}
-
-func objectResources(obj *objects.Record) []string {
-	if obj == nil {
-		return nil
-	}
-	if obj.ControlledAccess != nil {
-		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
-	}
-	return nil
 }
 
 func identityAliases(obj *objects.Record) []string {

@@ -10,273 +10,6 @@ import (
 	"time"
 )
 
-func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
-	var checksums []Checksum
-	if c.Checksums != nil {
-		checksums = append([]Checksum(nil), (*c.Checksums)...)
-	}
-	oid, ok := CanonicalSHA256(checksums)
-	if !ok {
-		return Record{}, errorapi.ErrNoValidSHA256
-	}
-	if c.AccessMethods == nil || len(*c.AccessMethods) == 0 {
-		return Record{}, errorapi.ErrAccessMethodsRequired
-	}
-	var controlled []string
-	if c.ControlledAccess != nil {
-		controlled = clientaccess.NormalizeAccessResources(*c.ControlledAccess)
-	}
-
-	id := ""
-	if c.Aliases != nil {
-		for _, alias := range *c.Aliases {
-			if strings.HasPrefix(alias, "id:") {
-				id = strings.TrimPrefix(alias, "id:")
-				break
-			}
-		}
-	}
-	if id == "" {
-		mintedID, err := MintRecordIDFromChecksum(oid, controlled)
-		if err != nil {
-			return Record{}, err
-		}
-		id = string(mintedID)
-	}
-
-	size := int64(0)
-	if c.Size != nil {
-		size = *c.Size
-	}
-	obj := Record{
-		Id:          RecordID(id),
-		Size:        size,
-		Name:        c.Name,
-		MimeType:    c.MimeType,
-		Description: c.Description,
-		Aliases:     c.Aliases,
-		Checksums:   []Checksum{{Type: "sha256", Checksum: oid}},
-	}
-	if c.ControlledAccess != nil {
-		obj.ControlledAccess = &controlled
-	}
-	obj, err := NormalizeRecord(obj, now)
-	if err != nil {
-		return Record{}, err
-	}
-	if obj.Name == nil {
-		obj.Name = objectStringPtr(oid)
-	}
-	obj.SelfUri = "drs://" + string(obj.Id)
-
-	methods := make([]AccessMethod, 0, len(*c.AccessMethods))
-	for _, method := range *c.AccessMethods {
-		if method.AccessId == nil || *method.AccessId == "" {
-			method.AccessId = objectStringPtr(method.Type)
-		}
-		methods = append(methods, method)
-	}
-	obj.AccessMethods = &methods
-	if len(methods) == 0 {
-		return Record{}, errorapi.ErrAccessMethodsRequired
-	}
-	return obj, nil
-}
-
-// NormalizeRecord applies the invariants for a record decoded by an adapter.
-// It owns the domain normalization so HTTP and persistence callers agree on
-// identity, timestamps, names, checksums, access resources, and aliases.
-func NormalizeRecord(record Record, fallback time.Time) (Record, error) {
-	id := strings.TrimSpace(string(record.Id))
-	if id == "" {
-		return Record{}, fmt.Errorf("did is required")
-	}
-	record.Id = RecordID(id)
-	if record.Checksums != nil {
-		record.Checksums = append([]Checksum(nil), record.Checksums...)
-	}
-
-	record = materializeRecordTime(record, fallback.UTC())
-	if record.Version == nil {
-		record.Version = objectStringPtr("1")
-	}
-
-	if record.Name != nil {
-		name := CleanToBasename(*record.Name)
-		if name == "" {
-			record.Name = nil
-		} else {
-			record.Name = objectStringPtr(name)
-		}
-	}
-	for i, checksum := range record.Checksums {
-		if NormalizeChecksumType(checksum.Type) != "sha256" {
-			continue
-		}
-		if normalized, ok := NormalizeSHA256Query(checksum.Checksum); ok {
-			record.Checksums[i] = Checksum{Type: "sha256", Checksum: normalized}
-		}
-	}
-	if record.ControlledAccess != nil {
-		controlled := clientaccess.NormalizeAccessResources(*record.ControlledAccess)
-		record.ControlledAccess = &controlled
-	}
-	primary := ""
-	if record.Name != nil {
-		primary = *record.Name
-	}
-	if record.NameAliases != nil {
-		record.NameAliases = NormalizeNameAliases(primary, record.NameAliases)
-	}
-	return record, nil
-}
-
-func EnforceCanonicalProjectScope(obj Record, organization, project string) (Record, error) {
-	organization = strings.TrimSpace(organization)
-	project = strings.TrimSpace(project)
-	if project != "" && organization == "" {
-		return Record{}, fmt.Errorf("organization is required when project is set")
-	}
-	if organization == "" || project == "" {
-		return obj, nil
-	}
-
-	resource, err := clientaccess.ResourcePath(organization, project)
-	if err != nil {
-		return Record{}, err
-	}
-	controlled := append(AccessResources(&obj), resource)
-	controlled = clientaccess.NormalizeAccessResources(controlled)
-	obj.ControlledAccess = &controlled
-	return obj, nil
-}
-
-// MergeRecordUpdate applies the mutable fields from update while retaining
-// immutable identity and existing fields that were omitted by the caller.
-func MergeRecordUpdate(existing Record, update Record, id string, now time.Time) (Record, error) {
-	merged := existing
-	merged.Id = RecordID(id)
-	merged.UpdatedTime = &now
-	if update.Name != nil {
-		name := CleanToBasename(*update.Name)
-		if name == "" {
-			merged.Name = nil
-		} else {
-			merged.Name = objectStringPtr(name)
-		}
-	}
-	if update.Description != nil {
-		merged.Description = update.Description
-	}
-	if update.MimeType != nil {
-		merged.MimeType = update.MimeType
-	}
-	if update.Version != nil {
-		merged.Version = update.Version
-	}
-	if update.Aliases != nil {
-		merged.Aliases = update.Aliases
-	}
-	if update.ControlledAccess != nil {
-		merged.ControlledAccess = update.ControlledAccess
-	}
-	if update.AccessMethods != nil {
-		merged.AccessMethods = update.AccessMethods
-	}
-	if update.Checksums != nil {
-		merged.Checksums = MergeAdditionalChecksums(existing.Checksums, update.Checksums)
-	}
-
-	return merged, nil
-}
-
-type RegistrationMergeInput struct {
-	ExistingName        string
-	ExistingVersion     string
-	ExistingDescription string
-	ExistingSize        int64
-	ExistingUpdated     time.Time
-	IncomingName        string
-	IncomingVersion     string
-	IncomingDescription string
-	IncomingSize        int64
-	IncomingUpdated     time.Time
-	IncomingResources   []string
-	CurrentResources    []string
-}
-
-// RegistrationMergeResult contains the merged metadata and, when needed, the
-// name alias that must be inserted by the adapter. It is deliberately free of
-// SQL, context, and authorization side effects.
-type RegistrationMergeResult struct {
-	Name        string
-	Version     string
-	Description string
-	Size        int64
-	Updated     time.Time
-	NameAlias   string
-}
-
-// MergeRegistrationMetadata applies registration-specific merge semantics.
-// This is intentionally separate from MergeRecordUpdate: registration may
-// replace metadata only for one overlapping current resource, while ordinary
-// record updates have different field and authorization semantics.
-func MergeRegistrationMetadata(input RegistrationMergeInput) RegistrationMergeResult {
-	allowReplacement := len(input.CurrentResources) == 1 && hasRegistrationResourceOverlap(input.IncomingResources, input.CurrentResources)
-	incomingName := CleanToBasename(input.IncomingName)
-
-	result := RegistrationMergeResult{
-		Name:        input.ExistingName,
-		Version:     input.ExistingVersion,
-		Description: input.ExistingDescription,
-		Size:        input.ExistingSize,
-		Updated:     input.ExistingUpdated,
-	}
-	if input.ExistingName != "" && incomingName != "" && input.ExistingName != incomingName {
-		result.NameAlias = incomingName
-		if allowReplacement {
-			result.NameAlias = input.ExistingName
-		}
-	}
-	if allowReplacement || strings.TrimSpace(result.Name) == "" {
-		if incomingName != "" {
-			result.Name = incomingName
-		}
-	}
-	if allowReplacement || strings.TrimSpace(result.Version) == "" {
-		if incoming := strings.TrimSpace(input.IncomingVersion); incoming != "" {
-			result.Version = incoming
-		}
-	}
-	if allowReplacement || strings.TrimSpace(result.Description) == "" {
-		if incoming := strings.TrimSpace(input.IncomingDescription); incoming != "" {
-			result.Description = incoming
-		}
-	}
-	if result.Size == 0 && input.IncomingSize != 0 {
-		result.Size = input.IncomingSize
-	}
-	if input.IncomingUpdated.After(result.Updated) {
-		result.Updated = input.IncomingUpdated
-	}
-	return result
-}
-
-func hasRegistrationResourceOverlap(left, right []string) bool {
-	set := make(map[string]struct{}, len(left))
-	for _, resource := range left {
-		set[resource] = struct{}{}
-	}
-	for _, resource := range right {
-		if _, ok := set[resource]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func objectStringPtr(value string) *string { return &value }
-
 func (s *Service) writeNow() time.Time {
 	clock := s.now
 	if clock == nil {
@@ -304,7 +37,7 @@ func (s *Service) RegisterScopedObjects(ctx context.Context, scoped []ScopedReco
 	now := s.writeNow()
 	prepared := make([]Record, len(scoped))
 	for i := range scoped {
-		record, err := EnforceCanonicalProjectScope(
+		record, err := enforceCanonicalProjectScope(
 			scoped[i].Record,
 			scoped[i].Scope.Organization,
 			scoped[i].Scope.Project,
@@ -322,7 +55,7 @@ func (s *Service) RegisterScopedObjects(ctx context.Context, scoped []ScopedReco
 // UpdateRecordInScope applies the caller's project scope before the existing
 // update authorization, immutable-field checks, merge, and replacement.
 func (s *Service) UpdateRecordInScope(ctx context.Context, id string, scope Scope, update Record, explicitSize *int64) (Record, error) {
-	normalized, err := EnforceCanonicalProjectScope(update, scope.Organization, scope.Project)
+	normalized, err := enforceCanonicalProjectScope(update, scope.Organization, scope.Project)
 	if err != nil {
 		return Record{}, err
 	}
@@ -528,18 +261,43 @@ func (s *Service) UpdateRecord(ctx context.Context, id string, update Record, ex
 			return Record{}, errorapi.ErrObjectChecksumImmutable
 		}
 	}
-	merged, err := MergeRecordUpdate(*existing, update, id, now.UTC())
-	if err != nil {
-		return Record{}, err
+	merged := *existing
+	merged.Id = RecordID(id)
+	updatedAt := now.UTC()
+	merged.UpdatedTime = &updatedAt
+	if update.Name != nil {
+		name := CleanToBasename(*update.Name)
+		if name == "" {
+			merged.Name = nil
+		} else {
+			merged.Name = objectStringPtr(name)
+		}
+	}
+	if update.Description != nil {
+		merged.Description = update.Description
+	}
+	if update.MimeType != nil {
+		merged.MimeType = update.MimeType
+	}
+	if update.Version != nil {
+		merged.Version = update.Version
+	}
+	if update.Aliases != nil {
+		merged.Aliases = update.Aliases
+	}
+	if update.ControlledAccess != nil {
+		merged.ControlledAccess = update.ControlledAccess
+	}
+	if update.AccessMethods != nil {
+		merged.AccessMethods = update.AccessMethods
+	}
+	if update.Checksums != nil {
+		merged.Checksums = mergeAdditionalChecksums(existing.Checksums, update.Checksums)
 	}
 	if err := s.store.ReplaceObjects(ctx, []Record{merged}); err != nil {
 		return Record{}, err
 	}
 	return merged, nil
-}
-
-func (s *Service) ReplaceObjects(ctx context.Context, objs []Record) error {
-	return s.store.ReplaceObjects(ctx, objs)
 }
 
 // BulkOverwriteResult summarizes a project-scoped, source-wins metadata copy.
@@ -570,7 +328,7 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 	now := s.writeNow()
 	prepared := make([]Record, len(candidates))
 	for i, candidate := range candidates {
-		normalized, err := EnforceCanonicalProjectScope(candidate, scope.Organization, scope.Project)
+		normalized, err := enforceCanonicalProjectScope(candidate, scope.Organization, scope.Project)
 		if err != nil {
 			return result, err
 		}

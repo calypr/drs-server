@@ -1,32 +1,43 @@
-package scoperepair
+package storage
 
 import (
 	"context"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 )
 
 const defaultPageSize = 500
 
-type Service struct {
-	records   PreparedRecordReader
-	writer    ReferenceWriter
-	scopes    ScopeReader
-	probe     StorageProbe
-	collapser DuplicateCollapser
+type RepairService struct {
+	records   repairRecordService
+	buckets   repairBucketService
+	inspector *Inspector
 }
 
-func NewService(records PreparedRecordReader, writer ReferenceWriter, scopes ScopeReader, probe StorageProbe, collapser DuplicateCollapser) *Service {
-	return &Service{records: records, writer: writer, scopes: scopes, probe: probe, collapser: collapser}
+type repairRecordService interface {
+	ListPreparedObjectsPageByScope(context.Context, string, string, string, string, int, int) ([]objects.Record, error)
+	UpdateRecord(context.Context, string, objects.Record, *int64, time.Time) (objects.Record, error)
+	CollapseProjectChecksumDuplicates(context.Context, string, string) (int, error)
 }
 
-type scopeTarget struct {
+type repairBucketService interface {
+	ListS3Credentials(context.Context) ([]buckets.Credential, error)
+	ListBucketScopes(context.Context) ([]buckets.Scope, error)
+}
+
+func NewRepairService(records repairRecordService, buckets repairBucketService, inspector *Inspector) *RepairService {
+	return &RepairService{records: records, buckets: buckets, inspector: inspector}
+}
+
+type repairScopeTarget struct {
 	Resource     string
 	Organization string
 	Project      string
@@ -38,76 +49,74 @@ type auditedObject struct {
 	record         objects.Record
 	sha256         string
 	currentURLs    []string
-	scope          scopeTarget
+	scope          repairScopeTarget
 	scopeKnown     bool
 	scopeAmbiguous bool
 	inferredScope  string
 	canonicalURL   string
-	findings       []Finding
+	findings       []RepairFinding
 	updated        *objects.Record
 }
 
 type auditState struct {
-	report  Report
+	report  RepairReport
 	objects []*auditedObject
 }
 
-// AuditAuthorized applies the HTTP maintenance read policy before running the
-// trusted audit state machine.
-func (s *Service) AuditAuthorized(ctx context.Context, options Options) (Report, error) {
+// AuditAuthorized checks read access for the requested scope before auditing it.
+func (s *RepairService) AuditAuthorized(ctx context.Context, options RepairOptions) (RepairReport, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
 	if options.Organization == "" || options.Project == "" {
-		return Report{}, fmt.Errorf("audit requires --organization and --project")
+		return RepairReport{}, fmt.Errorf("audit requires --organization and --project")
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
-		return Report{}, err
+		return RepairReport{}, err
 	}
 	state, err := s.audit(ctx, options)
 	if err != nil {
-		return Report{}, err
+		return RepairReport{}, err
 	}
 	return state.report, nil
 }
 
-// ApplyAuthorized performs read authorization before update authorization and
-// before entering the trusted collapse/audit/write state machine.
-func (s *Service) ApplyAuthorized(ctx context.Context, options Options) (ApplyResult, error) {
+// ApplyAuthorized requires read and update access for the requested scope before applying repairs.
+func (s *RepairService) ApplyAuthorized(ctx context.Context, options RepairOptions) (RepairResult, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
 	if options.Organization == "" || options.Project == "" {
-		return ApplyResult{}, fmt.Errorf("apply requires --organization and --project")
+		return RepairResult{}, fmt.Errorf("apply requires --organization and --project")
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
-		return ApplyResult{}, err
+		return RepairResult{}, err
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "update"); err != nil {
-		return ApplyResult{}, err
+		return RepairResult{}, err
 	}
 	return s.apply(ctx, options)
 }
 
-func (s *Service) apply(ctx context.Context, options Options) (ApplyResult, error) {
-	if s.collapser != nil {
-		if _, err := s.collapser.Collapse(ctx, options.Organization, options.Project); err != nil {
-			return ApplyResult{}, err
+func (s *RepairService) apply(ctx context.Context, options RepairOptions) (RepairResult, error) {
+	if s.records != nil {
+		if _, err := s.records.CollapseProjectChecksumDuplicates(ctx, options.Organization, options.Project); err != nil {
+			return RepairResult{}, err
 		}
 	}
 	state, err := s.audit(ctx, options)
 	if err != nil {
-		return ApplyResult{}, err
+		return RepairResult{}, err
 	}
-	result := ApplyResult{Report: state.report}
+	result := RepairResult{Report: state.report}
 	for _, object := range state.objects {
 		if object.updated == nil {
 			continue
 		}
 		result.AutoFixable++
-		if s.writer == nil {
+		if s.records == nil {
 			result.Skipped++
 			continue
 		}
-		if err := s.writer.Update(ctx, object.record.Id, *object.updated); err != nil {
+		if _, err := s.records.UpdateRecord(ctx, string(object.record.Id), *object.updated, nil, time.Now().UTC()); err != nil {
 			result.Skipped++
 			continue
 		}
@@ -130,7 +139,7 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 	return errorapi.ErrAccessDenied
 }
 
-func (s *Service) audit(ctx context.Context, options Options) (*auditState, error) {
+func (s *RepairService) audit(ctx context.Context, options RepairOptions) (*auditState, error) {
 	if s.records == nil {
 		return nil, fmt.Errorf("prepared record reader is not configured")
 	}
@@ -142,7 +151,7 @@ func (s *Service) audit(ctx context.Context, options Options) (*auditState, erro
 	if err != nil {
 		return nil, err
 	}
-	state := &auditState{report: Report{Organization: strings.TrimSpace(options.Organization), Project: strings.TrimSpace(options.Project), Scanned: scanned}}
+	state := &auditState{report: RepairReport{Organization: strings.TrimSpace(options.Organization), Project: strings.TrimSpace(options.Project), Scanned: scanned}}
 	for _, record := range records {
 		object, include := s.auditRecord(ctx, record, scopes, options)
 		if include {
@@ -155,7 +164,7 @@ func (s *Service) audit(ctx context.Context, options Options) (*auditState, erro
 		if len(object.findings) == 0 {
 			continue
 		}
-		state.report.Objects = append(state.report.Objects, ObjectReport{
+		state.report.Objects = append(state.report.Objects, RepairObjectReport{
 			ObjectID:             string(object.record.Id),
 			SHA256:               object.sha256,
 			Organization:         object.scope.Organization,
@@ -163,13 +172,13 @@ func (s *Service) audit(ctx context.Context, options Options) (*auditState, erro
 			CurrentAccessURLs:    append([]string(nil), object.currentURLs...),
 			ProposedCanonicalURL: object.canonicalURL,
 			AutoFixable:          object.updated != nil,
-			Findings:             append([]Finding(nil), object.findings...),
+			Findings:             append([]RepairFinding(nil), object.findings...),
 		})
 	}
 	return state, nil
 }
 
-func (s *Service) listRecords(ctx context.Context, options Options) ([]objects.Record, int, error) {
+func (s *RepairService) listRecords(ctx context.Context, options RepairOptions) ([]objects.Record, int, error) {
 	pageSize := options.PageSize
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
@@ -185,7 +194,7 @@ func (s *Service) listRecords(ctx context.Context, options Options) ([]objects.R
 		if limit <= 0 && options.Limit > 0 {
 			break
 		}
-		page, err := s.records.ListPrepared(ctx, PreparedRecordQuery{Limit: limit, Start: start, Organization: options.Organization, Project: options.Project})
+		page, err := s.records.ListPreparedObjectsPageByScope(ctx, options.Organization, options.Project, "read", start, limit, 0)
 		if err != nil {
 			return nil, scanned, err
 		}
@@ -202,7 +211,7 @@ func (s *Service) listRecords(ctx context.Context, options Options) ([]objects.R
 	return result, scanned, nil
 }
 
-func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes map[string][]scopeTarget, options Options) (*auditedObject, bool) {
+func (s *RepairService) auditRecord(ctx context.Context, record objects.Record, scopes map[string][]repairScopeTarget, options RepairOptions) (*auditedObject, bool) {
 	sha, _ := objects.CanonicalSHA256(record.Checksums)
 	object := &auditedObject{record: record, sha256: sha, currentURLs: accessMethodURLs(record.AccessMethods)}
 	resource, known, ambiguous := inferRecordResource(record, sha, scopes)

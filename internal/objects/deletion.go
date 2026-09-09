@@ -40,15 +40,11 @@ func (s *Service) DeleteBulkByScope(ctx context.Context, organization, project s
 	return s.store.RemoveObjectControlledAccessBulk(ctx, toDelete, resource)
 }
 
-func (s *Service) DeleteObject(ctx context.Context, id string) error {
-	return s.DeleteObjectWithOptions(ctx, id, DeleteOptions{})
-}
-
 type DeleteOptions struct {
 	DeleteStorageData bool
 }
 
-func (s *Service) DeleteObjectWithOptions(ctx context.Context, id string, opts DeleteOptions) error {
+func (s *Service) DeleteObject(ctx context.Context, id string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
 		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}
@@ -62,11 +58,7 @@ func (s *Service) DeleteObjectWithOptions(ctx context.Context, id string, opts D
 	return s.store.DeleteObject(ctx, id)
 }
 
-func (s *Service) BulkDeleteObjects(ctx context.Context, ids []string) error {
-	return s.BulkDeleteObjectsWithOptions(ctx, ids, DeleteOptions{})
-}
-
-func (s *Service) BulkDeleteObjectsWithOptions(ctx context.Context, ids []string, opts DeleteOptions) error {
+func (s *Service) BulkDeleteObjects(ctx context.Context, ids []string, opts DeleteOptions) error {
 	if opts.DeleteStorageData {
 		return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
 	}

@@ -1,4 +1,4 @@
-package scoperepair
+package storage
 
 import (
 	"context"
@@ -13,15 +13,15 @@ import (
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
-func (s *Service) loadScopeTargets(ctx context.Context) (map[string][]scopeTarget, error) {
-	if s.scopes == nil {
+func (s *RepairService) loadScopeTargets(ctx context.Context) (map[string][]repairScopeTarget, error) {
+	if s.buckets == nil {
 		return nil, fmt.Errorf("scope reader is not configured")
 	}
-	credentials, err := s.scopes.ListCredentials(ctx)
+	credentials, err := s.buckets.ListS3Credentials(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list buckets: %w", err)
 	}
-	out := make(map[string][]scopeTarget)
+	out := make(map[string][]repairScopeTarget)
 	for _, credential := range credentials {
 		if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {
 			continue
@@ -30,7 +30,7 @@ func (s *Service) loadScopeTargets(ctx context.Context) (map[string][]scopeTarge
 		if bucket == "" {
 			continue
 		}
-		scopes, err := s.scopes.ListScopes(ctx, bucket)
+		scopes, err := s.buckets.ListBucketScopes(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("list bucket scopes for %s: %w", bucket, err)
 		}
@@ -42,7 +42,7 @@ func (s *Service) loadScopeTargets(ctx context.Context) (map[string][]scopeTarge
 			if err != nil || resource == "" {
 				continue
 			}
-			target := scopeTarget{Resource: resource, Organization: strings.TrimSpace(scope.Organization), Project: strings.TrimSpace(scope.ProjectID), Bucket: bucket}
+			target := repairScopeTarget{Resource: resource, Organization: strings.TrimSpace(scope.Organization), Project: strings.TrimSpace(scope.ProjectID), Bucket: bucket}
 			if scopeBucket, prefix, ok := parseScopePath(scope.PathPrefix); ok {
 				if scopeBucket != "" {
 					target.Bucket = scopeBucket
@@ -82,7 +82,7 @@ func parseScopePath(raw string) (string, string, bool) {
 	return strings.TrimSpace(parsed.Host), strings.Trim(strings.TrimSpace(parsed.Path), "/"), true
 }
 
-func inferRecordResource(record objects.Record, sha string, scopes map[string][]scopeTarget) (string, bool, bool) {
+func inferRecordResource(record objects.Record, sha string, scopes map[string][]repairScopeTarget) (string, bool, bool) {
 	resources := recordProjectResources(record, "")
 	if len(resources) == 1 {
 		resource := resources[0]

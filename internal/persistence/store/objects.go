@@ -320,16 +320,6 @@ func (db *Store) attachBulkChecksums(ctx context.Context, objectsByID map[string
 	return rows.Err()
 }
 
-func objectAccessResources(obj *objects.Record) []string {
-	if obj == nil {
-		return nil
-	}
-	if obj.ControlledAccess != nil {
-		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
-	}
-	return nil
-}
-
 func normalizeObjectNameAliases(obj *objects.Record) []string {
 	if obj == nil {
 		return nil
@@ -417,7 +407,7 @@ func (db *Store) attachPublicRead(ctx context.Context, objectsByID map[string]*o
 	for id, obj := range objectsByID {
 		public, ok := known[id]
 		if !ok {
-			public = len(objectAccessResources(obj)) == 0
+			public = len(objects.AccessResources(obj)) == 0
 		}
 		obj.PublicRead = public
 		obj.PublicReadPolicyKnown = ok
