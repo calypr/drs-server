@@ -62,33 +62,6 @@ type InspectionResult struct {
 	Items   []StorageObject
 }
 
-type ListValidationRequest struct {
-	ID                string
-	ObjectURL         string
-	ExpectedSizeBytes *int64
-	ExpectedName      string
-}
-
-type ListValidationResult struct {
-	ID                   string
-	ObjectURL            string
-	Provider             string
-	Bucket               string
-	Key                  string
-	Path                 string
-	Exists               bool
-	Status               ProbeStatus
-	Error                string
-	ErrorKind            string
-	SizeBytes            *int64
-	ETag                 string
-	LastModTime          time.Time
-	ValidationStatus     ValidationStatus
-	SizeMatch            *bool
-	NameMatch            *bool
-	ValidationMismatches []string
-}
-
 type ProbeStatus string
 
 const (
@@ -118,6 +91,7 @@ type InspectRequest struct {
 	ObjectURL         string
 	ExpectedSizeBytes *int64
 	ExpectedSHA256    string
+	ExpectedName      string
 }
 
 type ObjectMetadata struct {
@@ -149,6 +123,7 @@ type ProbeResult struct {
 	LastModTime          time.Time
 	ValidationStatus     ValidationStatus
 	SizeMatch            *bool
+	NameMatch            *bool
 	SHA256Match          *bool
 	ValidationMismatches []string
 }

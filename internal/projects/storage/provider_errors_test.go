@@ -185,7 +185,7 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 	}
 
 	service.inventory = errorInventory{cause: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "inventory", Cause: cause}}
-	validationResults := service.ValidateInventoryObjects(context.Background(), []ListValidationRequest{
+	validationResults := service.ValidateInventoryObjects(context.Background(), []InspectRequest{
 		{ID: "good", ObjectURL: "s3://bucket/prefix/project/good"},
 		{ID: "bad", ObjectURL: "s3://bucket/prefix/project/bad"},
 	})

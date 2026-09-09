@@ -64,7 +64,8 @@ func (s *Service) probeOne(ctx context.Context, request InspectRequest) ProbeRes
 			if result.SizeBytes != nil {
 				sizeBytes = *result.SizeBytes
 			}
-			result.ValidationStatus, result.SizeMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, &ObjectMetadata{
+			result.ValidationStatus, result.SizeMatch, result.NameMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, &ObjectMetadata{
+				Key:        result.Key,
 				SizeBytes:  sizeBytes,
 				MetaSHA256: result.MetaSHA256,
 			})
@@ -93,7 +94,7 @@ func (s *Service) probeOne(ctx context.Context, request InspectRequest) ProbeRes
 	result.MetaSHA256 = metadata.MetaSHA256
 	result.ETag = metadata.ETag
 	result.LastModTime = metadata.LastModTime
-	result.ValidationStatus, result.SizeMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, metadata)
+	result.ValidationStatus, result.SizeMatch, result.NameMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, metadata)
 	if cache := cacheFromContext(ctx); cache != nil {
 		cache.setProbe(key, result)
 	}
@@ -107,7 +108,7 @@ func probeCacheKey(request InspectRequest) string {
 	} else {
 		key += "|"
 	}
-	return key + "|" + strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:")))
+	return key + "|" + strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:"))) + "|" + strings.TrimSpace(request.ExpectedName)
 }
 
 func (s *Service) inspectRaw(ctx context.Context, request InspectRequest) (*ObjectMetadata, error) {
@@ -250,17 +251,21 @@ func classifyError(err error) (ProbeStatus, string) {
 }
 
 func validationStatusForError(request InspectRequest) ValidationStatus {
-	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" {
+	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" && strings.TrimSpace(request.ExpectedName) == "" {
 		return ValidationNotRequested
 	}
 	return ValidationUnverifiable
 }
 
-func validateProbe(request InspectRequest, metadata *ObjectMetadata) (ValidationStatus, *bool, *bool, []string) {
-	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" {
-		return ValidationNotRequested, nil, nil, nil
+func validateProbe(request InspectRequest, metadata *ObjectMetadata) (ValidationStatus, *bool, *bool, *bool, []string) {
+	return validateObject(request, *metadata)
+}
+
+func validateObject(request InspectRequest, metadata ObjectMetadata) (ValidationStatus, *bool, *bool, *bool, []string) {
+	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedSHA256) == "" && strings.TrimSpace(request.ExpectedName) == "" {
+		return ValidationNotRequested, nil, nil, nil, nil
 	}
-	mismatches := make([]string, 0, 2)
+	mismatches := make([]string, 0, 3)
 	var sizeMatch *bool
 	if request.ExpectedSizeBytes != nil {
 		matched := metadata.SizeBytes == *request.ExpectedSizeBytes
@@ -269,11 +274,19 @@ func validateProbe(request InspectRequest, metadata *ObjectMetadata) (Validation
 			mismatches = append(mismatches, "size_mismatch")
 		}
 	}
+	var nameMatch *bool
+	if expectedName := strings.TrimSpace(request.ExpectedName); expectedName != "" {
+		matched := path.Base(metadata.Key) == expectedName
+		nameMatch = &matched
+		if !matched {
+			mismatches = append(mismatches, "name_mismatch")
+		}
+	}
 	var shaMatch *bool
 	expectedSHA := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:")))
 	if expectedSHA != "" {
 		if strings.TrimSpace(metadata.MetaSHA256) == "" {
-			return ValidationUnverifiable, sizeMatch, nil, append(mismatches, "missing_remote_sha256")
+			return ValidationUnverifiable, sizeMatch, nameMatch, nil, append(mismatches, "missing_remote_sha256")
 		}
 		matched := strings.EqualFold(strings.TrimSpace(metadata.MetaSHA256), expectedSHA)
 		shaMatch = &matched
@@ -282,9 +295,9 @@ func validateProbe(request InspectRequest, metadata *ObjectMetadata) (Validation
 		}
 	}
 	if len(mismatches) > 0 {
-		return ValidationMismatched, sizeMatch, shaMatch, mismatches
+		return ValidationMismatched, sizeMatch, nameMatch, shaMatch, mismatches
 	}
-	return ValidationMatched, sizeMatch, shaMatch, nil
+	return ValidationMatched, sizeMatch, nameMatch, shaMatch, nil
 }
 
 func int64Pointer(value int64) *int64 {

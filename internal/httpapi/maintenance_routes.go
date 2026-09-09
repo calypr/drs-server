@@ -324,9 +324,9 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	if len(req.Items) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
 	}
-	items := make([]projectstorage.ListValidationRequest, 0, len(req.Items))
+	items := make([]projectstorage.InspectRequest, 0, len(req.Items))
 	for _, item := range req.Items {
-		items = append(items, projectstorage.ListValidationRequest{
+		items = append(items, projectstorage.InspectRequest{
 			ID:                strings.TrimSpace(item.ID),
 			ObjectURL:         strings.TrimSpace(item.ObjectURL),
 			ExpectedSizeBytes: item.ExpectedSizeBytes,
@@ -336,7 +336,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	results := s.projectStorage.ValidateInventoryObjects(c.Context(), items)
 	out := internalInspectObjectBulkResponse{Items: make([]internalInspectObjectBulkItem, 0, len(results))}
 	for _, result := range results {
-		out.Items = append(out.Items, bulkListInspectItemFromProjectStorage(result))
+		out.Items = append(out.Items, bulkInspectItemFromProjectStorage(result))
 	}
 	log.Printf("INFO: syfon_inspect_bulk_list_handler items=%d results=%d duration_ms=%d", len(items), len(out.Items), time.Since(started).Milliseconds())
 	return c.JSON(out)
@@ -520,32 +520,8 @@ func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) intern
 		ETag:                 result.ETag,
 		ValidationStatus:     string(result.ValidationStatus),
 		SizeMatch:            result.SizeMatch,
-		SHA256Match:          result.SHA256Match,
-		ValidationMismatches: append([]string(nil), result.ValidationMismatches...),
-	}
-	if !result.LastModTime.IsZero() {
-		out.LastModTime = result.LastModTime.Format(time.RFC3339)
-	}
-	return out
-}
-
-func bulkListInspectItemFromProjectStorage(result projectstorage.ListValidationResult) internalInspectObjectBulkItem {
-	out := internalInspectObjectBulkItem{
-		ID:                   result.ID,
-		ObjectURL:            result.ObjectURL,
-		Provider:             result.Provider,
-		Bucket:               result.Bucket,
-		Key:                  result.Key,
-		Path:                 result.Path,
-		Exists:               result.Exists,
-		Status:               string(result.Status),
-		Error:                result.Error,
-		ErrorKind:            result.ErrorKind,
-		SizeBytes:            result.SizeBytes,
-		ETag:                 result.ETag,
-		ValidationStatus:     string(result.ValidationStatus),
-		SizeMatch:            result.SizeMatch,
 		NameMatch:            result.NameMatch,
+		SHA256Match:          result.SHA256Match,
 		ValidationMismatches: append([]string(nil), result.ValidationMismatches...),
 	}
 	if !result.LastModTime.IsZero() {

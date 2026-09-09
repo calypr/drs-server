@@ -15,7 +15,7 @@ import (
 type validationWork struct {
 	bucket         string
 	key            string
-	base           ListValidationResult
+	base           ProbeResult
 	requestIndexes []int
 }
 
@@ -23,13 +23,13 @@ type validationWork struct {
 // inventory evidence. Exact targets are deduplicated, dense sibling keys are
 // coalesced at the historical threshold, and output is always restored to
 // input order including duplicate requests.
-func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []ListValidationRequest) []ListValidationResult {
+func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []InspectRequest) []ProbeResult {
 	ctx = withRequestCache(ctx)
 	if len(requests) == 0 {
-		return []ListValidationResult{}
+		return []ProbeResult{}
 	}
 	visible, visibleErr := s.visibleBuckets(ctx)
-	results := make([]ListValidationResult, len(requests))
+	results := make([]ProbeResult, len(requests))
 	workByTarget := make(map[string]*validationWork)
 	for index, request := range requests {
 		base, work, ok := s.validationTarget(ctx, request, index, visible, visibleErr)
@@ -46,7 +46,7 @@ func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []ListV
 	}
 
 	groups := groupValidationTargets(workByTarget)
-	outcomes := make(map[string]ListValidationResult, len(workByTarget))
+	outcomes := make(map[string]ProbeResult, len(workByTarget))
 	matched := make(map[string]StorageObject, len(workByTarget))
 	unresolved := cloneValidationWork(workByTarget)
 	for _, group := range groups {
@@ -77,15 +77,15 @@ func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []ListV
 			result := outcome
 			result.ID = strings.TrimSpace(request.ID)
 			result.ObjectURL = strings.TrimSpace(request.ObjectURL)
-			result.ValidationStatus = validationErrorStatus(request)
+			result.ValidationStatus = validationStatusForError(request)
 			results[index] = result
 		}
 	}
 	return results
 }
 
-func (s *Service) validationTarget(ctx context.Context, request ListValidationRequest, index int, visible map[string]buckets.VisibleBucket, visibleErr error) (ListValidationResult, *validationWork, bool) {
-	base := ListValidationResult{
+func (s *Service) validationTarget(ctx context.Context, request InspectRequest, index int, visible map[string]buckets.VisibleBucket, visibleErr error) (ProbeResult, *validationWork, bool) {
+	base := ProbeResult{
 		ID:               strings.TrimSpace(request.ID),
 		ObjectURL:        strings.TrimSpace(request.ObjectURL),
 		Status:           ProbeError,
@@ -96,7 +96,7 @@ func (s *Service) validationTarget(ctx context.Context, request ListValidationRe
 		base.Status = ProbeInvalid
 		base.ErrorKind = string(ErrorInvalidInput)
 		base.Error = "object_url must be a valid s3://bucket/key URL"
-		base.ValidationStatus = validationErrorStatus(request)
+		base.ValidationStatus = validationStatusForError(request)
 		return base, nil, false
 	}
 	base.Provider = address.S3Provider
@@ -108,20 +108,20 @@ func (s *Service) validationTarget(ctx context.Context, request ListValidationRe
 		base.Status, base.ErrorKind = classifyError(err)
 		logStorageDiagnostic(ctx, err, "inventory")
 		base.Error = safeStorageErrorMessage(err, "inventory")
-		base.ValidationStatus = validationErrorStatus(request)
+		base.ValidationStatus = validationStatusForError(request)
 		return base, nil, false
 	}
 	if visibleErr != nil {
 		base.Status, base.ErrorKind = classifyError(visibleErr)
 		base.Error = safeStorageErrorMessage(visibleErr, "inventory")
-		base.ValidationStatus = validationErrorStatus(request)
+		base.ValidationStatus = validationStatusForError(request)
 		return base, nil, false
 	}
 	if !buckets.VisibleToCaller(visible, bucket, credential.CredentialID) {
 		err := &Error{Kind: ErrorPermissionDenied, Message: fmt.Sprintf("bucket %q is not visible to the caller", bucket)}
 		base.Status, base.ErrorKind = classifyError(err)
 		base.Error = err.Error()
-		base.ValidationStatus = validationErrorStatus(request)
+		base.ValidationStatus = validationStatusForError(request)
 		return base, nil, false
 	}
 	return base, &validationWork{bucket: bucket, key: key, base: base, requestIndexes: []int{index}}, true
@@ -159,7 +159,7 @@ func cloneValidationWork(input map[string]*validationWork) map[string]*validatio
 	return output
 }
 
-func (s *Service) runCoalescedValidation(ctx context.Context, group []*validationWork, outcomes map[string]ListValidationResult, matched map[string]StorageObject, unresolved map[string]*validationWork) {
+func (s *Service) runCoalescedValidation(ctx context.Context, group []*validationWork, outcomes map[string]ProbeResult, matched map[string]StorageObject, unresolved map[string]*validationWork) {
 	if len(group) == 0 {
 		return
 	}
@@ -195,7 +195,7 @@ func (s *Service) runCoalescedValidation(ctx context.Context, group []*validatio
 	}
 }
 
-func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]*validationWork, outcomes map[string]ListValidationResult, matched map[string]StorageObject) {
+func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]*validationWork, outcomes map[string]ProbeResult, matched map[string]StorageObject) {
 	keys := make([]string, 0, len(unresolved))
 	for key := range unresolved {
 		keys = append(keys, key)
@@ -255,7 +255,7 @@ func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]
 	wg.Wait()
 }
 
-func presentValidationResult(request ListValidationRequest, base ListValidationResult, item StorageObject) ListValidationResult {
+func presentValidationResult(request InspectRequest, base ProbeResult, item StorageObject) ProbeResult {
 	base.ObjectURL = item.ObjectURL
 	base.Key = item.Key
 	base.Path = item.Path
@@ -266,40 +266,10 @@ func presentValidationResult(request ListValidationRequest, base ListValidationR
 	base.SizeBytes = int64Pointer(item.SizeBytes)
 	base.ETag = strings.TrimSpace(item.ETag)
 	base.LastModTime = item.LastModTime
-	base.ValidationStatus, base.SizeMatch, base.NameMatch, base.ValidationMismatches = validateInventory(request, item)
+	base.ValidationStatus, base.SizeMatch, base.NameMatch, base.SHA256Match, base.ValidationMismatches = validateObject(request, ObjectMetadata{
+		Key:        item.Key,
+		SizeBytes:  item.SizeBytes,
+		MetaSHA256: item.MetaSHA256,
+	})
 	return base
-}
-
-func validationErrorStatus(request ListValidationRequest) ValidationStatus {
-	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedName) == "" {
-		return ValidationNotRequested
-	}
-	return ValidationUnverifiable
-}
-
-func validateInventory(request ListValidationRequest, item StorageObject) (ValidationStatus, *bool, *bool, []string) {
-	if request.ExpectedSizeBytes == nil && strings.TrimSpace(request.ExpectedName) == "" {
-		return ValidationNotRequested, nil, nil, nil
-	}
-	mismatches := make([]string, 0, 2)
-	var sizeMatch *bool
-	if request.ExpectedSizeBytes != nil {
-		matched := item.SizeBytes == *request.ExpectedSizeBytes
-		sizeMatch = &matched
-		if !matched {
-			mismatches = append(mismatches, "size_mismatch")
-		}
-	}
-	var nameMatch *bool
-	if expectedName := strings.TrimSpace(request.ExpectedName); expectedName != "" {
-		matched := path.Base(item.Key) == expectedName
-		nameMatch = &matched
-		if !matched {
-			mismatches = append(mismatches, "name_mismatch")
-		}
-	}
-	if len(mismatches) > 0 {
-		return ValidationMismatched, sizeMatch, nameMatch, mismatches
-	}
-	return ValidationMatched, sizeMatch, nameMatch, nil
 }
