@@ -42,7 +42,7 @@ func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req projectstorage.RepairOptions
+	var req internalapi.ScopeRepairOptions
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -63,7 +63,7 @@ func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	var req projectstorage.RepairOptions
+	var req internalapi.ScopeRepairOptions
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}

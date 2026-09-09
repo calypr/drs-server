@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 )
@@ -216,8 +217,8 @@ func pathStyleAccessURL(target repairScopeTarget, name string) string {
 	return "s3://" + strings.TrimSpace(target.Bucket) + "/" + strings.Join(parts, "/")
 }
 
-func newFinding(kind RepairFindingKind, severity RepairSeverity, record objects.Record, sha string, currentURLs []string, canonical string, autoFixable bool, message string) RepairFinding {
-	finding := RepairFinding{Kind: kind, Severity: severity, ObjectID: string(record.Id), SHA256: sha, CurrentAccessURLs: append([]string(nil), currentURLs...), ProposedCanonicalURL: canonical, AutoFixable: autoFixable, Message: message}
+func newFinding(kind, severity string, record objects.Record, sha string, currentURLs []string, canonical string, autoFixable bool, message string) internalapi.ScopeRepairFinding {
+	finding := internalapi.ScopeRepairFinding{Kind: kind, Severity: severity, ObjectId: string(record.Id), Sha256: sha, CurrentAccessUrls: append([]string(nil), currentURLs...), ProposedCanonicalUrl: canonical, AutoFixable: autoFixable, Message: message}
 	for _, resource := range objects.AccessResources(&record) {
 		organization, project, ok := clientaccess.ResourceScope(resource)
 		if ok && organization != "" {

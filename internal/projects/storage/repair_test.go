@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -193,7 +194,7 @@ func TestRepairScopeTargetsSkipCatalogWithoutUsableS3Credentials(t *testing.T) {
 func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
 	records := &fakeRepairRecords{pages: [][]objects.Record{{repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy")}, nil}}
 	service := newRepairTestService(records, repairBuckets(), nil)
-	report, _, err := service.audit(context.Background(), RepairOptions{Organization: " org ", Project: " project ", PageSize: 1})
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: " org ", Project: " project ", PageSize: 1})
 	if err != nil {
 		t.Fatalf("audit() error = %v", err)
 	}
@@ -202,7 +203,7 @@ func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
 	}
 	object := report.Objects[0]
 	wantURL := "s3://repair-bucket/prefix/did-1/" + strings.Repeat("a", 64)
-	if object.ProposedCanonicalURL != wantURL || object.Findings[0].Kind != FindingLegacyAccessURLRewritable || !object.AutoFixable {
+	if object.ProposedCanonicalUrl != wantURL || object.Findings[0].Kind != FindingLegacyAccessURLRewritable || !object.AutoFixable {
 		t.Fatalf("object report = %+v", object)
 	}
 	if len(records.queries) != 2 || records.queries[1].start != "did-1" || records.queries[0].limit != 1 {
@@ -219,7 +220,7 @@ func TestRepairApplyCollapsesBeforeAuditAndContinuesAfterWriteFailure(t *testing
 		failNext: true,
 	}
 	service := newRepairTestService(records, repairBuckets(), nil)
-	result, err := service.apply(context.Background(), RepairOptions{Organization: "org", Project: "project", PageSize: 10})
+	result, err := service.apply(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", PageSize: 10})
 	if err != nil {
 		t.Fatalf("apply() error = %v", err)
 	}
@@ -239,7 +240,7 @@ func TestRepairAuditStorageFindingsDistinguishNotFound(t *testing.T) {
 	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{"s3://repair-bucket/current": true}}
 	service := newRepairTestService(records, repairBuckets(), probe)
-	report, _, err := service.audit(context.Background(), RepairOptions{Organization: "org", Project: "project", CheckStorage: true})
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
 		t.Fatalf("audit() error = %v", err)
 	}
@@ -263,11 +264,11 @@ func TestRepairAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
 	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{canonical: true}}
 	service := newRepairTestService(records, repairBuckets(), probe)
-	report, _, err := service.audit(context.Background(), RepairOptions{Organization: "org", Project: "project", CheckStorage: true})
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})
 	if err != nil {
 		t.Fatalf("audit() error = %v", err)
 	}
-	if len(report.Objects) != 1 || len(report.Objects[0].Findings) != 1 || report.Objects[0].Findings[0].ProposedCanonicalURL != pathStyle {
+	if len(report.Objects) != 1 || len(report.Objects[0].Findings) != 1 || report.Objects[0].Findings[0].ProposedCanonicalUrl != pathStyle {
 		t.Fatalf("report = %+v, want path-style URL %q", report, pathStyle)
 	}
 	for _, call := range probe.calls {
@@ -281,7 +282,7 @@ func TestRepairAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
 func TestRepairApplyRequiresProjectScopeBeforeCallingPorts(t *testing.T) {
 	records := &fakeRepairRecords{}
 	service := newRepairTestService(records, repairBuckets(), nil)
-	_, err := service.ApplyAuthorized(context.Background(), RepairOptions{Organization: "org"})
+	_, err := service.ApplyAuthorized(context.Background(), internalapi.ScopeRepairOptions{Organization: "org"})
 	if err == nil || len(records.collapse) != 0 || len(records.queries) != 0 {
 		t.Fatalf("ApplyAuthorized() validation err=%v collapse=%v queries=%v", err, records.collapse, records.queries)
 	}
@@ -293,7 +294,7 @@ func TestRepairAuthorizationHappensBeforePorts(t *testing.T) {
 	t.Run("denied read does not inspect or collapse", func(t *testing.T) {
 		records := &fakeRepairRecords{}
 		service := newRepairTestService(records, repairBuckets(), nil)
-		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{}), RepairOptions{Organization: "org", Project: "project"})
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
 		if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 || len(records.collapse) != 0 {
 			t.Fatalf("ApplyAuthorized() error=%v collapse=%v queries=%v", err, records.collapse, records.queries)
 		}
@@ -302,7 +303,7 @@ func TestRepairAuthorizationHappensBeforePorts(t *testing.T) {
 	t.Run("read-only access does not update or collapse", func(t *testing.T) {
 		records := &fakeRepairRecords{}
 		service := newRepairTestService(records, repairBuckets(), nil)
-		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{resource: {"read": true}}), RepairOptions{Organization: "org", Project: "project"})
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{resource: {"read": true}}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
 		if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 || len(records.collapse) != 0 {
 			t.Fatalf("ApplyAuthorized() error=%v collapse=%v queries=%v", err, records.collapse, records.queries)
 		}
@@ -310,7 +311,7 @@ func TestRepairAuthorizationHappensBeforePorts(t *testing.T) {
 
 	records := &fakeRepairRecords{}
 	service := newRepairTestService(records, repairBuckets(), nil)
-	_, err := service.AuditAuthorized(repairAuthzContext(map[string]map[string]bool{}), RepairOptions{Organization: "org", Project: "project"})
+	_, err := service.AuditAuthorized(repairAuthzContext(map[string]map[string]bool{}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
 	if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 {
 		t.Fatalf("AuditAuthorized() error=%v queries=%v", err, records.queries)
 	}

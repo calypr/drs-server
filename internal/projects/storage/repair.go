@@ -8,12 +8,27 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
 const defaultPageSize = 500
+
+const (
+	FindingLegacyAccessURLRemovable  = "legacy_access_url_removable"
+	FindingLegacyAccessURLRewritable = "legacy_access_url_rewritable"
+	FindingNonCanonicalAccessURL     = "non_canonical_access_url"
+	FindingMissingControlledAccess   = "missing_controlled_access"
+	FindingDuplicateSHA256Sibling    = "duplicate_sha256_sibling"
+	FindingStorageObjectMissing      = "storage_object_missing"
+	FindingStorageProbeError         = "storage_probe_error"
+
+	SeverityInfo  = "info"
+	SeverityWarn  = "warn"
+	SeverityError = "error"
+)
 
 type repairScopeTarget struct {
 	Resource     string
@@ -32,54 +47,54 @@ type auditedObject struct {
 	scopeAmbiguous bool
 	inferredScope  string
 	canonicalURL   string
-	findings       []RepairFinding
+	findings       []internalapi.ScopeRepairFinding
 	updated        *objects.Record
 }
 
 // AuditAuthorized checks read access for the requested scope before auditing it.
-func (s *Service) AuditAuthorized(ctx context.Context, options RepairOptions) (RepairReport, error) {
+func (s *Service) AuditAuthorized(ctx context.Context, options internalapi.ScopeRepairOptions) (internalapi.ScopeRepairReport, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
 	if options.Organization == "" || options.Project == "" {
-		return RepairReport{}, fmt.Errorf("audit requires --organization and --project")
+		return internalapi.ScopeRepairReport{}, fmt.Errorf("audit requires --organization and --project")
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
-		return RepairReport{}, err
+		return internalapi.ScopeRepairReport{}, err
 	}
 	report, _, err := s.audit(ctx, options)
 	if err != nil {
-		return RepairReport{}, err
+		return internalapi.ScopeRepairReport{}, err
 	}
 	return report, nil
 }
 
 // ApplyAuthorized requires read and update access for the requested scope before applying repairs.
-func (s *Service) ApplyAuthorized(ctx context.Context, options RepairOptions) (RepairResult, error) {
+func (s *Service) ApplyAuthorized(ctx context.Context, options internalapi.ScopeRepairOptions) (internalapi.ScopeRepairApplyResult, error) {
 	options.Organization = strings.TrimSpace(options.Organization)
 	options.Project = strings.TrimSpace(options.Project)
 	if options.Organization == "" || options.Project == "" {
-		return RepairResult{}, fmt.Errorf("apply requires --organization and --project")
+		return internalapi.ScopeRepairApplyResult{}, fmt.Errorf("apply requires --organization and --project")
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "read"); err != nil {
-		return RepairResult{}, err
+		return internalapi.ScopeRepairApplyResult{}, err
 	}
 	if err := authorizeStorageCleanupScope(ctx, options.Organization, options.Project, "update"); err != nil {
-		return RepairResult{}, err
+		return internalapi.ScopeRepairApplyResult{}, err
 	}
 	return s.apply(ctx, options)
 }
 
-func (s *Service) apply(ctx context.Context, options RepairOptions) (RepairResult, error) {
+func (s *Service) apply(ctx context.Context, options internalapi.ScopeRepairOptions) (internalapi.ScopeRepairApplyResult, error) {
 	if s.records != nil {
 		if _, err := s.records.CollapseProjectChecksumDuplicates(ctx, options.Organization, options.Project); err != nil {
-			return RepairResult{}, err
+			return internalapi.ScopeRepairApplyResult{}, err
 		}
 	}
 	report, audited, err := s.audit(ctx, options)
 	if err != nil {
-		return RepairResult{}, err
+		return internalapi.ScopeRepairApplyResult{}, err
 	}
-	result := RepairResult{Report: report}
+	result := internalapi.ScopeRepairApplyResult{Report: report}
 	for _, object := range audited {
 		if object.updated == nil {
 			continue
@@ -112,13 +127,13 @@ func authorizeStorageCleanupScope(ctx context.Context, organization, project str
 	return errorapi.ErrAccessDenied
 }
 
-func (s *Service) audit(ctx context.Context, options RepairOptions) (RepairReport, []*auditedObject, error) {
+func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOptions) (internalapi.ScopeRepairReport, []*auditedObject, error) {
 	if s.records == nil {
-		return RepairReport{}, nil, fmt.Errorf("prepared record reader is not configured")
+		return internalapi.ScopeRepairReport{}, nil, fmt.Errorf("prepared record reader is not configured")
 	}
 	scopes, err := s.loadScopeTargets(ctx)
 	if err != nil {
-		return RepairReport{}, nil, err
+		return internalapi.ScopeRepairReport{}, nil, err
 	}
 	pageSize := options.PageSize
 	if pageSize <= 0 {
@@ -137,7 +152,7 @@ func (s *Service) audit(ctx context.Context, options RepairOptions) (RepairRepor
 		}
 		page, err := s.records.ListPreparedObjectsPageByScope(ctx, options.Organization, options.Project, "read", start, limit, 0)
 		if err != nil {
-			return RepairReport{}, nil, err
+			return internalapi.ScopeRepairReport{}, nil, err
 		}
 		if len(page) == 0 {
 			break
@@ -149,7 +164,7 @@ func (s *Service) audit(ctx context.Context, options RepairOptions) (RepairRepor
 			break
 		}
 	}
-	report := RepairReport{Organization: strings.TrimSpace(options.Organization), Project: strings.TrimSpace(options.Project), Scanned: scanned}
+	report := internalapi.ScopeRepairReport{Organization: strings.TrimSpace(options.Organization), Project: strings.TrimSpace(options.Project), Scanned: scanned}
 	audited := make([]*auditedObject, 0, len(records))
 	for _, record := range records {
 		object, include := s.auditRecord(ctx, record, scopes, options)
@@ -163,21 +178,21 @@ func (s *Service) audit(ctx context.Context, options RepairOptions) (RepairRepor
 		if len(object.findings) == 0 {
 			continue
 		}
-		report.Objects = append(report.Objects, RepairObjectReport{
-			ObjectID:             string(object.record.Id),
-			SHA256:               object.sha256,
+		report.Objects = append(report.Objects, internalapi.ScopeRepairObjectReport{
+			ObjectId:             string(object.record.Id),
+			Sha256:               object.sha256,
 			Organization:         object.scope.Organization,
 			Project:              object.scope.Project,
-			CurrentAccessURLs:    append([]string(nil), object.currentURLs...),
-			ProposedCanonicalURL: object.canonicalURL,
+			CurrentAccessUrls:    append([]string(nil), object.currentURLs...),
+			ProposedCanonicalUrl: object.canonicalURL,
 			AutoFixable:          object.updated != nil,
-			Findings:             append([]RepairFinding(nil), object.findings...),
+			Findings:             append([]internalapi.ScopeRepairFinding(nil), object.findings...),
 		})
 	}
 	return report, audited, nil
 }
 
-func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes map[string][]repairScopeTarget, options RepairOptions) (*auditedObject, bool) {
+func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes map[string][]repairScopeTarget, options internalapi.ScopeRepairOptions) (*auditedObject, bool) {
 	sha, _ := objects.CanonicalSHA256(record.Checksums)
 	object := &auditedObject{record: record, sha256: sha, currentURLs: accessMethodURLs(record.AccessMethods)}
 	resource, known, ambiguous := inferRecordResource(record, sha, scopes)
