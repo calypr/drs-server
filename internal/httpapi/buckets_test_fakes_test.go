@@ -1,4 +1,4 @@
-package buckets
+package httpapi
 
 import (
 	"context"

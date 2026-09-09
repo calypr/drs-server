@@ -5,7 +5,6 @@ import (
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
-	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
 	"github.com/calypr/syfon/internal/httpapi/metrics"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
@@ -93,7 +92,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	if options.Internal {
 		server := newInternalServer(deps)
 		internalapi.RegisterHandlers(api, server)
-		httpbuckets.RegisterRoutes(api, deps.Buckets, projectCleanupHandler(server))
+		registerBucketRoutes(api, deps.Buckets, projectCleanupHandler(server))
 	}
 	if options.LFS {
 		registerLFSRoutes(api, deps.LFS, options.LFSProtocol)

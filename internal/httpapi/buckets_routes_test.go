@@ -1,4 +1,4 @@
-package buckets
+package httpapi
 
 import (
 	"bytes"
@@ -39,7 +39,7 @@ func doInternalDRSTestRequest(req *http.Request, fixture internalDRSTestFixture)
 		c.SetContext(req.Context())
 		return c.Next()
 	})
-	RegisterRoutes(app, fixture.bucketService, nil)
+	registerBucketRoutes(app, fixture.bucketService, nil)
 
 	rr := httptest.NewRecorder()
 	resp, err := app.Test(req)
