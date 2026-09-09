@@ -166,7 +166,6 @@ s3_credentials:
 		UsageReports:   usageService.Reports(),
 		Buckets:        bucketService,
 		ProjectStorage: projectStorageService,
-		ScopeRepair:    projectStorageService,
 	}, httpapi.Options{Internal: true})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -59,7 +59,7 @@ func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 	if req.Organization == "" || req.Project == "" {
 		return middleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 	}
-	report, err := s.repair.AuditAuthorized(c.Context(), req)
+	report, err := s.projectStorage.AuditAuthorized(c.Context(), req)
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
@@ -80,7 +80,7 @@ func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
 	if req.Organization == "" || req.Project == "" {
 		return middleware.Reject(c, fiber.StatusBadRequest, "organization and project are required")
 	}
-	result, err := s.repair.ApplyAuthorized(c.Context(), req)
+	result, err := s.projectStorage.ApplyAuthorized(c.Context(), req)
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}

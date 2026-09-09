@@ -39,7 +39,6 @@ func registerServerRoutes(rt *serverRuntime) {
 		UsageReports:   rt.usageService.Reports(),
 		Buckets:        rt.bucketService,
 		ProjectStorage: rt.projectStorage,
-		ScopeRepair:    rt.projectStorage,
 		Authorization:  rt.authzMiddleware,
 		RequestIDs:     rt.requestIDMiddleware,
 	}, httpapi.Options{

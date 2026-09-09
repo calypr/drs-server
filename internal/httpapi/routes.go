@@ -1,6 +1,10 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"io"
+	"strings"
+
 	generated "github.com/calypr/syfon/apigen/drs"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
@@ -25,7 +29,6 @@ type Dependencies struct {
 	UsageReports   usage.Reporter
 	Buckets        *buckets.Service
 	ProjectStorage *projectstorage.Service
-	ScopeRepair    *projectstorage.Service
 	Authorization  *middleware.AuthzMiddleware
 	RequestIDs     *middleware.RequestIDMiddleware
 }
@@ -44,7 +47,6 @@ type internalServer struct {
 	transfers      *transfers.Service
 	projectStorage *projectstorage.Service
 	buckets        *buckets.Service
-	repair         *projectstorage.Service
 }
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)
@@ -101,6 +103,18 @@ func newInternalServer(deps Dependencies) *internalServer {
 		transfers:      deps.Transfers,
 		projectStorage: deps.ProjectStorage,
 		buckets:        deps.Buckets,
-		repair:         deps.ScopeRepair,
 	}
+}
+
+func decodeStrictJSON(body []byte, dst any) error {
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err == nil {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
