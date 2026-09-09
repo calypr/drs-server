@@ -221,6 +221,16 @@ func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, d
 
 	progress := common.GetProgress(ctx)
 	oid := common.GetOid(ctx)
+	var progressMu sync.Mutex
+	serializedProgress := progress
+	if progress != nil {
+		serializedProgress = func(event common.ProgressEvent) error {
+			progressMu.Lock()
+			defer progressMu.Unlock()
+			event.BytesSoFar = soFar.Load()
+			return progress(event)
+		}
+	}
 
 	for i := 0; i < totalParts; i++ {
 		ps := int64(i) * chunkSize
@@ -248,7 +258,7 @@ func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, d
 				w := io.NewOffsetWriter(file, partStart)
 				bufPtr := bufPool.Get().(*[]byte)
 				buf := *bufPtr
-				progressReader := newDownloadProgressReader(partBody, progress, oid, soFar.Load(), &soFar)
+				progressReader := newDownloadProgressReader(partBody, serializedProgress, oid, soFar.Load(), &soFar)
 				written, err := io.CopyBuffer(w, progressReader, buf)
 				bufPool.Put(bufPtr)
 				if err != nil {
