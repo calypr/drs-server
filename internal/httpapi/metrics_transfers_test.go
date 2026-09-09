@@ -45,8 +45,8 @@ func (i metricsProviderErrorIngestor) RecordProviderTransferEvents(context.Conte
 func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	ingest := &metricsIngestFake{}
 	reports := &metricsReporterFake{
-		transferSummary:   usage.Summary{EventCount: 1, DownloadEventCount: 1, BytesDownloaded: 42},
-		transferBreakdown: []usage.Breakdown{{Key: "user@example.com", BytesDownloaded: 42}},
+		transferSummary:   usage.Summary{EventCount: metricsInt64(1), DownloadEventCount: metricsInt64(1), BytesDownloaded: metricsInt64(42)},
+		transferBreakdown: []usage.Breakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
 	}
 	app := fiber.New()
 	registerMetricsRoutes(app, reports, ingest)
@@ -105,7 +105,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	if err := json.Unmarshal(summaryBody, &summary); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
-	if summary.EventCount != 1 || summary.DownloadEventCount != 1 || summary.BytesDownloaded != 42 {
+	if summary.EventCount == nil || *summary.EventCount != 1 || summary.DownloadEventCount == nil || *summary.DownloadEventCount != 1 || summary.BytesDownloaded == nil || *summary.BytesDownloaded != 42 {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 
@@ -125,7 +125,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	if err := json.Unmarshal(breakdownBody, &breakdown); err != nil {
 		t.Fatalf("decode breakdown: %v", err)
 	}
-	if breakdown.GroupBy != "user" || len(breakdown.Data) != 1 || breakdown.Data[0].Key != "user@example.com" || breakdown.Data[0].BytesDownloaded != 42 {
+	if breakdown.GroupBy != "user" || len(breakdown.Data) != 1 || breakdown.Data[0].Key == nil || *breakdown.Data[0].Key != "user@example.com" || breakdown.Data[0].BytesDownloaded == nil || *breakdown.Data[0].BytesDownloaded != 42 {
 		t.Fatalf("unexpected breakdown: %+v", breakdown)
 	}
 }
@@ -202,8 +202,8 @@ func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing
 
 func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 	reports := &metricsReporterFake{
-		transferSummary:   usage.Summary{BytesDownloaded: 141},
-		transferBreakdown: []usage.Breakdown{{Key: "user@example.com", BytesDownloaded: 42}},
+		transferSummary:   usage.Summary{BytesDownloaded: metricsInt64(141)},
+		transferBreakdown: []usage.Breakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
 	}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 
@@ -233,7 +233,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 		if err := json.Unmarshal(body, &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(resp.Data) != 1 || resp.Data[0].BytesDownloaded != 42 {
+		if len(resp.Data) != 1 || resp.Data[0].BytesDownloaded == nil || *resp.Data[0].BytesDownloaded != 42 {
 			t.Fatalf("expected only proj-a bytes, got %+v", resp.Data)
 		}
 	})
@@ -272,7 +272,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 		if err := json.Unmarshal(body, &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if len(resp.Data) != 1 || resp.Data[0].BytesDownloaded != 42 {
+		if len(resp.Data) != 1 || resp.Data[0].BytesDownloaded == nil || *resp.Data[0].BytesDownloaded != 42 {
 			t.Fatalf("expected aggregate to include only readable scope bytes, got %+v", resp.Data)
 		}
 	})
@@ -294,7 +294,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 		if err := json.Unmarshal(body, &summary); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if summary.BytesDownloaded != 141 {
+		if summary.BytesDownloaded == nil || *summary.BytesDownloaded != 141 {
 			t.Fatalf("expected global user bytes 141, got %+v", summary)
 		}
 	})

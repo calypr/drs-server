@@ -49,10 +49,10 @@ func TestGetFileUsageFlushesEventsAndReturnsLatestAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsage returned error: %v", err)
 	}
-	if usage.ObjectID != "object-1" || usage.Name != "object.dat" || usage.Size != 42 {
+	if usage.ObjectId == nil || *usage.ObjectId != "object-1" || postgresTestStringVal(usage.Name) != "object.dat" || postgresTestInt64Val(usage.Size) != 42 {
 		t.Fatalf("unexpected object usage identity: %+v", usage)
 	}
-	if usage.UploadCount != 2 || usage.DownloadCount != 3 {
+	if postgresTestInt64Val(usage.UploadCount) != 2 || postgresTestInt64Val(usage.DownloadCount) != 3 {
 		t.Fatalf("unexpected object usage counts: %+v", usage)
 	}
 	if usage.LastAccessTime == nil || !usage.LastAccessTime.Equal(downloaded) {
@@ -99,7 +99,7 @@ func TestListFileUsageByObjectIDs_ReturnsCountsAndLatestTimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFileUsageByObjectIDs returned error: %v", err)
 	}
-	if len(usage) != 2 || usage[0].UploadCount != 1 || usage[1].DownloadCount != 2 {
+	if len(usage) != 2 || postgresTestInt64Val(usage[0].UploadCount) != 1 || postgresTestInt64Val(usage[1].DownloadCount) != 2 {
 		t.Fatalf("unexpected usage rows: %+v", usage)
 	}
 	if usage[0].LastAccessTime == nil || !usage[0].LastAccessTime.Equal(uploaded) || usage[1].LastAccessTime == nil || !usage[1].LastAccessTime.Equal(downloaded) {
@@ -108,4 +108,18 @@ func TestListFileUsageByObjectIDs_ReturnsCountsAndLatestTimes(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
 	}
+}
+
+func postgresTestStringVal(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func postgresTestInt64Val(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

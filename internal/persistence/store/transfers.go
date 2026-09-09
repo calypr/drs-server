@@ -624,7 +624,7 @@ func scanTransferAttributionBreakdown(rows transferRows) ([]usage.Breakdown, err
 			&item.Project,
 			&item.Provider,
 			&item.Bucket,
-			&item.SHA256,
+			&item.Sha256,
 			&item.ActorEmail,
 			&item.ActorSubject,
 			&item.EventCount,

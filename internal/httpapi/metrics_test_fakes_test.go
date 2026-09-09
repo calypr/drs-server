@@ -12,6 +12,10 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+func metricsString(value string) *string { return &value }
+
+func metricsInt64(value int64) *int64 { return &value }
+
 func metricsTestContext(base context.Context, mode string, headerSet bool, headerValue bool, privileges map[string]map[string]bool) context.Context {
 	session := access.NewSession(mode)
 	if headerSet {

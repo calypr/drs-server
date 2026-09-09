@@ -15,6 +15,8 @@ var (
 	_ Reporter = (*Service)(nil)
 )
 
+func ptr[T any](value T) *T { return &value }
+
 type reportStoreSpy struct {
 	files          []FileUsage
 	summaries      FileUsageSummary
@@ -28,7 +30,7 @@ type reportStoreSpy struct {
 
 func (s *reportStoreSpy) GetFileUsage(_ context.Context, objectID string) (*FileUsage, error) {
 	for _, item := range s.files {
-		if item.ObjectID == objectID {
+		if item.ObjectId != nil && *item.ObjectId == objectID {
 			copy := item
 			return &copy, nil
 		}
@@ -43,7 +45,7 @@ func (s *reportStoreSpy) ListFileUsageByObjectIDs(_ context.Context, ids []strin
 	items := make([]FileUsage, 0, len(ids))
 	for _, id := range ids {
 		for _, item := range s.files {
-			if item.ObjectID == id {
+			if item.ObjectId != nil && *item.ObjectId == id {
 				items = append(items, item)
 			}
 		}
@@ -79,7 +81,7 @@ func (s *reportStoreSpy) GetFileUsageSummaryByResources(ctx context.Context, _ [
 
 func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ string, _ string) (FileUsageSummary, error) {
 	result := s.summaries
-	if result.RecordCount == 0 {
+	if result.RecordCount == nil {
 		result.RecordCount = result.TotalFiles
 	}
 	return result, nil
@@ -110,43 +112,43 @@ type optimizedReportStore struct {
 
 func (s *optimizedReportStore) ListFileUsagePageByScope(_ context.Context, organization, project string, limit, offset int, _ *time.Time) ([]FileUsage, error) {
 	s.pageByScopeCalls++
-	return []FileUsage{{ObjectID: organization + "/" + project, Size: int64(limit + offset)}}, nil
+	return []FileUsage{{ObjectId: ptr(organization + "/" + project), Size: ptr(int64(limit + offset))}}, nil
 }
 
 func (s *optimizedReportStore) ListFileUsagePageByResources(_ context.Context, resources []string, includeUnscoped bool, _, _ int, _ *time.Time) ([]FileUsage, error) {
 	s.pageByResourcesCalls++
 	s.lastResources = append([]string(nil), resources...)
 	s.lastIncludeUnscoped = includeUnscoped
-	return []FileUsage{{ObjectID: "resource-fast-path"}}, nil
+	return []FileUsage{{ObjectId: ptr("resource-fast-path")}}, nil
 }
 
 func (s *optimizedReportStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (FileUsageSummary, error) {
 	s.summaryByScopeCalls++
-	return FileUsageSummary{TotalFiles: 2}, nil
+	return FileUsageSummary{TotalFiles: ptr(int64(2))}, nil
 }
 
 func (s *optimizedReportStore) GetFileUsageSummaryByResources(_ context.Context, resources []string, includeUnscoped bool, _ *time.Time) (FileUsageSummary, error) {
 	s.summaryByResourceCalls++
 	s.lastResources = append([]string(nil), resources...)
 	s.lastIncludeUnscoped = includeUnscoped
-	return FileUsageSummary{TotalFiles: 3}, nil
+	return FileUsageSummary{TotalFiles: ptr(int64(3))}, nil
 }
 
 func (s *optimizedReportStore) GetProjectRecordSummaryByScope(context.Context, string, string) (FileUsageSummary, error) {
 	s.recordSummaryCalls++
-	return FileUsageSummary{RecordCount: 7}, nil
+	return FileUsageSummary{RecordCount: ptr(int64(7))}, nil
 }
 
 func (s *optimizedReportStore) QueryTransferSummary(_ context.Context, _ Filter, resources []string) (Summary, error) {
 	s.transferByResources++
 	s.lastResources = append([]string(nil), resources...)
-	return Summary{EventCount: 9}, nil
+	return Summary{EventCount: ptr(int64(9))}, nil
 }
 
 func (s *optimizedReportStore) QueryTransferBreakdown(_ context.Context, _ Filter, _ string, resources []string) ([]Breakdown, error) {
 	s.breakdownByResources++
 	s.lastResources = append([]string(nil), resources...)
-	return []Breakdown{{Key: "resource-fast-path"}}, nil
+	return []Breakdown{{Key: ptr("resource-fast-path")}}, nil
 }
 
 type objectReaderSpy struct {
@@ -181,7 +183,7 @@ func TestServiceUsesScopedReportCapabilities(t *testing.T) {
 		t.Fatalf("aggregate optimization: items=%+v err=%v resources=%v include=%t", items, err, store.lastResources, store.lastIncludeUnscoped)
 	}
 	summary, err := service.GetFileUsageSummary(ctx, FileUsageSummaryQuery{Scope: ScopeQuery{Organization: "org", Project: "project"}})
-	if err != nil || summary.RecordCount != 7 || store.summaryByScopeCalls != 1 || store.recordSummaryCalls != 1 {
+	if err != nil || summary.RecordCount == nil || *summary.RecordCount != 7 || store.summaryByScopeCalls != 1 || store.recordSummaryCalls != 1 {
 		t.Fatalf("single summary optimization: summary=%+v err=%v", summary, err)
 	}
 	if _, err := service.GetTransferAttributionSummary(ctx, TransferSummaryQuery{Scope: query}); err != nil || store.transferByResources != 1 {
@@ -223,8 +225,8 @@ func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testin
 	recent := time.Now().UTC().Add(-2 * time.Hour)
 	objects := &objectReaderSpy{ids: map[string][]string{"org/project": {"a", "b"}}}
 	store := &reportStoreSpy{files: []FileUsage{
-		{ObjectID: "a", LastDownloadTime: &old},
-		{ObjectID: "b", LastDownloadTime: &recent},
+		{ObjectId: ptr("a"), LastDownloadTime: &old},
+		{ObjectId: ptr("b"), LastDownloadTime: &recent},
 	}}
 	service := NewService(Dependencies{Reports: store, Objects: objects})
 	cutoff := time.Now().UTC().Add(-24 * time.Hour)
@@ -236,7 +238,7 @@ func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testin
 	if err != nil {
 		t.Fatalf("ListFileUsageBatch error: %v", err)
 	}
-	if !reflect.DeepEqual(items, []FileUsage{{ObjectID: "a", LastDownloadTime: &old}}) {
+	if !reflect.DeepEqual(items, []FileUsage{{ObjectId: ptr("a"), LastDownloadTime: &old}}) {
 		t.Fatalf("items = %+v", items)
 	}
 	if _, err := service.GetScopedFileUsage(context.Background(), "missing", ScopeQuery{Organization: "org", Project: "project"}); !errors.Is(err, errorapi.ErrNotFound) {
@@ -276,20 +278,20 @@ func TestProviderEventNormalizationPreservesValidationAndCounts(t *testing.T) {
 
 func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	store := &reportStoreSpy{
-		files:      []FileUsage{{ObjectID: "object-1", Size: 17}},
-		summaries:  FileUsageSummary{TotalFiles: 4},
-		transfer:   map[string]Summary{"": {EventCount: 3}},
-		breakdowns: map[string][]Breakdown{"": {{Key: "provider", EventCount: 2}}},
+		files:      []FileUsage{{ObjectId: ptr("object-1"), Size: ptr(int64(17))}},
+		summaries:  FileUsageSummary{TotalFiles: ptr(int64(4))},
+		transfer:   map[string]Summary{"": {EventCount: ptr(int64(3))}},
+		breakdowns: map[string][]Breakdown{"": {{Key: ptr("provider"), EventCount: ptr(int64(2))}}},
 	}
 	service := NewService(Dependencies{Reports: store})
 	ctx := context.Background()
 
 	got, err := service.GetFileUsage(ctx, "object-1")
-	if err != nil || got == nil || got.Size != 17 {
+	if err != nil || got == nil || got.Size == nil || *got.Size != 17 {
 		t.Fatalf("GetFileUsage() = %+v, %v", got, err)
 	}
 	items, err := service.ListFileUsageByObjectIDs(ctx, []string{"object-1"})
-	if err != nil || len(items) != 1 || items[0].ObjectID != "object-1" {
+	if err != nil || len(items) != 1 || items[0].ObjectId == nil || *items[0].ObjectId != "object-1" {
 		t.Fatalf("ListFileUsageByObjectIDs() = %+v, %v", items, err)
 	}
 	items, err = service.ListFileUsage(ctx, FileUsageQuery{Limit: 1})
@@ -297,15 +299,15 @@ func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 		t.Fatalf("ListFileUsage() = %+v, %v (calls=%d)", items, err, store.listCalls)
 	}
 	summary, err := service.GetFileUsageSummary(ctx, FileUsageSummaryQuery{})
-	if err != nil || summary.TotalFiles != 4 || store.summaryCalls != 1 {
+	if err != nil || summary.TotalFiles == nil || *summary.TotalFiles != 4 || store.summaryCalls != 1 {
 		t.Fatalf("GetFileUsageSummary() = %+v, %v (calls=%d)", summary, err, store.summaryCalls)
 	}
 	transfer, err := service.GetTransferAttributionSummary(ctx, TransferSummaryQuery{})
-	if err != nil || transfer.EventCount != 3 || store.transferCalls != 1 {
+	if err != nil || transfer.EventCount == nil || *transfer.EventCount != 3 || store.transferCalls != 1 {
 		t.Fatalf("GetTransferAttributionSummary() = %+v, %v (calls=%d)", transfer, err, store.transferCalls)
 	}
 	breakdown, err := service.GetTransferAttributionBreakdown(ctx, TransferBreakdownQuery{GroupBy: "scope"})
-	if err != nil || len(breakdown) != 1 || breakdown[0].Key != "provider" || store.breakdownCalls != 1 {
+	if err != nil || len(breakdown) != 1 || breakdown[0].Key == nil || *breakdown[0].Key != "provider" || store.breakdownCalls != 1 {
 		t.Fatalf("GetTransferAttributionBreakdown() = %+v, %v (calls=%d)", breakdown, err, store.breakdownCalls)
 	}
 	var unavailable *Service

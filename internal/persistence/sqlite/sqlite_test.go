@@ -1216,7 +1216,7 @@ func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsage failed: %v", err)
 	}
-	if usage.UploadCount != 1 || usage.DownloadCount != 2 {
+	if sqliteTestInt64Val(usage.UploadCount) != 1 || sqliteTestInt64Val(usage.DownloadCount) != 2 {
 		t.Fatalf("unexpected usage counters: %+v", usage)
 	}
 	if usage.LastAccessTime == nil {
@@ -1235,7 +1235,7 @@ func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsageSummary failed: %v", err)
 	}
-	if summary.TotalFiles == 0 || summary.TotalUploads == 0 || summary.TotalDownloads == 0 {
+	if sqliteTestInt64Val(summary.TotalFiles) == 0 || sqliteTestInt64Val(summary.TotalUploads) == 0 || sqliteTestInt64Val(summary.TotalDownloads) == 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 }
@@ -1274,7 +1274,7 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 	if err != nil {
 		t.Fatalf("GetFileUsage failed after create: %v", err)
 	}
-	if usage.UploadCount != 1 || usage.DownloadCount != 1 {
+	if sqliteTestInt64Val(usage.UploadCount) != 1 || sqliteTestInt64Val(usage.DownloadCount) != 1 {
 		t.Fatalf("expected queued usage to flush on create, got: %+v", usage)
 	}
 }
@@ -1452,7 +1452,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFileUsagePageByScope failed: %v", err)
 	}
-	if len(rows) != 1 || rows[0].ObjectID != "obj-2" {
+	if len(rows) != 1 || sqliteTestStringVal(rows[0].ObjectId) != "obj-2" {
 		t.Fatalf("unexpected scoped usage page: %+v", rows)
 	}
 
@@ -1460,7 +1460,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsageSummaryByScope failed: %v", err)
 	}
-	if summary.TotalFiles != 2 || summary.TotalUploads != 1 || summary.TotalDownloads != 1 || summary.InactiveFileCount != 0 {
+	if sqliteTestInt64Val(summary.TotalFiles) != 2 || sqliteTestInt64Val(summary.TotalUploads) != 1 || sqliteTestInt64Val(summary.TotalDownloads) != 1 || sqliteTestInt64Val(summary.InactiveFileCount) != 0 {
 		t.Fatalf("unexpected scoped summary: %+v", summary)
 	}
 
@@ -1468,7 +1468,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProjectRecordSummaryByScope failed: %v", err)
 	}
-	if recordSummary.RecordCount != 2 {
+	if sqliteTestInt64Val(recordSummary.RecordCount) != 2 {
 		t.Fatalf("unexpected scoped record count: %+v", recordSummary)
 	}
 	if recordSummary.RecordLatestUpdatedTime == nil || !recordSummary.RecordLatestUpdatedTime.Equal(now) {
@@ -1523,7 +1523,7 @@ func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummaryByResources failed: %v", err)
 	}
-	if summary.EventCount != 1 || summary.BytesDownloaded != 11 {
+	if sqliteTestInt64Val(summary.EventCount) != 1 || sqliteTestInt64Val(summary.BytesDownloaded) != 11 {
 		t.Fatalf("unexpected scoped transfer summary: %+v", summary)
 	}
 
@@ -1531,7 +1531,7 @@ func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdownByResources failed: %v", err)
 	}
-	if len(breakdown) != 1 || breakdown[0].ActorEmail != "user-a@example.com" || breakdown[0].BytesDownloaded != 11 {
+	if len(breakdown) != 1 || sqliteTestStringVal(breakdown[0].ActorEmail) != "user-a@example.com" || sqliteTestInt64Val(breakdown[0].BytesDownloaded) != 11 {
 		t.Fatalf("unexpected scoped transfer breakdown: %+v", breakdown)
 	}
 }
@@ -1706,7 +1706,7 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary failed: %v", err)
 	}
-	if summary.EventCount != 2 || summary.DownloadEventCount != 1 || summary.UploadEventCount != 1 || summary.BytesDownloaded != 42 || summary.BytesUploaded != 42 {
+	if sqliteTestInt64Val(summary.EventCount) != 2 || sqliteTestInt64Val(summary.DownloadEventCount) != 1 || sqliteTestInt64Val(summary.UploadEventCount) != 1 || sqliteTestInt64Val(summary.BytesDownloaded) != 42 || sqliteTestInt64Val(summary.BytesUploaded) != 42 {
 		t.Fatalf("unexpected transfer summary: %+v", summary)
 	}
 
@@ -1721,14 +1721,14 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown(provider) failed: %v", err)
 	}
-	if len(providerBreakdown) != 1 || providerBreakdown[0].BytesDownloaded != 42 || providerBreakdown[0].BytesUploaded != 42 {
+	if len(providerBreakdown) != 1 || sqliteTestInt64Val(providerBreakdown[0].BytesDownloaded) != 42 || sqliteTestInt64Val(providerBreakdown[0].BytesUploaded) != 42 {
 		t.Fatalf("unexpected provider breakdown: %+v", providerBreakdown)
 	}
 	objectBreakdown, err := db.QueryTransferBreakdown(ctx, usage.Filter{SHA256: oid}, "object", nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown(object) failed: %v", err)
 	}
-	if len(objectBreakdown) != 1 || objectBreakdown[0].SHA256 != oid {
+	if len(objectBreakdown) != 1 || sqliteTestStringVal(objectBreakdown[0].Sha256) != oid {
 		t.Fatalf("unexpected object breakdown: %+v", objectBreakdown)
 	}
 
@@ -1739,7 +1739,7 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary after delete failed: %v", err)
 	}
-	if afterDelete.EventCount != 2 || afterDelete.BytesDownloaded != 42 || afterDelete.BytesUploaded != 42 {
+	if sqliteTestInt64Val(afterDelete.EventCount) != 2 || sqliteTestInt64Val(afterDelete.BytesDownloaded) != 42 || sqliteTestInt64Val(afterDelete.BytesUploaded) != 42 {
 		t.Fatalf("expected transfer events to survive object deletion, got %+v", afterDelete)
 	}
 	unmatched := usage.ProviderEvent{
@@ -1760,14 +1760,14 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary default failed: %v", err)
 	}
-	if defaultSummary.EventCount != 2 {
+	if sqliteTestInt64Val(defaultSummary.EventCount) != 2 {
 		t.Fatalf("unmatched provider event should not be billed by default: %+v", defaultSummary)
 	}
 	allSummary, err := db.QueryTransferSummary(ctx, usage.Filter{Bucket: "bucket-a", ReconciliationStatus: "all"}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary all failed: %v", err)
 	}
-	if allSummary.EventCount != 2 {
+	if sqliteTestInt64Val(allSummary.EventCount) != 2 {
 		t.Fatalf("expected all reconciliation states when requested, got %+v", allSummary)
 	}
 
@@ -1978,6 +1978,13 @@ func sqliteTestPtr[T any](value T) *T {
 func sqliteTestStringVal(value *string) string {
 	if value == nil {
 		return ""
+	}
+	return *value
+}
+
+func sqliteTestInt64Val(value *int64) int64 {
+	if value == nil {
+		return 0
 	}
 	return *value
 }

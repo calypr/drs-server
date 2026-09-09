@@ -24,7 +24,7 @@ func TestGetTransferAttributionReports_MapAggregatesAndBreakdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary returned error: %v", err)
 	}
-	if summary.EventCount != 5 || summary.AccessIssuedCount != 3 || summary.BytesDownloaded != 80 || summary.BytesUploaded != 20 {
+	if postgresTestInt64Val(summary.EventCount) != 5 || postgresTestInt64Val(summary.AccessIssuedCount) != 3 || postgresTestInt64Val(summary.BytesDownloaded) != 80 || postgresTestInt64Val(summary.BytesUploaded) != 20 {
 		t.Fatalf("unexpected transfer summary: %+v", summary)
 	}
 
@@ -40,7 +40,7 @@ func TestGetTransferAttributionReports_MapAggregatesAndBreakdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown returned error: %v", err)
 	}
-	if len(breakdown) != 1 || breakdown[0].Key != "s3:bucket" || breakdown[0].EventCount != 2 || breakdown[0].LastTransferTime == nil {
+	if len(breakdown) != 1 || postgresTestStringVal(breakdown[0].Key) != "s3:bucket" || postgresTestInt64Val(breakdown[0].EventCount) != 2 || breakdown[0].LastTransferTime == nil {
 		t.Fatalf("unexpected transfer breakdown: %+v", breakdown)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

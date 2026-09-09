@@ -44,7 +44,7 @@ func (db *Store) GetFileUsage(ctx context.Context, objectID string) (*usage.File
 		LEFT JOIN object_usage u ON u.object_id = o.id
 		WHERE o.id = ?
 	`, objectID).Scan(
-		&item.ObjectID, &item.Name, &item.Size,
+		&item.ObjectId, &item.Name, &item.Size,
 		&item.UploadCount, &item.DownloadCount,
 		&lastUpload, &lastDownload,
 	)
@@ -337,7 +337,7 @@ func scanFileUsageRows(rows *sql.Rows, capacity int) ([]usage.FileUsage, error) 
 	for rows.Next() {
 		var item usage.FileUsage
 		var lastUpload, lastDownload sql.NullTime
-		if err := rows.Scan(&item.ObjectID, &item.Name, &item.Size, &item.UploadCount, &item.DownloadCount, &lastUpload, &lastDownload); err != nil {
+		if err := rows.Scan(&item.ObjectId, &item.Name, &item.Size, &item.UploadCount, &item.DownloadCount, &lastUpload, &lastDownload); err != nil {
 			return nil, err
 		}
 		item.LastUploadTime = nullableUsageTime(lastUpload)

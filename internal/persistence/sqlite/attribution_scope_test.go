@@ -36,7 +36,7 @@ func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary failed: %v", err)
 	}
-	if all.EventCount != 1 || all.BytesDownloaded != 42 {
+	if sqliteTestInt64Val(all.EventCount) != 1 || sqliteTestInt64Val(all.BytesDownloaded) != 42 {
 		t.Fatalf("empty-scope event was not retained: %+v", all)
 	}
 
@@ -44,7 +44,7 @@ func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummaryByResources failed: %v", err)
 	}
-	if project.EventCount != 0 || project.BytesDownloaded != 0 {
+	if sqliteTestInt64Val(project.EventCount) != 0 || sqliteTestInt64Val(project.BytesDownloaded) != 0 {
 		t.Fatalf("empty-scope event entered project report: %+v", project)
 	}
 }

@@ -171,13 +171,8 @@ func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 		return nil, err
 	}
 
-	items := make([]metricsapi.FileUsage, 0, len(data))
-	for _, v := range data {
-		items = append(items, toMetricsFileUsage(v))
-	}
-
 	return metricsapi.ListMetricsFiles200JSONResponse{
-		Data:   &items,
+		Data:   &data,
 		Limit:  &limit,
 		Offset: &offset,
 	}, nil
@@ -223,22 +218,17 @@ func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	if err != nil {
 		return nil, err
 	}
-	items := make([]metricsapi.FileUsage, 0, len(data))
-	for _, item := range data {
-		items = append(items, toMetricsFileUsage(item))
-	}
-
 	log.Printf(
 		"INFO: syfon_metrics_files_bulk requested=%d returned=%d scoped=%t aggregate_scopes=%d inactive_days=%t duration_ms=%d",
 		len(request.Body.ObjectIds),
-		len(items),
+		len(data),
 		access.isScoped(),
 		len(access.scopeQuery().Scopes),
 		request.Body.InactiveDays != nil,
 		time.Since(started).Milliseconds(),
 	)
 	return metricsapi.BulkMetricsFiles200JSONResponse{
-		Data: &items,
+		Data: &data,
 	}, nil
 }
 
@@ -275,7 +265,7 @@ func (s *metricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 		return nil, err
 	}
 
-	return metricsapi.GetMetricsFile200JSONResponse(toMetricsFileUsage(*fileUsage)), nil
+	return metricsapi.GetMetricsFile200JSONResponse(*fileUsage), nil
 }
 
 func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsapi.GetMetricsSummaryRequestObject) (metricsapi.GetMetricsSummaryResponseObject, error) {
@@ -304,41 +294,7 @@ func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 		return nil, err
 	}
 
-	return metricsapi.GetMetricsSummary200JSONResponse{
-		TotalFiles:              &summary.TotalFiles,
-		TotalUploads:            &summary.TotalUploads,
-		TotalDownloads:          &summary.TotalDownloads,
-		InactiveFileCount:       &summary.InactiveFileCount,
-		RecordCount:             scopedSummaryInt64(access, summary.RecordCount),
-		RecordLatestUpdatedTime: scopedSummaryTime(access, summary.RecordLatestUpdatedTime),
-	}, nil
-}
-
-func scopedSummaryInt64(access metricsAccess, value int64) *int64 {
-	if !access.isScoped() {
-		return nil
-	}
-	return &value
-}
-
-func scopedSummaryTime(access metricsAccess, value *time.Time) *time.Time {
-	if !access.isScoped() || value == nil {
-		return nil
-	}
-	return value
-}
-
-func toMetricsFileUsage(v usage.FileUsage) metricsapi.FileUsage {
-	return metricsapi.FileUsage{
-		ObjectId:         &v.ObjectID,
-		Name:             &v.Name,
-		Size:             &v.Size,
-		UploadCount:      &v.UploadCount,
-		DownloadCount:    &v.DownloadCount,
-		LastUploadTime:   v.LastUploadTime,
-		LastDownloadTime: v.LastDownloadTime,
-		LastAccessTime:   v.LastAccessTime,
-	}
+	return metricsapi.GetMetricsSummary200JSONResponse(summary), nil
 }
 
 func (s *metricsServer) RecordProviderTransferEvents(ctx context.Context, request metricsapi.RecordProviderTransferEventsRequestObject) (metricsapi.RecordProviderTransferEventsResponseObject, error) {
@@ -469,9 +425,9 @@ func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsa
 	if err != nil {
 		return nil, err
 	}
-	generated := toGeneratedTransferSummary(summary)
+	generated := metricsapi.GetTransferSummary200JSONResponse(summary)
 	generated.Freshness = &freshness
-	return metricsapi.GetTransferSummary200JSONResponse(generated), nil
+	return generated, nil
 }
 
 func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metricsapi.GetTransferBreakdownRequestObject) (metricsapi.GetTransferBreakdownResponseObject, error) {
@@ -501,13 +457,9 @@ func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	if err != nil {
 		return nil, err
 	}
-	generatedItems := make([]metricsapi.TransferAttributionBreakdown, 0, len(items))
-	for _, item := range items {
-		generatedItems = append(generatedItems, toGeneratedTransferBreakdown(item))
-	}
 	generatedGroupBy := metricsapi.TransferBreakdownResponseGroupBy(groupBy)
 	return metricsapi.GetTransferBreakdown200JSONResponse{
-		Data:      &generatedItems,
+		Data:      &items,
 		Freshness: &freshness,
 		GroupBy:   &generatedGroupBy,
 	}, nil
@@ -580,47 +532,10 @@ func generatedTime(v *time.Time) *time.Time {
 	return &t
 }
 
-func toGeneratedTransferSummary(summary usage.Summary) metricsapi.TransferAttributionSummary {
-	return metricsapi.TransferAttributionSummary{
-		EventCount:         &summary.EventCount,
-		AccessIssuedCount:  &summary.AccessIssuedCount,
-		DownloadEventCount: &summary.DownloadEventCount,
-		UploadEventCount:   &summary.UploadEventCount,
-		BytesRequested:     &summary.BytesRequested,
-		BytesDownloaded:    &summary.BytesDownloaded,
-		BytesUploaded:      &summary.BytesUploaded,
-	}
-}
-
-func toGeneratedTransferBreakdown(item usage.Breakdown) metricsapi.TransferAttributionBreakdown {
-	return metricsapi.TransferAttributionBreakdown{
-		Key:              &item.Key,
-		Organization:     &item.Organization,
-		Project:          &item.Project,
-		Provider:         &item.Provider,
-		Bucket:           &item.Bucket,
-		Sha256:           &item.SHA256,
-		ActorEmail:       &item.ActorEmail,
-		ActorSubject:     &item.ActorSubject,
-		EventCount:       &item.EventCount,
-		BytesRequested:   &item.BytesRequested,
-		BytesDownloaded:  &item.BytesDownloaded,
-		BytesUploaded:    &item.BytesUploaded,
-		LastTransferTime: item.LastTransferTime,
-	}
-}
-
 func (s *metricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, bool, error) {
-	domainFreshness, err := s.reporter.GetTransferFreshness(ctx, filter)
+	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
 	if err != nil {
 		return metricsapi.TransferMetricsFreshness{}, false, err
 	}
-	generated := metricsapi.TransferMetricsFreshness{
-		IsStale:             &domainFreshness.IsStale,
-		MissingBuckets:      &domainFreshness.MissingBuckets,
-		RequiredFrom:        domainFreshness.RequiredFrom,
-		RequiredTo:          domainFreshness.RequiredTo,
-		LatestCompletedSync: domainFreshness.LatestCompletedSync,
-	}
-	return generated, domainFreshness.IsStale, nil
+	return freshness, freshness.IsStale != nil && *freshness.IsStale, nil
 }

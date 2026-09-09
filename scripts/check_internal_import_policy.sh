@@ -28,6 +28,19 @@ is_shared_error_contract() {
 	[[ "$1" == github.com/calypr/syfon/apigen/errorapi ]]
 }
 
+is_canonical_generated_model() {
+	case "$1 -> $2" in
+		"github.com/calypr/syfon/internal/objects -> github.com/calypr/syfon/apigen/drs"|\
+		"github.com/calypr/syfon/internal/usage -> github.com/calypr/syfon/apigen/metricsapi"|\
+		"github.com/calypr/syfon/internal/projects/storage -> github.com/calypr/syfon/apigen/internalapi")
+			return 0
+		;;
+		*)
+			return 1
+		;;
+	esac
+}
+
 is_sql_dependency() {
 	case "$1" in
 		github.com/mattn/go-sqlite3|github.com/lib/pq|github.com/jackc/pgx*)
@@ -94,7 +107,7 @@ check_edge() {
 			if ! is_standard_library_dependency "$dep"; then forbidden=1; fi
 		;;
 		github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*) forbidden=1 ;;
 			esac
@@ -142,13 +155,13 @@ check_edge() {
 			fi
 		;;
 		github.com/calypr/syfon/internal/usage)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/transfers) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/projects/storage)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/maintenance/*) forbidden=1 ;;
 			esac
@@ -232,7 +245,12 @@ run_self_tests() {
 	expect_forbidden github.com/calypr/syfon/internal/usage github.com/calypr/syfon/internal/transfers
 	expect_allowed github.com/calypr/syfon/internal/requestid context
 	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/errorapi
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
+	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/metricsapi
+	expect_allowed github.com/calypr/syfon/internal/usage github.com/calypr/syfon/apigen/metricsapi
+	expect_forbidden github.com/calypr/syfon/internal/usage github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/projects/storage github.com/calypr/syfon/apigen/internalapi
+	expect_forbidden github.com/calypr/syfon/internal/projects/storage github.com/calypr/syfon/apigen/drs
 	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/internal/arbitrary github.com/calypr/syfon/internal/testsupport/sqlite

@@ -24,10 +24,15 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 	now := time.Now().UTC()
 	reports := &metricsReporterFake{
 		files: []usage.FileUsage{
-			{ObjectID: "sha-1", Name: "f1", Size: 1, UploadCount: 1, DownloadCount: 3, LastDownloadTime: metricsTimePtr(now.AddDate(0, 0, -10))},
-			{ObjectID: "sha-2", Name: "f2", Size: 2, UploadCount: 1},
+			{ObjectId: metricsString("sha-1"), Name: metricsString("f1"), Size: metricsInt64(1), UploadCount: metricsInt64(1), DownloadCount: metricsInt64(3), LastDownloadTime: metricsTimePtr(now.AddDate(0, 0, -10))},
+			{ObjectId: metricsString("sha-2"), Name: metricsString("f2"), Size: metricsInt64(2), UploadCount: metricsInt64(1)},
 		},
-		summary: usage.FileUsageSummary{TotalFiles: 2},
+		summary: usage.FileUsageSummary{
+			TotalFiles:        metricsInt64(2),
+			TotalUploads:      metricsInt64(0),
+			TotalDownloads:    metricsInt64(0),
+			InactiveFileCount: metricsInt64(0),
+		},
 	}
 	app := fiber.New()
 	registerMetricsRoutes(app, reports, &metricsIngestFake{})
@@ -66,7 +71,18 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 		if payload.TotalFiles == nil || *payload.TotalFiles != 2 {
 			t.Fatalf("expected total files 2, got %+v", payload.TotalFiles)
 		}
+		for name, value := range map[string]any{"total_uploads": float64(0), "total_downloads": float64(0), "inactive_file_count": float64(0)} {
+			if got, ok := payloadMap(body)[name]; !ok || got != value {
+				t.Fatalf("expected zero-valued generated field %s in response, got %v", name, payloadMap(body))
+			}
+		}
 	})
+}
+
+func payloadMap(body []byte) map[string]any {
+	var payload map[string]any
+	_ = json.Unmarshal(body, &payload)
+	return payload
 }
 
 func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
@@ -117,7 +133,7 @@ func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
 }
 
 func TestMetricsRoutes_BulkFiles(t *testing.T) {
-	reports := &metricsReporterFake{batch: []usage.FileUsage{{ObjectID: "obj-a", Name: "a.txt", Size: 10}}}
+	reports := &metricsReporterFake{batch: []usage.FileUsage{{ObjectId: metricsString("obj-a"), Name: metricsString("a.txt"), Size: metricsInt64(10)}}}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 	request := httptest.NewRequest(http.MethodPost, "/index/v1/metrics/files/bulk?organization=cbds&project=end_to_end_test", strings.NewReader(`{"object_ids":["obj-a","obj-b","missing","obj-a"],"inactive_days":30}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -141,7 +157,7 @@ func TestMetricsRoutes_BulkFiles(t *testing.T) {
 }
 
 func TestMetricsSummaryAuthzAndScope(t *testing.T) {
-	reports := &metricsReporterFake{summary: usage.FileUsageSummary{TotalFiles: 1, TotalUploads: 2, TotalDownloads: 3, RecordCount: 1}}
+	reports := &metricsReporterFake{summary: usage.FileUsageSummary{TotalFiles: metricsInt64(1), TotalUploads: metricsInt64(2), TotalDownloads: metricsInt64(3), RecordCount: metricsInt64(1)}}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 
 	request := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
@@ -175,9 +191,9 @@ func TestMetricsSummaryAuthzAndScope(t *testing.T) {
 
 func TestMetricsFilesAuthzAndScope(t *testing.T) {
 	reports := &metricsReporterFake{
-		files:           []usage.FileUsage{{ObjectID: "scoped-1", Name: "f1", Size: 1, UploadCount: 2, DownloadCount: 3}},
-		fileUsage:       map[string]usage.FileUsage{"other-1": {ObjectID: "other-1", Name: "f2", Size: 2}},
-		scopedFileUsage: map[string]usage.FileUsage{"scoped-1": {ObjectID: "scoped-1", Name: "f1", Size: 1}},
+		files:           []usage.FileUsage{{ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1), UploadCount: metricsInt64(2), DownloadCount: metricsInt64(3)}},
+		fileUsage:       map[string]usage.FileUsage{"other-1": {ObjectId: metricsString("other-1"), Name: metricsString("f2"), Size: metricsInt64(2)}},
+		scopedFileUsage: map[string]usage.FileUsage{"scoped-1": {ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1)}},
 	}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 	privileges := map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}}

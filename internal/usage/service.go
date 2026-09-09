@@ -319,9 +319,11 @@ func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query Tra
 }
 
 func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (Freshness, error) {
+	isStale := false
+	missingBuckets := []string{}
 	return Freshness{
-		IsStale:             false,
-		MissingBuckets:      []string{},
+		IsStale:             &isStale,
+		MissingBuckets:      &missingBuckets,
 		RequiredFrom:        filter.From,
 		RequiredTo:          filter.To,
 		LatestCompletedSync: nil,
