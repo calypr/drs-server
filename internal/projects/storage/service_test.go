@@ -14,13 +14,13 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-type fakeScopes struct {
-	values map[string]buckets.Scope
+type fakeScopeResolver struct {
+	scope buckets.StorageScope
+	err   error
 }
 
-func (f fakeScopes) LookupBucketScope(_ context.Context, organization, project string) (buckets.Scope, bool, error) {
-	scope, ok := f.values[strings.TrimSpace(organization)+"/"+strings.TrimSpace(project)]
-	return scope, ok, nil
+func (f fakeScopeResolver) ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error) {
+	return f.scope, f.err
 }
 
 type fakeCredentials struct {
@@ -115,7 +115,6 @@ type fakeCleanupScopes struct {
 }
 
 type testCatalog struct {
-	ScopeReader
 	CredentialReader
 	VisibilityReader
 	PhysicalScopeReader
@@ -137,20 +136,20 @@ func (f fakePhysical) ListPhysicalObjectsByScope(context.Context, string, string
 }
 
 func projectService(inventory *fakeInventory, deletePort DeletePort) (*Service, *fakeVisibility) {
-	return projectServiceWithScopes(inventory, deletePort, map[string]buckets.Scope{
-		"org/":        {Organization: "org", Bucket: "bucket", PathPrefix: "prefix"},
-		"org/project": {Organization: "org", ProjectID: "project", Bucket: "bucket", PathPrefix: "prefix/project"},
+	return projectServiceWithTarget(inventory, deletePort, buckets.StorageScope{
+		Provider: "s3", Bucket: "bucket", Prefix: "prefix/project", Prefixes: []string{"prefix", "project"},
+		Credential: buckets.Credential{CredentialID: "cred", Bucket: "bucket", Provider: "s3"},
 	})
 }
 
-func projectServiceWithScopes(inventory *fakeInventory, deletePort DeletePort, scopes map[string]buckets.Scope) (*Service, *fakeVisibility) {
+func projectServiceWithTarget(inventory *fakeInventory, deletePort DeletePort, target buckets.StorageScope) (*Service, *fakeVisibility) {
 	credential := buckets.Credential{CredentialID: "cred", Bucket: "bucket", Provider: "s3"}
 	visibility := &fakeVisibility{values: map[string]buckets.VisibleBucket{
 		"cred": {Credential: credential},
 	}}
 	service := NewService(Dependencies{
+		ScopeResolver: fakeScopeResolver{scope: target},
 		Catalog: testCatalog{
-			ScopeReader:      fakeScopes{values: scopes},
 			CredentialReader: fakeCredentials{values: map[string]buckets.Credential{"cred": credential}},
 			VisibilityReader: visibility,
 		},
@@ -209,9 +208,9 @@ func TestProbeObjectNormalizesScopedKeyAgainstEffectivePrefix(t *testing.T) {
 }
 
 func TestProbeObjectNormalizesLegacyOrganizationPrefixAgainstComposedScope(t *testing.T) {
-	service, _ := projectServiceWithScopes(&fakeInventory{}, nil, map[string]buckets.Scope{
-		"org/":        {Organization: "org", Bucket: "bucket", PathPrefix: "prefix"},
-		"org/project": {Organization: "org", ProjectID: "project", Bucket: "bucket", PathPrefix: "project"},
+	service, _ := projectServiceWithTarget(&fakeInventory{}, nil, buckets.StorageScope{
+		Provider: "s3", Bucket: "bucket", Prefix: "prefix/project", Prefixes: []string{"prefix", "project"},
+		Credential: buckets.Credential{CredentialID: "cred", Bucket: "bucket", Provider: "s3"},
 	})
 	probe := &recordingProbe{}
 	service.probe = probe

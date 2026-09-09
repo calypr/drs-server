@@ -7,8 +7,8 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-type ScopeReader interface {
-	LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error)
+type ScopeResolver interface {
+	ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error)
 }
 
 type CredentialReader interface {
@@ -42,7 +42,6 @@ type ScopeCatalog interface {
 }
 
 type Catalog interface {
-	ScopeReader
 	CredentialReader
 	VisibilityReader
 	PhysicalScopeReader
@@ -57,6 +56,7 @@ type Providers struct {
 }
 
 type Dependencies struct {
-	Catalog   Catalog
-	Providers Providers
+	ScopeResolver ScopeResolver
+	Catalog       Catalog
+	Providers     Providers
 }

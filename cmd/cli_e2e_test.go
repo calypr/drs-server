@@ -299,7 +299,6 @@ type cliFileStorageAccess struct {
 }
 
 type cliProjectStorageCatalog struct {
-	projectstorage.ScopeReader
 	projectstorage.CredentialReader
 	projectstorage.VisibilityReader
 	projectstorage.PhysicalScopeReader
@@ -399,8 +398,8 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 		Version:     "1.0.0",
 	}
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+		ScopeResolver: bucketService,
 		Catalog: cliProjectStorageCatalog{
-			ScopeReader:         bucketService,
 			CredentialReader:    bucketService,
 			VisibilityReader:    bucketService,
 			PhysicalScopeReader: objectService,

@@ -47,7 +47,6 @@ type serverBackend struct {
 }
 
 type projectStorageCatalog struct {
-	projectstorage.ScopeReader
 	projectstorage.CredentialReader
 	projectstorage.VisibilityReader
 	projectstorage.PhysicalScopeReader

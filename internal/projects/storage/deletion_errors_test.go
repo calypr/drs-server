@@ -19,13 +19,13 @@ type markerDelete struct {
 
 type failingDeleteScopes struct{ err error }
 
-func (s failingDeleteScopes) LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error) {
-	return buckets.Scope{}, false, s.err
+func (s failingDeleteScopes) ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error) {
+	return buckets.StorageScope{}, s.err
 }
 
 func TestDeleteProjectObjectsRedactsScopeDatabaseFailure(t *testing.T) {
 	service, _ := projectService(&fakeInventory{}, &markerDelete{})
-	service.inspector.scopes = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
+	service.inspector.resolver = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
 	ctx := requestid.WithRequestID(context.Background(), "scope-failure-request")
 	var logs bytes.Buffer
 	previous := slog.Default()

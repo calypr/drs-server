@@ -150,8 +150,8 @@ s3_credentials:
 	})
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+		ScopeResolver: bucketService,
 		Catalog: projectStorageCatalog{
-			ScopeReader:         bucketService,
 			CredentialReader:    bucketService,
 			VisibilityReader:    bucketService,
 			PhysicalScopeReader: objectService,

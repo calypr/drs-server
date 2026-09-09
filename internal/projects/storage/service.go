@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
@@ -25,7 +26,7 @@ const (
 )
 
 type Inspector struct {
-	scopes      ScopeReader
+	resolver    ScopeResolver
 	credentials CredentialReader
 	visibility  VisibilityReader
 	inventory   InventoryPort
@@ -47,7 +48,7 @@ type Service struct {
 
 func NewService(deps Dependencies) *Service {
 	inspector := &Inspector{
-		scopes:      deps.Catalog,
+		resolver:    deps.ScopeResolver,
 		credentials: deps.Catalog,
 		visibility:  deps.Catalog,
 		inventory:   deps.Providers.Inventory,
@@ -199,76 +200,48 @@ func (s *Inspector) resolveScope(ctx context.Context, organization, project, met
 	if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, method, []string{resource}) {
 		return scopeTarget{}, &access.AuthorizationError{Method: method, Resources: []string{resource}}
 	}
-	if s.scopes == nil {
-		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope reader is not configured"}
+	if s.resolver == nil {
+		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope resolver is not configured"}
 	}
-	scopes := make([]buckets.Scope, 0, 2)
-	if scope, found, lookupErr := s.scopes.LookupBucketScope(ctx, organization, ""); lookupErr != nil {
-		return scopeTarget{}, lookupErr
-	} else if found {
-		scopes = append(scopes, scope)
-	}
-	if project != "" {
-		if scope, found, lookupErr := s.scopes.LookupBucketScope(ctx, organization, project); lookupErr != nil {
-			return scopeTarget{}, lookupErr
-		} else if found {
-			scopes = append(scopes, scope)
-		}
-	}
-	if len(scopes) == 0 {
-		if project != "" {
-			return scopeTarget{}, &Error{Kind: ErrorScopeNotFound, Message: fmt.Sprintf("no bucket scope configured for organization %q project %q", organization, project)}
-		}
-		return scopeTarget{}, &Error{Kind: ErrorScopeNotFound, Message: fmt.Sprintf("no bucket scope configured for organization %q", organization)}
-	}
-	bucket := ""
-	for _, scope := range scopes {
-		if candidate := strings.TrimSpace(scope.Bucket); candidate != "" {
-			bucket = candidate
-		}
-	}
-	if bucket == "" {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: fmt.Sprintf("unable to resolve scoped storage bucket for organization %q project %q", organization, project)}
-	}
-	credential, err := s.credentialForBucket(ctx, bucket)
+	resolved, err := s.resolver.ResolveStorageScope(ctx, organization, project)
 	if err != nil {
-		return scopeTarget{}, err
+		return scopeTarget{}, mapScopeResolutionError(err)
 	}
-	if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {
-		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: fmt.Sprintf("provider %q is not supported for scoped bucket listing", credential.Provider)}
-	}
-	prefixes := normalizedPrefixes(scopes)
 	return scopeTarget{
-		Provider:   address.S3Provider,
-		Bucket:     bucket,
-		Prefix:     strings.Join(prefixes, "/"),
-		prefixes:   prefixes,
-		Credential: *credential,
+		Provider:   resolved.Provider,
+		Bucket:     resolved.Bucket,
+		Prefix:     resolved.Prefix,
+		prefixes:   append([]string(nil), resolved.Prefixes...),
+		Credential: resolved.Credential,
 	}, nil
 }
 
-func normalizedPrefixes(scopes []buckets.Scope) []string {
-	prefixes := make([]string, 0, len(scopes))
-	for _, scope := range scopes {
-		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-		if prefix == "" {
-			continue
-		}
-		if len(prefixes) == 0 {
-			prefixes = append(prefixes, prefix)
-			continue
-		}
-		last := prefixes[len(prefixes)-1]
-		switch {
-		case prefix == last:
-		case strings.HasPrefix(prefix, last+"/"):
-			prefixes[len(prefixes)-1] = prefix
-		case strings.HasPrefix(last, prefix+"/"):
-		default:
-			prefixes = append(prefixes, prefix)
-		}
+func mapScopeResolutionError(err error) error {
+	if err == nil {
+		return nil
 	}
-	return prefixes
+	var resolutionErr *buckets.StorageScopeError
+	if !errors.As(err, &resolutionErr) {
+		if errors.Is(err, errorapi.ErrProjectScopeNotFound) {
+			return &Error{Kind: ErrorScopeNotFound, Message: err.Error(), Cause: err}
+		}
+		if errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+			return &Error{Kind: ErrorCredentialMissing, Message: err.Error(), Cause: err}
+		}
+		return err
+	}
+	switch resolutionErr.Kind {
+	case buckets.StorageScopeInvalidInput:
+		return &Error{Kind: ErrorInvalidInput, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeNotFound:
+		return &Error{Kind: ErrorScopeNotFound, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeCredentialMissing:
+		return &Error{Kind: ErrorCredentialMissing, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeUnsupported:
+		return &Error{Kind: ErrorUnsupported, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	default:
+		return err
+	}
 }
 
 func normalizeObjects(items []StorageObject, target scopeTarget) []StorageObject {
