@@ -33,14 +33,14 @@ func TestLoadConfig_MinimalValid(t *testing.T) {
 	if cfg.Database.Sqlite == nil {
 		t.Fatal("expected sqlite config")
 	}
-	if cfg.LFS.MaxBatchObjects != DefaultLFSMaxBatchObjects {
-		t.Fatalf("expected default lfs.max_batch_objects=%d, got %d", DefaultLFSMaxBatchObjects, cfg.LFS.MaxBatchObjects)
+	if cfg.LFS.MaxBatchObjects != defaultLFSMaxBatchObjects {
+		t.Fatalf("expected default lfs.max_batch_objects=%d, got %d", defaultLFSMaxBatchObjects, cfg.LFS.MaxBatchObjects)
 	}
-	if cfg.LFS.MaxBatchBodyBytes != DefaultLFSMaxBatchBodyBytes {
-		t.Fatalf("expected default lfs.max_batch_body_bytes=%d, got %d", DefaultLFSMaxBatchBodyBytes, cfg.LFS.MaxBatchBodyBytes)
+	if cfg.LFS.MaxBatchBodyBytes != defaultLFSMaxBatchBodyBytes {
+		t.Fatalf("expected default lfs.max_batch_body_bytes=%d, got %d", defaultLFSMaxBatchBodyBytes, cfg.LFS.MaxBatchBodyBytes)
 	}
-	if cfg.LFS.RequestLimitPerMinute != DefaultLFSRequestLimitPerMinute {
-		t.Fatalf("expected default lfs.request_limit_per_minute=%d, got %d", DefaultLFSRequestLimitPerMinute, cfg.LFS.RequestLimitPerMinute)
+	if cfg.LFS.RequestLimitPerMinute != defaultLFSRequestLimitPerMinute {
+		t.Fatalf("expected default lfs.request_limit_per_minute=%d, got %d", defaultLFSRequestLimitPerMinute, cfg.LFS.RequestLimitPerMinute)
 	}
 	if !cfg.Routes.Ga4gh || !cfg.Routes.Internal || !cfg.Routes.LFS || !cfg.Routes.Metrics || !cfg.Routes.Docs {
 		t.Fatalf("expected route modules to default enabled, got %+v", cfg.Routes)
