@@ -11,28 +11,23 @@ import (
 )
 
 const (
-	RouteInspectObject                 = "/data/inspect"
-	RouteInspectObjectBulk             = "/data/inspect/bulk"
-	RouteInspectObjectBulkList         = "/data/inspect/bulk-list"
-	RouteInspectProjectBucket          = "/data/inspect/project-bucket"
-	RouteInspectProjectBucketInventory = "/data/inspect/project-bucket/inventory"
-	RouteInspectProjectRecords         = "/data/inspect/project-records"
-	RouteInspectProjectScopes          = "/data/inspect/project-scopes"
-	RouteDeleteProjectBucketObjects    = "/data/inspect/project-bucket/delete"
-	RouteProjectCleanup                = "/data/projects/:organization/:project_id"
-	RouteRepairScopeAudit              = "/data/repair/project-scope/audit"
-	RouteRepairScopeApply              = "/data/repair/project-scope/apply"
+	RouteInspectObject              = "/data/inspect"
+	RouteInspectObjectBulk          = "/data/inspect/bulk"
+	RouteInspectObjectBulkList      = "/data/inspect/bulk-list"
+	RouteInspectProjectBucket       = "/data/inspect/project-bucket"
+	RouteInspectProjectRecords      = "/data/inspect/project-records"
+	RouteDeleteProjectBucketObjects = "/data/inspect/project-bucket/delete"
+	RouteRepairScopeAudit           = "/data/repair/project-scope/audit"
+	RouteRepairScopeApply           = "/data/repair/project-scope/apply"
 )
 
-// ProjectCleanupHandler returns the project cleanup handler.
-func ProjectCleanupHandler(service *projectstorage.ProjectCleanup) fiber.Handler {
+func projectCleanupHandler(server *internalServer) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		return (&internalServer{cleanup: service}).InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
+		return server.InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
 	}
 }
 
-func RegisterUndocumentedRoutes(router fiber.Router, repair *scoperepair.Service, inspector *projectstorage.Inspector, cleanup *projectstorage.ProjectCleanup) {
-	server := &internalServer{repair: repair, inspector: inspector, cleanup: cleanup}
+func registerMaintenanceRoutes(router fiber.Router, server *internalServer) {
 	router.Post(RouteRepairScopeAudit, server.InternalScopeRepairAudit)
 	router.Post(RouteRepairScopeApply, server.InternalScopeRepairApply)
 	router.Post(RouteInspectObject, server.InternalInspectObject)
@@ -53,27 +48,3 @@ type internalServer struct {
 }
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)
-
-const (
-	RouteIndex                       = "/index"
-	RouteIndexDetail                 = "/index/:id"
-	RouteIndexControlledAccessRemove = "/index/:id/controlled-access/remove"
-	RouteBulkHashes                  = "/index/bulk/hashes"
-	RouteBulkDeleteHashes            = "/index/bulk/delete"
-	RouteBulkSHA256                  = "/index/bulk/sha256/validity"
-	RouteBulkSHA256Missing           = "/index/bulk/sha256/missing"
-	RouteBulkCreate                  = "/index/bulk"
-	RouteBulkDocs                    = "/index/bulk/documents"
-	RouteBulkOverwrite               = "/index/bulk/overwrite"
-)
-
-const (
-	RouteDownload          = "/data/download/:file_id"
-	RouteDownloadPart      = "/data/download/:file_id/part"
-	RouteUpload            = "/data/upload"
-	RouteUploadURL         = "/data/upload/:file_id"
-	RouteUploadBulk        = "/data/upload/bulk"
-	RouteMultipartInit     = "/data/multipart/init"
-	RouteMultipartUpload   = "/data/multipart/upload"
-	RouteMultipartComplete = "/data/multipart/complete"
-)

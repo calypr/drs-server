@@ -491,7 +491,7 @@ func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) e
 func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
 	var req internalapi.InternalRecord
-	if err := recordsDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if strings.TrimSpace(req.Did) == "" {

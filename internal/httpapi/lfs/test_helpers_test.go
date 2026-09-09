@@ -74,7 +74,7 @@ func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStor
 
 func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) Dependencies {
 	objectService := objectrecords.NewService(ports)
-	lfsService := transferlfs.NewService(transferService, objectService, ports.credentials, ports.pending, ports.fileCounters, storageFakeUploader(storageFake))
+	lfsService := transferlfs.NewService(transferService, objectService, ports, ports, ports, storageFakeUploader(storageFake))
 	return Dependencies{
 		Service: lfsService,
 	}

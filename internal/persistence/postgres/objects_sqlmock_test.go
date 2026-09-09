@@ -11,7 +11,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
 )
@@ -178,46 +177,6 @@ func TestGetObject_DeduplicatesAndPropagatesAuthz(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
-	}
-}
-
-func TestGetObject_IgnoresAuthContext(t *testing.T) {
-	pg, mock, rawDB := newMockPostgresDB(t)
-	defer rawDB.Close()
-
-	now := time.Date(2026, time.March, 1, 10, 0, 0, 0, time.UTC)
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT id, size, created_time, updated_time, name, version, description
-		FROM drs_object WHERE id = $1`)).
-		WithArgs("obj-2").
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "size", "created_time", "updated_time", "name", "version", "description",
-		}).AddRow("obj-2", int64(1), now, now, "n", "v", "d"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT name_alias FROM drs_object_name_alias WHERE object_id = $1 ORDER BY name_alias")).
-		WithArgs("obj-2").
-		WillReturnRows(sqlmock.NewRows([]string{"name_alias"}))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT url, type FROM drs_object_access_method WHERE object_id = $1")).
-		WithArgs("obj-2").
-		WillReturnRows(sqlmock.NewRows([]string{"url", "type"}).
-			AddRow("s3://bucket/key", "s3"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT resource FROM drs_object_controlled_access WHERE object_id = $1 ORDER BY resource")).
-		WithArgs("obj-2").
-		WillReturnRows(sqlmock.NewRows([]string{"resource"}).AddRow("/programs/p1/projects/a"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT public_read FROM drs_object_read_policy WHERE object_id = $1")).
-		WithArgs("obj-2").WillReturnError(sql.ErrNoRows)
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT type, checksum FROM drs_object_checksum WHERE object_id = $1")).
-		WithArgs("obj-2").
-		WillReturnRows(sqlmock.NewRows([]string{"type", "checksum"}))
-	session := access.NewSession("gen3")
-	session.SetAuthorizations([]string{"/programs/p1/projects/other"}, nil, true)
-	ctx := access.WithSession(context.Background(), session)
-
-	obj, err := pg.GetObject(ctx, "obj-2")
-	if err != nil {
-		t.Fatalf("expected object fetch to ignore auth context, got %v", err)
-	}
-	if obj.Id != "obj-2" {
-		t.Fatalf("expected obj-2, got %+v", obj)
 	}
 }
 

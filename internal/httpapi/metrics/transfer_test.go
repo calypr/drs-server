@@ -49,7 +49,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		transferBreakdown: []usage.Breakdown{{Key: "user@example.com", BytesDownloaded: 42}},
 	}
 	app := fiber.New()
-	registerMetricsRoutesForTest(app, reports, ingest)
+	RegisterMetricsRoutes(app, reports, ingest)
 
 	body := `{"events":[{
 		"provider_event_id":"event-download-1",
@@ -224,21 +224,6 @@ func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing
 	}
 }
 
-func TestTransferReportAuthResponsesCoverStatusVariants(t *testing.T) {
-	ctx := context.Background()
-	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusBadRequest} {
-		if got := getTransferSummaryAuthResponse(ctx, status); got == nil {
-			t.Fatalf("summary auth response for %d is nil", status)
-		}
-		if got := getTransferBreakdownAuthResponse(ctx, status); got == nil {
-			t.Fatalf("breakdown auth response for %d is nil", status)
-		}
-	}
-	if generatedTime(nil) != nil {
-		t.Fatal("generatedTime(nil) returned a value")
-	}
-}
-
 func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 	reports := &metricsReporterFake{
 		transferSummary:   usage.Summary{BytesDownloaded: 141},
@@ -341,7 +326,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 
 func TestMetricsRoutes_NoLegacyDownloadAttributionRoutes(t *testing.T) {
 	app := fiber.New()
-	registerMetricsRoutesForTest(app, &metricsReporterFake{}, &metricsIngestFake{})
+	RegisterMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
 
 	for _, tc := range []struct {
 		method string

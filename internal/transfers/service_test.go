@@ -73,14 +73,6 @@ func (f scopeFake) LookupBucketScope(_ context.Context, organization, project st
 	return scope, ok, nil
 }
 
-type credentialFake struct {
-	credentials []buckets.Credential
-}
-
-func (f credentialFake) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
-	return f.credentials, nil
-}
-
 type eventFake struct {
 	events []usage.Event
 	err    error
@@ -190,28 +182,6 @@ func TestResolveCanonicalStorageTargetComposesScopesAndPrefixes(t *testing.T) {
 	}
 }
 
-func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
-	accessPort := &accessFake{result: storage.SignedAccess{Location: "signed"}}
-	service := NewService(Dependencies{
-		Storage: accessPort,
-		Scopes: scopeFake{scopes: map[string]buckets.Scope{
-			"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "legacy"},
-		}},
-		Credentials: credentialFake{},
-	})
-	got, err := service.SignObjectURL(context.Background(), testRecord(), "s3://legacy/object", SignOptions{})
-	if err != nil {
-		t.Fatalf("SignObjectURL() error = %v", err)
-	}
-	if got != "signed" || len(accessPort.requests) != 1 {
-		t.Fatalf("unexpected signed result or calls: got=%q requests=%+v", got, accessPort.requests)
-	}
-	request := accessPort.requests[0]
-	if request.Target.LookupKey != "physical" || request.Target.OriginalURL != "s3://physical/legacy/object" {
-		t.Fatalf("unexpected storage request: %+v", request)
-	}
-}
-
 func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.SignedAccess{Location: "part-signed"}}
 	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: port})
@@ -268,9 +238,6 @@ func TestEventFromObjectPreservesContextAndRangeProjection(t *testing.T) {
 
 func TestUnconfiguredWorkflowsReturnConfigurationErrors(t *testing.T) {
 	service := NewService(Dependencies{})
-	if _, err := service.SignURL(context.Background(), "s3://bucket/key", SignOptions{}); err == nil {
-		t.Fatal("SignURL() unexpectedly succeeded without access port")
-	}
 	if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}}); err == nil {
 		t.Fatal("BeginMultipart() unexpectedly succeeded without multipart port")
 	}

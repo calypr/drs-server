@@ -50,7 +50,7 @@ func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req scoperepair.Options
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	req.Organization = strings.TrimSpace(req.Organization)
@@ -71,7 +71,7 @@ func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req scoperepair.Options
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	req.Organization = strings.TrimSpace(req.Organization)
@@ -248,7 +248,7 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectObjectRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	resp, err := s.inspector.ProbeObject(c.Context(), projectstorage.InspectRequest{
@@ -262,7 +262,7 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 		ExpectedSHA256:    strings.TrimSpace(req.ExpectedSHA256),
 	})
 	if err != nil {
-		return handleInspectStorageError(c, err)
+		return middleware.HandleError(c, err)
 	}
 	out := internalInspectObjectResponse{
 		ObjectURL:  resp.ObjectURL,
@@ -285,7 +285,7 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectObjectsBulkRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if len(req.Items) == 0 {
@@ -318,7 +318,7 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectObjectsBulkRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if len(req.Items) == 0 {
@@ -348,7 +348,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectProjectBucketRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	result, err := s.inspector.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
@@ -358,7 +358,7 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Printf("INFO: syfon_project_bucket_handler organization=%s project=%s mode=%s path_prefix=%q include_head=%t duration_ms=%d error=%q", req.Organization, req.Project, req.Mode, req.PathPrefix, req.IncludeHead, time.Since(started).Milliseconds(), err.Error())
-		return handleInspectStorageError(c, err)
+		return middleware.HandleError(c, err)
 	}
 	out := projectBucketInventoryResponseFromProjectStorage(result)
 	exists := false
@@ -381,7 +381,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectProjectBucketRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	result, err := s.inspector.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
@@ -390,7 +390,7 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 	})
 	if err != nil {
 		log.Printf("INFO: syfon_project_bucket_inventory_handler organization=%s project=%s path_prefix=%q duration_ms=%d error=%q", req.Organization, req.Project, req.PathPrefix, time.Since(started).Milliseconds(), err.Error())
-		return handleInspectStorageError(c, err)
+		return middleware.HandleError(c, err)
 	}
 	out := projectBucketInventoryResponseFromProjectStorage(result)
 	objectCount := 0
@@ -412,7 +412,7 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalInspectProjectRecordsRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	organization := strings.TrimSpace(req.Organization)
@@ -441,7 +441,7 @@ func (s *internalServer) InternalInspectProjectScopes(c fiber.Ctx, _ internalapi
 		req.Organization = c.Query("organization")
 		req.Project = c.Query("project")
 	default:
-		if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+		if err := decodeStrictJSON(c.Body(), &req); err != nil {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 		}
 	}
@@ -476,7 +476,7 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	var req internalDeleteProjectBucketObjectsRequest
-	if err := maintenanceDecodeStrictJSON(c.Body(), &req); err != nil {
+	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if len(req.ObjectURLs) == 0 {
@@ -494,10 +494,6 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 		})
 	}
 	return c.JSON(out)
-}
-
-func handleInspectStorageError(c fiber.Ctx, err error) error {
-	return middleware.HandleError(c, err)
 }
 
 func bulkInspectItemFromProjectStorage(result projectstorage.ProbeResult) internalInspectObjectBulkItem {

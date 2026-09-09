@@ -130,19 +130,7 @@ func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Reco
 	return access.HasObjectMethodAccess(ctx, "read", resources)
 }
 
-func sqliteServerBackend(database *store.Store) serverBackend {
-	return serverBackend{
-		objectStore: database,
-		bucketDependencies: buckets.Dependencies{
-			Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
-		},
-		pending:      database,
-		usageIngest:  database,
-		usageReports: database,
-	}
-}
-
-func postgresServerBackend(database *store.Store) serverBackend {
+func serverBackendForStore(database *store.Store) serverBackend {
 	return serverBackend{
 		objectStore: database,
 		bucketDependencies: buckets.Dependencies{

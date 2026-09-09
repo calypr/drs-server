@@ -149,21 +149,6 @@ func TestNewManagerRejectsTypedNilBackend(t *testing.T) {
 	}
 }
 
-func TestNewRegistrationSnapshotsCapabilitiesAndManagerHasNoMutationPath(t *testing.T) {
-	backend := &fakeBackend{provider: "s3"}
-	manager := managerWithBackends(t, &fakeLookup{}, backend)
-	if len(manager.providers) != 1 {
-		t.Fatalf("provider count = %d, want 1", len(manager.providers))
-	}
-	if _, ok := any(manager).(interface{ Register(string, Registration) }); ok {
-		t.Fatal("manager unexpectedly exposes a registration mutator")
-	}
-	registration := manager.providers["s3"]
-	if registration.prober == nil || registration.inventory == nil || registration.deleter == nil || registration.invalidator == nil {
-		t.Fatal("optional capabilities were not snapshotted")
-	}
-}
-
 func TestSignUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
 	lookup := &fakeLookup{
 		credentials: map[string]*buckets.Credential{"logical": credential("gcs", "physical")},

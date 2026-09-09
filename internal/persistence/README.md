@@ -14,7 +14,7 @@ Consumer packages own their narrow ports in `objects`, `buckets`, `transfers`, a
 
 ## Object and access tables
 
-Both runtime backends store the following object data. SQLite creates these tables in `internal/persistence/sqlite/sqlite.go:initSchema`. PostgreSQL creates the object tables from `internal/persistence/postgres/object_schema.sql`.
+Both runtime backends store the following object data. SQLite creates these tables in `internal/persistence/sqlite/dialect.go:sqliteSchemaBootstrap.initSchema`. PostgreSQL creates the object tables from `internal/persistence/postgres/object_schema.sql`.
 
 ### `drs_object`
 
@@ -89,12 +89,12 @@ These tables store issued-access records, access grant aggregates, and provider 
 
 The application initializes its schema when it creates a database:
 
-- `sqlite.NewSqliteDB` opens the configured SQLite file, enables its connection settings, calls `initSchema`, and runs compatibility upgrades before returning.
+- `sqlite.NewSqliteDB` opens the configured SQLite file, enables its connection settings, delegates to `sqlite/dialect.go` for `initSchema`, and runs compatibility upgrades before returning.
 - `postgres.NewPostgresDB` opens and pings PostgreSQL, loads `object_schema.sql`, then runs the credential, bucket-scope, LFS, usage, and transfer schema initializers.
 
 The SQLite runtime schema includes `drs_object`, the access and policy tables, aliases, credentials and scopes, LFS pending metadata, usage tables, transfer attribution tables, access grants, provider transfer events, indexes, and credential uniqueness triggers. Runtime initialization also handles older databases. It adds missing columns, migrates old credential identity shape, removes retired object columns, removes the retired browse index, and backfills access grants.
 
-The PostgreSQL runtime schema has the same logical table groups. Its object DDL lives in `postgres/object_schema.sql`. The remaining DDL and compatibility statements live in `postgres/postgres.go`.
+The PostgreSQL runtime schema has the same logical table groups. Its object DDL lives in `postgres/object_schema.sql`. The remaining DDL and compatibility statements live in `postgres/dialect.go`.
 
 ## Standalone SQLite script
 

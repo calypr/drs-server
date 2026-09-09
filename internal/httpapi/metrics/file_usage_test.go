@@ -28,7 +28,7 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 		summary: usage.FileUsageSummary{TotalFiles: 2},
 	}
 	app := fiber.New()
-	registerMetricsRoutesForTest(app, reports, &metricsIngestFake{})
+	RegisterMetricsRoutes(app, reports, &metricsIngestFake{})
 
 	t.Run("list", func(t *testing.T) {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?limit=10&offset=0&inactive_days=365", nil))
@@ -69,7 +69,7 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 
 func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-	registerMetricsRoutesForTest(app, &metricsReporterFake{}, &metricsIngestFake{})
+	RegisterMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil))
 	if err != nil {

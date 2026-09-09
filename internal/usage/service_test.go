@@ -316,10 +316,6 @@ func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	if err != nil || len(breakdown) != 1 || breakdown[0].Key != "provider" || store.breakdownCalls != 1 {
 		t.Fatalf("GetTransferAttributionBreakdown() = %+v, %v (calls=%d)", breakdown, err, store.breakdownCalls)
 	}
-	if service.Reports() != service {
-		t.Fatal("Reports() did not return the service reporter")
-	}
-
 	var unavailable *Service
 	if _, err := unavailable.GetFileUsage(ctx, "object-1"); !errors.Is(err, ErrReportsUnavailable) {
 		t.Fatalf("nil GetFileUsage() error = %v", err)

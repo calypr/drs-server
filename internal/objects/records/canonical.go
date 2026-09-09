@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-func recordStringPtr(value string) *string { return &value }
-
 func canonicalizeProjectScopedObjects(objects []objectmodel.Record, organization, project string) []objectmodel.Record {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
@@ -267,7 +265,8 @@ func mergeAccessMethods(group []objectmodel.Record) *[]objectmodel.AccessMethod 
 				continue
 			}
 			seen[key] = struct{}{}
-			method.AccessId = recordStringPtr(objectmodel.AccessMethodID(method.Type, url))
+			accessID := objectmodel.AccessMethodID(method.Type, url)
+			method.AccessId = &accessID
 			methods = append(methods, method)
 		}
 	}
@@ -382,22 +381,4 @@ func mergeStringPointerValues(getter func(objectmodel.Record) []string, group []
 	}
 	sort.Strings(values)
 	return &values
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		out = append(out, trimmed)
-	}
-	sort.Strings(out)
-	return out
 }

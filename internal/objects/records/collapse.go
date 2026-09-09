@@ -2,8 +2,10 @@ package records
 
 import (
 	"context"
-	objectmodel "github.com/calypr/syfon/internal/objects"
 	"sort"
+	"strings"
+
+	objectmodel "github.com/calypr/syfon/internal/objects"
 )
 
 func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organization, project string) (int, error) {
@@ -63,7 +65,21 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 			return 0, err
 		}
 	}
-	if err := s.store.BulkDeleteObjects(ctx, uniqueStrings(toDelete)); err != nil {
+	seen := make(map[string]struct{}, len(toDelete))
+	uniqueIDs := make([]string, 0, len(toDelete))
+	for _, id := range toDelete {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		uniqueIDs = append(uniqueIDs, id)
+	}
+	sort.Strings(uniqueIDs)
+	if err := s.store.BulkDeleteObjects(ctx, uniqueIDs); err != nil {
 		return 0, err
 	}
 	return len(aliasMap), nil

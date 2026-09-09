@@ -260,31 +260,6 @@ func (s *Service) firstConfiguredBucket(ctx context.Context) (string, error) {
 	return strings.TrimSpace(credentials[0].Bucket), nil
 }
 
-func (s *Service) StagePendingMetadata(ctx context.Context, metadata PendingMetadata) error {
-	if strings.TrimSpace(metadata.OID) == "" {
-		if oid, ok := objects.CanonicalSHA256(candidateChecksums(metadata.Candidate)); ok {
-			metadata.OID = oid
-		} else {
-			return fmt.Errorf("%w: pending LFS metadata requires an OID", errorapi.ErrInvalidInput)
-		}
-	}
-	now := s.currentTime()
-	if metadata.CreatedAt.IsZero() {
-		metadata.CreatedAt = now
-	} else {
-		metadata.CreatedAt = metadata.CreatedAt.UTC()
-	}
-	if metadata.ExpiresAt.IsZero() {
-		metadata.ExpiresAt = metadata.CreatedAt.Add(PendingMetadataTTL)
-	} else {
-		metadata.ExpiresAt = metadata.ExpiresAt.UTC()
-	}
-	if s.pending == nil {
-		return fmt.Errorf("pending LFS metadata store is not configured")
-	}
-	return s.pending.SavePendingMetadata(ctx, []PendingMetadata{metadata})
-}
-
 func (s *Service) Stage(ctx context.Context, candidates []objects.Candidate) error {
 	now := s.currentTime()
 	entries := make([]PendingMetadata, 0, len(candidates))
@@ -379,11 +354,4 @@ func (e *MetadataStageError) Unwrap() error {
 		return nil
 	}
 	return e.Err
-}
-
-func candidateChecksums(candidate objects.Candidate) []objects.Checksum {
-	if candidate.Checksums == nil {
-		return nil
-	}
-	return *candidate.Checksums
 }

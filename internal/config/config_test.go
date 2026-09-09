@@ -86,19 +86,9 @@ credential_encryption:
   local_key_file: ".syfon-credential-kek"
   master_key: "ee605db033f6992534def23f9594ffaa58142f8bd9b7ee8ae3de199aed435d97"
 `
-	tmpfile, err := os.CreateTemp("", "config-credential-encryption-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -139,19 +129,9 @@ database:
   sqlite:
     file: "test.db"
 `
-	tmpfile, err := os.CreateTemp("", "config-local-authz-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -197,7 +177,7 @@ database:
   sqlite:
     file: ":memory:"
 `
-	cfg, err := LoadConfig(writeAuthTestFile(t, content))
+	cfg, err := LoadConfig(writeConfigTestFile(t, content))
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -274,7 +254,7 @@ database:
   sqlite:
     file: ":memory:"
 `
-	_, err := LoadConfig(writeAuthTestFile(t, content))
+	_, err := LoadConfig(writeConfigTestFile(t, content))
 	if err == nil || !strings.Contains(err.Error(), `auth.mode "gen3" requires postgres database`) {
 		t.Fatalf("expected inherited-mock validation failure, got %v", err)
 	}
@@ -284,7 +264,7 @@ func TestLoadConfig_DoesNotRetainAuthFromPreviousLoad(t *testing.T) {
 	for _, key := range []string{"DRS_AUTH_MOCK_ENABLED", "DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "DRS_AUTH_MOCK_RESOURCES", "DRS_AUTH_MOCK_METHODS", "SYFON_AUTHZ_PLUGIN_PATH", "SYFON_AUTHN_PLUGIN_PATH", "DRS_FENCE_URL"} {
 		t.Setenv(key, "")
 	}
-	first := writeAuthTestFile(t, `
+	first := writeConfigTestFile(t, `
 auth:
   mode: local
   allow_unauthenticated: true
@@ -296,7 +276,7 @@ database:
   sqlite:
     file: ":memory:"
 `)
-	second := writeAuthTestFile(t, `
+	second := writeConfigTestFile(t, `
 auth:
   mode: local
   allow_unauthenticated: true
@@ -316,9 +296,9 @@ database:
 	}
 }
 
-func writeAuthTestFile(t *testing.T, content string) string {
+func writeConfigTestFile(t *testing.T, content string) string {
 	t.Helper()
-	file, err := os.CreateTemp(t.TempDir(), "config-auth-*.yaml")
+	file, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,19 +333,9 @@ bucket_scopes:
     organization_sub_path: organizations/calypr
     project_sub_path: projects/upload
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scopes-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -408,19 +378,9 @@ buckets:
       - organization: root_only
         org_path: roots/root_only
 `
-	tmpfile, err := os.CreateTemp("", "config-buckets-resources-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -458,19 +418,9 @@ bucket_scopes:
     bucket: other
     path: s3://calypr/project
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scope-mismatch-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected bucket/path mismatch error")
 	}
@@ -492,19 +442,9 @@ bucket_scopes:
     project_id: training
     path: s3://calypr/calypr/faliper
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scope-path-org-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected path-like organization error")
 	}
@@ -531,12 +471,9 @@ func TestLoadConfig_PostgresEnv(t *testing.T) {
 		t.Errorf("expected host myhost, got %s", cfg.Database.Postgres.Host)
 	}
 
-	// Sqlite should be nil if postgres env vars are set (per my logic in config.go)
-	// Wait, let's verify if my logic actually nils it out or if the validation fails.
 }
 
 func TestLoadConfig_MutualExclusivity(t *testing.T) {
-	// Creating a temp yaml file with both
 	content := `
 database:
   sqlite:
@@ -544,18 +481,9 @@ database:
   postgres:
     host: "localhost"
 `
-	tmpfile, err := os.CreateTemp("", "config*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
+	tmpfile := writeConfigTestFile(t, content)
 
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Error("expected error when both databases are specified, got nil")
 	}
@@ -658,19 +586,9 @@ s3_credentials:
     secret_key: "test-secret"
 `, tc.bucket)
 
-			tmpfile, err := os.CreateTemp("", "config-invalid-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
+			tmpfile := writeConfigTestFile(t, content)
 
-			_, err = LoadConfig(tmpfile.Name())
+			_, err := LoadConfig(tmpfile)
 			if err == nil {
 				t.Fatalf("expected error for invalid bucket %q, got nil", tc.bucket)
 			}
@@ -694,19 +612,9 @@ s3_credentials:
     provider: "bogus"
 `
 
-	tmpfile, err := os.CreateTemp("", "config-unsupported-provider-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected error for unsupported provider bogus")
 	}
@@ -793,19 +701,9 @@ s3_credentials:
     provider: %q
 `, tc.bucket, tc.provider)
 
-			tmpfile, err := os.CreateTemp("", "config-bucket-regression-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
+			tmpfile := writeConfigTestFile(t, content)
 
-			cfg, err := LoadConfig(tmpfile.Name())
+			cfg, err := LoadConfig(tmpfile)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for provider=%q bucket=%q", tc.provider, tc.bucket)
@@ -855,20 +753,9 @@ s3_credentials:
     secret_key: "test-secret"
 `, bucket)
 
-			tmpfile, err := os.CreateTemp("", "config-valid-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
+			tmpfile := writeConfigTestFile(t, content)
 
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			if _, err := LoadConfig(tmpfile.Name()); err != nil {
+			if _, err := LoadConfig(tmpfile); err != nil {
 				t.Fatalf("expected valid bucket %q to pass validation, got error: %v", bucket, err)
 			}
 		})
@@ -892,19 +779,9 @@ s3_credentials:
     secret_key: "test-secret"
 `
 
-	tmpfile, err := os.CreateTemp("", "config-s3-compatible-bucket-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	if _, err := LoadConfig(tmpfile.Name()); err != nil {
+	if _, err := LoadConfig(tmpfile); err != nil {
 		t.Fatalf("expected custom-endpoint s3 bucket to pass validation, got error: %v", err)
 	}
 }

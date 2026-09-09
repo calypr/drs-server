@@ -81,7 +81,7 @@ func TestApplyCredentialEncryptionConfigDoesNotOverrideEnv(t *testing.T) {
 }
 
 func TestLoadConfiguredBucketScopes(t *testing.T) {
-	database := &configuredBucketStore{
+	database := &serverBucketStore{
 		credentials: map[string]buckets.Credential{
 			"calypr": {CredentialID: "calypr", Bucket: "calypr"},
 		},
@@ -108,33 +108,4 @@ func TestLoadConfiguredBucketScopes(t *testing.T) {
 	if scope.Bucket != "calypr" || scope.PathPrefix != "008b435e-c1da-58b8-80f1-3ad2882c43cd" {
 		t.Fatalf("unexpected saved bucket scope: %+v", scope)
 	}
-}
-
-type configuredBucketStore struct {
-	credentials map[string]buckets.Credential
-	scopes      map[string]buckets.Scope
-}
-
-func (s *configuredBucketStore) GetS3Credential(_ context.Context, id string) (*buckets.Credential, error) {
-	credential, ok := s.credentials[id]
-	if !ok {
-		return nil, nil
-	}
-	return &credential, nil
-}
-
-func (s *configuredBucketStore) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
-	credentials := make([]buckets.Credential, 0, len(s.credentials))
-	for _, credential := range s.credentials {
-		credentials = append(credentials, credential)
-	}
-	return credentials, nil
-}
-
-func (s *configuredBucketStore) CreateBucketScope(_ context.Context, scope *buckets.Scope) error {
-	if scope == nil {
-		return nil
-	}
-	s.scopes[scope.Organization+"|"+scope.ProjectID] = *scope
-	return nil
 }

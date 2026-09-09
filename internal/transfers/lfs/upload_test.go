@@ -113,9 +113,9 @@ type lfsMetadataObjectSpy struct {
 	registerErr error
 }
 
-type objectsPortAdapter struct{ *lfsMetadataObjectSpy }
-
-func (objectsPortAdapter) RequireObjectResources(context.Context, string, []string) error { return nil }
+func (lfsMetadataObjectSpy) RequireObjectResources(context.Context, string, []string) error {
+	return nil
+}
 
 func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*objects.Record, error) {
 	*s.events = append(*s.events, "get")
@@ -161,7 +161,7 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound}
 	accounting := &lfsUploadAccountingSpy{events: &events}
-	service := NewService(nil, objectsPortAdapter{lfsMetadataObjectSpy: objectsPort}, nil, pending, accounting, nil)
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
 
 	if err := service.Verify(context.Background(), sha); err != nil {
 		t.Fatalf("Verify() error = %v", err)
@@ -184,7 +184,7 @@ func TestLFSMetadataWorkflowExistingObjectOnlyAccounts(t *testing.T) {
 	object := &objects.Record{Id: "existing"}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, object: object}
 	accounting := &lfsUploadAccountingSpy{events: &events}
-	service := NewService(nil, objectsPortAdapter{lfsMetadataObjectSpy: objectsPort}, nil, nil, accounting, nil)
+	service := NewService(nil, objectsPort, nil, nil, accounting, nil)
 
 	if err := service.Verify(context.Background(), "oid"); err != nil {
 		t.Fatalf("Verify() error = %v", err)

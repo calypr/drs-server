@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 	"time"
 
@@ -229,13 +228,6 @@ func TestTerminalReplayFingerprintPreservesTokenOmission(t *testing.T) {
 	replay := &awss3.ListObjectsV2Output{IsTruncated: aws.Bool(false), NextContinuationToken: aws.String("token-two"), Contents: []types.Object{{Key: aws.String("a")}}}
 	if listPageFingerprint(page) != listPageFingerprint(replay) {
 		t.Fatal("terminal replay identity unexpectedly includes continuation token")
-	}
-}
-
-func TestNewExposesStorageRegistration(t *testing.T) {
-	registration := New()
-	if reflect.ValueOf(registration).IsZero() {
-		t.Fatal("empty registration")
 	}
 }
 

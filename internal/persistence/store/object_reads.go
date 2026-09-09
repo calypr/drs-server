@@ -377,57 +377,6 @@ func (db *Store) ListObjectIDsPageByScope(ctx context.Context, organization, pro
 	return scanObjectIDs(rows)
 }
 
-func (db *Store) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	resources = clientaccess.NormalizeAccessResources(resources)
-	startAfter = strings.TrimSpace(startAfter)
-	if limit <= 0 || (len(resources) == 0 && !includeUnscoped) {
-		return []string{}, nil
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	args := make([]any, 0, len(resources)+3)
-	parts := make([]string, 0, 2)
-	if len(resources) > 0 {
-		placeholders := make([]string, 0, len(resources))
-		for _, resource := range resources {
-			args = append(args, resource)
-			placeholders = append(placeholders, "?")
-		}
-		parts = append(parts, `EXISTS (
-			SELECT 1
-			FROM drs_object_controlled_access ca
-			WHERE ca.object_id = o.id AND ca.resource IN (`+strings.Join(placeholders, ",")+`)
-		)`)
-	}
-	if includeUnscoped {
-		parts = append(parts, `NOT EXISTS (
-			SELECT 1
-			FROM drs_object_controlled_access ca
-			WHERE ca.object_id = o.id
-		)`)
-	}
-
-	query := `
-		SELECT DISTINCT o.id
-		FROM drs_object o
-		WHERE ((` + strings.Join(parts, " OR ") + `))
-	`
-	if startAfter != "" {
-		query += ` AND o.id > ?`
-		args = append(args, startAfter)
-	}
-	query += ` ORDER BY o.id LIMIT ? OFFSET ?`
-	args = append(args, limit, offset)
-	rows, err := db.queryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanObjectIDs(rows)
-}
-
 func (db *Store) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, restrictToResources bool) ([]string, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)

@@ -28,7 +28,6 @@ type ObjectStore interface {
 	ListObjectIDsByScope(context.Context, string, string) ([]string, error)
 	ListObjectIDsByResources(context.Context, []string, bool) ([]string, error)
 	ListObjectIDsPageByScope(context.Context, string, string, string, int, int) ([]string, error)
-	ListObjectIDsPageByResources(context.Context, []string, bool, string, int, int) ([]string, error)
 	ListObjectIDsPageByURL(context.Context, string, string, string, string, int, int, []string, bool, bool) ([]string, error)
 	ListObjectIDsByScopeAndResources(context.Context, string, string, []string, bool) ([]string, error)
 	ListObjectIDsByChecksumsAndResources(context.Context, []string, []string, bool, bool) (map[string][]string, error)

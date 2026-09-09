@@ -22,10 +22,6 @@ func (s *pageSpyDB) ListObjectIDsPageByScope(ctx context.Context, organization, 
 	return s.Store.ListObjectIDsPageByScope(ctx, organization, project, startAfter, limit, offset)
 }
 
-func (s *pageSpyDB) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	return s.Store.ListObjectIDsPageByResources(ctx, resources, includeUnscoped, startAfter, limit, offset)
-}
-
 func (s *pageSpyDB) ListObjectIDsByScope(ctx context.Context, organization, project string) ([]string, error) {
 	s.listCalls++
 	return s.Store.ListObjectIDsByScope(ctx, organization, project)

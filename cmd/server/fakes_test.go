@@ -245,11 +245,6 @@ func (s *serverObjectStore) ListObjectIDsPageByScope(ctx context.Context, organi
 	return pageServerIDs(ids, startAfter, limit, offset), err
 }
 
-func (s *serverObjectStore) ListObjectIDsPageByResources(ctx context.Context, resources []string, includeUnscoped bool, startAfter string, limit, offset int) ([]string, error) {
-	ids, err := s.ListObjectIDsByResources(ctx, resources, includeUnscoped)
-	return pageServerIDs(ids, startAfter, limit, offset), err
-}
-
 func (s *serverObjectStore) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
 	ids := make([]string, 0)
 	for id, record := range s.records {

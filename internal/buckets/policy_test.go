@@ -76,6 +76,20 @@ func TestAuthorizeScopeWritePolicy(t *testing.T) {
 			ctx:     bucketPolicyContext("gen3", true, nil),
 			wantErr: true,
 		},
+		{
+			name:    "top-level program creator alone is denied",
+			ctx:     bucketPolicyContext("gen3", true, map[string]map[string]bool{"/programs": {"arborist:create-descendant": true}}),
+			org:     "brand_new_org",
+			project: "new-project",
+			wantErr: true,
+		},
+		{
+			name:    "requestor create alone is denied",
+			ctx:     bucketPolicyContext("gen3", true, map[string]map[string]bool{organizationResource: {"requestor:create": true}}),
+			org:     "org",
+			project: "new-project",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

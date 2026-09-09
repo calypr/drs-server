@@ -31,15 +31,6 @@ var (
 	testConfigPath = flag.String("testConfig", "", "Path to config file for integration test")
 )
 
-type integrationProjectStorageCatalog struct {
-	projectstorage.ScopeReader
-	projectstorage.CredentialReader
-	projectstorage.VisibilityReader
-	projectstorage.PhysicalScopeReader
-	projectstorage.ObjectScopeDeleter
-	projectstorage.ScopeCatalog
-}
-
 func newSQLiteDatabase(t testing.TB) *store.Store {
 	t.Helper()
 	cipher, err := credentialcipher.NewFromEnv()
@@ -137,7 +128,7 @@ s3_credentials:
 		t.Fatalf("Failed to preload bucket scope: %v", err)
 	}
 
-	backend := sqliteServerBackend(database)
+	backend := serverBackendForStore(database)
 	invalidator := &storageInvalidator{}
 	bucketDependencies := backend.bucketDependencies
 	bucketDependencies.Fallback = newBucketVisibilityFallback(backend.objectStore)
@@ -159,7 +150,7 @@ s3_credentials:
 	})
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
-		Catalog: integrationProjectStorageCatalog{
+		Catalog: projectStorageCatalog{
 			ScopeReader:         bucketService,
 			CredentialReader:    bucketService,
 			VisibilityReader:    bucketService,

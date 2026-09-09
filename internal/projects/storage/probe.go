@@ -60,8 +60,12 @@ func (s *Inspector) probeOne(ctx context.Context, request InspectRequest) ProbeR
 			if result.ObjectURL == "" {
 				result.ObjectURL = strings.TrimSpace(request.ObjectURL)
 			}
+			sizeBytes := int64(0)
+			if result.SizeBytes != nil {
+				sizeBytes = *result.SizeBytes
+			}
 			result.ValidationStatus, result.SizeMatch, result.SHA256Match, result.ValidationMismatches = validateProbe(request, &ObjectMetadata{
-				SizeBytes:  valueInt64(result.SizeBytes),
+				SizeBytes:  sizeBytes,
 				MetaSHA256: result.MetaSHA256,
 			})
 			return result
@@ -104,13 +108,6 @@ func probeCacheKey(request InspectRequest) string {
 		key += "|"
 	}
 	return key + "|" + strings.ToLower(strings.TrimSpace(strings.TrimPrefix(request.ExpectedSHA256, "sha256:")))
-}
-
-func valueInt64(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
 }
 
 func (s *Inspector) inspectRaw(ctx context.Context, request InspectRequest) (*ObjectMetadata, error) {

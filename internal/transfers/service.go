@@ -125,7 +125,14 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 	if obj.Name != nil {
 		filename = objects.CleanToBasename(strings.TrimSpace(*obj.Name))
 	}
-	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: expires, DownloadFilename: filename, Range: storageRange(req.Range)})
+	var byteRange *storage.ByteRange
+	var rangeStart, rangeEnd *int64
+	if req.Range != nil {
+		byteRange = &storage.ByteRange{Start: req.Range.Start, End: req.Range.End}
+		start, end := req.Range.Start, req.Range.End
+		rangeStart, rangeEnd = &start, &end
+	}
+	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: expires, DownloadFilename: filename, Range: byteRange})
 	if err != nil {
 		return DownloadResult{}, err
 	}
@@ -142,7 +149,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 		}
 	}
 	if (req.Accounting == AccountingDownloadBeforeEvent || req.Accounting == AccountingEventOnly) && s.events != nil {
-		if err := s.recordAccessIssued(ctx, AccessRequest{Object: obj, Target: target, AccessID: req.AccessID, Direction: usage.ProviderTransferDirectionDownload, StorageURL: sourceURL, RangeStart: rangeStart(req.Range), RangeEnd: rangeEnd(req.Range)}); err != nil {
+		if err := s.recordAccessIssued(ctx, AccessRequest{Object: obj, Target: target, AccessID: req.AccessID, Direction: usage.ProviderTransferDirectionDownload, StorageURL: sourceURL, RangeStart: rangeStart, RangeEnd: rangeEnd}); err != nil {
 			return DownloadResult{}, err
 		}
 	}
@@ -171,7 +178,13 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 	var target storage.Target
 	if existing {
 		if strings.TrimSpace(req.Organization) != "" {
-			target, err = s.resolveScopedTarget(ctx, req.Organization, req.Project, uploadKeyForRequest(obj, req.Key))
+			key := strings.Trim(strings.TrimSpace(req.Key), "/")
+			if key == "" && obj != nil {
+				if sha, ok := objects.CanonicalSHA256(obj.Checksums); ok {
+					key = sha
+				}
+			}
+			target, err = s.resolveScopedTarget(ctx, req.Organization, req.Project, key)
 		} else {
 			canonical, resolveErr := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, Key: req.Key, PreferChecksum: true})
 			if resolveErr == nil {
@@ -244,35 +257,3 @@ func isNotFound(err error) bool {
 }
 
 func defaultSigningExpiry() time.Duration { return 15 * time.Minute }
-func storageRange(r *ByteRange) *storage.ByteRange {
-	if r == nil {
-		return nil
-	}
-	return &storage.ByteRange{Start: r.Start, End: r.End}
-}
-
-func rangeStart(r *ByteRange) *int64 {
-	if r == nil {
-		return nil
-	}
-	v := r.Start
-	return &v
-}
-func rangeEnd(r *ByteRange) *int64 {
-	if r == nil {
-		return nil
-	}
-	v := r.End
-	return &v
-}
-func uploadKeyForRequest(obj *objects.Record, key string) string {
-	if key = strings.Trim(strings.TrimSpace(key), "/"); key != "" {
-		return key
-	}
-	if obj != nil {
-		if sha, ok := objects.CanonicalSHA256(obj.Checksums); ok {
-			return sha
-		}
-	}
-	return ""
-}

@@ -52,7 +52,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		var database *store.Store
 		database, errDb = sqlite.NewSqliteDB(dbPath, cipher)
 		if errDb == nil {
-			backend = sqliteServerBackend(database)
+			backend = serverBackendForStore(database)
 		}
 	} else if cfg.Database.Postgres != nil {
 		dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
@@ -67,7 +67,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		var database *store.Store
 		database, errDb = postgres.NewPostgresDB(dsn, cipher)
 		if errDb == nil {
-			backend = postgresServerBackend(database)
+			backend = serverBackendForStore(database)
 		}
 	} else {
 		return nil, fmt.Errorf("no database configuration provided")

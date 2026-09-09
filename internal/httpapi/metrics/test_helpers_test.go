@@ -21,10 +21,6 @@ func metricsTestContext(base context.Context, mode string, headerSet bool, heade
 	return access.WithSession(base, session)
 }
 
-func registerMetricsRoutesForTest(app *fiber.App, reporter usage.Reporter, ingest usage.ProviderEventRecorder) {
-	RegisterMetricsRoutes(app, reporter, ingest)
-}
-
 func newMetricsTestApp(reporter usage.Reporter, ingest usage.ProviderEventRecorder) *fiber.App {
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {

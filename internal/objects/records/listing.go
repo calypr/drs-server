@@ -344,30 +344,6 @@ func (s *Service) ListObjectIDsByScope(ctx context.Context, organization, projec
 	return out, nil
 }
 
-func (s *Service) ListObjectsByScope(ctx context.Context, organization, project, requiredMethod string) ([]objectmodel.Record, error) {
-	if strings.TrimSpace(organization) == "" && strings.EqualFold(strings.TrimSpace(requiredMethod), objectMethodRead) {
-		if ids, ok, err := s.listReadableObjectIDs(ctx); ok {
-			if err != nil {
-				return nil, err
-			}
-			objects, err := s.store.GetBulkObjects(ctx, ids)
-			if err != nil {
-				return nil, err
-			}
-			return filterObjectsByMethod(ctx, objects, requiredMethod), nil
-		}
-	}
-	ids, err := s.store.ListObjectIDsByScope(ctx, organization, project)
-	if err != nil {
-		return nil, err
-	}
-	objects, err := s.store.GetBulkObjects(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	return s.PrepareScopedObjects(ctx, objects, organization, project, requiredMethod)
-}
-
 // ListPhysicalObjectsByScope returns each stored object row in a project scope.
 // Callers that repair physical access methods need the row identity and methods
 // without the same-checksum canonical merge used by normal reads.

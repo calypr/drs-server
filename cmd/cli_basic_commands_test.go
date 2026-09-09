@@ -90,9 +90,8 @@ func TestSyfonRemoveScopedControlledAccessOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected record to remain: %v", err)
 	}
-	controlled := derefCLIStringSlice(rec.ControlledAccess)
-	if len(controlled) != 1 || controlled[0] != "/organization/other/project/x" {
-		t.Fatalf("unexpected controlled access after scoped remove: %+v", controlled)
+	if rec.ControlledAccess == nil || len(*rec.ControlledAccess) != 1 || (*rec.ControlledAccess)[0] != "/organization/other/project/x" {
+		t.Fatalf("unexpected controlled access after scoped remove: %+v", rec.ControlledAccess)
 	}
 	if _, err := os.Stat(storagePath); err != nil {
 		t.Fatalf("expected backing storage to remain, stat err=%v", err)
@@ -930,10 +929,3 @@ func TestSyfonCopyProjectRefsCommand(t *testing.T) {
 }
 
 func stringPtr(v string) *string { return &v }
-
-func derefCLIStringSlice(in *[]string) []string {
-	if in == nil {
-		return nil
-	}
-	return *in
-}

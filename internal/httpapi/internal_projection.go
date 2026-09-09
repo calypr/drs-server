@@ -19,18 +19,30 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 	if id == "" {
 		return objects.Record{}, fmt.Errorf("did is required")
 	}
+	size := int64(0)
+	if value.Size != nil {
+		size = *value.Size
+	}
+	version := value.Version
+	if version == nil {
+		defaultVersion := "1"
+		version = &defaultVersion
+	}
 
 	record := objects.Record{
 		Id:          objects.RecordID(id),
-		Size:        int64Value(value.Size),
+		Size:        size,
 		CreatedTime: parseRecordTime(value.CreatedTime, now),
-		Version:     stringPointerOrDefault(value.Version, "1"),
+		Version:     version,
 		Description: value.Description,
 	}
 	updated := parseRecordTime(value.UpdatedTime, record.CreatedTime)
 	record.UpdatedTime = &updated
 	if value.Name != nil && strings.TrimSpace(*value.Name) != "" {
-		record.Name = normalizedRecordName(value.Name)
+		base := objects.CleanToBasename(*value.Name)
+		if base != "" {
+			record.Name = &base
+		}
 	}
 	if value.Hashes != nil {
 		record.Checksums = make([]objects.Checksum, 0, len(*value.Hashes))
@@ -58,13 +70,15 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 // ToInternalRecord translates a domain record to the generated internal-index
 // response model.
 func ToInternalRecord(record objects.Record) generated.InternalRecord {
+	createdTime := record.CreatedTime.Format(time.RFC3339)
+	nameAliases := objects.NormalizeNameAliases(recordStringValue(record.Name), record.NameAliases)
 	result := generated.InternalRecord{
 		Did:           string(record.Id),
 		Size:          &record.Size,
-		CreatedTime:   recordsStringPtr(record.CreatedTime.Format(time.RFC3339)),
+		CreatedTime:   &createdTime,
 		Description:   record.Description,
 		Name:          record.Name,
-		NameAliases:   stringSlicePtr(objects.NormalizeNameAliases(recordStringValue(record.Name), record.NameAliases)),
+		NameAliases:   &nameAliases,
 		Version:       record.Version,
 		AccessMethods: drsapi.ToGeneratedAccessMethods(record.AccessMethods),
 	}
@@ -73,7 +87,8 @@ func ToInternalRecord(record objects.Record) generated.InternalRecord {
 		result.ControlledAccess = &values
 	}
 	if record.UpdatedTime != nil {
-		result.UpdatedTime = recordsStringPtr(record.UpdatedTime.Format(time.RFC3339))
+		updatedTime := record.UpdatedTime.Format(time.RFC3339)
+		result.UpdatedTime = &updatedTime
 	}
 	if len(record.Checksums) > 0 {
 		hashes := make(generated.HashInfo)
@@ -118,31 +133,6 @@ func parseRecordTime(raw *string, fallback time.Time) time.Time {
 	return fallback.UTC()
 }
 
-func normalizedRecordName(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	base := objects.CleanToBasename(*value)
-	if base == "" {
-		return nil
-	}
-	return &base
-}
-
-func int64Value(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func stringPointerOrDefault(value *string, fallback string) *string {
-	if value != nil {
-		return value
-	}
-	return &fallback
-}
-
 func recordStringValue(value *string) string {
 	if value == nil {
 		return ""
@@ -156,10 +146,6 @@ func dereferenceStrings(value *[]string) []string {
 	}
 	return append([]string(nil), (*value)...)
 }
-
-func recordsStringPtr(value string) *string { return &value }
-
-func stringSlicePtr(value []string) *[]string { return &value }
 
 type getResponse struct {
 	ID               string                  `json:"id,omitempty"`

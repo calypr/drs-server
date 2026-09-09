@@ -8,14 +8,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 )
 
-// Queryer is the common query surface used by shared SQL operations. Both
-// *sql.DB and *sql.Tx implement it.
-type Queryer interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}
-
 // CredentialCodec is the persistence boundary for credential field encoding.
 type CredentialCodec interface {
 	Prepare(context.Context, *buckets.Credential) (*buckets.Credential, error)

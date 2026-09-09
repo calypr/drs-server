@@ -59,11 +59,11 @@ func TestLFSBatchDownloadUsesTransferAndUsagePorts(t *testing.T) {
 	if len(payload.Objects) != 1 || payload.Objects[0].Actions == nil || payload.Objects[0].Actions.Download == nil {
 		t.Fatalf("download actions = %+v", payload.Objects)
 	}
-	if len(ports.fileCounters.downloads) != 1 || ports.fileCounters.downloads[0] != oid {
-		t.Fatalf("download counters = %v", ports.fileCounters.downloads)
+	if len(ports.downloads) != 1 || ports.downloads[0] != oid {
+		t.Fatalf("download counters = %v", ports.downloads)
 	}
-	if len(ports.events.events) != 1 || ports.events.events[0].EventType != usage.TransferEventAccessIssued {
-		t.Fatalf("transfer events = %+v", ports.events.events)
+	if len(ports.transferEvents) != 1 || ports.transferEvents[0].EventType != usage.TransferEventAccessIssued {
+		t.Fatalf("transfer events = %+v", ports.transferEvents)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestLFSMetadataVerifyPreservesPendingPopBeforeRegister(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("metadata status = %d body=%s", response.Code, response.Body.String())
 	}
-	entry, ok := ports.pending.entries[oid]
+	entry, ok := ports.pending[oid]
 	if !ok || entry.CreatedAt.IsZero() || entry.ExpiresAt.Sub(entry.CreatedAt) != transferlfs.PendingMetadataTTL {
 		t.Fatalf("pending metadata timestamps = %+v", entry)
 	}
@@ -96,7 +96,7 @@ func TestLFSMetadataVerifyPreservesPendingPopBeforeRegister(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("verify status = %d body=%s", response.Code, response.Body.String())
 	}
-	if _, ok := ports.pending.entries[oid]; ok {
+	if _, ok := ports.pending[oid]; ok {
 		t.Fatal("pending metadata was not consumed")
 	}
 }
@@ -139,7 +139,7 @@ func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
 	const detail = "postgres://user:secret@database"
 	oid := strings.Repeat("e", 64)
 	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{})
-	ports.objectReader.getErr = errors.New(detail)
+	ports.getErr = errors.New(detail)
 	server := NewLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}).Service, DefaultOptions())
 
 	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
@@ -153,7 +153,7 @@ func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
 		t.Fatalf("unexpected verify response: %#v", response)
 	}
 
-	ports.objectReader.getErr = nil
+	ports.getErr = nil
 	response507, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
 		Oid:  oid,
 		Body: strings.NewReader("payload"),
@@ -195,8 +195,8 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			Objects:     objectrecords.NewService(ports),
 			Storage:     storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
-			Credentials: ports.credentials,
-			Events:      ports.events,
+			Credentials: ports,
+			Events:      ports,
 		})
 	}
 
@@ -209,7 +209,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
 				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
-				ports.objectReader.records["record-existing"] = &objects.Record{
+				ports.records["record-existing"] = &objects.Record{
 					Id:               "record-existing",
 					Checksums:        []objects.Checksum{{Type: "sha256", Checksum: oid}},
 					AccessMethods:    &methods,
@@ -222,7 +222,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
 				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
-				ports.pending.entries[oid] = transferlfs.PendingMetadata{
+				ports.pending[oid] = transferlfs.PendingMetadata{
 					OID: oid,
 					Candidate: objects.Candidate{
 						Checksums:        &[]objects.Checksum{{Type: "sha256", Checksum: oid}},

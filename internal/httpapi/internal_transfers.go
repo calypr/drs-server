@@ -22,7 +22,12 @@ func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.I
 	if middleware.MissingGen3AuthHeader(c.Context()) {
 		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	expires := parseDownloadExpiry(c.Query("expires_in"))
+	expires := time.Duration(config.DefaultSigningExpirySeconds) * time.Second
+	if raw := c.Query("expires_in"); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			expires = time.Duration(seconds) * time.Second
+		}
+	}
 	result, err := s.transfers.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: expires, Accounting: domaintransfers.AccountingDownloadBeforeEvent})
 	if err != nil {
 		return mapDownloadError(c, err)
@@ -55,15 +60,6 @@ func (s *internalServer) InternalDownloadPart(c fiber.Ctx, _ string, _ internala
 		return mapDownloadError(c, err)
 	}
 	return c.JSON(internalapi.InternalSignedURL{Url: &result.URL})
-}
-
-func parseDownloadExpiry(raw string) time.Duration {
-	if raw != "" {
-		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
-			return time.Duration(seconds) * time.Second
-		}
-	}
-	return time.Duration(config.DefaultSigningExpirySeconds) * time.Second
 }
 
 func mapDownloadError(c fiber.Ctx, err error) error {
