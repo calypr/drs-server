@@ -24,9 +24,8 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	}
 	var controlled []string
 	if c.ControlledAccess != nil {
-		controlled = *c.ControlledAccess
+		controlled = clientaccess.NormalizeAccessResources(*c.ControlledAccess)
 	}
-	controlled = clientaccess.NormalizeAccessResources(controlled)
 
 	id := ""
 	if c.Aliases != nil {
@@ -52,9 +51,7 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	obj := Record{
 		Id:          RecordID(id),
 		Size:        size,
-		CreatedTime: now,
-		UpdatedTime: &now,
-		Version:     objectStringPtr("1"),
+		Name:        c.Name,
 		MimeType:    c.MimeType,
 		Description: c.Description,
 		Aliases:     c.Aliases,
@@ -63,14 +60,12 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	if c.ControlledAccess != nil {
 		obj.ControlledAccess = &controlled
 	}
-	if c.Name != nil {
-		name := CleanToBasename(*c.Name)
-		if name != "" {
-			obj.Name = objectStringPtr(name)
-		}
+	obj, err := NormalizeRecord(obj, now)
+	if err != nil {
+		return Record{}, err
 	}
-	if obj.Name == nil || strings.TrimSpace(*obj.Name) == "" {
-		obj.Name = &oid
+	if obj.Name == nil {
+		obj.Name = objectStringPtr(oid)
 	}
 	obj.SelfUri = "drs://" + string(obj.Id)
 
@@ -86,6 +81,54 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		return Record{}, errorapi.ErrAccessMethodsRequired
 	}
 	return obj, nil
+}
+
+// NormalizeRecord applies the invariants for a record decoded by an adapter.
+// It owns the domain normalization so HTTP and persistence callers agree on
+// identity, timestamps, names, checksums, access resources, and aliases.
+func NormalizeRecord(record Record, fallback time.Time) (Record, error) {
+	id := strings.TrimSpace(string(record.Id))
+	if id == "" {
+		return Record{}, fmt.Errorf("did is required")
+	}
+	record.Id = RecordID(id)
+	if record.Checksums != nil {
+		record.Checksums = append([]Checksum(nil), record.Checksums...)
+	}
+
+	record = materializeRecordTime(record, fallback.UTC())
+	if record.Version == nil {
+		record.Version = objectStringPtr("1")
+	}
+
+	if record.Name != nil {
+		name := CleanToBasename(*record.Name)
+		if name == "" {
+			record.Name = nil
+		} else {
+			record.Name = objectStringPtr(name)
+		}
+	}
+	for i, checksum := range record.Checksums {
+		if NormalizeChecksumType(checksum.Type) != "sha256" {
+			continue
+		}
+		if normalized, ok := NormalizeSHA256Query(checksum.Checksum); ok {
+			record.Checksums[i] = Checksum{Type: "sha256", Checksum: normalized}
+		}
+	}
+	if record.ControlledAccess != nil {
+		controlled := clientaccess.NormalizeAccessResources(*record.ControlledAccess)
+		record.ControlledAccess = &controlled
+	}
+	primary := ""
+	if record.Name != nil {
+		primary = *record.Name
+	}
+	if record.NameAliases != nil {
+		record.NameAliases = NormalizeNameAliases(primary, record.NameAliases)
+	}
+	return record, nil
 }
 
 func EnforceCanonicalProjectScope(obj Record, organization, project string) (Record, error) {

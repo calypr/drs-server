@@ -1,57 +1,35 @@
 package httpapi
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	generated "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	clienthash "github.com/calypr/syfon/client/hash"
 	drsapi "github.com/calypr/syfon/internal/httpapi/drs"
 	"github.com/calypr/syfon/internal/objects"
 )
 
-// FromInternalRecord translates the generated internal-index record into a
-// domain record. Scope policy is applied by the core caller after translation.
-func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.Record, error) {
-	id := strings.TrimSpace(value.Did)
-	if id == "" {
-		return objects.Record{}, fmt.Errorf("did is required")
-	}
+func fromInternalRecord(value generated.InternalRecord, now time.Time) (objects.Record, error) {
 	size := int64(0)
 	if value.Size != nil {
 		size = *value.Size
 	}
-	version := value.Version
-	if version == nil {
-		defaultVersion := "1"
-		version = &defaultVersion
-	}
 
 	record := objects.Record{
-		Id:          objects.RecordID(id),
+		Id:          objects.RecordID(value.Did),
 		Size:        size,
-		CreatedTime: parseRecordTime(value.CreatedTime, now),
-		Version:     version,
+		CreatedTime: parseRecordTime(value.CreatedTime, time.Time{}),
+		Version:     value.Version,
 		Description: value.Description,
 	}
-	updated := parseRecordTime(value.UpdatedTime, record.CreatedTime)
-	record.UpdatedTime = &updated
-	if value.Name != nil && strings.TrimSpace(*value.Name) != "" {
-		base := objects.CleanToBasename(*value.Name)
-		if base != "" {
-			record.Name = &base
-		}
+	if value.UpdatedTime != nil {
+		updated := parseRecordTime(value.UpdatedTime, time.Time{})
+		record.UpdatedTime = &updated
 	}
 	if value.Hashes != nil {
 		record.Checksums = make([]objects.Checksum, 0, len(*value.Hashes))
 		for typ, checksum := range *value.Hashes {
-			if objects.NormalizeChecksumType(typ) == "sha256" {
-				if normalized := clienthash.NormalizeOid(checksum); normalized != "" {
-					typ, checksum = "sha256", normalized
-				}
-			}
 			record.Checksums = append(record.Checksums, objects.Checksum{Type: typ, Checksum: checksum})
 		}
 	}
@@ -63,15 +41,19 @@ func FromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 		methods := drsapi.FromGeneratedAccessMethods(*value.AccessMethods)
 		record.AccessMethods = &methods
 	}
-	record.NameAliases = objects.NormalizeNameAliases(recordStringValue(record.Name), dereferenceStrings(value.NameAliases))
-	return record, nil
+	if value.NameAliases != nil {
+		record.NameAliases = append([]string(nil), (*value.NameAliases)...)
+	}
+	return objects.NormalizeRecord(record, now)
 }
 
-// ToInternalRecord translates a domain record to the generated internal-index
-// response model.
-func ToInternalRecord(record objects.Record) generated.InternalRecord {
+func toInternalRecord(record objects.Record) generated.InternalRecord {
 	createdTime := record.CreatedTime.Format(time.RFC3339)
-	nameAliases := objects.NormalizeNameAliases(recordStringValue(record.Name), record.NameAliases)
+	name := ""
+	if record.Name != nil {
+		name = *record.Name
+	}
+	nameAliases := objects.NormalizeNameAliases(name, record.NameAliases)
 	result := generated.InternalRecord{
 		Did:           string(record.Id),
 		Size:          &record.Size,
@@ -100,10 +82,8 @@ func ToInternalRecord(record objects.Record) generated.InternalRecord {
 	return result
 }
 
-// ToInternalRecordResponse translates a domain record to the generated
-// internal-index response envelope.
-func ToInternalRecordResponse(record objects.Record) generated.InternalRecordResponse {
-	value := ToInternalRecord(record)
+func toInternalRecordResponse(record objects.Record) generated.InternalRecordResponse {
+	value := toInternalRecord(record)
 	return generated.InternalRecordResponse{
 		Did:              value.Did,
 		AccessMethods:    value.AccessMethods,
@@ -131,20 +111,6 @@ func parseRecordTime(raw *string, fallback time.Time) time.Time {
 		}
 	}
 	return fallback.UTC()
-}
-
-func recordStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func dereferenceStrings(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return append([]string(nil), (*value)...)
 }
 
 type getResponse struct {

@@ -1,10 +1,63 @@
 package objects
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestNormalizeRecordAppliesIncomingRecordPolicy(t *testing.T) {
+	fallback := time.Date(2026, 9, 9, 12, 0, 0, 0, time.FixedZone("PDT", -7*60*60))
+	created := time.Date(2026, 9, 8, 14, 30, 0, 123, time.UTC)
+	updated := time.Date(2026, 9, 8, 9, 30, 0, 456, time.UTC)
+	name := `dir\primary.txt`
+	controlled := []string{"https://example.test/programs/org/projects/proj", " /organization/org ", ""}
+	valid := strings.Repeat("A", 64)
+	invalid := "not-a-sha256"
+	record := Record{
+		Id:               "  did:example:1  ",
+		CreatedTime:      created,
+		UpdatedTime:      &updated,
+		Name:             &name,
+		Checksums:        []Checksum{{Type: "SHA-256", Checksum: "sha256:" + valid}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
+		ControlledAccess: &controlled,
+		NameAliases:      []string{"/primary.txt", `other\alias.txt`, "alias.txt", `other\alias.txt`, ""},
+	}
+
+	got, err := NormalizeRecord(record, fallback)
+	if err != nil {
+		t.Fatalf("NormalizeRecord() error = %v", err)
+	}
+	wantControlled := []string{"/organization/org/project/proj", "/organization/org"}
+	want := Record{
+		Id:               "did:example:1",
+		CreatedTime:      created,
+		UpdatedTime:      &updated,
+		Name:             objectStringPtr("primary.txt"),
+		Version:          objectStringPtr("1"),
+		Checksums:        []Checksum{{Type: "sha256", Checksum: strings.ToLower(valid)}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
+		ControlledAccess: &wantControlled,
+		NameAliases:      []string{"alias.txt"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NormalizeRecord() = %#v, want %#v", got, want)
+	}
+
+	got, err = NormalizeRecord(Record{Id: "did:example:2"}, fallback)
+	if err != nil {
+		t.Fatalf("NormalizeRecord() zero times error = %v", err)
+	}
+	if !got.CreatedTime.Equal(fallback.UTC()) || got.UpdatedTime == nil || !got.UpdatedTime.Equal(fallback.UTC()) {
+		t.Fatalf("NormalizeRecord() zero times = %#v, want fallback %v", got, fallback.UTC())
+	}
+}
+
+func TestNormalizeRecordRejectsMissingID(t *testing.T) {
+	if _, err := NormalizeRecord(Record{Id: "  "}, time.Time{}); err == nil || err.Error() != "did is required" {
+		t.Fatalf("NormalizeRecord() error = %v, want did is required", err)
+	}
+}
 
 func TestEnforceCanonicalProjectScope(t *testing.T) {
 	initial := []string{"/organization/other/project/proj"}

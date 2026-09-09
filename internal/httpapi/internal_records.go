@@ -46,7 +46,7 @@ func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 
 	candidates := make([]objects.Record, 0, len(req.Records))
 	for i, record := range req.Records {
-		obj, err := FromInternalRecord(record, time.Time{})
+		obj, err := fromInternalRecord(record, time.Time{})
 		if err != nil {
 			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 		}
@@ -133,7 +133,7 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 		}
 		compatibilityMatches := make([]internalapi.InternalRecord, 0, len(records))
 		for _, match := range records {
-			compatibilityMatches = append(compatibilityMatches, ToInternalRecord(match))
+			compatibilityMatches = append(compatibilityMatches, toInternalRecord(match))
 		}
 		finalRes[h] = compatibilityMatches
 	}
@@ -311,7 +311,7 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 	}
 	records := make([]internalapi.InternalRecord, 0, len(objs))
 	for _, obj := range objs {
-		records = append(records, ToInternalRecord(obj))
+		records = append(records, toInternalRecord(obj))
 	}
 	return c.JSON(internalapi.ListRecordsResponse{Records: &records})
 }
@@ -335,7 +335,9 @@ func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 		ids = append(ids, arr...)
 	}
 	if obj, err := req.AsBulkDocumentsRequest1(); err == nil {
-		ids = append(ids, dereferenceStrings(obj.Ids)...)
+		if obj.Ids != nil {
+			ids = append(ids, (*obj.Ids)...)
+		}
 	}
 	if len(ids) == 0 {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
@@ -348,7 +350,7 @@ func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 
 	out := make([]internalapi.InternalRecordResponse, 0, len(records))
 	for _, obj := range records {
-		out = append(out, ToInternalRecordResponse(obj))
+		out = append(out, toInternalRecordResponse(obj))
 	}
 	return c.JSON(out)
 }
@@ -400,11 +402,11 @@ func (s *internalServer) InternalCreate(c fiber.Ctx) error {
 	if strings.HasSuffix(c.Path(), "/bulk") {
 		records := make([]internalapi.InternalRecord, len(candidates))
 		for i, scoped := range candidates {
-			records[i] = ToInternalRecord(scoped.Record)
+			records[i] = toInternalRecord(scoped.Record)
 		}
 		return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &records})
 	}
-	return c.Status(fiber.StatusCreated).JSON(ToInternalRecordResponse(candidates[0].Record))
+	return c.Status(fiber.StatusCreated).JSON(toInternalRecordResponse(candidates[0].Record))
 }
 
 func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
@@ -417,7 +419,7 @@ func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
 	}
 	records := make([]internalapi.InternalRecord, len(candidates))
 	for i, scoped := range candidates {
-		records[i] = ToInternalRecord(scoped.Record)
+		records[i] = toInternalRecord(scoped.Record)
 	}
 	return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &records})
 }
@@ -427,7 +429,7 @@ func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error)
 	candidates := make([]objects.ScopedRecord, 0)
 	if err := c.Bind().JSON(&bulkReq); err == nil && len(bulkReq.Records) > 0 {
 		for i, r := range bulkReq.Records {
-			obj, err := FromInternalRecord(r, time.Time{})
+			obj, err := fromInternalRecord(r, time.Time{})
 			if err != nil {
 				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
 			}
@@ -442,7 +444,7 @@ func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error)
 
 	var singleReq internalapi.InternalRecord
 	if err := c.Bind().JSON(&singleReq); err == nil && singleReq.Did != "" {
-		obj, err := FromInternalRecord(singleReq, time.Time{})
+		obj, err := fromInternalRecord(singleReq, time.Time{})
 		if err != nil {
 			return nil, fmt.Errorf("record invalid: %w", err)
 		}
@@ -459,7 +461,14 @@ func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error)
 }
 
 func internalRecordScope(value internalapi.InternalRecord) (objects.Scope, error) {
-	return objects.NewScope(recordStringValue(value.Organization), recordStringValue(value.Project))
+	organization, project := "", ""
+	if value.Organization != nil {
+		organization = *value.Organization
+	}
+	if value.Project != nil {
+		project = *value.Project
+	}
+	return objects.NewScope(organization, project)
 }
 
 func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) error {
@@ -472,7 +481,7 @@ func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) e
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	return c.JSON(ToInternalRecordResponse(*obj))
+	return c.JSON(toInternalRecordResponse(*obj))
 }
 
 func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
@@ -488,7 +497,7 @@ func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	if err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	update, err := FromInternalRecord(req, time.Time{})
+	update, err := fromInternalRecord(req, time.Time{})
 	if err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
@@ -497,5 +506,5 @@ func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	return c.JSON(ToInternalRecordResponse(merged))
+	return c.JSON(toInternalRecordResponse(merged))
 }
