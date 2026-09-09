@@ -39,13 +39,13 @@ type Service struct {
 func NewService(deps Dependencies) *Service {
 	return &Service{
 		resolver:       deps.ScopeResolver,
-		credentials:    deps.Catalog,
-		visibility:     deps.Catalog,
+		credentials:    deps.Credentials,
+		visibility:     deps.Visibility,
 		inventory:      deps.Providers.Inventory,
 		probe:          deps.Providers.Probe,
 		delete:         deps.Providers.Delete,
-		cleanupObjects: deps.Catalog,
-		cleanupScopes:  deps.Catalog,
+		cleanupObjects: deps.ObjectCleanup,
+		cleanupScopes:  deps.ScopeCatalog,
 	}
 }
 

@@ -109,13 +109,6 @@ type fakeCleanupScopes struct {
 	err     error
 }
 
-type testCatalog struct {
-	CredentialReader
-	VisibilityReader
-	ObjectScopeDeleter
-	ScopeCatalog
-}
-
 func (f *fakeCleanupScopes) ListBucketScopes(context.Context) ([]buckets.Scope, error) {
 	return f.scopes, f.err
 }
@@ -139,11 +132,9 @@ func projectServiceWithTarget(inventory *fakeInventory, deletePort DeletePort, t
 	}}
 	service := NewService(Dependencies{
 		ScopeResolver: fakeScopeResolver{scope: target},
-		Catalog: testCatalog{
-			CredentialReader: fakeCredentials{values: map[string]buckets.Credential{"cred": credential}},
-			VisibilityReader: visibility,
-		},
-		Providers: Providers{Inventory: inventory, Delete: deletePort},
+		Credentials:   fakeCredentials{values: map[string]buckets.Credential{"cred": credential}},
+		Visibility:    visibility,
+		Providers:     Providers{Inventory: inventory, Delete: deletePort},
 	})
 	return service, visibility
 }
@@ -261,7 +252,7 @@ func TestDeleteProjectObjectsPreservesPolicyOrderAndConflictSafety(t *testing.T)
 func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 	objects := &fakeCleanupObjects{count: 3}
 	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "cred"}}}
-	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
+	service := NewService(Dependencies{ObjectCleanup: objects, ScopeCatalog: scopes})
 	session := access.NewSession("local")
 	session.AuthzEnforced = true
 	session.SetAuthorizations(nil, nil, true)
@@ -282,7 +273,7 @@ func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 func TestDeleteProjectDataAuthorizedPreservesTrustedCleanupOrder(t *testing.T) {
 	objects := &fakeCleanupObjects{count: 3}
 	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "cred"}}}
-	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
+	service := NewService(Dependencies{ObjectCleanup: objects, ScopeCatalog: scopes})
 	session := access.NewSession("local")
 	session.AuthzEnforced = true
 	session.SetAuthorizations(nil, map[string]map[string]bool{

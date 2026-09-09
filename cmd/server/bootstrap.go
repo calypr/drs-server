@@ -145,13 +145,11 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, storage.UploadSignedMultipartPart)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
-		Catalog: projectStorageCatalog{
-			CredentialReader:   bucketService,
-			VisibilityReader:   bucketService,
-			ObjectScopeDeleter: objectService,
-			ScopeCatalog:       bucketService,
-		},
-		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
+		Credentials:   bucketService,
+		Visibility:    bucketService,
+		ObjectCleanup: objectService,
+		ScopeCatalog:  bucketService,
+		Providers:     projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
 	scopeRepairService := projectstorage.NewRepairService(objectService, bucketService, projectStorageService)
 

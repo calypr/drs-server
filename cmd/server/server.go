@@ -13,7 +13,6 @@ import (
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/store"
-	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -44,13 +43,6 @@ type serverBackend struct {
 	pending            transferlfs.PendingStore
 	usageIngest        usage.Ingestor
 	usageReports       usage.ReportStore
-}
-
-type projectStorageCatalog struct {
-	projectstorage.CredentialReader
-	projectstorage.VisibilityReader
-	projectstorage.ObjectScopeDeleter
-	projectstorage.ScopeCatalog
 }
 
 var (

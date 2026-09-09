@@ -151,13 +151,11 @@ s3_credentials:
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
-		Catalog: projectStorageCatalog{
-			CredentialReader:   bucketService,
-			VisibilityReader:   bucketService,
-			ObjectScopeDeleter: objectService,
-			ScopeCatalog:       bucketService,
-		},
-		Providers: projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
+		Credentials:   bucketService,
+		Visibility:    bucketService,
+		ObjectCleanup: objectService,
+		ScopeCatalog:  bucketService,
+		Providers:     projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
 	scopeRepairService := projectstorage.NewRepairService(objectService, bucketService, projectStorageService)
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
