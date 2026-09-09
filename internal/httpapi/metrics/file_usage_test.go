@@ -14,125 +14,84 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
 func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 	now := time.Now().UTC()
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"sha-1": {Id: "sha-1", Name: metricsStringPtr("f1"), Size: 1},
-		"sha-2": {Id: "sha-2", Name: metricsStringPtr("f2"), Size: 2},
-	}, nil)
-	state := &metricsTransferState{}
-	ingest := &metricsIngestFake{state: state}
-	reports := newMetricsReport(objectReader, map[string]usage.FileUsage{
-		"sha-1": {
-			ObjectID:      "sha-1",
-			Name:          "f1",
-			Size:          1,
-			UploadCount:   1,
-			DownloadCount: 3,
-			LastDownloadTime: func() *time.Time {
-				t := now.AddDate(0, 0, -10)
-				return &t
-			}(),
+	reports := &metricsReporterFake{
+		files: []usage.FileUsage{
+			{ObjectID: "sha-1", Name: "f1", Size: 1, UploadCount: 1, DownloadCount: 3, LastDownloadTime: timePtr(now.AddDate(0, 0, -10))},
+			{ObjectID: "sha-2", Name: "f2", Size: 2, UploadCount: 1},
 		},
-		"sha-2": {
-			ObjectID:      "sha-2",
-			Name:          "f2",
-			Size:          2,
-			UploadCount:   1,
-			DownloadCount: 0,
-		},
-	}, state)
-
+		summary: usage.FileUsageSummary{TotalFiles: 2},
+	}
 	app := fiber.New()
-	registerMetricsRoutesForTest(app, ingest, reports, objectReader)
+	registerMetricsRoutesForTest(app, reports, &metricsIngestFake{})
 
 	t.Run("list", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?limit=10&offset=0&inactive_days=365", nil)
-		httpResp, err := app.Test(req)
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?limit=10&offset=0&inactive_days=365", nil))
 		if err != nil {
 			t.Fatalf("test request failed: %v", err)
 		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
 		}
-		var resp map[string]any
-		if err := json.Unmarshal(body, &resp); err != nil {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if _, ok := resp["data"]; !ok {
-			t.Fatalf("expected data field in response: %v", resp)
+		if _, ok := payload["data"]; !ok {
+			t.Fatalf("expected data field in response: %v", payload)
 		}
 	})
 
 	t.Run("summary", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?inactive_days=365", nil)
-		httpResp, err := app.Test(req)
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?inactive_days=365", nil))
 		if err != nil {
 			t.Fatalf("test request failed: %v", err)
 		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
 		}
-		var resp metricsapi.FileUsageSummary
-		if err := json.Unmarshal(body, &resp); err != nil {
+		var payload metricsapi.FileUsageSummary
+		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if resp.TotalFiles == nil || *resp.TotalFiles != 2 {
-			t.Fatalf("expected total files 2, got %+v", resp.TotalFiles)
+		if payload.TotalFiles == nil || *payload.TotalFiles != 2 {
+			t.Fatalf("expected total files 2, got %+v", payload.TotalFiles)
 		}
 	})
 }
 
 func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-	objectReader := newMetricsObjectReader(nil, nil)
-	state := &metricsTransferState{}
-	registerMetricsRoutesForTest(app, &metricsIngestFake{state: state}, newMetricsReport(objectReader, nil, state), objectReader)
+	registerMetricsRoutesForTest(app, &metricsReporterFake{}, &metricsIngestFake{})
 
-	req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil)
-	httpResp, err := app.Test(req)
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil))
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
-	body, _ := io.ReadAll(httpResp.Body)
-	if httpResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d body=%s", httpResp.StatusCode, string(body))
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?limit=0", nil)
-	httpResp2, err := app.Test(req2)
+	resp, err = app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?limit=0", nil))
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
-	body2, _ := io.ReadAll(httpResp2.Body)
-	if httpResp2.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d body=%s", httpResp2.StatusCode, string(body2))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
 	}
 }
 
 func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"outside": {Id: "outside"},
-	}, map[string]map[string][]string{
-		"outside": {"other": {"project"}},
-	})
-	reports := newMetricsReport(objectReader, nil, &metricsTransferState{})
-	server := NewMetricsServer(usage.NewService(usage.Dependencies{
-		Reports: reports,
-		Objects: objectReader,
-	}).Reports(), nil)
-
+	server := NewMetricsServer(&metricsReporterFake{}, nil)
 	limit := 0
-	response, err := server.ListMetricsFiles(context.Background(), metricsapi.ListMetricsFilesRequestObject{
-		Params: metricsapi.ListMetricsFilesParams{Limit: &limit},
-	})
+	response, err := server.ListMetricsFiles(context.Background(), metricsapi.ListMetricsFilesRequestObject{Params: metricsapi.ListMetricsFilesParams{Limit: &limit}})
 	if err != nil {
 		t.Fatalf("invalid list request error: %v", err)
 	}
@@ -149,21 +108,6 @@ func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
 		t.Fatalf("unauthorized summary response type = %T", summaryResponse)
 	}
 
-	scoped := metricsTestContext(context.Background(), "gen3", true, true, map[string]map[string]bool{
-		"/programs/org/projects/project": {"read": true},
-	})
-	scoped = context.WithValue(scoped, metricsQueryContextKey{}, metricsQueryParams{
-		organization: "org",
-		project:      "project",
-	})
-	fileResponse, err := server.GetMetricsFile(scoped, metricsapi.GetMetricsFileRequestObject{ObjectId: "outside"})
-	if err != nil {
-		t.Fatalf("out-of-scope file error: %v", err)
-	}
-	if _, ok := fileResponse.(metricsapi.GetMetricsFile404JSONResponse); !ok {
-		t.Fatalf("out-of-scope file response type = %T", fileResponse)
-	}
-
 	_, err = server.GetMetricsFile(context.Background(), metricsapi.GetMetricsFileRequestObject{ObjectId: "missing"})
 	if !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("missing file error = %v", err)
@@ -171,320 +115,109 @@ func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
 }
 
 func TestMetricsRoutes_BulkFiles(t *testing.T) {
-	oldDownload := time.Now().UTC().AddDate(0, 0, -40)
-	recentDownload := time.Now().UTC().AddDate(0, 0, -2)
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"obj-a": {Id: "obj-a", Name: metricsStringPtr("a.txt"), Size: 10},
-		"obj-b": {Id: "obj-b", Name: metricsStringPtr("b.txt"), Size: 20},
-		"obj-c": {Id: "obj-c", Name: metricsStringPtr("c.txt"), Size: 30},
-	}, map[string]map[string][]string{
-		"obj-a": {"cbds": {"end_to_end_test"}},
-		"obj-b": {"cbds": {"end_to_end_test"}},
-		"obj-c": {"other": {"project"}},
-	})
-	state := &metricsTransferState{}
-	ingest := &metricsIngestFake{state: state}
-	reports := newMetricsReport(objectReader, map[string]usage.FileUsage{
-		"obj-a": {
-			ObjectID:         "obj-a",
-			Name:             "a.txt",
-			Size:             10,
-			DownloadCount:    3,
-			LastDownloadTime: &oldDownload,
-		},
-		"obj-b": {
-			ObjectID:         "obj-b",
-			Name:             "b.txt",
-			Size:             20,
-			DownloadCount:    7,
-			LastDownloadTime: &recentDownload,
-		},
-		"obj-c": {
-			ObjectID:      "obj-c",
-			Name:          "c.txt",
-			Size:          30,
-			DownloadCount: 11,
-		},
-	}, state)
-	app := fiber.New()
-	app.Use(func(c fiber.Ctx) error {
-		if mode := c.Get("X-Test-Auth-Mode"); mode != "" {
-			var privs map[string]map[string]bool
-			if privsJSON := c.Get("X-Test-Privileges"); privsJSON != "" {
-				_ = json.Unmarshal([]byte(privsJSON), &privs)
-			}
-			headerRaw := c.Get("X-Test-Auth-Header")
-			ctx := metricsTestContext(c.Context(), mode, headerRaw != "", headerRaw == "true", privs)
-			c.SetContext(ctx)
-		}
-		return c.Next()
-	})
-	registerMetricsRoutesForTest(app, ingest, reports, objectReader)
+	reports := &metricsReporterFake{batch: []usage.FileUsage{{ObjectID: "obj-a", Name: "a.txt", Size: 10}}}
+	app := newMetricsTestApp(reports, &metricsIngestFake{})
+	request := httptest.NewRequest(http.MethodPost, "/index/v1/metrics/files/bulk?organization=cbds&project=end_to_end_test", strings.NewReader(`{"object_ids":["obj-a","obj-b","missing","obj-a"],"inactive_days":30}`))
+	request.Header.Set("Content-Type", "application/json")
+	setMetricsAuthHeaders(request, "gen3", true, map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}})
 
-	req := httptest.NewRequest(http.MethodPost, "/index/v1/metrics/files/bulk?organization=cbds&project=end_to_end_test", strings.NewReader(`{"object_ids":["obj-a","obj-b","obj-c","missing","obj-a"],"inactive_days":30}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Test-Auth-Mode", "gen3")
-	req.Header.Set("X-Test-Auth-Header", "true")
-	privs, _ := json.Marshal(map[string]map[string]bool{
-		"/programs/cbds/projects/end_to_end_test": {"read": true},
-	})
-	req.Header.Set("X-Test-Privileges", string(privs))
-	httpResp, err := app.Test(req)
+	resp, err := app.Test(request)
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
-	body, _ := io.ReadAll(httpResp.Body)
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
 	}
-	var resp metricsapi.MetricsListResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
+	var payload metricsapi.MetricsListResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Data == nil || len(*resp.Data) != 1 {
-		t.Fatalf("expected only inactive scoped object, got %s", string(body))
-	}
-	if got := *(*resp.Data)[0].ObjectId; got != "obj-a" {
-		t.Fatalf("expected obj-a, got %q", got)
+	if payload.Data == nil || len(*payload.Data) != 1 || *(*payload.Data)[0].ObjectId != "obj-a" {
+		t.Fatalf("expected configured batch response, got %s", body)
 	}
 }
 
 func TestMetricsSummaryAuthzAndScope(t *testing.T) {
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"scoped-1": {Id: "scoped-1", Name: metricsStringPtr("f1"), Size: 1},
-		"other-1":  {Id: "other-1", Name: metricsStringPtr("f2"), Size: 2},
-	}, map[string]map[string][]string{
-		"scoped-1": {"cbds": {"end_to_end_test"}},
-		"other-1":  {"other": {"other"}},
-	})
-	state := &metricsTransferState{}
-	ingest := &metricsIngestFake{state: state}
-	reports := newMetricsReport(objectReader, map[string]usage.FileUsage{
-		"scoped-1": {
-			ObjectID:      "scoped-1",
-			UploadCount:   2,
-			DownloadCount: 3,
-		},
-		"other-1": {
-			ObjectID:      "other-1",
-			UploadCount:   7,
-			DownloadCount: 11,
-		},
-	}, state)
-	app := fiber.New()
-	app.Use(func(c fiber.Ctx) error {
-		if mode := c.Get("X-Test-Auth-Mode"); mode != "" {
-			var privs map[string]map[string]bool
-			if privsJSON := c.Get("X-Test-Privileges"); privsJSON != "" {
-				_ = json.Unmarshal([]byte(privsJSON), &privs)
-			}
-			headerRaw := c.Get("X-Test-Auth-Header")
-			ctx := metricsTestContext(c.Context(), mode, headerRaw != "", headerRaw == "true", privs)
-			c.SetContext(ctx)
-		}
-		return c.Next()
-	})
-	registerMetricsRoutesForTest(app, ingest, reports, objectReader)
+	reports := &metricsReporterFake{summary: usage.FileUsageSummary{TotalFiles: 1, TotalUploads: 2, TotalDownloads: 3, RecordCount: 1}}
+	app := newMetricsTestApp(reports, &metricsIngestFake{})
 
-	t.Run("scope reader can access scoped summary", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "true")
-		privs, _ := json.Marshal(map[string]map[string]bool{
-			"/programs/cbds/projects/end_to_end_test": {"read": true},
-		})
-		req.Header.Set("X-Test-Privileges", string(privs))
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-		var resp metricsapi.FileUsageSummary
-		if err := json.Unmarshal(body, &resp); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		if resp.TotalFiles == nil || resp.TotalUploads == nil || resp.TotalDownloads == nil || *resp.TotalFiles != 1 || *resp.TotalUploads != 2 || *resp.TotalDownloads != 3 {
-			t.Fatalf("unexpected scoped summary: %+v", resp)
-		}
-		if resp.RecordCount == nil || *resp.RecordCount != 1 {
-			t.Fatalf("expected exact scoped record count, got %+v", resp.RecordCount)
-		}
-	})
+	request := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
+	setMetricsAuthHeaders(request, "gen3", true, map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}})
+	resp, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("test request failed: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
+	}
+	var payload metricsapi.FileUsageSummary
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.TotalFiles == nil || *payload.TotalFiles != 1 || payload.RecordCount == nil || *payload.RecordCount != 1 {
+		t.Fatalf("unexpected scoped summary: %+v", payload)
+	}
 
-	t.Run("missing auth header returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "false")
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusUnauthorized {
-			t.Fatalf("expected 401, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-	})
-
-	t.Run("program reader can access global summary via /programs read", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "true")
-		privs, _ := json.Marshal(map[string]map[string]bool{
-			"/programs": {"read": true},
-		})
-		req.Header.Set("X-Test-Privileges", string(privs))
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-	})
+	request = httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
+	setMetricsAuthHeaders(request, "gen3", false, nil)
+	resp, err = app.Test(request)
+	if err != nil {
+		t.Fatalf("test request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
 }
 
 func TestMetricsFilesAuthzAndScope(t *testing.T) {
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"scoped-1": {Id: "scoped-1", Name: metricsStringPtr("f1"), Size: 1},
-		"other-1":  {Id: "other-1", Name: metricsStringPtr("f2"), Size: 2},
-	}, map[string]map[string][]string{
-		"scoped-1": {"cbds": {"end_to_end_test"}},
-		"other-1":  {"other": {"other"}},
-	})
-	state := &metricsTransferState{}
-	ingest := &metricsIngestFake{state: state}
-	reports := newMetricsReport(objectReader, map[string]usage.FileUsage{
-		"scoped-1": {
-			ObjectID:      "scoped-1",
-			Name:          "f1",
-			Size:          1,
-			UploadCount:   2,
-			DownloadCount: 3,
-		},
-		"other-1": {
-			ObjectID:      "other-1",
-			Name:          "f2",
-			Size:          2,
-			UploadCount:   7,
-			DownloadCount: 11,
-		},
-	}, state)
-	app := fiber.New()
-	app.Use(func(c fiber.Ctx) error {
-		if mode := c.Get("X-Test-Auth-Mode"); mode != "" {
-			var privs map[string]map[string]bool
-			if privsJSON := c.Get("X-Test-Privileges"); privsJSON != "" {
-				_ = json.Unmarshal([]byte(privsJSON), &privs)
-			}
-			ctx := metricsTestContext(c.Context(), mode, c.Get("X-Test-Auth-Header") == "true", c.Get("X-Test-Auth-Header") == "true", privs)
-			c.SetContext(ctx)
-		}
-		return c.Next()
-	})
-	registerMetricsRoutesForTest(app, ingest, reports, objectReader)
+	reports := &metricsReporterFake{
+		files:           []usage.FileUsage{{ObjectID: "scoped-1", Name: "f1", Size: 1, UploadCount: 2, DownloadCount: 3}},
+		fileUsage:       map[string]usage.FileUsage{"other-1": {ObjectID: "other-1", Name: "f2", Size: 2}},
+		scopedFileUsage: map[string]usage.FileUsage{"scoped-1": {ObjectID: "scoped-1", Name: "f1", Size: 1}},
+	}
+	app := newMetricsTestApp(reports, &metricsIngestFake{})
+	privileges := map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}}
 
-	t.Run("scoped list returns only scoped objects", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?organization=cbds&project=end_to_end_test&limit=10&offset=0", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "true")
-		privs, _ := json.Marshal(map[string]map[string]bool{
-			"/programs/cbds/projects/end_to_end_test": {"read": true},
-		})
-		req.Header.Set("X-Test-Privileges", string(privs))
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-		var resp map[string]any
-		if err := json.Unmarshal(body, &resp); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		data, ok := resp["data"].([]any)
-		if !ok {
-			t.Fatalf("missing data field: %v", resp)
-		}
-		if len(data) != 1 {
-			t.Fatalf("expected 1 scoped item, got %d payload=%v", len(data), resp)
-		}
-		first, ok := data[0].(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected data item type: %T", data[0])
-		}
-		if first["object_id"] != "scoped-1" {
-			t.Fatalf("expected scoped-1, got %v", first["object_id"])
-		}
-	})
-
-	t.Run("scoped object lookup outside scope returns 404", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/other-1?organization=cbds&project=end_to_end_test", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "true")
-		privs, _ := json.Marshal(map[string]map[string]bool{
-			"/programs/cbds/projects/end_to_end_test": {"read": true},
-		})
-		req.Header.Set("X-Test-Privileges", string(privs))
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusNotFound {
-			t.Fatalf("expected 404, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-	})
-
-	t.Run("global object lookup allowed via /programs read", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/other-1", nil)
-		req.Header.Set("X-Test-Auth-Mode", "gen3")
-		req.Header.Set("X-Test-Auth-Header", "true")
-		privs, _ := json.Marshal(map[string]map[string]bool{
-			"/programs": {"read": true},
-		})
-		req.Header.Set("X-Test-Privileges", string(privs))
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("test request failed: %v", err)
-		}
-		body, _ := io.ReadAll(httpResp.Body)
-		if httpResp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
-		}
-	})
-}
-
-func TestListMultiScopedFileUsage_DeduplicatesAcrossScopes(t *testing.T) {
-	now := time.Now().UTC()
-	objectReader := newMetricsObjectReader(map[string]*objects.Record{
-		"obj-a": {Id: "obj-a", CreatedTime: now, UpdatedTime: &now},
-	}, map[string]map[string][]string{
-		"obj-a": {"org1": {"p1"}},
-	})
-	state := &metricsTransferState{}
-	reports := newMetricsReport(objectReader, map[string]usage.FileUsage{
-		"obj-a": {ObjectID: "obj-a", UploadCount: 1, DownloadCount: 2},
-	}, state)
-
-	service := usage.NewService(usage.Dependencies{
-		Reports: reports,
-		Objects: objectReader,
-	})
-	usages, err := service.ListFileUsage(context.Background(), usage.FileUsageQuery{
-		Scope: usage.ScopeQuery{
-			Scopes: []usage.Scope{{Organization: "org1", Project: "p1"}, {Organization: "org1", Project: "p1"}},
-		},
-	})
+	request := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files?organization=cbds&project=end_to_end_test&limit=10&offset=0", nil)
+	setMetricsAuthHeaders(request, "gen3", true, privileges)
+	resp, err := app.Test(request)
 	if err != nil {
-		t.Fatalf("ListFileUsage error: %v", err)
+		t.Fatalf("test request failed: %v", err)
 	}
-	if len(usages) != 1 || usages[0].ObjectID != "obj-a" {
-		t.Fatalf("expected one deduplicated usage record, got %+v", usages)
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
+	}
+	var list map[string]any
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data, ok := list["data"].([]any)
+	if !ok || len(data) != 1 || data[0].(map[string]any)["object_id"] != "scoped-1" {
+		t.Fatalf("unexpected scoped list: %v", list)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/other-1?organization=cbds&project=end_to_end_test", nil)
+	setMetricsAuthHeaders(request, "gen3", true, privileges)
+	resp, err = app.Test(request)
+	if err != nil {
+		t.Fatalf("test request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for scoped lookup outside scope, got %d", resp.StatusCode)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/other-1", nil)
+	setMetricsAuthHeaders(request, "gen3", true, map[string]map[string]bool{"/programs": {"read": true}})
+	resp, err = app.Test(request)
+	if err != nil {
+		t.Fatalf("test request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for global lookup, got %d", resp.StatusCode)
 	}
 }
+
+func timePtr(value time.Time) *time.Time { return &value }

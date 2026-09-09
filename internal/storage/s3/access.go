@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -19,7 +20,7 @@ func (s *backend) Sign(ctx context.Context, binding storage.ProviderBinding, req
 		return storage.SignedAccess{}, err
 	}
 
-	if methodIsPut(request.Method) {
+	if request.Method == http.MethodPut {
 		presigned, err := clients.presigner.PresignPutObject(ctx, &awss3.PutObjectInput{
 			Bucket: aws.String(request.Target.PhysicalBucket),
 			Key:    aws.String(request.Target.Key),

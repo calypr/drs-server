@@ -27,17 +27,17 @@ type metricsQueryParams struct {
 
 type MetricsServer struct {
 	reporter usage.Reporter
-	ingestor usage.Ingestor
+	ingestor usage.ProviderEventRecorder
 }
 
-func NewMetricsServer(reporter usage.Reporter, ingestor usage.Ingestor) *MetricsServer {
+func NewMetricsServer(reporter usage.Reporter, ingestor usage.ProviderEventRecorder) *MetricsServer {
 	return &MetricsServer{
 		reporter: reporter,
 		ingestor: ingestor,
 	}
 }
 
-func RegisterMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingestor usage.Ingestor) {
+func RegisterMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingestor usage.ProviderEventRecorder) {
 	router.Use(func(c fiber.Ctx) error {
 		params := metricsQueryParams{
 			organization: strings.TrimSpace(c.Query("organization")),

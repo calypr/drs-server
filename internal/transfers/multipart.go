@@ -60,27 +60,6 @@ func (s *multipartSession) acquire(ctx context.Context) error {
 
 func (s *multipartSession) release() { s.complete <- struct{}{} }
 
-func (s *Service) beginMultipartTarget(ctx context.Context, target storage.Target) (storage.UploadID, error) {
-	if s == nil || s.storage == nil {
-		return "", fmt.Errorf("storage multipart is not configured")
-	}
-	return s.storage.BeginMultipart(ctx, target)
-}
-
-func (s *Service) signMultipartPartTarget(ctx context.Context, target storage.Target, uploadID storage.UploadID, partNumber int32) (storage.SignedAccess, error) {
-	if s == nil || s.storage == nil {
-		return storage.SignedAccess{}, fmt.Errorf("storage multipart is not configured")
-	}
-	return s.storage.SignMultipartPart(ctx, storage.MultipartPartRequest{Target: target, UploadID: uploadID, PartNumber: partNumber})
-}
-
-func (s *Service) completeMultipartTarget(ctx context.Context, target storage.Target, uploadID storage.UploadID, parts []storage.CompletedPart) error {
-	if s == nil || s.storage == nil {
-		return fmt.Errorf("storage multipart is not configured")
-	}
-	return s.storage.CompleteMultipart(ctx, storage.CompleteMultipartRequest{Target: target, UploadID: uploadID, Parts: parts})
-}
-
 func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) (MultipartInitResult, error) {
 	if s == nil || s.objects == nil {
 		return MultipartInitResult{}, fmt.Errorf("transfer multipart is not configured")
@@ -103,7 +82,7 @@ func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) 
 	if s.storage == nil {
 		return MultipartInitResult{}, fmt.Errorf("transfer multipart is not configured")
 	}
-	uploadID, err := s.beginMultipartTarget(ctx, target)
+	uploadID, err := s.storage.BeginMultipart(ctx, target)
 	if err != nil {
 		return MultipartInitResult{}, err
 	}
@@ -121,7 +100,7 @@ func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNu
 	if err != nil {
 		return "", err
 	}
-	signed, err := s.signMultipartPartTarget(ctx, session.target, storage.UploadID(uploadID), partNumber)
+	signed, err := s.storage.SignMultipartPart(ctx, storage.MultipartPartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), PartNumber: partNumber})
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +120,7 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	for i, part := range parts {
 		providerParts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
 	}
-	if err := s.completeMultipartTarget(ctx, session.target, storage.UploadID(uploadID), providerParts); err != nil {
+	if err := s.storage.CompleteMultipart(ctx, storage.CompleteMultipartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), Parts: providerParts}); err != nil {
 		return err
 	}
 	s.multipartMu.Lock()

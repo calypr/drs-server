@@ -681,59 +681,6 @@ s3_credentials:
 	}
 }
 
-func TestLoadConfig_NonS3ProviderBucketNames(t *testing.T) {
-	cases := []struct {
-		provider string
-		bucket   string
-		want     string
-	}{
-		{"gcs", "my.gcs.bucket", "gcs"},
-		{"gs", "my_bucket", "gcs"},
-		{"azure", "my-azure-bucket", "azure"},
-		{"azblob", "my-azure-bucket", "azure"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.provider+"/"+tc.bucket, func(t *testing.T) {
-			content := fmt.Sprintf(`
-auth:
-  mode: local
-  allow_unauthenticated: true
-database:
-  sqlite:
-    file: "test.db"
-s3_credentials:
-  - bucket: %q
-    provider: %q
-`, tc.bucket, tc.provider)
-
-			tmpfile, err := os.CreateTemp("", "config-non-s3-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			cfg, err := LoadConfig(tmpfile.Name())
-			if err != nil {
-				t.Fatalf("provider=%q bucket=%q: expected no error, got: %v", tc.provider, tc.bucket, err)
-			}
-			if len(cfg.S3Credentials) != 1 {
-				t.Fatalf("provider=%q bucket=%q: expected one credential, got %d", tc.provider, tc.bucket, len(cfg.S3Credentials))
-			}
-			if cfg.S3Credentials[0].Provider != tc.want {
-				t.Fatalf("provider=%q bucket=%q: expected normalized provider %q, got %q", tc.provider, tc.bucket, tc.want, cfg.S3Credentials[0].Provider)
-			}
-		})
-	}
-}
-
 func TestLoadConfig_UnsupportedBucketProvider(t *testing.T) {
 	content := `
 auth:
@@ -790,6 +737,12 @@ func TestLoadConfig_BucketProviderValidationRegression(t *testing.T) {
 			wantProvider: "azure",
 		},
 		{
+			name:         "gcs alias accepts underscore",
+			provider:     "gs",
+			bucket:       "my_bucket",
+			wantProvider: "gcs",
+		},
+		{
 			name:         "file provider accepted",
 			provider:     "file",
 			bucket:       "local-bucket",
@@ -808,6 +761,20 @@ func TestLoadConfig_BucketProviderValidationRegression(t *testing.T) {
 			bucket:       "my.azure.bucket",
 			wantErr:      true,
 			errSubstring: "invalid",
+		},
+		{
+			name:         "gcs reserved prefix rejected",
+			provider:     "gcs",
+			bucket:       "goog-bucket",
+			wantErr:      true,
+			errSubstring: "cannot begin with \"goog\"",
+		},
+		{
+			name:         "azure consecutive hyphens rejected",
+			provider:     "azure",
+			bucket:       "my--bucket",
+			wantErr:      true,
+			errSubstring: "consecutive hyphens",
 		},
 	}
 
@@ -857,55 +824,6 @@ s3_credentials:
 			}
 			if cfg.S3Credentials[0].Provider != tc.wantProvider {
 				t.Fatalf("expected normalized provider %q, got %q", tc.wantProvider, cfg.S3Credentials[0].Provider)
-			}
-		})
-	}
-}
-
-func TestLoadConfig_InvalidNonS3BucketNames(t *testing.T) {
-	cases := []struct {
-		provider    string
-		bucket      string
-		errContains string
-	}{
-		{"gcs", "192.168.1.1", "cannot be an IP address"},
-		{"gcs", "goog-bucket", "cannot begin with \"goog\""},
-		{"azure", "my.azure.bucket", "invalid"},
-		{"azure", "my--bucket", "consecutive hyphens"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.provider+"/"+tc.bucket, func(t *testing.T) {
-			content := fmt.Sprintf(`
-auth:
-  mode: local
-database:
-  sqlite:
-    file: "test.db"
-s3_credentials:
-  - bucket: %q
-    provider: %q
-`, tc.bucket, tc.provider)
-
-			tmpfile, err := os.CreateTemp("", "config-invalid-non-s3-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			_, err = LoadConfig(tmpfile.Name())
-			if err == nil {
-				t.Fatalf("expected error for provider=%q bucket=%q, got nil", tc.provider, tc.bucket)
-			}
-			if !strings.Contains(err.Error(), tc.errContains) {
-				t.Fatalf("provider=%q bucket=%q: expected error containing %q, got %v", tc.provider, tc.bucket, tc.errContains, err)
 			}
 		})
 	}

@@ -11,20 +11,6 @@ import (
 
 func recordStringPtr(value string) *string { return &value }
 
-func recordStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func recordStringSliceValue(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
 func canonicalizeProjectScopedObjects(objects []objectmodel.Record, organization, project string) []objectmodel.Record {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
@@ -180,7 +166,12 @@ func collapseCanonicalGroup(group []objectmodel.Record) objectmodel.Record {
 		merged.ControlledAccess = nil
 	}
 	merged.NameAliases = mergeNameAliases(merged.Name, group)
-	merged.Aliases = mergeStringPointerValues(func(obj objectmodel.Record) []string { return recordStringSliceValue(obj.Aliases) }, group)
+	merged.Aliases = mergeStringPointerValues(func(obj objectmodel.Record) []string {
+		if obj.Aliases == nil {
+			return nil
+		}
+		return *obj.Aliases
+	}, group)
 	merged.SelfUri = "drs://" + string(merged.Id)
 	return merged
 }
@@ -325,7 +316,11 @@ func mergeNameAliases(primary *string, group []objectmodel.Record) []string {
 		}
 		candidates = append(candidates, obj.NameAliases...)
 	}
-	return objectmodel.NormalizeNameAliases(recordStringValue(primary), candidates)
+	primaryName := ""
+	if primary != nil {
+		primaryName = *primary
+	}
+	return objectmodel.NormalizeNameAliases(primaryName, candidates)
 }
 
 func pickLatestNonZeroSize(group []objectmodel.Record, fallback int64) int64 {

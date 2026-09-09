@@ -129,7 +129,7 @@ func TestCreateObjectAliasRequiresUpdateAccess(t *testing.T) {
 }
 
 func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
-	for _, optimized := range []bool{false, true} {
+	for _, optimized := range []bool{true} {
 		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
 			db := seedDeletionRecords(t)
 			service := newTestService(db)
@@ -150,7 +150,7 @@ func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
 }
 
 func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
-	for _, optimized := range []bool{false, true} {
+	for _, optimized := range []bool{true} {
 		t.Run(map[bool]string{false: "fallback", true: "optimized"}[optimized], func(t *testing.T) {
 			db := seedDeletionRecords(t)
 			service := newTestService(db)

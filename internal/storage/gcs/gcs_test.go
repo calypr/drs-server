@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -284,9 +283,6 @@ func TestMultipartPartsUseExpectedLayout(t *testing.T) {
 	want := ".syfon-multipart/upload/nested/file.txt/parts/4"
 	if got != want {
 		t.Fatalf("multipart key = %q, want %q", got, want)
-	}
-	if !reflect.DeepEqual(storageports.NormalizedMultipartParts([]storageports.CompletedPart{{PartNumber: 2}, {PartNumber: 1}}), []storageports.CompletedPart{{PartNumber: 1}, {PartNumber: 2}}) {
-		t.Fatal("multipart normalization did not sort by part number")
 	}
 }
 

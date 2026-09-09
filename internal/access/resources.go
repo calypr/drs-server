@@ -6,12 +6,6 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
-// ResourcePath returns the canonical resource path for an organization and
-// optional project scope.
-func ResourcePath(organization, project string) (string, error) {
-	return clientaccess.ResourcePath(organization, project)
-}
-
 // AuthorizedResources returns resources for which the current session has the
 // requested method. It preserves the canonicalization and de-duplication rules
 // used by the rest of the access package.

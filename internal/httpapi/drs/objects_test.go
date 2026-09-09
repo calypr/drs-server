@@ -21,15 +21,6 @@ func TestToGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
 	}
 }
 
-func TestObjectPayloadIncludesLegacyIDs(t *testing.T) {
-	payload := ObjectPayload(objects.Record{
-		Id: "record-1",
-	})
-	if payload.Id != "record-1" || payload.Did != "record-1" {
-		t.Fatalf("compatibility IDs = %q, %q", payload.Id, payload.Did)
-	}
-}
-
 func TestObjectPayloadUsesTypedNestedResponse(t *testing.T) {
 	name := "sample"
 	aliases := []string{"sample.alias"}

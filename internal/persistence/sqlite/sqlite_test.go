@@ -24,13 +24,6 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-var (
-	_ buckets.CredentialReader = (*store.Store)(nil)
-	_ buckets.CredentialAdmin  = (*store.Store)(nil)
-	_ buckets.ScopeStore       = (*store.Store)(nil)
-	_ buckets.VisibilityQuery  = (*store.Store)(nil)
-)
-
 func TestSQLiteStoreContract(t *testing.T) {
 	testsuite.RunStoreContract(t, func(t *testing.T) (*store.Store, func()) {
 		db, err := NewSqliteDB(":memory:", nil)
@@ -737,34 +730,6 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	}
 	if got.AccessKey != "plain-ak" || got.SecretKey != "plain-sk" {
 		t.Fatalf("expected decrypted values, got %+v", got)
-	}
-}
-
-func TestSqliteDB_BulkOperations(t *testing.T) {
-	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:", nil)
-
-	records := []objects.Record{
-		{Id: "bulk-1", Size: 10, ControlledAccess: &[]string{"/organization/org/project/p1"}},
-		{Id: "bulk-2", Size: 20, ControlledAccess: &[]string{"/organization/org/project/p2"}},
-	}
-
-	if err := db.RegisterObjects(ctx, records); err != nil {
-		t.Fatalf("RegisterObjects failed: %v", err)
-	}
-
-	fetched, _ := db.GetBulkObjects(ctx, []string{"bulk-1", "bulk-2"})
-	if len(fetched) != 2 {
-		t.Errorf("expected 2 objects, got %d", len(fetched))
-	}
-	for _, obj := range fetched {
-		if obj.ControlledAccess == nil || len(*obj.ControlledAccess) != 1 {
-			t.Fatalf("expected controlled access on %s, got %+v", obj.Id, obj.ControlledAccess)
-		}
-	}
-
-	if err := db.BulkDeleteObjects(ctx, []string{"bulk-1", "bulk-2"}); err != nil {
-		t.Fatalf("BulkDeleteObjects failed: %v", err)
 	}
 }
 

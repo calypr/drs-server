@@ -86,5 +86,9 @@ func (s *Service) SignObjectDownloadPart(ctx context.Context, obj *objects.Recor
 
 func targetFromURL(raw string) storage.Target {
 	parsed, _ := address.ParseLocation(raw)
-	return storage.Target{Provider: parsed.Provider, LookupKey: parsed.Bucket, PhysicalBucket: parsed.Bucket, Key: parsed.Key, Path: parsed.Path, OriginalURL: parsed.URL, CanonicalURL: parsed.URL, LookupCandidates: uniqueStrings(parsed.Bucket)}
+	target := storage.Target{Provider: parsed.Provider, LookupKey: parsed.Bucket, PhysicalBucket: parsed.Bucket, Key: parsed.Key, Path: parsed.Path, OriginalURL: parsed.URL, CanonicalURL: parsed.URL}
+	if bucket := strings.TrimSpace(parsed.Bucket); bucket != "" {
+		target.LookupCandidates = []string{bucket}
+	}
+	return target
 }

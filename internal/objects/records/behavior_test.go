@@ -27,30 +27,3 @@ func TestCanonicalContentMetadataIsDeterministicOnTimestampTie(t *testing.T) {
 		t.Fatalf("expected stable uuid-a identity and deterministic latest metadata: %+v", forward)
 	}
 }
-
-func TestSearchAfterID(t *testing.T) {
-	ids := []string{"a", "b", "c", "d"}
-	if got := searchAfterID(ids, "b"); got != 2 {
-		t.Fatalf("expected index 2 for startAfter=b, got %d", got)
-	}
-	if got := searchAfterID(ids, "bb"); got != 2 {
-		t.Fatalf("expected index 2 for startAfter=bb, got %d", got)
-	}
-	if got := searchAfterID(ids, "z"); got != len(ids) {
-		t.Fatalf("expected index %d for startAfter=z, got %d", len(ids), got)
-	}
-}
-
-func TestObjectMatchesScope(t *testing.T) {
-	controlled := []string{"/organization/org1/project/p1", "/organization/org1/project/p2"}
-	obj := &objectmodel.Record{ControlledAccess: &controlled}
-	if !objectMatchesScope(obj, "org1", "p1") {
-		t.Fatalf("expected org1/p1 to match")
-	}
-	if objectMatchesScope(obj, "org1", "p3") {
-		t.Fatalf("expected org1/p3 not to match")
-	}
-	if !objectMatchesScope(obj, "org1", "") {
-		t.Fatalf("expected org-wide org1 to match")
-	}
-}

@@ -125,7 +125,11 @@ func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 		return apimiddleware.HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 
-	if err := s.bucketService.CreateScopeForBucket(c.Context(), routeCredentialID, req.Organization, req.ProjectId, readOptionalPath(req.Path)); err != nil {
+	path := ""
+	if req.Path != nil {
+		path = strings.TrimSpace(*req.Path)
+	}
+	if err := s.bucketService.CreateScopeForBucket(c.Context(), routeCredentialID, req.Organization, req.ProjectId, path); err != nil {
 		return apimiddleware.HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusCreated)
@@ -174,13 +178,6 @@ func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 		result = append(result, bucketapi.BucketScopeResponse{Organization: scope.Organization, ProjectId: scope.ProjectID, Path: &path})
 	}
 	return c.JSON(result)
-}
-
-func readOptionalPath(path *string) string {
-	if path == nil {
-		return ""
-	}
-	return strings.TrimSpace(*path)
 }
 
 func decodeStrictJSON(body []byte, dst any) error {

@@ -22,9 +22,13 @@ func NewManager(credentials CredentialLookup, registrations ...Registration) (*M
 	providers := make(map[string]Registration, len(registrations))
 	order := make([]Registration, 0, len(registrations))
 	for _, registration := range registrations {
-		provider, err := canonicalProvider(registration.provider)
+		trimmed := strings.TrimSpace(registration.provider)
+		if trimmed == "" {
+			return nil, fmt.Errorf("storage provider is required")
+		}
+		provider, err := address.ParseBucketProvider(trimmed)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid storage provider %q: %w", registration.provider, err)
 		}
 		if isNilInterface(registration.complete) {
 			return nil, fmt.Errorf("storage provider %q has no backend", provider)
@@ -37,18 +41,6 @@ func NewManager(credentials CredentialLookup, registrations ...Registration) (*M
 		order = append(order, registration)
 	}
 	return &Manager{credentials: credentials, providers: providers, order: order}, nil
-}
-
-func canonicalProvider(raw string) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", fmt.Errorf("storage provider is required")
-	}
-	provider, err := address.ParseBucketProvider(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("invalid storage provider %q: %w", raw, err)
-	}
-	return provider, nil
 }
 
 // Sign resolves one credential binding and passes it to the provider.

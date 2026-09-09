@@ -16,13 +16,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-var (
-	_ buckets.CredentialReader = (*store.Store)(nil)
-	_ buckets.CredentialAdmin  = (*store.Store)(nil)
-	_ buckets.ScopeStore       = (*store.Store)(nil)
-	_ buckets.VisibilityQuery  = (*store.Store)(nil)
-)
-
 func newMockPostgresDB(t *testing.T) (*store.Store, sqlmock.Sqlmock, *sql.DB) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
@@ -33,16 +26,12 @@ func newMockPostgresDB(t *testing.T) (*store.Store, sqlmock.Sqlmock, *sql.DB) {
 	if err != nil {
 		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
 	}
-	shared, err := testsuite.OpenSQLMockStore(db, mockPostgresDialect{}, cipher)
+	shared, err := testsuite.OpenSQLMockStore(db, postgresDialect{}, cipher)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
 	return shared, mock, db
 }
-
-type mockPostgresDialect struct{ postgresDialect }
-
-func (mockPostgresDialect) Bootstrap(context.Context, *sql.DB) error { return nil }
 
 func TestGetS3Credential(t *testing.T) {
 	pg, mock, rawDB := newMockPostgresDB(t)

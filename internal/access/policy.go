@@ -189,10 +189,3 @@ func normalizePolicyPrivileges(in map[string]map[string]bool) map[string]map[str
 	}
 	return out
 }
-
-func AuthStatusCode(ctx context.Context) int {
-	if IsGen3Mode(ctx) && !HasAuthHeader(ctx) {
-		return 401
-	}
-	return 403
-}

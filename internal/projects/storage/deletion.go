@@ -61,16 +61,8 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 	return results
 }
 
-// DeleteProjectData performs the project cleanup sequence: catalog objects
-// are removed first, then matching bucket scopes are listed and deleted in
-// repository order. A scope count includes only successful deletions.
-func (s *ProjectCleanup) DeleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
-	return s.deleteProjectData(ctx, strings.TrimSpace(organization), strings.TrimSpace(project))
-}
-
 // DeleteProjectDataAuthorized applies the maintenance write policy before
-// entering the trusted cleanup sequence. Trusted callers should continue
-// using DeleteProjectData.
+// entering the trusted cleanup sequence.
 func (s *ProjectCleanup) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
 	result := ProjectCleanupResult{Organization: strings.TrimSpace(organization), ProjectID: strings.TrimSpace(project)}
 	if err := buckets.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectID, "delete", "update"); err != nil {

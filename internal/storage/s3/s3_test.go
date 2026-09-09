@@ -18,6 +18,10 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
+func newTestBackend() *backend {
+	return &backend{limiter: newProbeLimiterFromEnv()}
+}
+
 type fakeClient struct {
 	createOutput  *awss3.CreateMultipartUploadOutput
 	createErr     error
@@ -119,7 +123,7 @@ func (f *fakePresigner) PresignUploadPart(_ context.Context, input *awss3.Upload
 }
 
 func cachedBackend(client *fakeClient, presigner *fakePresigner) *backend {
-	provider := newBackend()
+	provider := newTestBackend()
 	provider.cache.Store("bucket", &clients{client: client, presigner: presigner})
 	return provider
 }
@@ -236,7 +240,7 @@ func TestNewExposesStorageRegistration(t *testing.T) {
 }
 
 func TestGetClientsNormalizesEndpointWhitespace(t *testing.T) {
-	provider := newBackend()
+	provider := newTestBackend()
 	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{
 		Region:    "us-east-1",
 		AccessKey: "access",

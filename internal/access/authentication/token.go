@@ -30,14 +30,6 @@ func newTokenVerifier(fenceURL string) *tokenVerifier {
 	}
 }
 
-func newTokenVerifierWithHTTPClient(client *http.Client, fenceURL string) *tokenVerifier {
-	verifier := newTokenVerifier(fenceURL)
-	if client != nil {
-		verifier.client = client
-	}
-	return verifier
-}
-
 func (v *tokenVerifier) cacheForIssuer(issuer string) *jwksCache {
 	v.mu.Lock()
 	defer v.mu.Unlock()

@@ -55,13 +55,13 @@ func TestPendingMetaCandidateJSONPreservesLegacyLFSShape(t *testing.T) {
 	url := "s3://bucket/legacy-lfs.bin"
 	candidate := objects.Candidate{
 		Aliases: &[]string{"id:" + id},
-		Name:    stringPtr("legacy-lfs.bin"),
+		Name:    sqliteTestPtr("legacy-lfs.bin"),
 		Size:    &size,
 		Checksums: &[]objects.Checksum{{
 			Type: "sha256", Checksum: oid,
 		}},
 		AccessMethods: &[]objects.AccessMethod{{
-			AccessId:  stringPtr("s3"),
+			AccessId:  sqliteTestPtr("s3"),
 			Type:      typ,
 			Cloud:     &region,
 			AccessUrl: &objects.AccessURL{Url: url},
@@ -127,5 +127,3 @@ func TestPendingMetaCandidateJSONPreservesExplicitZeroSize(t *testing.T) {
 		t.Fatalf("candidate_json size = %s, want explicit zero", sizeJSON)
 	}
 }
-
-func stringPtr(value string) *string { return &value }

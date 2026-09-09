@@ -40,8 +40,12 @@ func (s *server) GetBulkAccessURL(c fiber.Ctx) error {
 		if item.BulkAccessIds != nil {
 			accessIDs = append(accessIDs, (*item.BulkAccessIds)...)
 		}
+		objectID := ""
+		if item.BulkObjectId != nil {
+			objectID = strings.TrimSpace(*item.BulkObjectId)
+		}
 		requests = append(requests, transfers.BulkAccessLookupRequest{
-			ObjectID:  strings.TrimSpace(drsStringValue(item.BulkObjectId)),
+			ObjectID:  objectID,
 			AccessIDs: accessIDs,
 		})
 	}

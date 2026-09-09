@@ -5,12 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/gofiber/fiber/v3"
 
 	"github.com/calypr/syfon/apigen/bucketapi"
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -99,18 +96,9 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 		"/programs/org/projects/project": {"create": true, "update": true},
 	}))
 
-	app := fiber.New()
-	app.Put("/data/buckets", func(c fiber.Ctx) error {
-		return (&bucketServer{bucketService: bucketService}).PutBucket(c)
-	})
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 201, got %d body=%s", resp.StatusCode, body)
+	rr := doInternalDRSTestRequest(req, internalDRSTestFixture{bucketService: bucketService})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
 	}
 
 	var scopeIndex, saveIndex = -1, -1
@@ -153,24 +141,15 @@ func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testi
 		t.Fatalf("marshal request: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPut, "/data/buckets", bytes.NewReader(body))
-	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", true, nil))
+	req = req.WithContext(dataTestAuthContext(req.Context(), "local", true, nil))
 	req = req.WithContext(requestid.WithRequestID(req.Context(), "request-derived-lookup"))
 
-	app := fiber.New()
-	app.Put("/data/buckets", func(c fiber.Ctx) error {
-		c.SetContext(requestid.WithRequestID(c.Context(), "request-derived-lookup"))
-		return (&bucketServer{bucketService: bucketService}).PutBucket(c)
-	})
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 for derived credential lookup failure, got %d", resp.StatusCode)
+	rr := doInternalDRSTestRequest(req, internalDRSTestFixture{bucketService: bucketService})
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 for derived credential lookup failure, got %d", rr.Code)
 	}
 	var response errorapi.APIError
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
 	if response.Code != errorapi.ErrorCodeInternalError || response.Category != errorapi.ErrorCategoryInternalError || response.Status != http.StatusInternalServerError || response.Message != http.StatusText(http.StatusInternalServerError) || response.RequestId == nil || *response.RequestId != "request-derived-lookup" {
@@ -198,7 +177,7 @@ func TestHandleInternalBuckets_Gen3Auth(t *testing.T) {
 	}
 	req401 := httptest.NewRequest(http.MethodGet, "/data/buckets", nil)
 	req401 = req401.WithContext(dataTestAuthContext(req401.Context(), "gen3", false, nil))
-	rr401 := doInternalDRSTestRequest(req401, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr401 := doInternalDRSTestRequest(req401, newInternalDRSObjectManager(mockDB))
 	if rr401.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr401.Code)
 	}
@@ -216,7 +195,7 @@ func TestHandleInternalBuckets_IncludesBucketsWithoutScopes(t *testing.T) {
 		"/programs": {"read": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -264,7 +243,7 @@ func TestHandleInternalBuckets_PrefersExplicitScopeOverObjectDerivedDuplicate(t 
 		"/programs/Ellrott_Lab/projects/hla2vec": {"read": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -289,7 +268,7 @@ func TestHandleInternalPutDeleteBucket_Gen3Auth(t *testing.T) {
 	putBody, _ := json.Marshal(bucketapi.PutBucketRequest{Bucket: "bucket2", Provider: &provider, Region: &region, AccessKey: &accessKey, SecretKey: &secretKey, Endpoint: &endpoint, Organization: "cbds", ProjectId: "proj1", Path: &path})
 	putReq401 := httptest.NewRequest(http.MethodPut, "/data/buckets", bytes.NewBuffer(putBody))
 	putReq401 = putReq401.WithContext(dataTestAuthContext(putReq401.Context(), "gen3", false, nil))
-	putRR401 := doInternalDRSTestRequest(putReq401, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	putRR401 := doInternalDRSTestRequest(putReq401, newInternalDRSObjectManager(mockDB))
 	if putRR401.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", putRR401.Code)
 	}
@@ -299,7 +278,7 @@ func TestHandleInternalPutBucket_RejectsInvalidGeneratedPayloads(t *testing.T) {
 	mockDB := &bucketTestStore{Credentials: map[string]buckets.Credential{}}
 	req := httptest.NewRequest(http.MethodPut, "/data/buckets", bytes.NewBufferString(`{"bucket":"b2","organization":"cbds","unexpected":"boom"}`))
 	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", true, map[string]map[string]bool{"/programs/cbds": {"arborist:create-descendant": true}}))
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -341,7 +320,7 @@ func TestHandleInternalPutBucket_ReusesExistingPhysicalBucketCredential(t *testi
 		"/programs/Ellrott_Lab/projects/embedding_rotation": {"create": true, "update": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -380,7 +359,7 @@ func TestHandleInternalListBucketScopes_Success(t *testing.T) {
 		"/programs/org-a/projects/proj-a": {"read": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -416,7 +395,7 @@ func TestHandleInternalListBucketScopes_FiltersUnauthorizedScopesOnSharedBucket(
 		"/programs/org-a/projects/proj-a": {"read": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -450,7 +429,7 @@ func TestHandleInternalListBucketScopes_RendersRootScopeAsBucketURL(t *testing.T
 		"/programs/gdc": {"read": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -470,7 +449,7 @@ func TestHandleInternalListBucketScopes_RendersRootScopeAsBucketURL(t *testing.T
 func TestHandleInternalListBucketScopes_RequiresGen3Auth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/data/buckets/bucket-a/scopes", nil)
 	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", false, nil))
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&bucketTestStore{}, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(&bucketTestStore{}))
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -491,7 +470,7 @@ func TestHandleInternalDeleteBucketScope_RequiresExactPathMatch(t *testing.T) {
 		"/programs/org-a": {"delete": true, "update": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d body=%s", rr.Code, rr.Body.String())
 	}
@@ -517,7 +496,7 @@ func TestHandleInternalDeleteBucketScope_AllowsEmptyRootPath(t *testing.T) {
 		"/programs/org-a": {"delete": true, "update": true},
 	}))
 
-	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB, &internalDRSStorageFake{}))
+	rr := doInternalDRSTestRequest(req, newInternalDRSObjectManager(mockDB))
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d body=%s", rr.Code, rr.Body.String())
 	}

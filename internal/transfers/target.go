@@ -69,7 +69,9 @@ func storageTargetFromCanonical(original string, canonical CanonicalStorageTarge
 			target.Key = parsed.Key
 		}
 	}
-	target.LookupCandidates = uniqueStrings(target.PhysicalBucket)
+	if bucket := strings.TrimSpace(target.PhysicalBucket); bucket != "" {
+		target.LookupCandidates = []string{bucket}
+	}
 	if target.LookupKey == "" && len(target.LookupCandidates) > 0 {
 		target.LookupKey = target.LookupCandidates[0]
 	}
@@ -82,14 +84,6 @@ func (s *Service) resolveScopedTarget(ctx context.Context, organization, project
 		return storage.Target{}, err
 	}
 	return storageTargetFromCanonical(canonical.URL, canonical), nil
-}
-
-func uniqueStrings(value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return []string{value}
 }
 
 // ResolveCanonicalStorageTarget selects the physical target for an object.

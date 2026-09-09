@@ -12,7 +12,6 @@ import (
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
-	"github.com/gofiber/fiber/v3"
 )
 
 type captureStorageAccess struct {
@@ -50,8 +49,7 @@ func TestGetObjectAndAccessURLAliases(t *testing.T) {
 	})
 	storageAccess := &captureStorageAccess{}
 	om := testDRSServices(db, storageAccess)
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		resp, err := app.Test(httptest.NewRequest(method, "/objects/object-1", nil))
@@ -104,8 +102,7 @@ func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
 		},
 	})
 	om := testDRSServices(db, &captureStorageAccess{})
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 
 	request := []byte(`{"bulk_object_access_ids":[{"bulk_object_id":"object-1","bulk_access_ids":["a","missing"," a "]},{"bulk_object_id":"missing","bulk_access_ids":["a","b"]},{"bulk_object_id":"empty"}]}`)
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/objects/access", bytes.NewReader(request)))
@@ -147,8 +144,7 @@ func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 		"object-1": {Id: "object-1", Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}},
 	})
 	om := testDRSServices(db, nil)
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 
 	body, err := json.Marshal(struct {
 		BulkObjectIds []string `json:"bulk_object_ids"`
@@ -199,8 +195,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 			"object-1": {Id: "object-1"},
 		})
 		om := testDRSServices(db, nil)
-		app := fiber.New()
-		RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+		app := newDRSTestApp(om)
 		var body []byte
 		if methodPath.path == "/objects/delete" {
 			body, _ = json.Marshal(generated.BulkDeleteRequest{BulkObjectIds: []string{"object-1"}})
@@ -218,8 +213,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		"object-1": {Id: "object-1"},
 	})
 	om := testDRSServices(db, nil)
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 	body, err := json.Marshal(generated.AccessMethodUpdateRequest{AccessMethods: []generated.AccessMethod{{
 		Type: generated.AccessMethodTypeS3,
 		AccessUrl: &struct {

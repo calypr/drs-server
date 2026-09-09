@@ -113,7 +113,3 @@ type ApplyResult struct {
 	Skipped     int    `json:"skipped"`
 	AutoFixable int    `json:"auto_fixable"`
 }
-
-func (r Report) FindingCount() int {
-	return len(r.Objects)
-}

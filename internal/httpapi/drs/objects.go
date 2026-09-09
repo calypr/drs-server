@@ -14,7 +14,7 @@ func FromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidat
 		MimeType:         value.MimeType,
 		Name:             value.Name,
 		ControlledAccess: value.ControlledAccess,
-		Size:             int64Ptr(value.Size),
+		Size:             &value.Size,
 	}
 	if value.Checksums != nil {
 		checksums := make([]objects.Checksum, 0, len(value.Checksums))
@@ -39,8 +39,6 @@ func FromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidat
 	}
 	return out
 }
-
-func int64Ptr(value int64) *int64 { return &value }
 
 func ToGenerated(record objects.Record) generated.DrsObject {
 	out := generated.DrsObject{
@@ -216,11 +214,4 @@ func fromGeneratedContent(content generated.ContentsObject) objects.Content {
 
 func drsPtr[T any](value T) *T {
 	return &value
-}
-
-func drsStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

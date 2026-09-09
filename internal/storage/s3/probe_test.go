@@ -46,7 +46,7 @@ func TestHeadRetryRetriesTransientErrorAndReturnsMetadata(t *testing.T) {
 
 func TestHeadAndListShareOnePermitAndCancellationIsReleasable(t *testing.T) {
 	t.Setenv(envHeadMaxAttempts, "1")
-	provider := newBackend()
+	provider := newTestBackend()
 	provider.limiter = newProbeLimiter(1)
 	started := make(chan struct{})
 	unblock := make(chan struct{})
@@ -90,7 +90,7 @@ func TestHeadAndListShareOnePermitAndCancellationIsReleasable(t *testing.T) {
 
 func TestHeadReleasesPermitAfterProviderError(t *testing.T) {
 	t.Setenv(envHeadMaxAttempts, "1")
-	provider := newBackend()
+	provider := newTestBackend()
 	provider.limiter = newProbeLimiter(1)
 	client := &fakeClient{headErrs: []error{&smithy.GenericAPIError{Code: "AccessDenied", Message: "no"}}, headOutput: &awss3.HeadObjectOutput{}}
 	if _, err := provider.headWithRetry(context.Background(), client, "bucket", "key"); err == nil {

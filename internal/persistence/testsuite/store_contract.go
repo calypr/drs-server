@@ -131,12 +131,6 @@ func OpenSQLMockStore(db *sql.DB, dialect store.Dialect, codec store.CredentialC
 	return store.Open(db, SQLMockDialect{Dialect: dialect}, codec)
 }
 
-type lfsMetadataStore interface {
-	SavePendingMetadata(context.Context, []transferlfs.PendingMetadata) error
-	GetPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error)
-	PopPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error)
-}
-
 // Compile-time capability checks keep both backends on the same concrete API.
 var (
 	_ records.ObjectStore      = (*store.Store)(nil)
@@ -145,5 +139,5 @@ var (
 	_ buckets.CredentialAdmin  = (*store.Store)(nil)
 	_ buckets.ScopeStore       = (*store.Store)(nil)
 	_ buckets.VisibilityQuery  = (*store.Store)(nil)
-	_ lfsMetadataStore         = (*store.Store)(nil)
+	_ transferlfs.PendingStore = (*store.Store)(nil)
 )

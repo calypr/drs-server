@@ -19,10 +19,16 @@ import (
 // stored by the transfer workflow. The selected fields preserve the legacy
 // DRS candidate JSON written by the previous LFS adapter.
 func FromGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidate {
-	aliases := append([]string(nil), stringSliceValue(value.Aliases)...)
-	explicitID := strings.TrimSpace(stringValue(value.Id))
-	if explicitID == "" {
-		for _, checksum := range checksumValues(value.Checksums) {
+	aliases := []string(nil)
+	if value.Aliases != nil {
+		aliases = append(aliases, (*value.Aliases)...)
+	}
+	explicitID := ""
+	if value.Id != nil {
+		explicitID = strings.TrimSpace(*value.Id)
+	}
+	if explicitID == "" && value.Checksums != nil {
+		for _, checksum := range *value.Checksums {
 			if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
 				explicitID = clienthash.NormalizeOid(checksum.Checksum)
 				break
@@ -66,27 +72,6 @@ func FromGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidate {
 		out.AccessMethods = &methods
 	}
 	return out
-}
-
-func checksumValues(value *[]lfsapi.Checksum) []lfsapi.Checksum {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-func stringSliceValue(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 type LFSServer struct {

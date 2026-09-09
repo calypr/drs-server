@@ -97,7 +97,7 @@ func TestContentIdentityReplaceIsAtomicAndPreservesSHA(t *testing.T) {
 	name := "new-name"
 	replacement := obj
 	replacement.Name = &name
-	replacement.AccessMethods = accessMethods("s3://bucket/new")
+	replacement.AccessMethods = &[]objects.AccessMethod{testAccessMethod("s3://bucket/new")}
 	if err := db.ReplaceObjects(ctx, []objects.Record{replacement}); err != nil {
 		t.Fatal(err)
 	}
@@ -214,11 +214,7 @@ func identityTestObject(id, sha, resource, url string) objects.Record {
 	controlled := []string{resource}
 	return objects.Record{Id: objects.RecordID(id), Size: 7, CreatedTime: now, UpdatedTime: &now,
 		Name: sqliteTestPtr(id), Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}},
-		AccessMethods: accessMethods(url), ControlledAccess: &controlled}
-}
-
-func accessMethods(url string) *[]objects.AccessMethod {
-	return &[]objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: url}}}
+		AccessMethods: &[]objects.AccessMethod{testAccessMethod(url)}, ControlledAccess: &controlled}
 }
 
 func testIdentityAuth(resource string, methods ...string) context.Context {

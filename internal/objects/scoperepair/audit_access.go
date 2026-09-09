@@ -16,7 +16,11 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		return
 	}
 	methods := cloneAccessMethods(*object.record.AccessMethods)
-	pathStyleURL := pathStyleAccessURL(object.scope, objectName(object.record))
+	name := ""
+	if object.record.Name != nil {
+		name = strings.Trim(strings.TrimSpace(*object.record.Name), "/")
+	}
+	pathStyleURL := pathStyleAccessURL(object.scope, name)
 	targetURL := object.canonicalURL
 	if checkStorage {
 		canonicalExists := s.checkURLExists(ctx, object, object.canonicalURL)
@@ -183,13 +187,6 @@ func cloneRecord(record objects.Record) objects.Record {
 	result.Checksums = append([]objects.Checksum(nil), record.Checksums...)
 	result.NameAliases = append([]string(nil), record.NameAliases...)
 	return result
-}
-
-func objectName(record objects.Record) string {
-	if record.Name == nil {
-		return ""
-	}
-	return strings.Trim(strings.TrimSpace(*record.Name), "/")
 }
 
 func canonicalAccessURL(target scopeTarget, did, sha string) string {

@@ -3,27 +3,7 @@ package postgres
 import (
 	"fmt"
 	"strings"
-
-	clientaccess "github.com/calypr/syfon/client/access"
 )
-
-// postgresScopeResourceCondition remains a dialect test helper. Shared Store
-// reads use the same question-mark form and let Dialect.Rebind apply $n.
-func postgresScopeResourceCondition(column, organization, project string) (string, []any, error) {
-	resource, err := clientaccess.ResourcePath(organization, project)
-	if err != nil {
-		return "", nil, err
-	}
-	if strings.TrimSpace(project) != "" {
-		return column + " = ?", []any{resource}, nil
-	}
-	return "(" + column + " = ? OR " + column + " LIKE ? ESCAPE '\\')", []any{resource, postgresLikeEscape(resource+"/project/") + "%"}, nil
-}
-
-func postgresLikeEscape(value string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return replacer.Replace(value)
-}
 
 func postgresRebindQuestionPlaceholders(query string, start int) string {
 	var b strings.Builder

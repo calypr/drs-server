@@ -3,7 +3,6 @@ package s3
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -53,10 +52,6 @@ func New() storage.Registration {
 	return storage.NewRegistration(address.S3Provider, &backend{
 		limiter: newProbeLimiterFromEnv(),
 	})
-}
-
-func newBackend() *backend {
-	return &backend{limiter: newProbeLimiterFromEnv()}
 }
 
 func (s *backend) InvalidateBucket(bucket string) {
@@ -120,8 +115,4 @@ func responseContentDisposition(name string) *string {
 		return nil
 	}
 	return aws.String(disposition)
-}
-
-func methodIsPut(method string) bool {
-	return method == http.MethodPut
 }

@@ -214,23 +214,24 @@ func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
 
 func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.SignedAccess{Location: "part-signed"}}
-	service := NewService(Dependencies{Storage: port})
+	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: port})
 	ctx := context.Background()
 	target := storage.Target{PhysicalBucket: "bucket", LookupKey: "bucket", Key: "key", LookupCandidates: []string{"bucket"}}
-	id, err := service.beginMultipartTarget(ctx, target)
-	if err != nil || id != "provider/upload/id" {
-		t.Fatalf("InitMultipartUpload()=(%q,%v)", id, err)
+	guid := "opaque-guid"
+	result, err := service.BeginMultipart(ctx, MultipartInitRequest{Target: &target, GUID: &guid})
+	if err != nil || result.UploadID != "provider/upload/id" {
+		t.Fatalf("BeginMultipart()=(%+v,%v)", result, err)
 	}
-	partAccess, err := service.signMultipartPartTarget(ctx, target, id, 7)
-	part := partAccess.Location
+	part, err := service.SignMultipartPart(ctx, result.UploadID, 7)
 	if err != nil || part != "part-signed" {
 		t.Fatalf("SignMultipartPart()=(%q,%v)", part, err)
 	}
+	parts := []CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
 	providerParts := []storage.CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
-	if err := service.completeMultipartTarget(ctx, target, id, providerParts); err != nil {
+	if err := service.CompleteMultipart(ctx, result.UploadID, parts); err != nil {
 		t.Fatalf("CompleteMultipartUpload() error = %v", err)
 	}
-	if port.partRequest.UploadID != storage.UploadID(id) || port.partRequest.PartNumber != 7 {
+	if port.partRequest.UploadID != storage.UploadID(result.UploadID) || port.partRequest.PartNumber != 7 {
 		t.Fatalf("unexpected part request: %+v", port.partRequest)
 	}
 	if !reflect.DeepEqual(port.complete.Parts, providerParts) {
@@ -270,7 +271,7 @@ func TestUnconfiguredWorkflowsReturnConfigurationErrors(t *testing.T) {
 	if _, err := service.SignURL(context.Background(), "s3://bucket/key", SignOptions{}); err == nil {
 		t.Fatal("SignURL() unexpectedly succeeded without access port")
 	}
-	if _, err := service.beginMultipartTarget(context.Background(), storage.Target{PhysicalBucket: "bucket", Key: "key"}); err == nil {
-		t.Fatal("beginMultipartTarget() unexpectedly succeeded without multipart port")
+	if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}}); err == nil {
+		t.Fatal("BeginMultipart() unexpectedly succeeded without multipart port")
 	}
 }

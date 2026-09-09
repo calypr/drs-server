@@ -9,7 +9,10 @@ import (
 )
 
 func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
-	checksums := append([]Checksum(nil), candidateChecksums(c.Checksums)...)
+	var checksums []Checksum
+	if c.Checksums != nil {
+		checksums = append([]Checksum(nil), (*c.Checksums)...)
+	}
 	oid, ok := CanonicalSHA256(checksums)
 	if !ok {
 		return Record{}, errorapi.ErrNoValidSHA256
@@ -17,7 +20,11 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	if c.AccessMethods == nil || len(*c.AccessMethods) == 0 {
 		return Record{}, errorapi.ErrAccessMethodsRequired
 	}
-	controlled := clientaccess.NormalizeAccessResources(objectStringSliceValue(c.ControlledAccess))
+	var controlled []string
+	if c.ControlledAccess != nil {
+		controlled = *c.ControlledAccess
+	}
+	controlled = clientaccess.NormalizeAccessResources(controlled)
 
 	id := ""
 	if c.Aliases != nil {
@@ -36,9 +43,13 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		id = string(mintedID)
 	}
 
+	size := int64(0)
+	if c.Size != nil {
+		size = *c.Size
+	}
 	obj := Record{
 		Id:          RecordID(id),
-		Size:        objectInt64Value(c.Size),
+		Size:        size,
 		CreatedTime: now,
 		UpdatedTime: &now,
 		Version:     objectStringPtr("1"),
@@ -73,13 +84,6 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		return Record{}, errorapi.ErrAccessMethodsRequired
 	}
 	return obj, nil
-}
-
-func candidateChecksums(value *[]Checksum) []Checksum {
-	if value == nil {
-		return nil
-	}
-	return *value
 }
 
 func EnforceCanonicalProjectScope(obj Record, organization, project string) (Record, error) {
@@ -227,17 +231,3 @@ func hasRegistrationResourceOverlap(left, right []string) bool {
 }
 
 func objectStringPtr(value string) *string { return &value }
-
-func objectInt64Value(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func objectStringSliceValue(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return *value
-}

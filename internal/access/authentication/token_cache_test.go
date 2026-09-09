@@ -18,6 +18,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+func newTokenVerifierWithHTTPClient(client *http.Client, fenceURL string) *tokenVerifier {
+	verifier := newTokenVerifier(fenceURL)
+	if client != nil {
+		verifier.client = client
+	}
+	return verifier
+}
+
 type countingAuthTransport struct {
 	mu              sync.Mutex
 	discovery       int

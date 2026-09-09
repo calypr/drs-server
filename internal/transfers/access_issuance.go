@@ -106,7 +106,11 @@ func accessURLForID(obj *objects.Record, accessID string) string {
 		if method.AccessUrl == nil || strings.TrimSpace(method.AccessUrl.Url) == "" {
 			continue
 		}
-		if strings.EqualFold(rawAccessID(method.AccessId), accessID) {
+		methodAccessID := ""
+		if method.AccessId != nil {
+			methodAccessID = *method.AccessId
+		}
+		if strings.EqualFold(methodAccessID, accessID) {
 			return method.AccessUrl.Url
 		}
 		if strings.EqualFold(strings.TrimSpace(method.Type), accessID) {
@@ -117,11 +121,4 @@ func accessURLForID(obj *objects.Record, accessID string) string {
 		return legacyMatches[0]
 	}
 	return ""
-}
-
-func rawAccessID(accessID *string) string {
-	if accessID == nil {
-		return ""
-	}
-	return *accessID
 }

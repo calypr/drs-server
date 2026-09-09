@@ -192,18 +192,13 @@ func (f *bucketTestStore) objectCopy(id string) (objects.Record, bool) {
 	return copy, true
 }
 
-func newInternalDRSObjectManager(store *bucketTestStore, storageDependency any) internalDRSTestFixture {
-	var invalidator interface{ InvalidateBucket(string) }
-	if candidate, ok := storageDependency.(interface{ InvalidateBucket(string) }); ok {
-		invalidator = candidate
-	}
-
+func newInternalDRSObjectManager(store *bucketTestStore) internalDRSTestFixture {
 	service, err := domainbuckets.NewService(domainbuckets.Dependencies{
 		Credentials:     store,
 		CredentialAdmin: store,
 		Scopes:          store,
 		Fallback:        newBucketVisibilityFallback(store),
-	}, invalidator)
+	}, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -213,10 +208,6 @@ func newInternalDRSObjectManager(store *bucketTestStore, storageDependency any) 
 type internalDRSTestFixture struct {
 	bucketService *domainbuckets.Service
 }
-
-type internalDRSStorageFake struct{}
-
-func (*internalDRSStorageFake) InvalidateBucket(string) {}
 
 var _ domainbuckets.CredentialReader = (*bucketTestStore)(nil)
 var _ domainbuckets.CredentialAdmin = (*bucketTestStore)(nil)

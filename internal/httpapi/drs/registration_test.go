@@ -12,11 +12,16 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+func newDRSTestApp(services *testDRSServicesFixture) *fiber.App {
+	app := fiber.New()
+	RegisterDRSRoutes(app, services.objectService, services.transferService, generated.Service{})
+	return app
+}
+
 func TestRegisterObjects(t *testing.T) {
 	db := newDRSObjectStore(map[string]*objects.Record{})
 	om := testDRSServices(db, nil)
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 
 	candidate := generated.DrsObjectCandidate{
 		Size: 50,
@@ -60,8 +65,7 @@ func TestRegisterObjects(t *testing.T) {
 func TestRegisterObjectsRejectsMissingAccessMethods(t *testing.T) {
 	db := newDRSObjectStore(map[string]*objects.Record{})
 	om := testDRSServices(db, nil)
-	app := fiber.New()
-	RegisterDRSRoutes(app, om.objectService, om.transferService, generated.Service{})
+	app := newDRSTestApp(om)
 
 	body, err := json.Marshal(generated.DrsObjectCandidate{
 		Size:             100,

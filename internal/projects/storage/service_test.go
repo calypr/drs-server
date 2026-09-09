@@ -285,29 +285,6 @@ func TestAuditProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *tes
 	}
 }
 
-func TestDeleteProjectDataDeletesObjectsBeforeMatchingScopes(t *testing.T) {
-	objects := &fakeCleanupObjects{count: 3}
-	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{
-		{Organization: "org", ProjectID: "project", CredentialID: "cred-a", PathPrefix: "prefix/a"},
-		{Organization: "other", ProjectID: "project", CredentialID: "cred-b"},
-		{Organization: "org", ProjectID: "project", Bucket: "bucket-c"},
-	}}
-	service := NewService(Dependencies{Catalog: testCatalog{ObjectScopeDeleter: objects, ScopeCatalog: scopes}})
-	result, err := service.DeleteProjectData(context.Background(), " org ", " project ")
-	if err != nil {
-		t.Fatalf("DeleteProjectData() error = %v", err)
-	}
-	if result.DeletedObjects != 3 || result.DeletedBucketScopes != 2 {
-		t.Fatalf("cleanup result = %+v", result)
-	}
-	if !reflect.DeepEqual(objects.deleted, []string{"org/project"}) {
-		t.Fatalf("object deletions = %v", objects.deleted)
-	}
-	if !reflect.DeepEqual(scopes.deleted, []string{"org/project/cred-a/prefix/a", "org/project/bucket-c/"}) {
-		t.Fatalf("scope deletions = %v", scopes.deleted)
-	}
-}
-
 func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 	objects := &fakeCleanupObjects{count: 3}
 	scopes := &fakeCleanupScopes{scopes: []buckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "cred"}}}

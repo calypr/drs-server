@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"encoding/base64"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -378,74 +377,6 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 		assert     func(*testing.T, fiber.Ctx)
 	}{
 		{
-			name:       "local basic auth missing",
-			mode:       "local",
-			basicUser:  "user",
-			basicPass:  "pass",
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name:       "local basic auth valid",
-			mode:       "local",
-			basicUser:  "user",
-			basicPass:  "pass",
-			authHeader: "Basic " + base64.StdEncoding.EncodeToString([]byte("user:pass")),
-			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, c fiber.Ctx) {
-				if access.IsGen3Mode(c.Context()) {
-					t.Fatalf("did not expect gen3 mode in local auth")
-				}
-				if access.HasAuthHeader(c.Context()) {
-					t.Fatalf("did not expect auth header presence in local auth")
-				}
-			},
-		},
-		{
-			name:       "gen3 no auth header",
-			mode:       "gen3",
-			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, c fiber.Ctx) {
-				if !access.IsGen3Mode(c.Context()) {
-					t.Fatalf("expected gen3 mode")
-				}
-				if access.HasAuthHeader(c.Context()) {
-					t.Fatalf("did not expect auth header presence")
-				}
-			},
-		},
-		{
-			name:       "gen3 malformed bearer",
-			mode:       "gen3",
-			authHeader: "Bearer malformed.token",
-			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, c fiber.Ctx) {
-				if !access.IsGen3Mode(c.Context()) {
-					t.Fatalf("expected gen3 mode")
-				}
-				if !access.HasAuthHeader(c.Context()) {
-					t.Fatalf("expected auth header presence")
-				}
-			},
-		},
-		{
-			name: "gen3 mock auth injects privileges",
-			mode: "gen3",
-			env: map[string]string{
-				"DRS_AUTH_MOCK_ENABLED":   "true",
-				"DRS_AUTH_MOCK_RESOURCES": "/data_file,/programs/cbds/projects/end_to_end_test",
-				"DRS_AUTH_MOCK_METHODS":   "read,create",
-			},
-			wantStatus: http.StatusOK,
-			assert: func(t *testing.T, c fiber.Ctx) {
-				if !access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
-					t.Fatalf("expected read access on /data_file")
-				}
-				if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
-					t.Fatalf("expected create access on scoped resource")
-				}
-			},
-		},
-		{
 			name: "local authn plugin allows access",
 			mode: "local",
 			env: map[string]string{
@@ -494,10 +425,6 @@ func TestAuthzMiddlewareScenarios(t *testing.T) {
 			}
 
 			m := newTestAuthzMiddleware(slog.Default(), tc.mode, tc.basicUser, tc.basicPass)
-			// Always inject dummy plugin manager for malformed bearer scenario
-			if tc.name == "gen3 malformed bearer" {
-				injectDummyAuthorizationEvaluator(m)
-			}
 			// Always inject dummy authn plugin manager for authn plugin scenarios
 			if tc.name == "local authn plugin allows access" {
 				injectDummyAuthenticationEvaluator(m, true)

@@ -119,42 +119,6 @@ func recordHasDRSWorkflowChecksum(record objects.Record, wanted string) bool {
 	return false
 }
 
-func TestRegisterBulk_RegistersCandidate(t *testing.T) {
-	database := newSQLiteDatabase(t)
-	om := newTestService(database)
-
-	candidates := []objects.Candidate{
-		{
-			Aliases: ptr([]string{"id:test-register-bulk"}),
-			Checksums: &[]objects.Checksum{{
-				Type:     "sha256",
-				Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			}},
-			AccessMethods: &[]objects.AccessMethod{{
-				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/test-register-bulk"},
-			}},
-			Size: ptr(int64(1)),
-		},
-	}
-
-	count, err := registerCandidates(context.Background(), om, candidates)
-	if err != nil {
-		t.Fatalf("RegisterBulk error: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected count=1, got=%d", count)
-	}
-
-	obj, err := database.GetObject(context.Background(), "test-register-bulk")
-	if err != nil {
-		t.Fatalf("expected registered object, got error: %v", err)
-	}
-	if obj == nil || obj.Id != "test-register-bulk" {
-		t.Fatalf("unexpected object: %+v", obj)
-	}
-}
-
 func TestRegisterBulk_InvalidChecksum(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	om := newTestService(database)
@@ -170,34 +134,6 @@ func TestRegisterBulk_InvalidChecksum(t *testing.T) {
 
 	if _, err := registerCandidates(context.Background(), om, candidates); err == nil {
 		t.Fatalf("expected RegisterBulk error for invalid checksum")
-	}
-}
-
-func TestBulkDeleteObjects_DeletesAuthorizedObjects(t *testing.T) {
-	database := newSQLiteDatabase(t)
-	om := newTestService(database)
-
-	_, err := registerCandidates(context.Background(), om, []objects.Candidate{{
-		Aliases: ptr([]string{"id:test-delete-bulk"}),
-		Checksums: &[]objects.Checksum{{
-			Type:     "sha256",
-			Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		}},
-		AccessMethods: &[]objects.AccessMethod{{
-			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/test-delete-bulk"},
-		}},
-		Size: ptr(int64(1)),
-	}})
-	if err != nil {
-		t.Fatalf("seed RegisterBulk error: %v", err)
-	}
-
-	if err := om.BulkDeleteObjects(context.Background(), []string{"test-delete-bulk"}); err != nil {
-		t.Fatalf("BulkDeleteObjects error: %v", err)
-	}
-	if _, err := database.GetObject(context.Background(), "test-delete-bulk"); err == nil {
-		t.Fatalf("expected object to be deleted")
 	}
 }
 

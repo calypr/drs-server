@@ -383,30 +383,6 @@ func TestListObjectIDsByScopeReturnsQueryError(t *testing.T) {
 	}
 }
 
-func TestPostgresScopeResourceCondition(t *testing.T) {
-	condition, args, err := postgresScopeResourceCondition("ca.resource", "org", "")
-	if err != nil {
-		t.Fatalf("postgresScopeResourceCondition returned error: %v", err)
-	}
-	if want := "(ca.resource = ? OR ca.resource LIKE ? ESCAPE '\\')"; condition != want {
-		t.Fatalf("unexpected condition: got %q want %q", condition, want)
-	}
-	if len(args) != 2 || args[0] != "/organization/org" || args[1] != "/organization/org/project/%" {
-		t.Fatalf("unexpected args: %+v", args)
-	}
-
-	condition, args, err = postgresScopeResourceCondition("ca.resource", "org", "project")
-	if err != nil {
-		t.Fatalf("postgresScopeResourceCondition returned error: %v", err)
-	}
-	if condition != "ca.resource = ?" {
-		t.Fatalf("unexpected project condition: %q", condition)
-	}
-	if len(args) != 1 || args[0] != "/organization/org/project/project" {
-		t.Fatalf("unexpected project args: %+v", args)
-	}
-}
-
 func TestBulkDeleteObjects(t *testing.T) {
 	t.Run("deletes provided ids", func(t *testing.T) {
 		pg, mock, rawDB := newMockPostgresDB(t)

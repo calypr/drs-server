@@ -178,18 +178,6 @@ func validateJWKSURL(raw string) error {
 	return nil
 }
 
-// getKey retrieves a key by KID.
-func (c *jwksCache) getKey(kid string) (interface{}, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	key, ok := c.keys[kid]
-	if !ok {
-		return nil, fmt.Errorf("key not found: %s", kid)
-	}
-	return key, nil
-}
-
 // keyForToken loads the current key set and permits one forced refresh for a
 // missing key during the cooldown window. The mutex serializes discovery and
 // refreshes for an issuer, including failed refresh attempts.
