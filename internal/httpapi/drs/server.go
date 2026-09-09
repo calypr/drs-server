@@ -5,7 +5,6 @@ import (
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 	"strings"
@@ -123,7 +122,7 @@ func (s *server) DeleteObject(c fiber.Ctx, objectID generated.ObjectId) error {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
-	opts := objectrecords.DeleteOptions{
+	opts := objects.DeleteOptions{
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
 	if err := s.objectService.DeleteObjectWithOptions(c.Context(), string(objectID), opts); err != nil {
@@ -151,13 +150,13 @@ func (s *server) BulkUpdateAccessMethods(c fiber.Ctx) error {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	updates := make([]objectrecords.AccessMethodUpdate, 0, len(body.Updates))
+	updates := make([]objects.AccessMethodUpdate, 0, len(body.Updates))
 	for _, update := range body.Updates {
 		id := strings.TrimSpace(update.ObjectId)
 		if id == "" || len(update.AccessMethods) == 0 {
 			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
-		updates = append(updates, objectrecords.AccessMethodUpdate{
+		updates = append(updates, objects.AccessMethodUpdate{
 			ObjectID: id,
 			Methods:  FromGeneratedAccessMethods(update.AccessMethods),
 		})
@@ -198,7 +197,7 @@ func (s *server) BulkDeleteObjects(c fiber.Ctx) error {
 		ids = append(ids, id)
 	}
 
-	opts := objectrecords.DeleteOptions{
+	opts := objects.DeleteOptions{
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
 	if err := s.objectService.BulkDeleteObjectsWithOptions(c.Context(), ids, opts); err != nil {
@@ -304,7 +303,7 @@ func (s *server) RegisterObjects(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"objects": response})
 }
 
-func RegisterDRSRoutes(router fiber.Router, objectService *objectrecords.Service, accessService *transfers.Service, serviceInfo generated.Service) {
+func RegisterDRSRoutes(router fiber.Router, objectService *objects.Service, accessService *transfers.Service, serviceInfo generated.Service) {
 	handlers := &server{
 		objectService: objectService,
 		accessService: accessService,
@@ -315,7 +314,7 @@ func RegisterDRSRoutes(router fiber.Router, objectService *objectrecords.Service
 }
 
 type server struct {
-	objectService *objectrecords.Service
+	objectService *objects.Service
 	accessService *transfers.Service
 	serviceInfo   generated.Service
 }

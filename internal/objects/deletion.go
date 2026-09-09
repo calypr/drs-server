@@ -1,12 +1,10 @@
-package records
+package objects
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"strings"
-
-	objectmodel "github.com/calypr/syfon/internal/objects"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -87,7 +85,7 @@ func (s *Service) deletablePhysicalObjectIDsForBulk(ctx context.Context, ids []s
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[string]*objectmodel.Record, len(objects))
+	byID := make(map[string]*Record, len(objects))
 	for i := range objects {
 		byID[string(objects[i].Id)] = &objects[i]
 	}

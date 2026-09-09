@@ -14,7 +14,6 @@ import (
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
@@ -194,7 +193,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
 	cfg := &config.Config{Routes: routes}
 	dependencies := mockServerDependencies(objectStore, bucketStore)
-	objectService := objectrecords.NewService(dependencies.objects)
+	objectService := objects.NewService(dependencies.objects)
 	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService,

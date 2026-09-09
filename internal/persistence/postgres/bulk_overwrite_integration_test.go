@@ -8,7 +8,6 @@ import (
 
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	postgresdb "github.com/calypr/syfon/internal/persistence/postgres"
 )
 
@@ -41,7 +40,7 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	}
 
 	newName := "new"
-	service := objectrecords.NewService(db)
+	service := objects.NewService(db)
 	result, err := service.BulkOverwriteObjects(context.Background(), "ci-overwrite", "project", []objects.Record{{
 		Id:               "ci-overwrite-source",
 		Name:             &newName,

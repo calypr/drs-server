@@ -93,11 +93,6 @@ check_edge() {
 		github.com/calypr/syfon/internal/requestid)
 			if ! is_standard_library_dependency "$dep"; then forbidden=1; fi
 		;;
-		github.com/calypr/syfon/internal/httpapi/records)
-			case "$dep" in
-				github.com/calypr/syfon/internal/httpapi/drs) forbidden=1 ;;
-			esac
-		;;
 		github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*)
 			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
@@ -105,7 +100,7 @@ check_edge() {
 			esac
 			if [[ "$pkg" == github.com/calypr/syfon/internal/objects ]]; then
 				case "$dep" in
-					github.com/calypr/syfon/internal/objects/*|github.com/calypr/syfon/internal/access|github.com/calypr/syfon/internal/access/*) forbidden=1 ;;
+					github.com/calypr/syfon/internal/objects/*) forbidden=1 ;;
 				esac
 			fi
 		;;
@@ -229,18 +224,8 @@ run_self_tests() {
 	expect_allowed github.com/calypr/syfon/internal/objects/scoperepair github.com/calypr/syfon/internal/objects
 	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/calypr/syfon/internal/objects
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/mattn/go-sqlite3
-	expect_allowed github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/objects
-	expect_allowed github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/access
-	expect_allowed github.com/calypr/syfon/internal/httpapi/records github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/access
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/mattn/go-sqlite3
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/aws/aws-sdk-go-v2/aws
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/httpapi/records
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/persistence/sqlite
-	expect_forbidden github.com/calypr/syfon/internal/buckets github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/storage/s3 github.com/calypr/syfon/internal/objects/records
+	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/access
+	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/objects/scoperepair
 	expect_forbidden github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/storage/s3
 	expect_forbidden github.com/calypr/syfon/internal/storage/address github.com/google/uuid
 	expect_forbidden github.com/calypr/syfon/internal/buckets github.com/calypr/syfon/internal/storage
@@ -249,7 +234,6 @@ run_self_tests() {
 	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/errorapi
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
 	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi/middleware
-	expect_forbidden github.com/calypr/syfon/internal/httpapi/records github.com/calypr/syfon/internal/httpapi/drs
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/internal/arbitrary github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/cmd/server github.com/calypr/syfon/internal/testsupport/sqlite

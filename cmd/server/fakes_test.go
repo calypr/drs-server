@@ -10,7 +10,6 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -382,11 +381,11 @@ func cloneServerRecord(record *objects.Record) *objects.Record {
 }
 
 var (
-	_ objectrecords.ObjectStore = (*serverObjectStore)(nil)
+	_ objects.ObjectStore = (*serverObjectStore)(nil)
 )
 
 type serverTestDependencies struct {
-	objects       objectrecords.ObjectStore
+	objects       objects.ObjectStore
 	bucketService *buckets.Service
 	usageIngest   usage.Ingestor
 	usageReports  usage.ReportStore

@@ -16,7 +16,7 @@ import (
 	clientservices "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 	"github.com/calypr/syfon/internal/persistence/store"
@@ -378,7 +378,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
 	}
-	objectService := objectrecords.NewService(database)
+	objectService := objects.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService, Storage: cliFileStorageAccess{root: storageDir}, FileCounters: database,

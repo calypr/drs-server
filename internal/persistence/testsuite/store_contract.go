@@ -10,7 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/store"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
@@ -133,7 +133,7 @@ func OpenSQLMockStore(db *sql.DB, dialect store.Dialect, codec store.CredentialC
 
 // Compile-time capability checks keep both backends on the same concrete API.
 var (
-	_ records.ObjectStore      = (*store.Store)(nil)
+	_ objects.ObjectStore      = (*store.Store)(nil)
 	_ usage.ReportStore        = (*store.Store)(nil)
 	_ buckets.CredentialReader = (*store.Store)(nil)
 	_ buckets.CredentialAdmin  = (*store.Store)(nil)

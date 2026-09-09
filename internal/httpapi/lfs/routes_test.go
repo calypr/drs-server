@@ -15,7 +15,6 @@ import (
 	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -192,7 +191,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 	oid := strings.Repeat("d", 64)
 	newTransferService := func(ports *lfsTestServicePorts, storageFake *lfsTestStorage) *transfers.Service {
 		return transfers.NewService(transfers.Dependencies{
-			Objects:     objectrecords.NewService(ports),
+			Objects:     objects.NewService(ports),
 			Storage:     storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
 			Credentials: ports,

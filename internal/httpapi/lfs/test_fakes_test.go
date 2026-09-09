@@ -9,7 +9,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
@@ -19,7 +18,7 @@ import (
 // used by the LFS routes. Keeping the state and implementations together
 // avoids a graph of fakes that only forward calls to one another.
 type lfsTestServicePorts struct {
-	objectrecords.ObjectStore
+	objects.ObjectStore
 	records        map[string]*objects.Record
 	aliases        map[string]string
 	credentials    map[string]buckets.Credential
@@ -220,14 +219,14 @@ func (p *lfsTestServicePorts) RecordFileDownload(_ context.Context, objectID str
 	return nil
 }
 
-var _ objectrecords.ObjectStore = (*lfsTestServicePorts)(nil)
+var _ objects.ObjectStore = (*lfsTestServicePorts)(nil)
 var _ buckets.CredentialReader = (*lfsTestServicePorts)(nil)
 var _ transferlfs.PendingStore = (*lfsTestServicePorts)(nil)
 var _ usage.FileCounterRecorder = (*lfsTestServicePorts)(nil)
 
 func newLFSTransferService(storageFake *lfsTestStorage, ports *lfsTestServicePorts) *transfers.Service {
 	return transfers.NewService(transfers.Dependencies{
-		Objects:      objectrecords.NewService(ports),
+		Objects:      objects.NewService(ports),
 		Storage:      storageFake,
 		Credentials:  ports,
 		Events:       ports,

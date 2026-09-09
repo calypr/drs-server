@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -73,7 +73,7 @@ func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStor
 }
 
 func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) Dependencies {
-	objectService := objectrecords.NewService(ports)
+	objectService := objects.NewService(ports)
 	lfsService := transferlfs.NewService(transferService, objectService, ports, ports, ports, storageFakeUploader(storageFake))
 	return Dependencies{
 		Service: lfsService,

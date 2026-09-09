@@ -10,13 +10,12 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
-func newScopeRepairService(objectService *objectrecords.Service, bucketService *buckets.Service, storageManager storageProbe) *scoperepair.Service {
+func newScopeRepairService(objectService *objects.Service, bucketService *buckets.Service, storageManager storageProbe) *scoperepair.Service {
 	adapter := scopeRepairIndexAdapter{service: objectService}
 	return scoperepair.NewService(
 		adapter,

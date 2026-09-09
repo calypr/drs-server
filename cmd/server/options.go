@@ -7,7 +7,7 @@ import (
 	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/httpapi/lfs"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -20,7 +20,7 @@ type serverRuntime struct {
 	app                 *fiber.App
 	cfg                 *config.Config
 	serviceInfo         drs.Service
-	objectService       *objectrecords.Service
+	objectService       *objects.Service
 	transferService     *transfers.Service
 	lfsService          *transferlfs.Service
 	usageService        *usage.Service

@@ -9,7 +9,6 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 )
 
 type bucketFallbackScopeQuery struct {
@@ -53,7 +52,7 @@ func (s *bucketFallbackStore) GetBulkObjects(ctx context.Context, ids []string) 
 	return s.reader.GetBulkObjects(ctx, ids)
 }
 
-func newBucketFallbackStore(scope *bucketFallbackScopeQuery, reader *bucketFallbackRecordReader) objectrecords.ObjectStore {
+func newBucketFallbackStore(scope *bucketFallbackScopeQuery, reader *bucketFallbackRecordReader) objects.ObjectStore {
 	return &bucketFallbackStore{serverObjectStore: &serverObjectStore{}, scope: scope, reader: reader}
 }
 

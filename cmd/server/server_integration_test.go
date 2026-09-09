@@ -16,7 +16,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 	"github.com/calypr/syfon/internal/persistence/store"
@@ -142,7 +142,7 @@ s3_credentials:
 	}
 	invalidator.manager = storageManager
 	app := fiber.New()
-	objectService := objectrecords.NewService(backend.objectStore)
+	objectService := objects.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService, Storage: storageManager, Scopes: bucketService, Credentials: bucketService,

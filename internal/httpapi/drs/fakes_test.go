@@ -7,19 +7,18 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 type testDRSServicesFixture struct {
-	objectService   *objectrecords.Service
+	objectService   *objects.Service
 	transferService *transfers.Service
 }
 
 func testDRSServices(store *drsObjectStore, storageAccess transfers.StoragePort) *testDRSServicesFixture {
 	return &testDRSServicesFixture{
-		objectService: objectrecords.NewService(store),
+		objectService: objects.NewService(store),
 		transferService: transfers.NewService(transfers.Dependencies{
 			Storage: storageAccess,
 			Events:  testTransferEvents{},
@@ -31,7 +30,7 @@ func testDRSServices(store *drsObjectStore, storageAccess transfers.StoragePort)
 // endpoint tests. Its methods are deliberately direct; the old fixture graph
 // only forwarded each method to one component over the same maps.
 type drsObjectStore struct {
-	objectrecords.ObjectStore
+	objects.ObjectStore
 	objects map[string]*objects.Record
 	aliases map[string]string
 }
@@ -165,6 +164,6 @@ func (testTransferEvents) RecordTransferAttributionEvents(context.Context, []usa
 }
 
 var (
-	_ objectrecords.ObjectStore = (*drsObjectStore)(nil)
-	_ transfers.EventRecorder   = testTransferEvents{}
+	_ objects.ObjectStore     = (*drsObjectStore)(nil)
+	_ transfers.EventRecorder = testTransferEvents{}
 )

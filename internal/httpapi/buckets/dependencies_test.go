@@ -12,7 +12,6 @@ import (
 	"github.com/calypr/syfon/internal/access"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/store"
 )
 
@@ -212,13 +211,13 @@ type internalDRSTestFixture struct {
 var _ domainbuckets.CredentialReader = (*bucketTestStore)(nil)
 var _ domainbuckets.CredentialAdmin = (*bucketTestStore)(nil)
 var _ domainbuckets.ScopeStore = (*bucketTestStore)(nil)
-var _ objectrecords.ObjectStore = (*bucketTestStore)(nil)
+var _ objects.ObjectStore = (*bucketTestStore)(nil)
 
 var (
 	errBucketVisibilityScopeQuery = errors.New("bucket visibility fallback requires an object scope query")
 )
 
-func newBucketVisibilityFallback(store objectrecords.ObjectStore) domainbuckets.VisibilityFallback {
+func newBucketVisibilityFallback(store objects.ObjectStore) domainbuckets.VisibilityFallback {
 	return func(ctx context.Context) ([]domainbuckets.VisibilityRow, error) {
 		if store == nil {
 			return nil, errBucketVisibilityScopeQuery

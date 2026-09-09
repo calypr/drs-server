@@ -1,4 +1,4 @@
-package records_test
+package objects_test
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/store"
 )
 
@@ -27,7 +26,7 @@ func (s *pageSpyDB) ListObjectIDsByScope(ctx context.Context, organization, proj
 	return s.Store.ListObjectIDsByScope(ctx, organization, project)
 }
 
-func registerScopedCandidate(t *testing.T, om *objectrecords.Service, id, checksum, org, project string) {
+func registerScopedCandidate(t *testing.T, om *objects.Service, id, checksum, org, project string) {
 	t.Helper()
 	controlled := []string{"/organization/" + org + "/project/" + project}
 	_, err := registerCandidates(context.Background(), om, []objects.Candidate{{

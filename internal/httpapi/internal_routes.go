@@ -3,7 +3,7 @@ package httpapi
 import (
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/objects/scoperepair"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
@@ -17,7 +17,7 @@ func projectCleanupHandler(server *internalServer) fiber.Handler {
 }
 
 type internalServer struct {
-	objects   *objectrecords.Service
+	objects   *objects.Service
 	transfers *domaintransfers.Service
 	inspector *projectstorage.Inspector
 	cleanup   *projectstorage.ProjectCleanup

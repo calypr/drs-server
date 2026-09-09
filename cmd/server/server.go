@@ -12,7 +12,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -40,7 +39,7 @@ func serviceInfoForBackend(sqlite bool) drs.Service {
 }
 
 type serverBackend struct {
-	objectStore        objectrecords.ObjectStore
+	objectStore        objects.ObjectStore
 	bucketDependencies buckets.Dependencies
 	pending            transferlfs.PendingStore
 	usageIngest        usage.Ingestor
@@ -61,7 +60,7 @@ var (
 	errBucketVisibilityRecordReader = fmt.Errorf("bucket visibility fallback requires an object record reader")
 )
 
-func newBucketVisibilityFallback(store objectrecords.ObjectStore) buckets.VisibilityFallback {
+func newBucketVisibilityFallback(store objects.ObjectStore) buckets.VisibilityFallback {
 	return func(ctx context.Context) ([]buckets.VisibilityRow, error) {
 		if store == nil {
 			return nil, errBucketVisibilityScopeQuery

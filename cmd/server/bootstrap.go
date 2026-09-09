@@ -14,7 +14,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/postgres"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
@@ -129,7 +129,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		return nil, fmt.Errorf("failed to load configured bucket scopes: %w", err)
 	}
 
-	objectService := objectrecords.NewService(backend.objectStore)
+	objectService := objects.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{
 		Reports: backend.usageReports,
 		Objects: objectService,

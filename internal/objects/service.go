@@ -1,28 +1,43 @@
-package records
+package objects
 
 import (
 	"context"
-
-	objectmodel "github.com/calypr/syfon/internal/objects"
+	"time"
 )
 
-// ObjectStore is the complete persistence capability required by the record
-// service. Concrete SQLite and Postgres stores implement this contract.
+const (
+	objectMethodRead   = "read"
+	objectMethodCreate = "create"
+	objectMethodUpdate = "update"
+	objectMethodDelete = "delete"
+)
+
+// Service owns stateful object lookup and mutation operations.
+type Service struct {
+	store ObjectStore
+	now   func() time.Time
+}
+
+func NewService(store ObjectStore) *Service {
+	return &Service{store: store, now: time.Now}
+}
+
+// ObjectStore is the persistence capability required by Service.
 type ObjectStore interface {
-	GetObject(context.Context, string) (*objectmodel.Record, error)
-	GetBulkObjects(context.Context, []string) ([]objectmodel.Record, error)
+	GetObject(context.Context, string) (*Record, error)
+	GetBulkObjects(context.Context, []string) ([]Record, error)
 	DeleteObject(context.Context, string) error
 	BulkDeleteObjects(context.Context, []string) error
-	RegisterObjects(context.Context, []objectmodel.Record) error
-	ReplaceObjects(context.Context, []objectmodel.Record) error
-	UpdateObjectAccessMethods(context.Context, string, []objectmodel.AccessMethod) error
-	BulkUpdateAccessMethods(context.Context, map[string][]objectmodel.AccessMethod) error
+	RegisterObjects(context.Context, []Record) error
+	ReplaceObjects(context.Context, []Record) error
+	UpdateObjectAccessMethods(context.Context, string, []AccessMethod) error
+	BulkUpdateAccessMethods(context.Context, map[string][]AccessMethod) error
 	RemoveObjectControlledAccess(context.Context, string, string) error
 	RemoveObjectControlledAccessBulk(context.Context, []string, string) (int, error)
 	CreateObjectAlias(context.Context, string, string) error
 	ResolveObjectAlias(context.Context, string) (string, error)
-	GetObjectsByChecksum(context.Context, string) ([]objectmodel.Record, error)
-	GetObjectsByChecksums(context.Context, []string) (map[string][]objectmodel.Record, error)
+	GetObjectsByChecksum(context.Context, string) ([]Record, error)
+	GetObjectsByChecksums(context.Context, []string) (map[string][]Record, error)
 	ListScopedObjectIDsByChecksums(context.Context, string, string, []string) (map[string][]string, error)
 	ListObjectIDsByScope(context.Context, string, string) ([]string, error)
 	ListObjectIDsByResources(context.Context, []string, bool) ([]string, error)
