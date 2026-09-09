@@ -15,22 +15,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type bulkOverwriteRequest struct {
-	Organization string                       `json:"organization"`
-	Project      string                       `json:"project"`
-	Records      []internalapi.InternalRecord `json:"records"`
-}
-
-type bulkOverwriteResponse struct {
-	Processed       int `json:"processed"`
-	Created         int `json:"created"`
-	Replaced        int `json:"replaced"`
-	DIDMatched      int `json:"did_matched"`
-	ChecksumMatched int `json:"checksum_matched"`
-}
-
 func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
-	var req bulkOverwriteRequest
+	var req internalapi.BulkOverwriteRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
@@ -58,11 +44,11 @@ func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 	if err != nil {
 		return middleware.HandleError(c, err)
 	}
-	return c.JSON(bulkOverwriteResponse{
+	return c.JSON(internalapi.BulkOverwriteResponse{
 		Processed:       len(candidates),
 		Created:         result.Created,
 		Replaced:        result.Replaced,
-		DIDMatched:      result.DIDMatched,
+		DidMatched:      result.DIDMatched,
 		ChecksumMatched: result.ChecksumMatched,
 	})
 }
