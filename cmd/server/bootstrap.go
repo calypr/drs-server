@@ -142,7 +142,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		Credentials:  bucketService,
 		Events:       backend.usageIngest,
 	})
-	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, storage.UploadSignedMultipartPart)
+	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
 		Credentials:   bucketService,

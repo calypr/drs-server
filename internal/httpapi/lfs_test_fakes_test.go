@@ -303,7 +303,7 @@ func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake 
 	return lfsService
 }
 
-func storageFakeUploader(fake *lfsTestStorage) storage.SignedPartUploader {
+func storageFakeUploader(fake *lfsTestStorage) func(context.Context, string, []byte) (string, error) {
 	return func(_ context.Context, _ string, content []byte) (string, error) {
 		if fake.uploadPart != nil {
 			return fake.uploadPart(content)

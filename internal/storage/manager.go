@@ -6,8 +6,15 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage/address"
 )
+
+// CredentialLookup reads one configured bucket credential by identifier or
+// physical bucket name.
+type CredentialLookup interface {
+	GetS3Credential(ctx context.Context, bucket string) (*buckets.Credential, error)
+}
 
 type Manager struct {
 	credentials CredentialLookup

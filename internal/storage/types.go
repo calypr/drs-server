@@ -1,6 +1,9 @@
 package storage
 
 import (
+	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -42,6 +45,11 @@ type ByteRange struct {
 }
 
 type UploadID string
+
+func MultipartPartObjectKey(key string, uploadID UploadID, partNumber int32) string {
+	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
+	return path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), cleanKey, "parts", strconv.Itoa(int(partNumber)))
+}
 
 type CompletedPart struct {
 	PartNumber int32
