@@ -1,4 +1,4 @@
-package drs
+package httpapi
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func testDRSServices(store *drsObjectStore, storageAccess transfers.StoragePort)
 		transferService: transfers.NewService(transfers.Dependencies{
 			Objects: objectService,
 			Storage: storageAccess,
-			Events:  testTransferEvents{},
+			Events:  drsTestTransferEvents{},
 		}),
 	}
 }
@@ -119,7 +119,7 @@ func (s *drsObjectStore) GetObjectsByChecksum(_ context.Context, checksum string
 	checksum = strings.TrimSpace(checksum)
 	result := make([]objects.Record, 0)
 	for id, obj := range s.objects {
-		if id == checksum || string(obj.Id) == checksum || recordHasChecksum(obj, checksum) {
+		if id == checksum || string(obj.Id) == checksum || drsRecordHasChecksum(obj, checksum) {
 			result = append(result, *cloneDRSRecord(obj))
 		}
 	}
@@ -138,7 +138,7 @@ func (s *drsObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []
 	return result, nil
 }
 
-func recordHasChecksum(obj *objects.Record, wanted string) bool {
+func drsRecordHasChecksum(obj *objects.Record, wanted string) bool {
 	for _, checksum := range obj.Checksums {
 		if strings.EqualFold(strings.TrimSpace(checksum.Checksum), wanted) {
 			return true
@@ -159,13 +159,13 @@ func cloneDRSRecord(obj *objects.Record) *objects.Record {
 	return &copy
 }
 
-type testTransferEvents struct{}
+type drsTestTransferEvents struct{}
 
-func (testTransferEvents) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
+func (drsTestTransferEvents) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
 	return nil
 }
 
 var (
 	_ objects.ObjectStore     = (*drsObjectStore)(nil)
-	_ transfers.EventRecorder = testTransferEvents{}
+	_ transfers.EventRecorder = drsTestTransferEvents{}
 )

@@ -6,7 +6,6 @@ import (
 
 	generated "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	drsapi "github.com/calypr/syfon/internal/httpapi/drs"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -38,7 +37,7 @@ func fromInternalRecord(value generated.InternalRecord, now time.Time) (objects.
 		record.ControlledAccess = &controlled
 	}
 	if value.AccessMethods != nil {
-		methods := drsapi.FromGeneratedAccessMethods(*value.AccessMethods)
+		methods := drsFromGeneratedAccessMethods(*value.AccessMethods)
 		record.AccessMethods = &methods
 	}
 	if value.NameAliases != nil {
@@ -62,7 +61,7 @@ func toInternalRecord(record objects.Record) generated.InternalRecord {
 		Name:          record.Name,
 		NameAliases:   &nameAliases,
 		Version:       record.Version,
-		AccessMethods: drsapi.ToGeneratedAccessMethods(record.AccessMethods),
+		AccessMethods: drsToGeneratedAccessMethods(record.AccessMethods),
 	}
 	if controlled := record.ControlledAccess; controlled != nil {
 		values := append([]string(nil), (*controlled)...)

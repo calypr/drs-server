@@ -6,7 +6,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
-	httpdrs "github.com/calypr/syfon/internal/httpapi/drs"
 	"github.com/calypr/syfon/internal/httpapi/lfs"
 	"github.com/calypr/syfon/internal/httpapi/metrics"
 	"github.com/calypr/syfon/internal/httpapi/middleware"
@@ -87,7 +86,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		apidocs.RegisterSwaggerRoutes(api)
 	}
 	if options.GA4GH {
-		httpdrs.RegisterDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo)
+		registerDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo)
 	}
 	if options.Metrics {
 		metrics.RegisterMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
