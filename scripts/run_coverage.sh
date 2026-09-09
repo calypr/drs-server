@@ -57,9 +57,19 @@ CGO_ENABLED=1 go test "${GO_TEST_FLAGS[@]}" ${PKGS}
 
 if [[ "${SCOPE}" == "meaningful" ]]; then
   CGO_ENABLED=1 go test -count=1 -covermode=atomic \
-    -coverpkg=./internal/httpapi,./internal/persistence/store \
+    -coverpkg=./internal/... \
     -coverprofile "${OUT_DIR}/cross-package.out" \
-    ./cmd/server ./internal/persistence/sqlite ./internal/persistence/postgres
+    ./cmd ./cmd/server ./internal/persistence/sqlite ./internal/persistence/postgres
+
+  CGO_ENABLED=1 go test -count=1 -covermode=atomic \
+    -coverpkg=./internal/... \
+    -coverprofile "${OUT_DIR}/cross-domain.out" \
+    ./internal/buckets/... \
+    ./internal/httpapi/... \
+    ./internal/objects/... \
+    ./internal/projects/... \
+    ./internal/transfers/... \
+    ./internal/usage/...
 fi
 
 go tool cover -func="${OUT_FILE}" | tee "${OUT_DIR}/coverage.txt"
