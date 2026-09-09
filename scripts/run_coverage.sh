@@ -54,6 +54,14 @@ if [[ "${SCOPE}" == "client" ]]; then
 fi
 
 CGO_ENABLED=1 go test "${GO_TEST_FLAGS[@]}" ${PKGS}
+
+if [[ "${SCOPE}" == "meaningful" ]]; then
+  CGO_ENABLED=1 go test -count=1 -covermode=atomic \
+    -coverpkg=./internal/httpapi,./internal/persistence/store \
+    -coverprofile "${OUT_DIR}/cross-package.out" \
+    ./cmd/server ./internal/persistence/sqlite ./internal/persistence/postgres
+fi
+
 go tool cover -func="${OUT_FILE}" | tee "${OUT_DIR}/coverage.txt"
 go tool cover -html="${OUT_FILE}" -o "${HTML_FILE}"
 
