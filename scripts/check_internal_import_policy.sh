@@ -233,7 +233,7 @@ run_self_tests() {
 	expect_allowed github.com/calypr/syfon/internal/requestid context
 	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/errorapi
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
-	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi/middleware
+	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/internal/arbitrary github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/cmd/server github.com/calypr/syfon/internal/testsupport/sqlite

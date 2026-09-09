@@ -13,7 +13,6 @@ import (
 	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -117,7 +116,7 @@ func parseScopeQuery(ctx context.Context) (string, string, bool, error) {
 }
 
 func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
-	return middleware.NewAPIError(ctx, metricsErrorCode(status), status, http.StatusText(status))
+	return NewAPIError(ctx, metricsErrorCode(status), status, http.StatusText(status))
 }
 
 func metricsErrorCode(status int) errorapi.ErrorCode {

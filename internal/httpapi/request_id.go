@@ -1,8 +1,9 @@
-package middleware
+package httpapi
 
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -14,18 +15,12 @@ import (
 
 const requestIDHeader = "X-Request-Id"
 
-type RequestIDMiddleware struct {
-	logger *slog.Logger
-}
-
-func NewRequestIDMiddleware(logger *slog.Logger) *RequestIDMiddleware {
+// RequestIDHandler adds the request ID to context and response headers while
+// recording the request lifecycle at the HTTP boundary.
+func RequestIDHandler(logger *slog.Logger) fiber.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &RequestIDMiddleware{logger: logger}
-}
-
-func (m *RequestIDMiddleware) FiberMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		requestID := strings.TrimSpace(c.Get(requestIDHeader))
 		if requestID == "" {
@@ -38,12 +33,12 @@ func (m *RequestIDMiddleware) FiberMiddleware() fiber.Handler {
 		c.Set(requestIDHeader, requestID)
 
 		start := time.Now()
-		m.logger.Debug("request start", "request_id", requestID, "method", c.Method(), "path", c.Path())
+		logger.Debug("request start", "request_id", requestID, "method", c.Method(), "path", c.Path())
 
 		err := c.Next()
 
-		status := c.Response().StatusCode()
-		m.logger.Debug(
+		status := pendingResponseStatus(c, err)
+		logger.Debug(
 			fmt.Sprintf("[%d] %s %s", status, c.Method(), c.Path()),
 			"request_id", requestID,
 			"status", status,
@@ -52,6 +47,17 @@ func (m *RequestIDMiddleware) FiberMiddleware() fiber.Handler {
 
 		return err
 	}
+}
+
+func pendingResponseStatus(c fiber.Ctx, err error) int {
+	if err == nil {
+		return c.Response().StatusCode()
+	}
+	var fiberErr *fiber.Error
+	if errors.As(err, &fiberErr) {
+		return fiberErr.Code
+	}
+	return ClassifyError(c.Context(), err).Status
 }
 
 func newRequestID() string {

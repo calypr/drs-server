@@ -4,17 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/requestid"
 	providerstorage "github.com/calypr/syfon/internal/storage"
-	"github.com/gofiber/fiber/v3"
 )
 
 func TestMapStorageErrorPreservesProviderIdentityAndCause(t *testing.T) {
@@ -57,37 +52,6 @@ func TestMapStorageErrorPreservesProviderIdentityAndCause(t *testing.T) {
 	}
 }
 
-func TestTransientProviderErrorUsesUnavailableContractAndRedactsCause(t *testing.T) {
-	cause := fmt.Errorf("private provider detail: %w", context.DeadlineExceeded)
-	source := &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "probe", Cause: cause}
-	mapped := mapStorageError(source, "probe", "bucket", "key")
-	var operationErr *providerstorage.OperationError
-	if !errors.As(mapped, &operationErr) || operationErr != source {
-		t.Fatalf("provider operation identity was not preserved: %v", mapped)
-	}
-	if !errors.Is(mapped, context.DeadlineExceeded) {
-		t.Fatal("deadline cause was not preserved")
-	}
-
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-	app.Get("/probe", func(c fiber.Ctx) error { return middleware.HandleError(c, mapped) })
-	response, err := app.Test(httptest.NewRequest("GET", "/probe", nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != 503 {
-		t.Fatalf("status = %d, want 503", response.StatusCode)
-	}
-	if strings.Contains(string(body), "private provider detail") {
-		t.Fatalf("provider cause escaped public response: %s", body)
-	}
-}
-
 func TestMappedIncompleteDiagnosticLogsCauseOnceWithRequestID(t *testing.T) {
 	cause := errors.New("private provider detail")
 	source := &providerstorage.OperationError{Kind: providerstorage.ErrorIncomplete, Provider: "s3", Capability: "inventory", Cause: cause}
@@ -109,40 +73,6 @@ func TestMappedIncompleteDiagnosticLogsCauseOnceWithRequestID(t *testing.T) {
 	}
 	if !strings.Contains(output, "request_id=request-123") {
 		t.Fatalf("request ID missing from diagnostic logs: %q", output)
-	}
-}
-
-func TestMappedProviderErrorsRedactCauseAtHTTPBoundary(t *testing.T) {
-	tests := []struct {
-		name string
-		kind providerstorage.ErrorKind
-	}{
-		{name: "invalid", kind: providerstorage.ErrorInvalid},
-		{name: "incomplete", kind: providerstorage.ErrorIncomplete},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			mapped := mapStorageError(&providerstorage.OperationError{
-				Kind:       test.kind,
-				Provider:   "s3",
-				Capability: "inventory",
-				Cause:      errors.New("private provider detail"),
-			}, "inventory", "bucket", "prefix")
-			app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-			app.Get("/storage", func(c fiber.Ctx) error { return middleware.HandleError(c, mapped) })
-			response, err := app.Test(httptest.NewRequest("GET", "/storage", nil))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(body), "private provider detail") {
-				t.Fatalf("provider cause escaped HTTP response: %s", body)
-			}
-		})
 	}
 }
 

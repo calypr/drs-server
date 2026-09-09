@@ -5,7 +5,6 @@ import (
 	"log"
 	"strings"
 
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -44,7 +43,7 @@ func handleSwaggerUI(c fiber.Ctx) error {
 func handleOpenAPISpec(c fiber.Ctx) error {
 	merged, err := buildMergedOpenAPISpec()
 	if err != nil {
-		return sendInternalServerError(c, "OpenAPI spec file not found: "+err.Error())
+		return fmt.Errorf("OpenAPI spec file not found: %w", err)
 	}
 	c.Set("Content-Type", "application/yaml")
 	if err := c.Send(merged); err != nil {
@@ -58,7 +57,7 @@ func handleNamedOpenAPISpec(name, label string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		specBytes, err := loadSpecBytesByName(name)
 		if err != nil {
-			return sendInternalServerError(c, label+" OpenAPI spec file not found: "+err.Error())
+			return fmt.Errorf("%s OpenAPI spec file not found: %w", label, err)
 		}
 		c.Set("Content-Type", "application/yaml")
 		if err := c.Send(specBytes); err != nil {
@@ -67,8 +66,4 @@ func handleNamedOpenAPISpec(name, label string) fiber.Handler {
 		}
 		return nil
 	}
-}
-
-func sendInternalServerError(c fiber.Ctx, message string) error {
-	return middleware.HandleError(c, fmt.Errorf("%s", message))
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
+	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -185,12 +185,12 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 			SecretKey: "mock-secret",
 		},
 	}}
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
+	app := fiber.New(fiber.Config{ErrorHandler: httpapi.FiberErrorHandler})
 
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	authRuntime := authentication.NewRuntime(logger, config.AuthConfig{Mode: config.AuthModeLocal})
-	authzMiddleware := middleware.NewAuthzMiddleware(logger, middleware.Options{Mode: "local", Evaluator: authRuntime})
-	requestIDMiddleware := middleware.NewRequestIDMiddleware(logger)
+	authzHandler := httpapi.AuthorizationHandler(httpapi.AuthzOptions{Mode: "local", Evaluator: authRuntime})
+	requestIDHandler := httpapi.RequestIDHandler(logger)
 	cfg := &config.Config{Routes: routes}
 	dependencies := mockServerDependencies(objectStore, bucketStore)
 	objectService := objects.NewService(dependencies.objects, nil)
@@ -202,17 +202,17 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	})
 	lfsService := transferlfs.NewService(transferService, objectService, dependencies.bucketService, dependencies.pending, dependencies.usageIngest, nil)
 	rt := &serverRuntime{
-		app:                 app,
-		cfg:                 cfg,
-		serviceInfo:         serviceInfoForBackend(true),
-		objectService:       objectService,
-		transferService:     transferService,
-		lfsService:          lfsService,
-		usageService:        usageService,
-		usageIngest:         dependencies.usageIngest,
-		bucketService:       dependencies.bucketService,
-		authzMiddleware:     authzMiddleware,
-		requestIDMiddleware: requestIDMiddleware,
+		app:              app,
+		cfg:              cfg,
+		serviceInfo:      serviceInfoForBackend(true),
+		objectService:    objectService,
+		transferService:  transferService,
+		lfsService:       lfsService,
+		usageService:     usageService,
+		usageIngest:      dependencies.usageIngest,
+		bucketService:    dependencies.bucketService,
+		authzHandler:     authzHandler,
+		requestIDHandler: requestIDHandler,
 	}
 	registerServerRoutes(rt)
 	return app

@@ -1,4 +1,4 @@
-package middleware
+package httpapi
 
 import (
 	"context"
@@ -94,8 +94,8 @@ func ClassifyError(ctx context.Context, err error) errorapi.APIError {
 	return newAPIError(ctx, code, category, status, msg)
 }
 
-// LogError records the original cause separately from its public API value.
-func LogError(c fiber.Ctx, err error, payload errorapi.APIError) {
+// logError records the original cause separately from its public API value.
+func logError(c fiber.Ctx, err error, payload errorapi.APIError) {
 	requestID := requestid.GetRequestID(c.Context())
 	args := []any{
 		"request_id", requestID,
@@ -119,7 +119,7 @@ func HandleError(c fiber.Ctx, err error) error {
 	}
 
 	payload := ClassifyError(c.Context(), err)
-	LogError(c, err, payload)
+	logError(c, err, payload)
 	return c.Status(payload.Status).JSON(payload)
 }
 

@@ -16,7 +16,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/client/apierror"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -71,7 +70,7 @@ func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 }
 
 func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
+	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
 	registerMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil))
@@ -247,8 +246,8 @@ func TestMetricsRoutesPropagateSourceErrorsThroughSDKBoundary(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-			app.Use(middleware.NewRequestIDMiddleware(nil).FiberMiddleware())
+			app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
+			app.Use(RequestIDHandler(nil))
 			registerMetricsRoutes(app, metricsErrorPropagationReporter{err: test.source}, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil)
@@ -288,8 +287,8 @@ func TestMetricsRoutesRedactAndLogUntypedSourceErrors(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previousLogger) })
 
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-	app.Use(middleware.NewRequestIDMiddleware(nil).FiberMiddleware())
+	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
+	app.Use(RequestIDHandler(nil))
 	registerMetricsRoutes(app, metricsErrorPropagationReporter{err: privateCause}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/private", nil)

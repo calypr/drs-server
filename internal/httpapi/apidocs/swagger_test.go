@@ -1,7 +1,8 @@
-package apidocs
+package apidocs_test
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,14 +10,16 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/httpapi"
+	"github.com/calypr/syfon/internal/httpapi/apidocs"
 	"github.com/gofiber/fiber/v3"
 )
 
 func TestSwaggerUIRoutesServed(t *testing.T) {
 	app := fiber.New()
-	RegisterSwaggerRoutes(app)
+	apidocs.RegisterSwaggerRoutes(app)
 
-	for _, path := range []string{RouteSwaggerUI, RouteSwaggerUIAlt} {
+	for _, path := range []string{apidocs.RouteSwaggerUI, apidocs.RouteSwaggerUIAlt} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
 			t.Fatalf("test request failed for %s: %v", path, err)
@@ -35,9 +38,9 @@ func TestSwaggerUIRoutesServed(t *testing.T) {
 }
 
 func TestOpenAPISpecFailureUsesAPIErrorContract(t *testing.T) {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: httpapi.FiberErrorHandler})
 	app.Get("/", func(c fiber.Ctx) error {
-		return sendInternalServerError(c, "private filesystem detail")
+		return errors.New("private filesystem detail")
 	})
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
@@ -55,16 +58,16 @@ func TestOpenAPISpecFailureUsesAPIErrorContract(t *testing.T) {
 
 func TestOpenAPIRoutesServedInRegistrationOrder(t *testing.T) {
 	app := fiber.New()
-	RegisterSwaggerRoutes(app)
+	apidocs.RegisterSwaggerRoutes(app)
 
 	want := []string{
-		RouteSwaggerUI,
-		RouteSwaggerUIAlt,
-		RouteOpenAPISpec,
-		RouteLFSSpec,
-		RouteBucketSpec,
-		RouteInternalSpec,
-		RouteErrorSpec,
+		apidocs.RouteSwaggerUI,
+		apidocs.RouteSwaggerUIAlt,
+		apidocs.RouteOpenAPISpec,
+		apidocs.RouteLFSSpec,
+		apidocs.RouteBucketSpec,
+		apidocs.RouteInternalSpec,
+		apidocs.RouteErrorSpec,
 	}
 	var got []string
 	for _, routes := range app.Stack() {
@@ -87,14 +90,14 @@ func TestOpenAPIRoutesServedInRegistrationOrder(t *testing.T) {
 
 func TestOpenAPISpecRoutesServed(t *testing.T) {
 	app := fiber.New()
-	RegisterSwaggerRoutes(app)
+	apidocs.RegisterSwaggerRoutes(app)
 
 	paths := []string{
-		RouteOpenAPISpec,
-		RouteLFSSpec,
-		RouteBucketSpec,
-		RouteInternalSpec,
-		RouteErrorSpec,
+		apidocs.RouteOpenAPISpec,
+		apidocs.RouteLFSSpec,
+		apidocs.RouteBucketSpec,
+		apidocs.RouteInternalSpec,
+		apidocs.RouteErrorSpec,
 	}
 	for _, path := range paths {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
@@ -108,7 +111,7 @@ func TestOpenAPISpecRoutesServed(t *testing.T) {
 		if got := resp.Header.Get("Content-Type"); got != "application/yaml" {
 			t.Fatalf("expected yaml content type for %s, got %q", path, got)
 		}
-		if path == RouteOpenAPISpec && !strings.Contains(string(body), "openapi: 3.0.3") {
+		if path == apidocs.RouteOpenAPISpec && !strings.Contains(string(body), "openapi: 3.0.3") {
 			t.Fatalf("expected openapi spec body, got: %s", string(body))
 		}
 	}

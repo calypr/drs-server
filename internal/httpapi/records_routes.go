@@ -11,7 +11,6 @@ import (
 	"github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/gofiber/fiber/v3"
 )
@@ -19,31 +18,31 @@ import (
 func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 	var req internalapi.BulkOverwriteRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if strings.TrimSpace(req.Organization) == "" || strings.TrimSpace(req.Project) == "" || len(req.Records) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and records are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and records are required")
 	}
 	if len(req.Records) > maxInternalBulkOverwrite {
-		return middleware.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many records: maximum is %d", maxInternalBulkOverwrite))
+		return Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many records: maximum is %d", maxInternalBulkOverwrite))
 	}
 	scope, err := objects.NewScope(req.Organization, req.Project)
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+		return Reject(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	candidates := make([]objects.Record, 0, len(req.Records))
 	for i, record := range req.Records {
 		obj, err := fromInternalRecord(record, time.Time{})
 		if err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
+			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 		}
 		candidates = append(candidates, obj)
 	}
 
 	result, err := s.objects.BulkOverwriteObjects(c.Context(), scope.Organization, scope.Project, candidates)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(internalapi.BulkOverwriteResponse{
 		Processed:       len(candidates),
@@ -57,10 +56,10 @@ func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 	var req internalapi.BulkMissingSHA256Request
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if strings.TrimSpace(req.Organization) == "" || strings.TrimSpace(req.Project) == "" || len(req.Sha256) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and sha256 values are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: organization, project, and sha256 values are required")
 	}
 
 	normalized := make([]string, 0, len(req.Sha256))
@@ -72,10 +71,10 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 			continue
 		}
 		if len(value) != 64 {
-			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
+			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
 		}
 		if _, err := hex.DecodeString(value); err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
+			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
 		}
 		if _, ok := seen[value]; ok {
 			continue
@@ -84,15 +83,15 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 		normalized = append(normalized, value)
 	}
 	if len(normalized) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "invalid request body: sha256 values are required")
+		return Reject(c, fiber.StatusBadRequest, "invalid request body: sha256 values are required")
 	}
 	if len(normalized) > maxInternalBulkMissingSHA256 {
-		return middleware.Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many sha256 values: maximum is %d", maxInternalBulkMissingSHA256))
+		return Reject(c, fiber.StatusRequestEntityTooLarge, fmt.Sprintf("too many sha256 values: maximum is %d", maxInternalBulkMissingSHA256))
 	}
 
 	missing, err := s.objects.ListMissingScopedSHA256(c.Context(), req.Organization, req.Project, normalized)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(internalapi.BulkMissingSHA256Response{Checked: int32(len(normalized)), MissingSha256: missing})
 }
@@ -100,7 +99,7 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 	var req internalapi.BulkHashesRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	queries := make([]objects.ChecksumQuery, 0, len(req.Hashes))
@@ -110,7 +109,7 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 	}
 	matches, err := s.objects.LookupChecksumQueries(c.Context(), queries, "read")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	finalRes := make(map[string][]internalapi.InternalRecord, len(req.Hashes))
@@ -134,10 +133,10 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 	var req internalapi.BulkSHA256ValidityRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if req.Sha256 == nil || len(*req.Sha256) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
 	}
 
 	hashes := make([]string, 0, len(*req.Sha256))
@@ -151,12 +150,12 @@ func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 		out[hash] = false
 	}
 	if len(hashes) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: sha256 values are required")
 	}
 
 	records, err := s.objects.GetObjectsByChecksums(c.Context(), hashes, "read")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	for _, hash := range hashes {
 		for _, obj := range records[hash] {
@@ -172,41 +171,41 @@ func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 func (s *internalServer) InternalDelete(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
 	if err := s.objects.DeleteObject(c.Context(), id, objects.DeleteOptions{}); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *internalServer) InternalDeleteByQuery(c fiber.Ctx, _ internalapi.InternalDeleteByQueryParams) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 	scope, err := scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+		return Reject(c, fiber.StatusBadRequest, err.Error())
 	}
 	if scope.Organization == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "No scope specified")
+		return Reject(c, fiber.StatusBadRequest, "No scope specified")
 	}
 
 	count, err := s.objects.DeleteBulkByScope(c.Context(), scope.Organization, scope.Project)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(internalapi.DeleteByQueryResponse{Deleted: &count})
 }
 
 func (s *internalServer) InternalBulkDeleteHashes(c fiber.Ctx) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 
 	var req internalapi.BulkHashesRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if len(req.Hashes) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 	}
 
 	normalized := make([]string, 0, len(req.Hashes))
@@ -218,12 +217,12 @@ func (s *internalServer) InternalBulkDeleteHashes(c fiber.Ctx) error {
 		normalized = append(normalized, val)
 	}
 	if len(normalized) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: hashes are required")
 	}
 
 	deleted, err := s.objects.DeleteObjectsByChecksums(c.Context(), normalized)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(internalapi.DeleteByQueryResponse{Deleted: &deleted})
 }
@@ -240,11 +239,11 @@ func (s *internalServer) InternalGet(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
 	obj, err := s.objects.GetObject(c.Context(), id, "read")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	encoded, err := json.Marshal(projectGet(*obj))
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	return c.Send(encoded)
@@ -263,7 +262,7 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 		// integer syntax is rejected before the typed scope is validated.
 		limit, start, page, err = parseInternalListPageFiber(c)
 		if err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+			return Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 	}
 
@@ -271,14 +270,14 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 	if hash == "" {
 		scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 		if err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+			return Reject(c, fiber.StatusBadRequest, err.Error())
 		}
 		limit, start, page, err = parseInternalListPageFiber(c)
 	} else {
 		scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 	}
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, err.Error())
+		return Reject(c, fiber.StatusBadRequest, err.Error())
 	}
 
 	query := objects.RecordListQuery{
@@ -295,7 +294,7 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 	}
 	objs, err := s.objects.ListPreparedPage(c.Context(), query)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	records := make([]internalapi.InternalRecord, 0, len(objs))
 	for _, obj := range objs {
@@ -315,7 +314,7 @@ func scopeFromQuery(organization, program, project string) (objects.Scope, error
 func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 	var req internalapi.BulkDocumentsRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	var ids []string
@@ -328,12 +327,12 @@ func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 		}
 	}
 	if len(ids) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
 	}
 
 	records, err := s.objects.GetBulkObjects(c.Context(), ids, "read")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	out := make([]internalapi.InternalRecordResponse, 0, len(records))
@@ -381,10 +380,10 @@ func parseInternalListPageFiber(c fiber.Ctx) (int, string, int, error) {
 func (s *internalServer) InternalCreate(c fiber.Ctx) error {
 	candidates, err := decodeInternalCreateCandidates(c)
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if err := s.objects.RegisterScopedObjects(c.Context(), candidates); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	if strings.HasSuffix(c.Path(), "/bulk") {
@@ -400,10 +399,10 @@ func (s *internalServer) InternalCreate(c fiber.Ctx) error {
 func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
 	candidates, err := decodeInternalCreateCandidates(c)
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if err := s.objects.RegisterScopedObjects(c.Context(), candidates); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	records := make([]internalapi.InternalRecord, len(candidates))
 	for i, scoped := range candidates {
@@ -463,11 +462,11 @@ func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) e
 	id := strings.TrimSpace(c.Params("id"))
 	var req internalapi.ControlledAccessRemoveRequest
 	if err := c.Bind().JSON(&req); err != nil || strings.TrimSpace(req.Resource) == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	obj, err := s.objects.RemoveObjectControlledAccess(c.Context(), id, req.Resource)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(toInternalRecordResponse(*obj))
 }
@@ -476,23 +475,23 @@ func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
 	var req internalapi.InternalRecord
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	if strings.TrimSpace(req.Did) == "" {
 		req.Did = id
 	}
 	scope, err := internalRecordScope(req)
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	update, err := fromInternalRecord(req, time.Time{})
 	if err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 
 	merged, err := s.objects.UpdateRecordInScope(c.Context(), id, scope, update, req.Size)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(toInternalRecordResponse(merged))
 }

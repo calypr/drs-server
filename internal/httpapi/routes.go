@@ -9,7 +9,6 @@ import (
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -29,8 +28,8 @@ type Dependencies struct {
 	UsageReports   usage.Reporter
 	Buckets        *buckets.Service
 	ProjectStorage *projectstorage.Service
-	Authorization  *middleware.AuthzMiddleware
-	RequestIDs     *middleware.RequestIDMiddleware
+	Authorization  fiber.Handler
+	RequestIDs     fiber.Handler
 }
 
 type Options struct {
@@ -69,10 +68,10 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	api := app.Group("/")
 	var middlewares []any
 	if deps.RequestIDs != nil {
-		middlewares = append(middlewares, deps.RequestIDs.FiberMiddleware())
+		middlewares = append(middlewares, deps.RequestIDs)
 	}
 	if deps.Authorization != nil {
-		middlewares = append(middlewares, deps.Authorization.FiberMiddleware())
+		middlewares = append(middlewares, deps.Authorization)
 	}
 	if len(middlewares) > 0 {
 		api.Use(middlewares...)

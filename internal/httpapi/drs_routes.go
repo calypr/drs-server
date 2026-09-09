@@ -6,7 +6,6 @@ import (
 
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
@@ -15,10 +14,10 @@ import (
 func (s *drsServer) GetAccessURL(c fiber.Ctx, objectID generated.ObjectId, accessID generated.AccessId) error {
 	result, err := s.accessService.IssueAccess(c.Context(), transfers.AccessLookupRequest{ObjectID: string(objectID), AccessID: string(accessID)})
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	if !result.Found {
-		return middleware.Reject(c, fiber.StatusNotFound, "Access ID not found or has no URL")
+		return Reject(c, fiber.StatusNotFound, "Access ID not found or has no URL")
 	}
 	return c.JSON(generated.AccessURL{Url: result.URL})
 }
@@ -30,7 +29,7 @@ func (s *drsServer) PostAccessURL(c fiber.Ctx, objectID generated.ObjectId, acce
 func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 	var body generated.BulkObjectAccessId
 	if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	requests := make([]transfers.BulkAccessLookupRequest, 0, len(*body.BulkObjectAccessIds))
@@ -88,15 +87,15 @@ func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 func (s *drsServer) PostUploadRequest(c fiber.Ctx) error {
 	const uploadRequestRoutingError = "upload-request requires explicit upload routing; default bucket selection is disabled"
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 
 	var req generated.UploadRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if len(req.Requests) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	for _, item := range req.Requests {
 		key := strings.TrimSpace(item.Name)
@@ -108,25 +107,25 @@ func (s *drsServer) PostUploadRequest(c fiber.Ctx) error {
 			key = oid
 		}
 		if key == "" {
-			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
 
-	return middleware.Reject(c, fiber.StatusBadRequest, uploadRequestRoutingError)
+	return Reject(c, fiber.StatusBadRequest, uploadRequestRoutingError)
 }
 
 func (s *drsServer) DeleteObject(c fiber.Ctx, objectID generated.ObjectId) error {
 	var body generated.DeleteRequest
 	if len(c.Body()) > 0 {
 		if err := c.Bind().JSON(&body); err != nil {
-			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
 	opts := objects.DeleteOptions{
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
 	if err := s.objectService.DeleteObject(c.Context(), string(objectID), opts); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -135,11 +134,11 @@ func (s *drsServer) UpdateObjectAccessMethods(c fiber.Ctx, objectID string) erro
 	objectID = strings.TrimSpace(objectID)
 	var body generated.AccessMethodUpdateRequest
 	if err := c.Bind().JSON(&body); err != nil || len(body.AccessMethods) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	obj, err := s.objectService.UpdateAccessMethodsAndRead(c.Context(), objectID, drsFromGeneratedAccessMethods(body.AccessMethods))
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(drsObjectPayload(*obj))
 }
@@ -147,14 +146,14 @@ func (s *drsServer) UpdateObjectAccessMethods(c fiber.Ctx, objectID string) erro
 func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
 	var body generated.BulkAccessMethodUpdateRequest
 	if err := c.Bind().JSON(&body); err != nil || len(body.Updates) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	updates := make([]objects.AccessMethodUpdate, 0, len(body.Updates))
 	for _, update := range body.Updates {
 		id := strings.TrimSpace(update.ObjectId)
 		if id == "" || len(update.AccessMethods) == 0 {
-			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 		updates = append(updates, objects.AccessMethodUpdate{
 			ObjectID: id,
@@ -164,7 +163,7 @@ func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
 
 	updated, err := s.objectService.BulkUpdateAccessMethodsAndRead(c.Context(), updates)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	response := make([]drsObjectResponse, 0, len(updated))
@@ -177,10 +176,10 @@ func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
 func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 	var body generated.BulkDeleteRequest
 	if err := c.Bind().JSON(&body); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	if len(body.BulkObjectIds) == 0 {
-		return middleware.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
+		return Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
 	}
 
 	ids := make([]string, 0, len(body.BulkObjectIds))
@@ -188,7 +187,7 @@ func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 	for _, rawID := range body.BulkObjectIds {
 		id := strings.TrimSpace(rawID)
 		if id == "" {
-			return middleware.Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot contain empty values")
+			return Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot contain empty values")
 		}
 		if _, ok := seen[id]; ok {
 			continue
@@ -201,7 +200,7 @@ func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
 	}
 	if err := s.objectService.BulkDeleteObjects(c.Context(), ids, opts); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -211,13 +210,13 @@ func (s *drsServer) BulkAddChecksums(c fiber.Ctx) error { return unsupportedChec
 func (s *drsServer) AddChecksums(c fiber.Ctx, _ string) error { return unsupportedChecksumAddition(c) }
 
 func unsupportedChecksumAddition(c fiber.Ctx) error {
-	return middleware.Reject(c, fiber.StatusNotFound, "Checksum addition is not supported")
+	return Reject(c, fiber.StatusNotFound, "Checksum addition is not supported")
 }
 
 func (s *drsServer) GetObject(c fiber.Ctx, objectID generated.ObjectId, _ generated.GetObjectParams) error {
 	obj, err := s.objectService.GetObject(c.Context(), string(objectID), "")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.JSON(drsObjectPayload(*obj))
 }
@@ -231,12 +230,12 @@ func (s *drsServer) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams
 		BulkObjectIds []string `json:"bulk_object_ids"`
 	}
 	if err := c.Bind().JSON(&body); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	objects, err := s.objectService.GetBulkObjects(c.Context(), body.BulkObjectIds, "")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	resolved := make([]drsObjectResponse, 0, len(objects))
@@ -256,7 +255,7 @@ func (s *drsServer) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams
 func (s *drsServer) GetObjectsByChecksum(c fiber.Ctx, checksum generated.ChecksumParameter) error {
 	fetched, err := s.objectService.GetObjectsByChecksum(c.Context(), string(checksum), "")
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	resolved := make([]drsObjectResponse, 0)
@@ -286,13 +285,13 @@ func (s *drsServer) RegisterObjects(c fiber.Ctx) error {
 		if err2 := json.Unmarshal(c.Body(), &single); err2 == nil && len(single.Checksums) > 0 {
 			candidates = []objects.Candidate{drsFromGeneratedCandidate(single)}
 		} else {
-			return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body")
+			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
 
 	registered, err := s.objectService.RegisterCandidates(c.Context(), candidates)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	response := make([]drsObjectResponse, len(registered))

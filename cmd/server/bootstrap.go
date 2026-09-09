@@ -13,7 +13,7 @@ import (
 	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
+	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/postgres"
@@ -153,40 +153,40 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		Providers:     projectstorage.Providers{Inventory: storageManager, Probe: storageManager, Delete: storageManager},
 	})
 
-	// Build Fiber runtime and middleware pipeline.
+	// Build the Fiber runtime and request handlers.
 	app := fiber.New(fiber.Config{
 		ReadTimeout:    30 * time.Second,
 		WriteTimeout:   120 * time.Second,
 		IdleTimeout:    120 * time.Second,
 		ReadBufferSize: 64 * 1024,
 		AppName:        "Syfon DRS Server",
-		ErrorHandler:   middleware.FiberErrorHandler,
+		ErrorHandler:   httpapi.FiberErrorHandler,
 	})
 	app.Use(recover.New())
 
-	// Init AuthZ Middleware
+	// Build the authorization and request ID handlers.
 	// We use a standard slog.Logger for data-client compatibility
 	slogLogger := logger
 	authRuntime := authentication.NewRuntime(slogLogger, cfg.Auth)
-	authzMiddleware := middleware.NewAuthzMiddleware(slogLogger, middleware.Options{
+	authzHandler := httpapi.AuthorizationHandler(httpapi.AuthzOptions{
 		Mode:      cfg.Auth.Mode,
 		Evaluator: authRuntime,
 	})
-	requestIDMiddleware := middleware.NewRequestIDMiddleware(slogLogger)
+	requestIDHandler := httpapi.RequestIDHandler(slogLogger)
 
 	return &serverRuntime{
-		app:                 app,
-		cfg:                 cfg,
-		serviceInfo:         serviceInfoForBackend(cfg.Database.Sqlite != nil),
-		objectService:       objectService,
-		transferService:     transferService,
-		lfsService:          lfsService,
-		usageService:        usageService,
-		usageIngest:         backend.usageIngest,
-		projectStorage:      projectStorageService,
-		bucketService:       bucketService,
-		authzMiddleware:     authzMiddleware,
-		requestIDMiddleware: requestIDMiddleware,
+		app:              app,
+		cfg:              cfg,
+		serviceInfo:      serviceInfoForBackend(cfg.Database.Sqlite != nil),
+		objectService:    objectService,
+		transferService:  transferService,
+		lfsService:       lfsService,
+		usageService:     usageService,
+		usageIngest:      backend.usageIngest,
+		projectStorage:   projectStorageService,
+		bucketService:    bucketService,
+		authzHandler:     authzHandler,
+		requestIDHandler: requestIDHandler,
 	}, nil
 }
 

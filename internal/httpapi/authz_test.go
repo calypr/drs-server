@@ -1,4 +1,4 @@
-package middleware
+package httpapi
 
 import (
 	"log/slog"
@@ -15,7 +15,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func newTestAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass string) *AuthzMiddleware {
+func newTestAuthzHandler(logger *slog.Logger, mode, basicUser, basicPass string) fiber.Handler {
 	auth := config.AuthConfig{
 		Mode: mode,
 		Basic: config.BasicAuthConfig{
@@ -33,11 +33,7 @@ func newTestAuthzMiddleware(logger *slog.Logger, mode, basicUser, basicPass stri
 		}
 	}
 	authRuntime := authentication.NewRuntime(logger, auth)
-	return NewAuthzMiddleware(logger, Options{Mode: mode, Evaluator: authRuntime})
-}
-
-func injectDummyAuthorizationEvaluator(m *AuthzMiddleware) {
-	m.evaluator = &fixedEvaluator{decision: access.DecisionContinue}
+	return AuthorizationHandler(AuthzOptions{Mode: mode, Evaluator: authRuntime})
 }
 
 type fixedEvaluator struct {
@@ -59,9 +55,9 @@ func (e *fixedEvaluator) Evaluate(req access.EvaluationRequest) access.Evaluatio
 }
 
 func TestLocalModeBasicAuthEnforced(t *testing.T) {
-	m := newTestAuthzMiddleware(slog.Default(), "local", "user", "pass")
+	handler := newTestAuthzHandler(slog.Default(), "local", "user", "pass")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
@@ -103,9 +99,9 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 
 	for _, tc := range paths {
 		t.Run(tc.name, func(t *testing.T) {
-			m := newTestAuthzMiddleware(slog.Default(), "local", "user", "pass")
+			handler := newTestAuthzHandler(slog.Default(), "local", "user", "pass")
 			app := fiber.New()
-			app.Use(m.FiberMiddleware())
+			app.Use(handler)
 			app.Get(tc.path, func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
 			resp, err := app.Test(httptest.NewRequest(http.MethodGet, tc.path, nil))
@@ -119,14 +115,14 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 	}
 }
 
-func TestMiddlewareInstallsEvaluatorSession(t *testing.T) {
+func TestAuthorizationHandlerInstallsEvaluatorSession(t *testing.T) {
 	const requestID = "request-id-for-evaluator"
 	evaluator := &recordingEvaluator{}
-	m := NewAuthzMiddleware(slog.Default(), Options{Mode: "gen3", Evaluator: evaluator})
+	handler := AuthorizationHandler(AuthzOptions{Mode: "gen3", Evaluator: evaluator})
 
 	app := fiber.New()
-	app.Use(NewRequestIDMiddleware(nil).FiberMiddleware())
-	app.Use(m.FiberMiddleware())
+	app.Use(RequestIDHandler(nil))
+	app.Use(handler)
 	app.Get("/objects/object-id", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/objects/object-id", nil)
@@ -154,9 +150,9 @@ func (e *recordingEvaluator) Evaluate(request access.EvaluationRequest) access.E
 }
 
 func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
-	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
+	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		if !access.IsGen3Mode(c.Context()) {
 			t.Fatalf("expected gen3 mode in context")
@@ -178,10 +174,9 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 }
 
 func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
-	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
-	injectDummyAuthorizationEvaluator(m)
+	handler := AuthorizationHandler(AuthzOptions{Mode: "gen3", Evaluator: &fixedEvaluator{decision: access.DecisionContinue}})
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		if !access.HasAuthHeader(c.Context()) {
 			t.Fatalf("expected auth header presence to be true")
@@ -205,9 +200,9 @@ func TestGen3MockAuthInjectsPrivileges(t *testing.T) {
 	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file,/programs/cbds/projects/end_to_end_test")
 	t.Setenv("DRS_AUTH_MOCK_METHODS", "read,file_upload,create,update,delete")
 
-	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
+	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		if !access.IsGen3Mode(c.Context()) {
 			t.Fatalf("expected gen3 mode")
@@ -237,9 +232,9 @@ func TestGen3MockAuthRequireHeader(t *testing.T) {
 	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file")
 	t.Setenv("DRS_AUTH_MOCK_METHODS", "read")
 
-	m := newTestAuthzMiddleware(slog.Default(), "gen3", "", "")
+	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		// Without header, mock privileges should not be injected.
 		if access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
@@ -270,9 +265,9 @@ func TestLocalAuthzCSVInjectsMethodAwarePrivileges(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := newTestAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
+	handler := newTestAuthzHandler(slog.Default(), "local", "admin", "admin-pass")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		if access.IsGen3Mode(c.Context()) {
 			t.Fatalf("did not expect gen3 mode")
@@ -314,9 +309,9 @@ func TestLocalAuthzCSVReplacesSingleAdminCredentials(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := newTestAuthzMiddleware(slog.Default(), "local", "admin", "admin-pass")
+	handler := newTestAuthzHandler(slog.Default(), "local", "admin", "admin-pass")
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})
@@ -339,10 +334,9 @@ func TestLocalAuthzCSVDeniesAuthenticatedSubjectMissingFromCSV(t *testing.T) {
 	}
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
 
-	m := newTestAuthzMiddleware(slog.Default(), "local", "", "")
-	m.evaluator = &fixedEvaluator{decision: access.DecisionForbidden}
+	handler := AuthorizationHandler(AuthzOptions{Mode: "local", Evaluator: &fixedEvaluator{decision: access.DecisionForbidden}})
 	app := fiber.New()
-	app.Use(m.FiberMiddleware())
+	app.Use(handler)
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.SendStatus(http.StatusOK)
 	})

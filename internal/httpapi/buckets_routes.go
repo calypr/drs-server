@@ -7,7 +7,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -34,11 +33,11 @@ func bucketPointer[T any](value T) *T {
 func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
 	bucketService := s.bucketService
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	visible, err := bucketService.ListVisibleBuckets(c.Context())
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	resp := bucketapi.BucketsResponse{S3BUCKETS: map[string]bucketapi.BucketMetadata{}}
@@ -62,20 +61,20 @@ func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
 func (s *bucketServer) PutBucket(c fiber.Ctx) error {
 	var req bucketapi.PutBucketRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 
 	req.Bucket = strings.TrimSpace(req.Bucket)
 	req.Organization = strings.TrimSpace(req.Organization)
 	req.ProjectId = strings.TrimSpace(req.ProjectId)
 	if req.Bucket == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "bucket is required")
+		return Reject(c, fiber.StatusBadRequest, "bucket is required")
 	}
 	if req.Organization == "" && req.ProjectId != "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "organization is required when project_id is set")
+		return Reject(c, fiber.StatusBadRequest, "organization is required when project_id is set")
 	}
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := s.bucketService.Put(c.Context(), domainbuckets.PutRequest{
 		Bucket:       req.Bucket,
@@ -88,7 +87,7 @@ func (s *bucketServer) PutBucket(c fiber.Ctx) error {
 		Endpoint:     req.Endpoint,
 		Path:         req.Path,
 	}); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
@@ -96,13 +95,13 @@ func (s *bucketServer) PutBucket(c fiber.Ctx) error {
 func (s *bucketServer) DeleteBucket(c fiber.Ctx, bucket string) error {
 	credentialID := strings.TrimSpace(bucket)
 	if credentialID == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "bucket name is required")
+		return Reject(c, fiber.StatusBadRequest, "bucket name is required")
 	}
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := s.bucketService.DeleteBucket(c.Context(), credentialID); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -110,19 +109,19 @@ func (s *bucketServer) DeleteBucket(c fiber.Ctx, bucket string) error {
 func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
+		return Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
 	var req bucketapi.AddBucketScopeRequest
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
-		return middleware.Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 	req.Organization = strings.TrimSpace(req.Organization)
 	req.ProjectId = strings.TrimSpace(req.ProjectId)
 	if req.Organization == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "organization is required")
+		return Reject(c, fiber.StatusBadRequest, "organization is required")
 	}
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 
 	path := ""
@@ -130,7 +129,7 @@ func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 		path = strings.TrimSpace(*req.Path)
 	}
 	if err := s.bucketService.CreateScopeForBucket(c.Context(), routeCredentialID, req.Organization, req.ProjectId, path); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
@@ -138,7 +137,7 @@ func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
 	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
+		return Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
 	organization := strings.TrimSpace(params.Organization)
 	scopePath := strings.TrimSpace(params.Path)
@@ -147,29 +146,29 @@ func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, para
 		projectID = strings.TrimSpace(*params.ProjectId)
 	}
 	if organization == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "organization and path are required")
+		return Reject(c, fiber.StatusBadRequest, "organization and path are required")
 	}
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	if err := s.bucketService.DeleteScope(c.Context(), routeCredentialID, organization, projectID, scopePath); err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
-		return middleware.HandleError(c, errorapi.ErrAuthenticationRequired)
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
 	routeCredentialID := strings.TrimSpace(bucket)
 	if routeCredentialID == "" {
-		return middleware.Reject(c, fiber.StatusBadRequest, "credential id is required")
+		return Reject(c, fiber.StatusBadRequest, "credential id is required")
 	}
 
 	scopes, err := s.bucketService.ListVisibleScopes(c.Context(), routeCredentialID)
 	if err != nil {
-		return middleware.HandleError(c, err)
+		return HandleError(c, err)
 	}
 
 	result := make([]bucketapi.BucketScopeResponse, 0, len(scopes))

@@ -5,7 +5,6 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
@@ -15,18 +14,18 @@ import (
 )
 
 type serverRuntime struct {
-	app                 *fiber.App
-	cfg                 *config.Config
-	serviceInfo         drs.Service
-	objectService       *objects.Service
-	transferService     *transfers.Service
-	lfsService          *transferlfs.Service
-	usageService        *usage.Service
-	usageIngest         usage.Ingestor
-	projectStorage      *projectstorage.Service
-	bucketService       *buckets.Service
-	authzMiddleware     *middleware.AuthzMiddleware
-	requestIDMiddleware *middleware.RequestIDMiddleware
+	app              *fiber.App
+	cfg              *config.Config
+	serviceInfo      drs.Service
+	objectService    *objects.Service
+	transferService  *transfers.Service
+	lfsService       *transferlfs.Service
+	usageService     *usage.Service
+	usageIngest      usage.Ingestor
+	projectStorage   *projectstorage.Service
+	bucketService    *buckets.Service
+	authzHandler     fiber.Handler
+	requestIDHandler fiber.Handler
 }
 
 func registerServerRoutes(rt *serverRuntime) {
@@ -39,8 +38,8 @@ func registerServerRoutes(rt *serverRuntime) {
 		UsageReports:   rt.usageService.Reports(),
 		Buckets:        rt.bucketService,
 		ProjectStorage: rt.projectStorage,
-		Authorization:  rt.authzMiddleware,
-		RequestIDs:     rt.requestIDMiddleware,
+		Authorization:  rt.authzHandler,
+		RequestIDs:     rt.requestIDHandler,
 	}, httpapi.Options{
 		Docs:     rt.cfg.Routes.Docs,
 		GA4GH:    rt.cfg.Routes.Ga4gh,
