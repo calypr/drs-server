@@ -322,6 +322,15 @@ type lfsTestScopeReader struct {
 	scopes map[string]buckets.Scope
 }
 
+func defaultLFSOptions() LFSOptions {
+	return LFSOptions{
+		MaxBatchObjects:              1000,
+		MaxBatchBodyBytes:            10 * 1024 * 1024,
+		RequestLimitPerMinute:        1200,
+		BandwidthLimitBytesPerMinute: 0,
+	}
+}
+
 func (r lfsTestScopeReader) LookupBucketScope(_ context.Context, organization, project string) (buckets.Scope, bool, error) {
 	scope, ok := r.scopes[organization+"|"+project]
 	return scope, ok, nil

@@ -206,16 +206,6 @@ type LFSOptions struct {
 	BandwidthLimitBytesPerMinute int64
 }
 
-// defaultLFSOptions returns the historical Git LFS limits.
-func defaultLFSOptions() LFSOptions {
-	return LFSOptions{
-		MaxBatchObjects:              1000,
-		MaxBatchBodyBytes:            10 * 1024 * 1024,
-		RequestLimitPerMinute:        1200,
-		BandwidthLimitBytesPerMinute: 0,
-	}
-}
-
 func registerLFSRoutes(router fiber.Router, service *transferlfs.Service, opts LFSOptions) {
 	server := newLFSServer(service, opts)
 	strict := lfsapi.NewStrictHandler(server, []lfsapi.StrictMiddlewareFunc{
