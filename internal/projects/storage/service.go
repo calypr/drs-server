@@ -432,3 +432,14 @@ func (s *Service) visibleBuckets(ctx context.Context) (map[string]buckets.Visibl
 	cacheVisible(ctx, visible, err)
 	return cloneVisible(visible), err
 }
+
+func visibleBucketContains(visible map[string]buckets.VisibleBucket, bucket, credentialID string) bool {
+	for key, entry := range visible {
+		if strings.EqualFold(strings.TrimSpace(entry.Credential.Bucket), bucket) ||
+			strings.EqualFold(strings.TrimSpace(key), credentialID) ||
+			strings.EqualFold(strings.TrimSpace(entry.Credential.CredentialID), credentialID) {
+			return true
+		}
+	}
+	return false
+}

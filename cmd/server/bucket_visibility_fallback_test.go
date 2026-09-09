@@ -92,13 +92,13 @@ func TestBucketVisibilityFallbackScansAndProjectsRows(t *testing.T) {
 		t.Fatalf("fallback returned error: %v", err)
 	}
 	want := []buckets.VisibilityRow{
-		{AccessURL: "s3://bucket-a/key", AccessType: "s3", Resource: "/organization/org/project/project"},
-		{AccessURL: "s3://bucket-a/key", AccessType: "s3", Resource: "/organization/org/project/other"},
-		{AccessURL: "s3://bucket-a/key", AccessType: "s3", Resource: "/organization/org/project/project"},
-		{AccessURL: "s3://bucket-a/key", AccessType: "s3", Resource: "/organization/org/project/other"},
-		{AccessURL: "https://example.test/object", AccessType: "https", Resource: "/organization/org/project/project"},
-		{AccessURL: "https://example.test/object", AccessType: "https", Resource: "/organization/org/project/other"},
-		{AccessURL: "/data/b", AccessType: "file", Resource: "/organization/org/project/second"},
+		{AccessURL: "s3://bucket-a/key", Resource: "/organization/org/project/project"},
+		{AccessURL: "s3://bucket-a/key", Resource: "/organization/org/project/other"},
+		{AccessURL: "s3://bucket-a/key", Resource: "/organization/org/project/project"},
+		{AccessURL: "s3://bucket-a/key", Resource: "/organization/org/project/other"},
+		{AccessURL: "https://example.test/object", Resource: "/organization/org/project/project"},
+		{AccessURL: "https://example.test/object", Resource: "/organization/org/project/other"},
+		{AccessURL: "/data/b", Resource: "/organization/org/project/second"},
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("rows = %#v, want %#v", rows, want)

@@ -54,6 +54,29 @@ func (f *fakeVisibility) ListVisibleBuckets(context.Context) (map[string]buckets
 	return f.values, nil
 }
 
+func TestVisibleBucketContainsMatchesPhysicalAndCredentialAliases(t *testing.T) {
+	visible := map[string]buckets.VisibleBucket{
+		"credential-id": {Credential: buckets.Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+	}
+	for _, tc := range []struct {
+		name         string
+		bucket       string
+		credentialID string
+		want         bool
+	}{
+		{name: "physical bucket", bucket: "PHYSICAL-BUCKET", want: true},
+		{name: "map credential key", credentialID: "CREDENTIAL-ID", want: true},
+		{name: "credential field", credentialID: "credential-id", want: true},
+		{name: "unknown", bucket: "other", credentialID: "other", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := visibleBucketContains(visible, tc.bucket, tc.credentialID); got != tc.want {
+				t.Fatalf("visibleBucketContains()=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 type fakeInventory struct {
 	items    []storage.ObjectMetadata
 	result   storage.InventoryResult

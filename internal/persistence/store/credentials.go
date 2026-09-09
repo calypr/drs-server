@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/requestid"
 )
@@ -33,24 +35,24 @@ func (db *Store) GetS3Credential(ctx context.Context, credentialID string) (*buc
 	if err == sql.ErrNoRows {
 		fallback, fallbackErr := db.getS3CredentialByPhysicalBucket(ctx, credentialID)
 		if fallbackErr == nil {
-			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, nil)
+			auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, nil)
 			return fallback, nil
 		}
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, fallbackErr)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, fallbackErr)
 		return nil, fallbackErr
 	}
 	if err != nil {
 		wrapped := fmt.Errorf("failed to fetch credential: %w", err)
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
 		return nil, wrapped
 	}
 	parsed, err := db.cipher.Parse(ctx, &c)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to decrypt credential: %w", err)
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, wrapped)
 		return nil, wrapped
 	}
-	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, nil)
+	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "read", credentialID, nil)
 	return parsed, nil
 }
 
@@ -99,11 +101,11 @@ func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential)
 	stored, err := db.cipher.Prepare(ctx, cred)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to prepare credential for storage: %w", err)
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
 		return wrapped
 	}
 	if err := db.ensureUniquePhysicalBucket(ctx, stored.CredentialID, stored.Bucket); err != nil {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
 		return err
 	}
 
@@ -122,10 +124,10 @@ func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential)
 	)
 	if err != nil {
 		wrapped := fmt.Errorf("failed to save credential: %w", err)
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, wrapped)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, wrapped)
 		return wrapped
 	}
-	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, nil)
+	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, nil)
 	return nil
 }
 
@@ -155,28 +157,28 @@ func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, credentialID, b
 func (db *Store) DeleteS3Credential(ctx context.Context, credentialID string) error {
 	resolvedID, err := db.resolveCredentialID(ctx, credentialID)
 	if err != nil {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
 	}
 	if _, err := db.execContext(ctx, "DELETE FROM bucket_scope WHERE credential_id = ?", resolvedID); err != nil {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return fmt.Errorf("failed to delete bucket scopes for %s: %w", credentialID, err)
 	}
 	res, err := db.execContext(ctx, "DELETE FROM s3_credential WHERE credential_id = ?", resolvedID)
 	if err != nil {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
 	}
 	rows, err := res.RowsAffected()
 	if err != nil {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, err)
 		return err
 	}
 	if rows == 0 {
-		buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, errorapi.ErrStorageCredentialMissing)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, errorapi.ErrStorageCredentialMissing)
 		return errorapi.ErrStorageCredentialMissing
 	}
-	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, nil)
+	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "delete", credentialID, nil)
 	return nil
 }
 
@@ -211,19 +213,31 @@ func (db *Store) ListS3Credentials(ctx context.Context) ([]buckets.Credential, e
 	for rows.Next() {
 		var c buckets.Credential
 		if err := rows.Scan(&c.CredentialID, &c.Bucket, &c.Provider, &c.Region, &c.AccessKey, &c.SecretKey, &c.Endpoint); err != nil {
-			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", err)
+			auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", err)
 			return nil, err
 		}
 		parsed, err := db.cipher.Parse(ctx, &c)
 		if err != nil {
 			wrapped := fmt.Errorf("failed to decrypt credential for bucket %s: %w", c.Bucket, err)
-			buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", c.Bucket, wrapped)
+			auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", c.Bucket, wrapped)
 			return nil, wrapped
 		}
 		creds = append(creds, *parsed)
 	}
-	buckets.AuditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", nil)
+	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", nil)
 	return creds, nil
+}
+
+func auditCredentialAccess(ctx context.Context, requestID, action, bucket string, err error) {
+	mode := "local"
+	if access.FromContext(ctx).Mode == "gen3" {
+		mode = "gen3"
+	}
+	if err != nil {
+		slog.Warn("s3 credential audit", "action", action, "bucket", bucket, "request_id", requestID, "mode", mode, "result", "error", "err", err)
+		return
+	}
+	slog.Info("s3 credential audit", "action", action, "bucket", bucket, "request_id", requestID, "mode", mode, "result", "success")
 }
 
 func (db *Store) CreateBucketScope(ctx context.Context, scope *buckets.Scope) error {

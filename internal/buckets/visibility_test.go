@@ -305,29 +305,6 @@ func TestListVisibleBucketsSortsProgramsWithinEachCredential(t *testing.T) {
 	}
 }
 
-func TestVisibleToCallerMatchesPhysicalAndCredentialAliases(t *testing.T) {
-	visible := map[string]VisibleBucket{
-		"credential-id": {Credential: Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}},
-	}
-	for _, tc := range []struct {
-		name         string
-		bucket       string
-		credentialID string
-		want         bool
-	}{
-		{name: "physical bucket", bucket: "PHYSICAL-BUCKET", want: true},
-		{name: "map credential key", credentialID: "CREDENTIAL-ID", want: true},
-		{name: "credential field", credentialID: "credential-id", want: true},
-		{name: "unknown", bucket: "other", credentialID: "other", want: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := VisibleToCaller(visible, tc.bucket, tc.credentialID); got != tc.want {
-				t.Fatalf("VisibleToCaller()=%v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestVisibleScopeOperationsPreserveTheirDistinctReadPolicies(t *testing.T) {
 	allowed := mustResource(t, "Org", "Project")
 	root := mustResource(t, "Org", "")

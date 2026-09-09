@@ -114,19 +114,6 @@ func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows
 	return byCredential, nil
 }
 
-// VisibleToCaller reports whether a caller's bucket or credential aliases are
-// represented in a visible bucket map.
-func VisibleToCaller(visible map[string]VisibleBucket, bucket, credentialID string) bool {
-	for key, entry := range visible {
-		if strings.EqualFold(strings.TrimSpace(entry.Credential.Bucket), bucket) ||
-			strings.EqualFold(strings.TrimSpace(key), credentialID) ||
-			strings.EqualFold(strings.TrimSpace(entry.Credential.CredentialID), credentialID) {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *Service) credentialIDForVisibilityRow(row VisibilityRow, creds []Credential) (string, bool) {
 	bucket, ok := bucketForVisibilityRow(row, creds)
 	if !ok {

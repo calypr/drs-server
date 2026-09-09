@@ -92,9 +92,8 @@ func newBucketVisibilityFallback(store objects.ObjectStore) buckets.VisibilityFa
 						continue
 					}
 					rows = append(rows, buckets.VisibilityRow{
-						AccessURL:  accessURL,
-						AccessType: strings.TrimSpace(method.Type),
-						Resource:   resource,
+						AccessURL: accessURL,
+						Resource:  resource,
 					})
 				}
 			}

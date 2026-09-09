@@ -2,7 +2,10 @@ package access
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 func testSessionContext(mode string, header bool, enforced bool, resources []string, privileges map[string]map[string]bool) context.Context {
@@ -204,5 +207,94 @@ func TestAuthorizationAnyAllBehavior(t *testing.T) {
 	}
 	if !HasObjectMethodAccess(ctx, "read", []string{first, second}) {
 		t.Fatal("expected object access to allow any matching resource")
+	}
+}
+
+func TestAuthorizeScopeWrite(t *testing.T) {
+	const projectResource = "/organization/org/project/project"
+	const organizationResource = "/organization/org"
+
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		org     string
+		project string
+		wantErr bool
+	}{
+		{
+			name:    "local enforcement off allows project control",
+			ctx:     testSessionContext("local", false, false, nil, nil),
+			org:     "org",
+			project: "project",
+		},
+		{
+			name:    "gen3 missing header is denied",
+			ctx:     testSessionContext("gen3", false, true, nil, map[string]map[string]bool{projectResource: {"create": true}}),
+			org:     "org",
+			project: "project",
+			wantErr: true,
+		},
+		{
+			name:    "project method allows write",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{projectResource: {"create": true}}),
+			org:     "org",
+			project: "project",
+		},
+		{
+			name:    "wildcard method allows write",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{projectResource: {"*": true}}),
+			org:     "org",
+			project: "project",
+		},
+		{
+			name:    "arborist create descendant allows project",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{organizationResource: {"arborist:create-descendant": true}}),
+			org:     "org",
+			project: "project",
+		},
+		{
+			name:    "arborist manage owners allows project",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{organizationResource: {"arborist:manage-owners": true}}),
+			org:     "org",
+			project: "project",
+		},
+		{
+			name:    "unrelated resource is denied",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{"/organization/other/project/project": {"create": true}}),
+			org:     "org",
+			project: "project",
+			wantErr: true,
+		},
+		{
+			name:    "enforced empty organization is denied",
+			ctx:     testSessionContext("gen3", true, true, nil, nil),
+			wantErr: true,
+		},
+		{
+			name:    "top-level program creator alone is denied",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{"/programs": {"arborist:create-descendant": true}}),
+			org:     "brand_new_org",
+			project: "new-project",
+			wantErr: true,
+		},
+		{
+			name:    "requestor create alone is denied",
+			ctx:     testSessionContext("gen3", true, true, nil, map[string]map[string]bool{organizationResource: {"requestor:create": true}}),
+			org:     "org",
+			project: "new-project",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := AuthorizeScopeWrite(tt.ctx, tt.org, tt.project, "create", "update")
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("AuthorizeScopeWrite() error = %v, wantErr=%t", err, tt.wantErr)
+			}
+			if tt.wantErr && !errors.Is(err, errorapi.ErrAccessDenied) {
+				t.Fatalf("AuthorizeScopeWrite() error = %v, want unauthorized", err)
+			}
+		})
 	}
 }

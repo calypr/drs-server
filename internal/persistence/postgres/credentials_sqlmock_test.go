@@ -1,17 +1,22 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/store"
 	"github.com/calypr/syfon/internal/persistence/testsuite"
+	"github.com/calypr/syfon/internal/requestid"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -54,6 +59,52 @@ func TestGetS3Credential(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestGetS3CredentialAuditPreservesFields(t *testing.T) {
+	orig := slog.Default()
+	var buf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(orig) })
+
+	pg, mock, rawDB := newMockPostgresDB(t)
+	defer rawDB.Close()
+	rows := sqlmock.NewRows([]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}).
+		AddRow("b1", "bucket-a", "s3", "us-east-1", "ak", "sk", "")
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE credential_id = $1`)).
+		WithArgs("b1").
+		WillReturnRows(rows)
+	ctx := requestid.WithRequestID(context.Background(), "req-abc")
+	if _, err := pg.GetS3Credential(ctx, "b1"); err != nil {
+		t.Fatalf("GetS3Credential success returned error: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE credential_id = $1`)).
+		WithArgs("missing").
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(regexp.QuoteMeta(`
+		SELECT credential_id, bucket, provider, region, access_key, secret_key, endpoint
+		FROM s3_credential WHERE bucket = $1`)).
+		WithArgs("missing").
+		WillReturnRows(sqlmock.NewRows([]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}))
+	session := access.NewSession("gen3")
+	if _, err := pg.GetS3Credential(access.WithSession(ctx, session), "missing"); !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		t.Fatalf("GetS3Credential missing error = %v, want credential missing", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet SQL expectations: %v", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{"s3 credential audit", "request_id=req-abc", "result=success", "result=error", "mode=gen3"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in audit output %q", want, out)
+		}
 	}
 }
 

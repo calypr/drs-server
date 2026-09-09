@@ -129,7 +129,7 @@ func (s *Service) validationTarget(ctx context.Context, request InspectRequest, 
 		base.ValidationStatus = string(validationStatusForError(request))
 		return base, nil, false
 	}
-	if !buckets.VisibleToCaller(visible, bucket, credential.CredentialID) {
+	if !visibleBucketContains(visible, bucket, credential.CredentialID) {
 		err := &Error{Kind: ErrorPermissionDenied, Message: fmt.Sprintf("bucket %q is not visible to the caller", bucket)}
 		status, kind := classifyError(err)
 		base.Status, base.ErrorKind = string(status), kind

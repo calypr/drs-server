@@ -25,9 +25,8 @@ type Scope struct {
 // VisibilityRow is the minimum storage projection needed to build bucket
 // visibility responses without hydrating full objects.
 type VisibilityRow struct {
-	AccessURL  string
-	AccessType string
-	Resource   string
+	AccessURL string
+	Resource  string
 }
 
 // VisibleBucket is the credential and resource projection exposed to callers

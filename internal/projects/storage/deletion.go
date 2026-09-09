@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -66,7 +66,7 @@ func (s *Service) DeleteProjectObjects(ctx context.Context, organization, projec
 // entering the trusted cleanup sequence.
 func (s *Service) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (internalapi.ProjectCleanupResponse, error) {
 	result := internalapi.ProjectCleanupResponse{Organization: strings.TrimSpace(organization), ProjectId: strings.TrimSpace(project)}
-	if err := buckets.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectId, "delete", "update"); err != nil {
+	if err := access.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectId, "delete", "update"); err != nil {
 		return result, err
 	}
 	return s.deleteProjectData(ctx, result.Organization, result.ProjectId)

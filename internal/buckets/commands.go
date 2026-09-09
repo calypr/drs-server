@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -47,7 +49,7 @@ func (s *Service) Put(ctx context.Context, request PutRequest) error {
 	secretKey := stringValue(request.SecretKey)
 	endpoint := stringValue(request.Endpoint)
 
-	if err := AuthorizeScopeWrite(ctx, organization, projectID, "create", "update"); err != nil {
+	if err := access.AuthorizeScopeWrite(ctx, organization, projectID, "create", "update"); err != nil {
 		return err
 	}
 	prefix, err := address.NormalizeStoragePath(stringValue(request.Path), bucket)
@@ -139,10 +141,16 @@ func (s *Service) DeleteBucket(ctx context.Context, bucket string) error {
 	if err != nil {
 		return err
 	}
-	if !BucketsAllowedByNames(ctx, scopes, bucket, "delete", "update") {
-		return errorapi.ErrAccessDenied
+	for _, scope := range scopes {
+		if scope.Bucket != bucket {
+			continue
+		}
+		resource, resourceErr := clientaccess.ResourcePath(scope.Organization, scope.ProjectID)
+		if resourceErr == nil && resource != "" && access.HasAnyMethodAccess(ctx, []string{resource}, "delete", "update") {
+			return s.DeleteS3Credential(ctx, bucket)
+		}
 	}
-	return s.DeleteS3Credential(ctx, bucket)
+	return errorapi.ErrAccessDenied
 }
 
 // CreateScopeForBucket resolves a physical or credential alias, normalizes its
@@ -159,7 +167,7 @@ func (s *Service) CreateScopeForBucket(ctx context.Context, credentialID, organi
 	if credential == nil {
 		return errorapi.ErrStorageCredentialMissing
 	}
-	if err := AuthorizeScopeWrite(ctx, organization, projectID, "create", "update"); err != nil {
+	if err := access.AuthorizeScopeWrite(ctx, organization, projectID, "create", "update"); err != nil {
 		return err
 	}
 	prefix, err := address.NormalizeStoragePath(strings.TrimSpace(path), credential.Bucket)
@@ -183,7 +191,7 @@ func (s *Service) DeleteScope(ctx context.Context, routeCredentialID, organizati
 	organization = strings.TrimSpace(organization)
 	projectID = strings.TrimSpace(projectID)
 	pathPrefix = strings.TrimSpace(pathPrefix)
-	if err := AuthorizeScopeWrite(ctx, organization, projectID, "delete", "update"); err != nil {
+	if err := access.AuthorizeScopeWrite(ctx, organization, projectID, "delete", "update"); err != nil {
 		return err
 	}
 	if pathPrefix != "" {
@@ -259,7 +267,8 @@ func (s *Service) ListVisibleScopes(ctx context.Context, routeCredentialID strin
 			!strings.EqualFold(strings.TrimSpace(scope.CredentialID), strings.TrimSpace(routeCredentialID)) {
 			continue
 		}
-		if !ScopeAllowed(ctx, scope, "read") {
+		resource, resourceErr := clientaccess.ResourcePath(scope.Organization, scope.ProjectID)
+		if resourceErr != nil || resource == "" || !access.HasAnyMethodAccess(ctx, []string{resource}, "read") {
 			continue
 		}
 		visible = append(visible, VisibleScope{
@@ -290,7 +299,8 @@ func (s *Service) ListVisibleProjectScopes(ctx context.Context, organization, pr
 		if scopeProject != "" && !strings.EqualFold(scopeProject, project) {
 			continue
 		}
-		if !ScopeAllowed(ctx, scope, "read") {
+		resource, resourceErr := clientaccess.ResourcePath(scope.Organization, scope.ProjectID)
+		if resourceErr != nil || resource == "" || !access.HasAnyMethodAccess(ctx, []string{resource}, "read") {
 			continue
 		}
 		visible = append(visible, VisibleProjectScope{

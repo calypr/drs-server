@@ -10,7 +10,6 @@ import (
 	"time"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -191,7 +190,7 @@ func (s *Service) inspectRaw(ctx context.Context, request InspectRequest) (*obje
 	if err != nil {
 		return nil, err
 	}
-	if !buckets.VisibleToCaller(visible, bucket, credential.CredentialID) {
+	if !visibleBucketContains(visible, bucket, credential.CredentialID) {
 		return nil, &Error{Kind: ErrorPermissionDenied, Message: fmt.Sprintf("bucket %q is not visible to the caller", bucket)}
 	}
 	if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {

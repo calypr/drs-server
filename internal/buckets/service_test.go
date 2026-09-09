@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 )
 
 func TestNewServiceRequiresTheCompletePolicyGraph(t *testing.T) {
@@ -210,5 +211,38 @@ func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *test
 	}
 	if credentials.saveCalls != 0 {
 		t.Fatalf("invalid S3 credential saved %d times", credentials.saveCalls)
+	}
+}
+
+func TestDeleteBucketAuthorizesMatchingPhysicalScope(t *testing.T) {
+	service, credentials, _ := newFakeService(
+		[]Credential{{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+		[]Scope{{Organization: "org", ProjectID: "project", Bucket: "physical-bucket"}},
+		&fakeVisibilityQuery{}, nil, nil,
+	)
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{
+		"/organization/org/project/project": {"delete": true},
+	}, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	if err := service.DeleteBucket(ctx, "physical-bucket"); err != nil {
+		t.Fatalf("DeleteBucket() error = %v", err)
+	}
+	if credentials.deleteCalls != 1 || credentials.lastDeleted != "physical-bucket" {
+		t.Fatalf("delete calls=%d bucket=%q, want one physical-bucket deletion", credentials.deleteCalls, credentials.lastDeleted)
+	}
+
+	service, credentials, _ = newFakeService(
+		[]Credential{{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+		[]Scope{{Organization: "org", ProjectID: "project", Bucket: "physical-bucket"}},
+		&fakeVisibilityQuery{}, nil, nil,
+	)
+	if err := service.DeleteBucket(ctx, "other-bucket"); !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("DeleteBucket() error = %v, want access denied", err)
+	}
+	if credentials.deleteCalls != 0 {
+		t.Fatalf("unauthorized delete called credential store %d times", credentials.deleteCalls)
 	}
 }

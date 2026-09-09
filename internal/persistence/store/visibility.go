@@ -49,7 +49,10 @@ func (db *Store) ListBucketVisibilityRows(ctx context.Context, resources []strin
 	out := make([]buckets.VisibilityRow, 0)
 	for rows.Next() {
 		var row buckets.VisibilityRow
-		if err := rows.Scan(&row.AccessURL, &row.AccessType, &row.Resource); err != nil {
+		// Keep scanning am.type because it remains part of SELECT DISTINCT;
+		// visibility consumers only need the URL/resource projection.
+		var accessType string
+		if err := rows.Scan(&row.AccessURL, &accessType, &row.Resource); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

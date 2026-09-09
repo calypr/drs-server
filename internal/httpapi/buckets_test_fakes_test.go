@@ -259,9 +259,8 @@ func newBucketVisibilityFallback(store objects.ObjectStore) domainbuckets.Visibi
 						continue
 					}
 					rows = append(rows, domainbuckets.VisibilityRow{
-						AccessURL:  accessURL,
-						AccessType: strings.TrimSpace(method.Type),
-						Resource:   resource,
+						AccessURL: accessURL,
+						Resource:  resource,
 					})
 				}
 			}

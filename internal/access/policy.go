@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
@@ -173,6 +174,34 @@ func HasAnyServiceMethodAccess(ctx context.Context, resources []string, service 
 		}
 	}
 	return false
+}
+
+// AuthorizeScopeWrite checks the authorization policy for creating, updating,
+// or deleting a project-scoped resource. The caller remains responsible for
+// transport authentication, such as requiring a Gen3 authorization header.
+func AuthorizeScopeWrite(ctx context.Context, organization, project string, methods ...string) error {
+	if strings.TrimSpace(organization) == "" {
+		if !IsAuthzEnforced(ctx) {
+			return nil
+		}
+		return errorapi.ErrAccessDenied
+	}
+	res, err := clientaccess.ResourcePath(organization, project)
+	if err != nil {
+		return err
+	}
+	if res != "" && HasAnyMethodAccess(ctx, []string{res}, methods...) {
+		return nil
+	}
+
+	orgResource, err := clientaccess.ResourcePath(organization, "")
+	if err != nil {
+		return err
+	}
+	if orgResource != "" && HasAnyServiceMethodAccess(ctx, []string{orgResource}, "arborist", "create-descendant", "manage-owners") {
+		return nil
+	}
+	return errorapi.ErrAccessDenied
 }
 
 func normalizePolicyPrivileges(in map[string]map[string]bool) map[string]map[string]bool {
