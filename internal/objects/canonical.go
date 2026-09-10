@@ -31,7 +31,7 @@ func canonicalizeProjectScopedObjects(objects []Record, organization, project st
 			passthrough = append(passthrough, cloneObject(obj))
 			continue
 		}
-		grouped[key] = append(grouped[key], cloneObject(obj))
+		grouped[key] = append(grouped[key], obj)
 	}
 
 	keys := make([]string, 0, len(grouped))
@@ -64,26 +64,22 @@ func canonicalProjectChecksumKey(obj *Record, forcedResource string) (string, bo
 	}
 	resource := strings.TrimSpace(forcedResource)
 	if resource == "" {
-		resources := projectScopeResources(obj)
+		resources := AccessResources(obj)
+		projectScopes := make([]string, 0, len(resources))
+		for _, resource := range resources {
+			org, project, ok := clientaccess.ResourceScope(resource)
+			if !ok || strings.TrimSpace(org) == "" || strings.TrimSpace(project) == "" {
+				continue
+			}
+			projectScopes = append(projectScopes, resource)
+		}
+		resources = clientaccess.NormalizeAccessResources(projectScopes)
 		if len(resources) != 1 {
 			return "", false
 		}
 		resource = resources[0]
 	}
 	return resource + "|" + sha, true
-}
-
-func projectScopeResources(obj *Record) []string {
-	resources := AccessResources(obj)
-	out := make([]string, 0, len(resources))
-	for _, resource := range resources {
-		org, project, ok := clientaccess.ResourceScope(resource)
-		if !ok || strings.TrimSpace(org) == "" || strings.TrimSpace(project) == "" {
-			continue
-		}
-		out = append(out, resource)
-	}
-	return clientaccess.NormalizeAccessResources(out)
 }
 
 func canonicalizeContentObjects(objects []Record) []Record {
@@ -98,7 +94,7 @@ func canonicalizeContentObjects(objects []Record) []Record {
 			passthrough = append(passthrough, cloneObject(obj))
 			continue
 		}
-		grouped[sha] = append(grouped[sha], cloneObject(obj))
+		grouped[sha] = append(grouped[sha], obj)
 	}
 	out := make([]Record, 0, len(grouped)+len(passthrough))
 	for _, group := range grouped {
@@ -128,14 +124,16 @@ func collapseCanonicalGroup(group []Record) Record {
 	if len(group) == 0 {
 		return Record{}
 	}
-	canonical := cloneObject(group[0])
-	latest := cloneObject(group[0])
+	canonical := group[0]
+	latest := group[0]
 	for i := 1; i < len(group); i++ {
-		obj := cloneObject(group[i])
-		if canonicalObjectOlder(obj, canonical) {
+		obj := group[i]
+		created, canonicalCreated := obj.CreatedTime.UTC(), canonical.CreatedTime.UTC()
+		if created.Before(canonicalCreated) || created.Equal(canonicalCreated) && obj.Id < canonical.Id {
 			canonical = obj
 		}
-		if canonicalObjectNewer(obj, latest) {
+		when, latestWhen := canonicalObjectSortTime(obj), canonicalObjectSortTime(latest)
+		if when.After(latestWhen) || when.Equal(latestWhen) && obj.Id > latest.Id {
 			latest = obj
 		}
 	}
@@ -143,8 +141,7 @@ func collapseCanonicalGroup(group []Record) Record {
 	merged := cloneObject(canonical)
 	merged.Name = latest.Name
 	merged.Size = pickLatestNonZeroSize(group, canonical.Size)
-	merged.Description = pickLatestStringPtr(group, func(obj Record) *string { return obj.Description }, canonical.Description)
-	merged.Version = pickLatestStringPtr(group, func(obj Record) *string { return obj.Version }, canonical.Version)
+	merged.Description, merged.Version = pickLatestStrings(group, canonical.Description, canonical.Version)
 	updated := canonicalObjectSortTime(latest)
 	merged.UpdatedTime = &updated
 	merged.Checksums = mergeChecksums(group)
@@ -171,24 +168,6 @@ func collapseCanonicalGroup(group []Record) Record {
 	}, group)
 	merged.SelfUri = "drs://" + string(merged.Id)
 	return merged
-}
-
-func canonicalObjectOlder(a, b Record) bool {
-	at := a.CreatedTime.UTC()
-	bt := b.CreatedTime.UTC()
-	if !at.Equal(bt) {
-		return at.Before(bt)
-	}
-	return a.Id < b.Id
-}
-
-func canonicalObjectNewer(a, b Record) bool {
-	at := canonicalObjectSortTime(a)
-	bt := canonicalObjectSortTime(b)
-	if !at.Equal(bt) {
-		return at.After(bt)
-	}
-	return a.Id > b.Id
 }
 
 func canonicalObjectSortTime(obj Record) time.Time {
@@ -339,24 +318,22 @@ func pickLatestNonZeroSize(group []Record, fallback int64) int64 {
 	return best
 }
 
-func pickLatestStringPtr(group []Record, getter func(Record) *string, fallback *string) *string {
-	best := fallback
-	var bestTime time.Time
-	bestID := ""
+func pickLatestStrings(group []Record, description, version *string) (*string, *string) {
+	var descriptionTime, versionTime time.Time
+	descriptionID, versionID := "", ""
 	for _, obj := range group {
-		value := getter(obj)
-		if value == nil || strings.TrimSpace(*value) == "" {
-			continue
-		}
 		when := canonicalObjectSortTime(obj)
-		if best == nil || when.After(bestTime) || when.Equal(bestTime) && string(obj.Id) > bestID {
+		id := string(obj.Id)
+		if value := obj.Description; value != nil && strings.TrimSpace(*value) != "" && (description == nil || when.After(descriptionTime) || when.Equal(descriptionTime) && id > descriptionID) {
 			trimmed := strings.TrimSpace(*value)
-			best = &trimmed
-			bestTime = when
-			bestID = string(obj.Id)
+			description, descriptionTime, descriptionID = &trimmed, when, id
+		}
+		if value := obj.Version; value != nil && strings.TrimSpace(*value) != "" && (version == nil || when.After(versionTime) || when.Equal(versionTime) && id > versionID) {
+			trimmed := strings.TrimSpace(*value)
+			version, versionTime, versionID = &trimmed, when, id
 		}
 	}
-	return best
+	return description, version
 }
 
 func mergeStringPointerValues(getter func(Record) []string, group []Record) *[]string {
@@ -401,7 +378,7 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 		if !ok {
 			continue
 		}
-		grouped[key] = append(grouped[key], cloneObject(obj))
+		grouped[key] = append(grouped[key], obj)
 	}
 
 	merged := make([]Record, 0, len(grouped))
