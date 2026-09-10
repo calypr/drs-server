@@ -3,7 +3,6 @@ package buckets
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 )
@@ -215,23 +214,6 @@ func (r *recordingInvalidator) snapshot() []string {
 	return append([]string(nil), r.aliases...)
 }
 
-type manualClock struct {
-	mu       sync.Mutex
-	nowValue int64
-}
-
-func (c *manualClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return time.Unix(0, c.nowValue)
-}
-
-func (c *manualClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	c.nowValue += d.Nanoseconds()
-	c.mu.Unlock()
-}
-
 func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
 	credentialStore := &fakeCredentialStore{credentials: append([]Credential(nil), creds...)}
 	scopeStore := &fakeScopeStore{scopes: append([]Scope(nil), scopes...)}
@@ -240,6 +222,6 @@ func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQue
 		CredentialAdmin: credentialStore,
 		Scopes:          scopeStore,
 		Visibility:      visibility,
-	}, invalidator, time.Minute, time.Now)
+	}, invalidator)
 	return service, credentialStore, scopeStore
 }

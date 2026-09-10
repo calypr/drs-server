@@ -9,10 +9,10 @@ import (
 )
 
 func TestResolveStorageScopeComposesOrganizationAndProjectPrefixes(t *testing.T) {
-	service, _, _ := newClockedService(&manualClock{}, []Scope{
+	service, _, _ := newFakeService([]Credential{{CredentialID: "credential", Bucket: "bucket", Provider: "s3"}}, []Scope{
 		{Organization: "org", Bucket: "bucket", PathPrefix: "prefix"},
 		{Organization: "org", ProjectID: "project", Bucket: "bucket", PathPrefix: "project"},
-	}, []Credential{{CredentialID: "credential", Bucket: "bucket", Provider: "s3"}}, nil)
+	}, &fakeVisibilityQuery{}, nil)
 
 	got, err := service.ResolveStorageScope(context.Background(), " org ", " project ")
 	if err != nil {
@@ -37,14 +37,14 @@ func TestResolveStorageScopeComposesOrganizationAndProjectPrefixes(t *testing.T)
 }
 
 func TestResolveStorageScopeClassifiesMissingScopeAndCredential(t *testing.T) {
-	service, _, _ := newClockedService(&manualClock{}, nil, nil, nil)
+	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
 	_, err := service.ResolveStorageScope(context.Background(), "org", "project")
 	var resolutionErr *StorageScopeError
 	if !errors.As(err, &resolutionErr) || resolutionErr.Kind != StorageScopeNotFound || !errors.Is(err, errorapi.ErrProjectScopeNotFound) {
 		t.Fatalf("missing scope error = %v, want classified scope error", err)
 	}
 
-	service, _, _ = newClockedService(&manualClock{}, []Scope{{Organization: "org", ProjectID: "project", Bucket: "bucket"}}, nil, nil)
+	service, _, _ = newFakeService(nil, []Scope{{Organization: "org", ProjectID: "project", Bucket: "bucket"}}, &fakeVisibilityQuery{}, nil)
 	_, err = service.ResolveStorageScope(context.Background(), "org", "project")
 	if !errors.As(err, &resolutionErr) || resolutionErr.Kind != StorageScopeCredentialMissing || !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
 		t.Fatalf("missing credential error = %v, want classified credential error", err)

@@ -39,7 +39,6 @@ func (s *Service) DeleteS3Credential(ctx context.Context, bucket string) error {
 	if err := s.credentialAdmin.DeleteS3Credential(ctx, bucket); err != nil {
 		return err
 	}
-	s.scopeCache.clear()
 	aliases := []string{requested}
 	if resolved != nil {
 		aliases = append(aliases, resolved.CredentialID, resolved.Bucket)

@@ -13,22 +13,17 @@ func (s *Service) ListBucketScopes(ctx context.Context) ([]Scope, error) {
 	return s.scopeStore.ListBucketScopes(ctx)
 }
 
-// CreateBucketScope persists a scope and only then seeds the positive cache.
+// CreateBucketScope persists a scope.
 func (s *Service) CreateBucketScope(ctx context.Context, scope *Scope) error {
-	if err := s.scopeStore.CreateBucketScope(ctx, scope); err != nil {
-		return err
-	}
-	s.scopeCache.set(normalizeScope(scope), true)
-	return nil
+	return s.scopeStore.CreateBucketScope(ctx, scope)
 }
 
-// DeleteBucketScope deletes the requested scope, clears cached scope answers,
-// and preserves the existing last-scope credential cleanup policy.
+// DeleteBucketScope deletes the requested scope and preserves the existing
+// last-scope credential cleanup policy.
 func (s *Service) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
 	if err := s.scopeStore.DeleteBucketScope(ctx, organization, projectID, credentialID, pathPrefix); err != nil {
 		return err
 	}
-	s.scopeCache.clear()
 
 	resolvedID := strings.TrimSpace(credentialID)
 	resolvedBucket := ""
@@ -50,29 +45,34 @@ func (s *Service) DeleteBucketScope(ctx context.Context, organization, projectID
 	return nil
 }
 
-// LookupBucketScope returns a normalized scope and caches both hits and
-// not-found misses. Other backend errors are never cached.
+// LookupBucketScope returns a normalized scope. Not-found errors are represented
+// as an absent scope so callers can compose organization and project scopes.
 func (s *Service) LookupBucketScope(ctx context.Context, organization, project string) (Scope, bool, error) {
-	if scope, found, cached := s.scopeCache.get(organization, project); cached {
-		return scope, found, nil
-	}
-
 	scope, err := s.scopeStore.GetBucketScope(ctx, organization, project)
 	if err != nil {
 		if errorapi.IsNotFoundError(err) {
-			s.scopeCache.set(Scope{Organization: organization, ProjectID: project}, false)
 			return Scope{}, false, nil
 		}
 		return Scope{}, false, err
 	}
 	if scope == nil {
-		s.scopeCache.set(Scope{Organization: organization, ProjectID: project}, false)
 		return Scope{}, false, nil
 	}
 
-	normalized := normalizeScope(scope)
-	s.scopeCache.set(normalized, true)
-	return normalized, true, nil
+	return normalizeScope(scope), true, nil
+}
+
+func normalizeScope(scope *Scope) Scope {
+	if scope == nil {
+		return Scope{}
+	}
+	return Scope{
+		Organization: strings.TrimSpace(scope.Organization),
+		ProjectID:    strings.TrimSpace(scope.ProjectID),
+		CredentialID: strings.TrimSpace(scope.CredentialID),
+		Bucket:       strings.TrimSpace(scope.Bucket),
+		PathPrefix:   strings.Trim(strings.TrimSpace(scope.PathPrefix), "/"),
+	}
 }
 
 func (s *Service) credentialIDForScope(scope Scope) string {
