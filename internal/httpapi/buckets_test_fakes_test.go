@@ -196,7 +196,7 @@ func newInternalDRSObjectManager(store *bucketTestStore) internalDRSTestFixture 
 		Credentials:     store,
 		CredentialAdmin: store,
 		Scopes:          store,
-		Fallback:        newBucketVisibilityFallback(store),
+		Visibility:      newBucketVisibilityQuery(store),
 	}, nil)
 	if err != nil {
 		panic(err)
@@ -213,12 +213,16 @@ var _ domainbuckets.CredentialAdmin = (*bucketTestStore)(nil)
 var _ domainbuckets.ScopeStore = (*bucketTestStore)(nil)
 var _ objects.ObjectStore = (*bucketTestStore)(nil)
 
-var (
-	errBucketVisibilityScopeQuery = errors.New("bucket visibility fallback requires an object scope query")
-)
+var errBucketVisibilityScopeQuery = errors.New("bucket visibility query requires an object store")
 
-func newBucketVisibilityFallback(store objects.ObjectStore) domainbuckets.VisibilityFallback {
-	return func(ctx context.Context) ([]domainbuckets.VisibilityRow, error) {
+type bucketVisibilityQueryFunc func(context.Context) ([]domainbuckets.VisibilityRow, error)
+
+func (f bucketVisibilityQueryFunc) ListBucketVisibilityRows(ctx context.Context, _ []string, _, _ bool) ([]domainbuckets.VisibilityRow, error) {
+	return f(ctx)
+}
+
+func newBucketVisibilityQuery(store objects.ObjectStore) domainbuckets.VisibilityQuery {
+	return bucketVisibilityQueryFunc(func(ctx context.Context) ([]domainbuckets.VisibilityRow, error) {
 		if store == nil {
 			return nil, errBucketVisibilityScopeQuery
 		}
@@ -266,7 +270,7 @@ func newBucketVisibilityFallback(store objects.ObjectStore) domainbuckets.Visibi
 			}
 		}
 		return rows, nil
-	}
+	})
 }
 
 func bucketVisibilityObjectReadable(ctx context.Context, object *objects.Record) bool {

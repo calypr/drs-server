@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
-	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/objects"
@@ -43,79 +42,6 @@ type serverBackend struct {
 	pending            transferlfs.PendingStore
 	usageIngest        usage.Ingestor
 	usageReports       usage.ReportStore
-}
-
-var (
-	errBucketVisibilityScopeQuery   = fmt.Errorf("bucket visibility fallback requires an object scope query")
-	errBucketVisibilityRecordReader = fmt.Errorf("bucket visibility fallback requires an object record reader")
-)
-
-func newBucketVisibilityFallback(store objects.ObjectStore) buckets.VisibilityFallback {
-	return func(ctx context.Context) ([]buckets.VisibilityRow, error) {
-		if store == nil {
-			return nil, errBucketVisibilityScopeQuery
-		}
-
-		ids, err := store.ListObjectIDsByScope(ctx, "", "")
-		if err != nil {
-			return nil, err
-		}
-		if len(ids) == 0 {
-			return []buckets.VisibilityRow{}, nil
-		}
-
-		records, err := store.GetBulkObjects(ctx, ids)
-		if err != nil {
-			return nil, err
-		}
-		rows := make([]buckets.VisibilityRow, 0)
-		for i := range records {
-			obj := &records[i]
-			if !serverBucketVisibilityObjectReadable(ctx, obj) {
-				continue
-			}
-			resources := objects.AccessResources(obj)
-			if len(resources) == 0 || obj.AccessMethods == nil {
-				continue
-			}
-			for _, method := range *obj.AccessMethods {
-				if method.AccessUrl == nil {
-					continue
-				}
-				accessURL := strings.TrimSpace(method.AccessUrl.Url)
-				if accessURL == "" {
-					continue
-				}
-				for _, resource := range resources {
-					resource = strings.TrimSpace(resource)
-					if resource == "" {
-						continue
-					}
-					rows = append(rows, buckets.VisibilityRow{
-						AccessURL: accessURL,
-						Resource:  resource,
-					})
-				}
-			}
-		}
-		return rows, nil
-	}
-}
-
-func serverBucketVisibilityObjectReadable(ctx context.Context, obj *objects.Record) bool {
-	if !access.IsAuthzEnforced(ctx) ||
-		access.HasMethodAccess(ctx, "read", []string{"/programs"}) ||
-		access.HasMethodAccess(ctx, "read", []string{"/data_file"}) {
-		return true
-	}
-	if obj != nil && obj.PublicRead {
-		return true
-	}
-	resources := objects.AccessResources(obj)
-	if obj != nil && obj.PublicReadPolicyKnown && len(resources) == 0 {
-		return false
-	}
-	return access.HasObjectMethodAccess(ctx, "read", resources)
 }
 
 func serverBackendForStore(database *store.Store) serverBackend {

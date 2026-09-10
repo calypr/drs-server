@@ -83,9 +83,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	if needsStorage {
 		invalidator = &storageInvalidator{}
 	}
-	bucketDependencies := backend.bucketDependencies
-	bucketDependencies.Fallback = newBucketVisibilityFallback(backend.objectStore)
-	bucketService, err := buckets.NewService(bucketDependencies, invalidator)
+	bucketService, err := buckets.NewService(backend.bucketDependencies, invalidator)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize bucket service: %w", err)
 	}

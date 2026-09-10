@@ -116,9 +116,9 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          scopes,
-		Fallback: func(context.Context) ([]buckets.VisibilityRow, error) {
+		Visibility: bucketVisibilityQueryFunc(func(context.Context) ([]buckets.VisibilityRow, error) {
 			return nil, nil
-		},
+		}),
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
@@ -170,9 +170,9 @@ func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testi
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          scopes,
-		Fallback: func(context.Context) ([]buckets.VisibilityRow, error) {
+		Visibility: bucketVisibilityQueryFunc(func(context.Context) ([]buckets.VisibilityRow, error) {
 			return nil, nil
-		},
+		}),
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)

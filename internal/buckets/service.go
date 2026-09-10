@@ -12,17 +12,14 @@ import (
 
 const defaultScopeCacheTTL = 30 * time.Second
 
-var errMissingVisibilitySource = fmt.Errorf("bucket service requires a visibility query or fallback")
+var errMissingVisibilitySource = fmt.Errorf("bucket service requires a visibility query")
 
-// Dependencies are the narrow repository and visibility ports used by Service.
-// Visibility is an optional persistence optimization; Fallback is the
-// composition-owned object scan used when that optimization is unavailable.
+// Dependencies are the repository and visibility ports required by Service.
 type Dependencies struct {
 	Credentials     CredentialReader
 	CredentialAdmin CredentialAdmin
 	Scopes          ScopeStore
 	Visibility      VisibilityQuery
-	Fallback        VisibilityFallback
 }
 
 type cacheInvalidator interface {
@@ -37,7 +34,6 @@ type Service struct {
 	credentialAdmin        CredentialAdmin
 	scopeStore             ScopeStore
 	visibility             VisibilityQuery
-	fallback               VisibilityFallback
 	scopeCache             *scopeCache
 	signerCacheInvalidator cacheInvalidator
 }
@@ -54,7 +50,7 @@ func NewService(deps Dependencies, invalidator cacheInvalidator) (*Service, erro
 	if deps.Scopes == nil {
 		return nil, fmt.Errorf("bucket service requires scope store")
 	}
-	if deps.Visibility == nil && deps.Fallback == nil {
+	if deps.Visibility == nil {
 		return nil, errMissingVisibilitySource
 	}
 	return newService(deps, invalidator, defaultScopeCacheTTL, time.Now), nil
@@ -66,7 +62,6 @@ func newService(deps Dependencies, invalidator cacheInvalidator, ttl time.Durati
 		credentialAdmin:        deps.CredentialAdmin,
 		scopeStore:             deps.Scopes,
 		visibility:             deps.Visibility,
-		fallback:               deps.Fallback,
 		scopeCache:             newScopeCache(ttl, now),
 		signerCacheInvalidator: invalidator,
 	}

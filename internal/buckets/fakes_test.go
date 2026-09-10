@@ -232,7 +232,7 @@ func (c *manualClock) Advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, fallback VisibilityFallback, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
+func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
 	credentialStore := &fakeCredentialStore{credentials: append([]Credential(nil), creds...)}
 	scopeStore := &fakeScopeStore{scopes: append([]Scope(nil), scopes...)}
 	service := newService(Dependencies{
@@ -240,7 +240,6 @@ func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQue
 		CredentialAdmin: credentialStore,
 		Scopes:          scopeStore,
 		Visibility:      visibility,
-		Fallback:        fallback,
 	}, invalidator, time.Minute, time.Now)
 	return service, credentialStore, scopeStore
 }

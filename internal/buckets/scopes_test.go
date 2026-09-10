@@ -16,7 +16,7 @@ func newClockedService(clock *manualClock, scopes []Scope, credentials []Credent
 		Credentials:     credentialStore,
 		CredentialAdmin: credentialStore,
 		Scopes:          scopeStore,
-		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
+		Visibility:      &fakeVisibilityQuery{},
 	}, invalidator, 10*time.Second, clock.Now)
 	return service, credentialStore, scopeStore
 }

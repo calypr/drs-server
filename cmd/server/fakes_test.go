@@ -395,7 +395,7 @@ type serverTestDependencies struct {
 func mockServerDependencies(objectStore *serverObjectStore, bucketStore *serverBucketStore) serverTestDependencies {
 	bucketService, err := buckets.NewService(buckets.Dependencies{
 		Credentials: bucketStore, CredentialAdmin: bucketStore, Scopes: bucketStore,
-		Fallback: newBucketVisibilityFallback(objectStore),
+		Visibility: serverVisibilityQuery{},
 	}, nil)
 	if err != nil {
 		panic(err)
@@ -407,6 +407,12 @@ func mockServerDependencies(objectStore *serverObjectStore, bucketStore *serverB
 		usageReports:  serverUsageStore{},
 		pending:       serverPendingStore{},
 	}
+}
+
+type serverVisibilityQuery struct{}
+
+func (serverVisibilityQuery) ListBucketVisibilityRows(context.Context, []string, bool, bool) ([]buckets.VisibilityRow, error) {
+	return nil, nil
 }
 
 type serverBucketStore struct {

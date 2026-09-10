@@ -22,13 +22,8 @@ type ScopeStore interface {
 	ListBucketScopes(ctx context.Context) ([]Scope, error)
 }
 
-// VisibilityQuery is an optional object-projection optimization for bucket
-// visibility. The bucket service supplies the object-scan fallback.
+// VisibilityQuery supplies the object projection used to resolve bucket
+// visibility.
 type VisibilityQuery interface {
 	ListBucketVisibilityRows(ctx context.Context, resources []string, includeUnscoped, restrictToResources bool) ([]VisibilityRow, error)
 }
-
-// VisibilityFallback supplies the object-derived visibility projection when a
-// persistence adapter does not provide VisibilityQuery. The composition layer
-// owns object scanning and read-policy filtering before returning these rows.
-type VisibilityFallback func(context.Context) ([]VisibilityRow, error)

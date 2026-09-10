@@ -130,9 +130,7 @@ s3_credentials:
 
 	backend := serverBackendForStore(database)
 	invalidator := &storageInvalidator{}
-	bucketDependencies := backend.bucketDependencies
-	bucketDependencies.Fallback = newBucketVisibilityFallback(backend.objectStore)
-	bucketService, err := buckets.NewService(bucketDependencies, invalidator)
+	bucketService, err := buckets.NewService(backend.bucketDependencies, invalidator)
 	if err != nil {
 		t.Fatalf("failed to initialize bucket service: %v", err)
 	}

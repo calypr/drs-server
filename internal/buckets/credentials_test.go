@@ -9,7 +9,7 @@ import (
 
 func TestSaveS3CredentialInvalidatesCredentialIDAndPhysicalAliasesAfterCommit(t *testing.T) {
 	invalidator := &recordingInvalidator{}
-	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, invalidator)
 	credential := &Credential{
 		CredentialID: " credential-id ",
 		Bucket:       " physical-bucket ",
@@ -32,7 +32,7 @@ func TestSaveS3CredentialInvalidatesCredentialIDAndPhysicalAliasesAfterCommit(t 
 
 func TestSaveS3CredentialDoesNotInvalidateAfterFailedCommit(t *testing.T) {
 	invalidator := &recordingInvalidator{}
-	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, invalidator)
 	credentials.saveErr = errors.New("write failed")
 
 	err := service.SaveS3Credential(context.Background(), &Credential{CredentialID: "id-a", Bucket: "bucket-a"})
@@ -47,7 +47,7 @@ func TestSaveS3CredentialDoesNotInvalidateAfterFailedCommit(t *testing.T) {
 func TestDeleteS3CredentialInvalidatesRequestedResolvedAndPhysicalAliases(t *testing.T) {
 	credential := Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}
 	invalidator := &recordingInvalidator{}
-	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, invalidator)
 
 	if err := service.DeleteS3Credential(context.Background(), "credential-id"); err != nil {
 		t.Fatalf("DeleteS3Credential: %v", err)
@@ -66,7 +66,7 @@ func TestDeleteS3CredentialInvalidatesRequestedResolvedAndPhysicalAliases(t *tes
 func TestDeleteS3CredentialByPhysicalAliasIncludesBothIdentityForms(t *testing.T) {
 	credential := Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}
 	invalidator := &recordingInvalidator{}
-	service, _, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, _, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, invalidator)
 
 	if err := service.DeleteS3Credential(context.Background(), "physical-bucket"); err != nil {
 		t.Fatalf("DeleteS3Credential: %v", err)
@@ -81,7 +81,7 @@ func TestDeleteS3CredentialByPhysicalAliasIncludesBothIdentityForms(t *testing.T
 func TestDeleteS3CredentialDoesNotInvalidateAfterFailedDelete(t *testing.T) {
 	credential := Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}
 	invalidator := &recordingInvalidator{}
-	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, invalidator)
 	credentials.deleteErr = errors.New("delete failed")
 
 	err := service.DeleteS3Credential(context.Background(), "physical-bucket")
@@ -95,7 +95,7 @@ func TestDeleteS3CredentialDoesNotInvalidateAfterFailedDelete(t *testing.T) {
 
 func TestSaveS3CredentialWithoutExplicitIDUsesPhysicalAlias(t *testing.T) {
 	invalidator := &recordingInvalidator{}
-	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, invalidator)
+	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, invalidator)
 
 	if err := service.SaveS3Credential(context.Background(), &Credential{Bucket: "physical-bucket"}); err != nil {
 		t.Fatalf("SaveS3Credential: %v", err)
