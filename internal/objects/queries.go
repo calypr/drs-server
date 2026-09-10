@@ -6,10 +6,8 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"log"
 	"sort"
 	"strings"
-	"time"
 )
 
 const maxRecordListLimit = 10000
@@ -124,16 +122,12 @@ func (s *Service) GetPreparedScopedObjects(ctx context.Context, ids []string, or
 }
 
 func (s *Service) PrepareScopedObjects(ctx context.Context, objects []Record, organization, project, requiredMethod string) ([]Record, error) {
-	started := time.Now()
 	expanded, err := s.expandProjectChecksumSiblingObjects(ctx, objects, organization, project)
 	if err != nil {
 		return nil, err
 	}
 	filtered := filterObjectsByMethod(ctx, expanded, requiredMethod)
-	canonicalStart := time.Now()
-	canonical := canonicalizeProjectScopedObjects(filtered, organization, project)
-	log.Printf("INFO: syfon_prepare_scoped_objects organization=%s project=%s input_count=%d expanded_count=%d filtered_count=%d output_count=%d canonicalize_scoped_objects_ms=%d duration_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), len(objects), len(expanded), len(filtered), len(canonical), time.Since(canonicalStart).Milliseconds(), time.Since(started).Milliseconds())
-	return canonical, nil
+	return canonicalizeProjectScopedObjects(filtered, organization, project), nil
 }
 
 func (s *Service) ListPreparedObjectsPageByScope(ctx context.Context, organization, project, requiredMethod, startAfter string, limit, offset int) ([]Record, error) {
@@ -158,10 +152,6 @@ func (s *Service) ListPreparedObjectsPageByScope(ctx context.Context, organizati
 	rawStart := startAfter
 	collected := make([]Record, 0, target)
 	seen := make(map[string]struct{}, target)
-	started := time.Now()
-	rawPages := 0
-	rawIDs := 0
-
 	for len(collected) < target {
 		ids, err := s.ListObjectIDsPageByScope(ctx, organization, project, requiredMethod, rawStart, batchSize, 0)
 		if err != nil {
@@ -170,8 +160,6 @@ func (s *Service) ListPreparedObjectsPageByScope(ctx context.Context, organizati
 		if len(ids) == 0 {
 			break
 		}
-		rawPages++
-		rawIDs += len(ids)
 		rawStart = ids[len(ids)-1]
 
 		prepared, err := s.GetPreparedScopedObjects(ctx, ids, organization, project, requiredMethod)
@@ -197,16 +185,13 @@ func (s *Service) ListPreparedObjectsPageByScope(ctx context.Context, organizati
 	}
 
 	if skip >= len(collected) {
-		log.Printf("INFO: syfon_list_prepared_objects_page_by_scope organization=%s project=%s start_after=%t limit=%d offset=%d raw_pages=%d raw_ids=%d records=0 duration_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), startAfter != "", limit, offset, rawPages, rawIDs, time.Since(started).Milliseconds())
 		return []Record{}, nil
 	}
 	end := skip + limit
 	if end > len(collected) {
 		end = len(collected)
 	}
-	out := collected[skip:end]
-	log.Printf("INFO: syfon_list_prepared_objects_page_by_scope organization=%s project=%s start_after=%t limit=%d offset=%d raw_pages=%d raw_ids=%d records=%d duration_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), startAfter != "", limit, offset, rawPages, rawIDs, len(out), time.Since(started).Milliseconds())
-	return out, nil
+	return collected[skip:end], nil
 }
 
 func (s *Service) ListObjectIDsPageByChecksum(ctx context.Context, checksum, checksumType, organization, project, requiredMethod, startAfter string, limit, offset int) ([]string, error) {
@@ -265,10 +250,7 @@ func (s *Service) ListObjectIDsPageByScope(ctx context.Context, organization, pr
 	}
 
 	if canUseUnrestrictedScopePage(ctx, requiredMethod) {
-		pageStart := time.Now()
-		ids, err := s.store.ListObjectIDsPageByScope(ctx, organization, project, startAfter, limit, offset)
-		log.Printf("INFO: syfon_list_object_ids_page_by_scope organization=%s project=%s start_after=%t limit=%d offset=%d ids=%d db_page_ms=%d optimized=%t", strings.TrimSpace(organization), strings.TrimSpace(project), strings.TrimSpace(startAfter) != "", limit, offset, len(ids), time.Since(pageStart).Milliseconds(), true)
-		return ids, err
+		return s.store.ListObjectIDsPageByScope(ctx, organization, project, startAfter, limit, offset)
 	}
 
 	ids, err := s.ListObjectIDsByScope(ctx, organization, project, requiredMethod)
@@ -318,12 +300,10 @@ func (s *Service) ListObjectIDsByScope(ctx context.Context, organization, projec
 			return ids, err
 		}
 	}
-	listStart := time.Now()
 	ids, err := s.store.ListObjectIDsByScope(ctx, organization, project)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("INFO: syfon_list_object_ids_by_scope organization=%s project=%s ids=%d list_scope_ids_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), len(ids), time.Since(listStart).Milliseconds())
 	objects, err := s.store.GetBulkObjects(ctx, ids)
 	if err != nil {
 		return nil, err
@@ -405,13 +385,10 @@ func (s *Service) expandProjectChecksumSiblingObjects(ctx context.Context, objec
 		return objects, nil
 	}
 
-	listStart := time.Now()
 	idsByChecksum, err := s.store.ListScopedObjectIDsByChecksums(ctx, organization, project, checksums)
 	if err != nil {
 		return nil, err
 	}
-	listDuration := time.Since(listStart)
-
 	expanded := make([]Record, 0, len(objects))
 	seenIDs := make(map[string]struct{}, len(objects))
 	missingIDs := make([]string, 0)
@@ -436,7 +413,6 @@ func (s *Service) expandProjectChecksumSiblingObjects(ctx context.Context, objec
 		}
 	}
 
-	hydrateStart := time.Now()
 	if len(missingIDs) > 0 {
 		siblings, err := s.store.GetBulkObjects(ctx, missingIDs)
 		if err != nil {
@@ -457,8 +433,6 @@ func (s *Service) expandProjectChecksumSiblingObjects(ctx context.Context, objec
 			expanded = append(expanded, obj)
 		}
 	}
-	hydrateDuration := time.Since(hydrateStart)
-	log.Printf("INFO: syfon_expand_scoped_checksum_siblings organization=%s project=%s checksums=%d input_count=%d missing_ids=%d output_count=%d list_scoped_sibling_ids_ms=%d hydrate_missing_siblings_ms=%d", strings.TrimSpace(organization), strings.TrimSpace(project), len(checksums), len(objects), len(missingIDs), len(expanded), listDuration.Milliseconds(), hydrateDuration.Milliseconds())
 	return expanded, nil
 }
 

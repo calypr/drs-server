@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -179,7 +178,6 @@ func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 }
 
 func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi.BulkMetricsFilesRequestObject) (metricsapi.BulkMetricsFilesResponseObject, error) {
-	started := time.Now()
 	if request.Body == nil {
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
@@ -218,15 +216,6 @@ func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	if err != nil {
 		return nil, err
 	}
-	log.Printf(
-		"INFO: syfon_metrics_files_bulk requested=%d returned=%d scoped=%t aggregate_scopes=%d inactive_days=%t duration_ms=%d",
-		len(request.Body.ObjectIds),
-		len(data),
-		access.isScoped(),
-		len(access.scopeQuery().Scopes),
-		request.Body.InactiveDays != nil,
-		time.Since(started).Milliseconds(),
-	)
 	return metricsapi.BulkMetricsFiles200JSONResponse{
 		Data: &data,
 	}, nil

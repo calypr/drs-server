@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"log"
 	"strings"
 	"time"
 
@@ -129,7 +128,6 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
-	started := time.Now()
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -151,12 +149,10 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	}
 	results := s.projectStorage.ValidateInventoryObjects(c.Context(), items)
 	out := internalapi.InternalInspectObjectBulkResponse{Items: results}
-	log.Printf("INFO: syfon_inspect_bulk_list_handler items=%d results=%d duration_ms=%d", len(items), len(out.Items), time.Since(started).Milliseconds())
 	return c.JSON(out)
 }
 
 func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
-	started := time.Now()
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -170,26 +166,12 @@ func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
 		PathPrefix:  strings.TrimSpace(req.PathPrefix),
 	})
 	if err != nil {
-		log.Printf("INFO: syfon_project_bucket_handler organization=%s project=%s mode=%s path_prefix=%q include_head=%t duration_ms=%d error=%q", req.Organization, req.Project, req.Mode, req.PathPrefix, req.IncludeHead, time.Since(started).Milliseconds(), err.Error())
 		return HandleError(c, err)
 	}
-	out := result
-	exists := false
-	objectCount := 0
-	totalBytes := int64(0)
-	mode := strings.TrimSpace(req.Mode)
-	if out.Summary != nil {
-		exists = out.Summary.Exists
-		objectCount = out.Summary.ObjectCount
-		totalBytes = out.Summary.TotalBytes
-		mode = out.Summary.Mode
-	}
-	log.Printf("INFO: syfon_project_bucket_handler organization=%s project=%s mode=%s path_prefix=%q include_head=%t exists=%t object_count=%d returned_items=%d total_bytes=%d duration_ms=%d", req.Organization, req.Project, mode, req.PathPrefix, req.IncludeHead, exists, objectCount, len(out.Items), totalBytes, time.Since(started).Milliseconds())
-	return c.JSON(out)
+	return c.JSON(result)
 }
 
 func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) error {
-	started := time.Now()
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -202,22 +184,9 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 		PathPrefix: strings.TrimSpace(req.PathPrefix),
 	})
 	if err != nil {
-		log.Printf("INFO: syfon_project_bucket_inventory_handler organization=%s project=%s path_prefix=%q duration_ms=%d error=%q", req.Organization, req.Project, req.PathPrefix, time.Since(started).Milliseconds(), err.Error())
 		return HandleError(c, err)
 	}
-	out := result
-	objectCount := 0
-	totalBytes := int64(0)
-	bucket := ""
-	prefix := ""
-	if out.Summary != nil {
-		objectCount = out.Summary.ObjectCount
-		totalBytes = out.Summary.TotalBytes
-		bucket = out.Summary.Bucket
-		prefix = out.Summary.Prefix
-	}
-	log.Printf("INFO: syfon_project_bucket_inventory_handler organization=%s project=%s path_prefix=%q bucket=%s prefix=%q object_count=%d returned_items=%d total_bytes=%d duration_ms=%d", req.Organization, req.Project, req.PathPrefix, bucket, prefix, objectCount, len(out.Items), totalBytes, time.Since(started).Milliseconds())
-	return c.JSON(out)
+	return c.JSON(result)
 }
 
 func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
