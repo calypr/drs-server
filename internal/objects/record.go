@@ -76,26 +76,11 @@ type RecordID string
 type Checksum = generated.Checksum
 type AccessURL = generated.AccessURL
 
-// AccessAuthorizations describes optional authorization issuers attached to
-// an access method.  The fields mirror the DRS contract without importing it.
-type AccessAuthorizations struct {
-	BearerAuthIssuers   *[]string `json:"bearer_auth_issuers,omitempty"`
-	DrsObjectId         *string   `json:"drs_object_id,omitempty"`
-	PassportAuthIssuers *[]string `json:"passport_auth_issuers,omitempty"`
-	SupportedTypes      *[]string `json:"supported_types,omitempty"`
-}
-
 type AccessMethod struct {
-	AccessId       *string               `json:"access_id,omitempty"`
-	AccessUrl      *AccessURL            `json:"access_url,omitempty"`
-	Authorizations *AccessAuthorizations `json:"authorizations,omitempty"`
-	Available      *bool                 `json:"available,omitempty"`
-	Cloud          *string               `json:"cloud,omitempty"`
-	Region         *string               `json:"region,omitempty"`
-	Type           string                `json:"type"`
+	AccessId  *string    `json:"access_id,omitempty"`
+	AccessUrl *AccessURL `json:"access_url,omitempty"`
+	Type      string     `json:"type"`
 }
-
-type Content = generated.ContentsObject
 
 // Candidate is the plain request value accepted by object registration and
 // LFS metadata staging. HTTP adapters translate generated request models into
@@ -104,10 +89,8 @@ type Candidate struct {
 	AccessMethods    *[]AccessMethod `json:"access_methods,omitempty"`
 	Aliases          *[]string       `json:"aliases,omitempty"`
 	Checksums        *[]Checksum     `json:"checksums,omitempty"`
-	Contents         *[]Content      `json:"contents,omitempty"`
 	ControlledAccess *[]string       `json:"controlled_access,omitempty"`
 	Description      *string         `json:"description,omitempty"`
-	MimeType         *string         `json:"mime_type,omitempty"`
 	Name             *string         `json:"name,omitempty"`
 	Size             *int64          `json:"size,omitempty"`
 }
@@ -119,14 +102,11 @@ type Record struct {
 	AccessMethods         *[]AccessMethod `json:"access_methods,omitempty"`
 	Aliases               *[]string       `json:"aliases,omitempty"`
 	Checksums             []Checksum      `json:"checksums"`
-	Contents              *[]Content      `json:"contents,omitempty"`
 	ControlledAccess      *[]string       `json:"controlled_access,omitempty"`
 	CreatedTime           time.Time       `json:"created_time"`
 	Description           *string         `json:"description,omitempty"`
-	MimeType              *string         `json:"mime_type,omitempty"`
 	Name                  *string         `json:"name,omitempty"`
 	NameAliases           []string        `json:"name_aliases,omitempty"`
-	Project               string          `json:"project"`
 	PublicRead            bool            `json:"-"`
 	PublicReadPolicyKnown bool            `json:"-"`
 	SelfUri               string          `json:"self_uri"`
@@ -389,7 +369,6 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 		Id:          RecordID(id),
 		Size:        size,
 		Name:        c.Name,
-		MimeType:    c.MimeType,
 		Description: c.Description,
 		Aliases:     c.Aliases,
 		Checksums:   []Checksum{{Type: "sha256", Checksum: oid}},

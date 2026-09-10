@@ -18,14 +18,12 @@ func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
 	controlled := []string{"/organization/org/project/proj"}
 	aliases := []string{"legacy-name", "id:explicit-id"}
 	accessID := "provided"
-	contents := []Content{{Name: "nested"}}
 	candidate := Candidate{
 		Name:             &name,
 		Size:             &size,
 		Aliases:          &aliases,
 		Checksums:        &[]Checksum{{Type: "sha256", Checksum: checksum}},
 		ControlledAccess: &controlled,
-		Contents:         &contents,
 		AccessMethods: &[]AccessMethod{{
 			AccessId:  &accessID,
 			Type:      "https",
@@ -48,9 +46,6 @@ func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
 	}
 	if got.Size != size || !got.CreatedTime.Equal(now) || got.UpdatedTime == nil || !got.UpdatedTime.Equal(now) {
 		t.Fatalf("timestamps/size changed: %#v", got)
-	}
-	if got.Contents != nil {
-		t.Fatalf("Contents was persisted: %#v; baseline contract omits it", got.Contents)
 	}
 	if got.ControlledAccess == nil || len(*got.ControlledAccess) != 1 || (*got.ControlledAccess)[0] != controlled[0] {
 		t.Fatalf("controlled access = %v, want %v", got.ControlledAccess, controlled)

@@ -333,7 +333,6 @@ func drsFromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candi
 	out := objects.Candidate{
 		Aliases:          value.Aliases,
 		Description:      value.Description,
-		MimeType:         value.MimeType,
 		Name:             value.Name,
 		ControlledAccess: value.ControlledAccess,
 		Size:             &value.Size,
@@ -348,9 +347,6 @@ func drsFromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candi
 		}
 		out.AccessMethods = &methods
 	}
-	if value.Contents != nil {
-		out.Contents = cloneGeneratedContents(value.Contents)
-	}
 	return out
 }
 
@@ -360,7 +356,6 @@ func drsToGenerated(record objects.Record) generated.DrsObject {
 		ControlledAccess: record.ControlledAccess,
 		CreatedTime:      record.CreatedTime,
 		Description:      record.Description,
-		MimeType:         record.MimeType,
 		Name:             record.Name,
 		SelfUri:          record.SelfUri,
 		Size:             record.Size,
@@ -377,9 +372,6 @@ func drsToGenerated(record objects.Record) generated.DrsObject {
 	}
 	if record.Aliases != nil {
 		out.Aliases = record.Aliases
-	}
-	if record.Contents != nil {
-		out.Contents = cloneGeneratedContents(record.Contents)
 	}
 	return out
 }
@@ -448,61 +440,22 @@ func drsToGeneratedAccessMethods(methods *[]objects.AccessMethod) *[]generated.A
 }
 
 func drsToGeneratedAccessMethod(method objects.AccessMethod) generated.AccessMethod {
-	out := generated.AccessMethod{AccessId: method.AccessId, Available: method.Available, Cloud: method.Cloud, Region: method.Region, Type: generated.AccessMethodType(method.Type)}
+	out := generated.AccessMethod{AccessId: method.AccessId, Type: generated.AccessMethodType(method.Type)}
 	if method.AccessUrl != nil {
 		out.AccessUrl = &struct {
 			Headers *[]string `json:"headers,omitempty"`
 			Url     string    `json:"url"`
 		}{Headers: method.AccessUrl.Headers, Url: method.AccessUrl.Url}
 	}
-	if method.Authorizations != nil {
-		supported := (*[]generated.AccessMethodAuthorizationsSupportedTypes)(nil)
-		if method.Authorizations.SupportedTypes != nil {
-			converted := make([]generated.AccessMethodAuthorizationsSupportedTypes, len(*method.Authorizations.SupportedTypes))
-			for i, value := range *method.Authorizations.SupportedTypes {
-				converted[i] = generated.AccessMethodAuthorizationsSupportedTypes(value)
-			}
-			supported = &converted
-		}
-		out.Authorizations = &struct {
-			BearerAuthIssuers   *[]string                                             `json:"bearer_auth_issuers,omitempty"`
-			DrsObjectId         *string                                               `json:"drs_object_id,omitempty"`
-			PassportAuthIssuers *[]string                                             `json:"passport_auth_issuers,omitempty"`
-			SupportedTypes      *[]generated.AccessMethodAuthorizationsSupportedTypes `json:"supported_types,omitempty"`
-		}{BearerAuthIssuers: method.Authorizations.BearerAuthIssuers, DrsObjectId: method.Authorizations.DrsObjectId, PassportAuthIssuers: method.Authorizations.PassportAuthIssuers, SupportedTypes: supported}
-	}
 	return out
 }
 
 func drsFromGeneratedAccessMethod(method generated.AccessMethod) objects.AccessMethod {
-	out := objects.AccessMethod{AccessId: method.AccessId, Available: method.Available, Cloud: method.Cloud, Region: method.Region, Type: string(method.Type)}
+	out := objects.AccessMethod{AccessId: method.AccessId, Type: string(method.Type)}
 	if method.AccessUrl != nil {
 		out.AccessUrl = &objects.AccessURL{Headers: method.AccessUrl.Headers, Url: method.AccessUrl.Url}
 	}
-	if method.Authorizations != nil {
-		var supported *[]string
-		if method.Authorizations.SupportedTypes != nil {
-			converted := make([]string, len(*method.Authorizations.SupportedTypes))
-			for i, value := range *method.Authorizations.SupportedTypes {
-				converted[i] = string(value)
-			}
-			supported = &converted
-		}
-		out.Authorizations = &objects.AccessAuthorizations{BearerAuthIssuers: method.Authorizations.BearerAuthIssuers, DrsObjectId: method.Authorizations.DrsObjectId, PassportAuthIssuers: method.Authorizations.PassportAuthIssuers, SupportedTypes: supported}
-	}
 	return out
-}
-
-func cloneGeneratedContents(contents *[]generated.ContentsObject) *[]generated.ContentsObject {
-	if contents == nil {
-		return nil
-	}
-	cloned := make([]generated.ContentsObject, len(*contents))
-	for i, content := range *contents {
-		cloned[i] = content
-		cloned[i].Contents = cloneGeneratedContents(content.Contents)
-	}
-	return &cloned
 }
 
 func drsPtr[T any](value T) *T {

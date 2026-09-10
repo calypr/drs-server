@@ -276,9 +276,6 @@ func (s *Service) UpdateRecord(ctx context.Context, id string, update Record, ex
 	if update.Description != nil {
 		merged.Description = update.Description
 	}
-	if update.MimeType != nil {
-		merged.MimeType = update.MimeType
-	}
 	if update.Version != nil {
 		merged.Version = update.Version
 	}

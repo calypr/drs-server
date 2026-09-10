@@ -32,40 +32,12 @@ func TestToGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
 	}
 }
 
-func TestContentsConversionNormalizesNilSlices(t *testing.T) {
-	nilDomainContents := []objects.Content(nil)
-	record := objects.Record{
-		Contents: &[]objects.Content{{Name: "bundle", Contents: &nilDomainContents}},
-	}
-	generatedRecord := drsToGenerated(record)
-	if generatedRecord.Contents == nil || *generatedRecord.Contents == nil || (*generatedRecord.Contents)[0].Contents == nil || *(*generatedRecord.Contents)[0].Contents == nil {
-		t.Fatalf("generated contents did not normalize nonnil nil slices: %#v", generatedRecord.Contents)
-	}
-	wire, err := json.Marshal(generatedRecord)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(wire, []byte(`"contents":[{"contents":[]`)) {
-		t.Fatalf("generated contents wire shape = %s", wire)
-	}
-
-	nilGeneratedContents := []generated.ContentsObject(nil)
-	candidate := drsFromGeneratedCandidate(generated.DrsObjectCandidate{
-		Contents: &[]generated.ContentsObject{{Name: "bundle", Contents: &nilGeneratedContents}},
-	})
-	if candidate.Contents == nil || *candidate.Contents == nil || (*candidate.Contents)[0].Contents == nil || *(*candidate.Contents)[0].Contents == nil {
-		t.Fatalf("candidate contents did not normalize nonnil nil slices: %#v", candidate.Contents)
-	}
-}
-
-func TestObjectPayloadUsesTypedNestedResponse(t *testing.T) {
+func TestObjectPayloadIncludesLegacyIdentityAliases(t *testing.T) {
 	name := "sample"
 	aliases := []string{"sample.alias"}
 	created := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
-	childID := "child"
 	record := objects.Record{
 		Id: "record-1", Name: &name, NameAliases: aliases, CreatedTime: created,
-		Contents: &[]objects.Content{{Id: &childID, Contents: &[]objects.Content{{Name: "leaf"}}}},
 	}
 	data, err := json.Marshal(drsObjectPayload(record))
 	if err != nil {
@@ -79,13 +51,6 @@ func TestObjectPayloadUsesTypedNestedResponse(t *testing.T) {
 		if string(payload[key]) != want {
 			t.Fatalf("%s = %s, want %s", key, payload[key], want)
 		}
-	}
-	var contents []generated.ContentsObject
-	if err := json.Unmarshal(payload["contents"], &contents); err != nil {
-		t.Fatal(err)
-	}
-	if len(contents) != 1 || contents[0].Contents == nil || len(*contents[0].Contents) != 1 {
-		t.Fatalf("nested contents = %#v", contents)
 	}
 }
 
@@ -104,25 +69,15 @@ func TestObjectPayloadInvalidTimeFallsBackToIdentity(t *testing.T) {
 	}
 }
 
-func TestAccessMethodsRoundTripPreservesGeneratedWireShape(t *testing.T) {
+func TestAccessMethodsRoundTripPreservesDurableWireShape(t *testing.T) {
 	accessID := "access"
-	available := true
-	cloud := "aws"
-	region := "us-east-1"
 	headers := []string{"authorization", "x-test"}
-	supported := []generated.AccessMethodAuthorizationsSupportedTypes{generated.AccessMethodAuthorizationsSupportedTypesBearerAuth}
 	want := generated.AccessMethod{
-		AccessId: &accessID, Available: &available, Cloud: &cloud, Region: &region, Type: generated.AccessMethodTypeS3,
+		AccessId: &accessID, Type: generated.AccessMethodTypeS3,
 		AccessUrl: &struct {
 			Headers *[]string `json:"headers,omitempty"`
 			Url     string    `json:"url"`
 		}{Headers: &headers, Url: "s3://bucket/key"},
-		Authorizations: &struct {
-			BearerAuthIssuers   *[]string                                             `json:"bearer_auth_issuers,omitempty"`
-			DrsObjectId         *string                                               `json:"drs_object_id,omitempty"`
-			PassportAuthIssuers *[]string                                             `json:"passport_auth_issuers,omitempty"`
-			SupportedTypes      *[]generated.AccessMethodAuthorizationsSupportedTypes `json:"supported_types,omitempty"`
-		}{SupportedTypes: &supported},
 	}
 
 	got := drsToGeneratedAccessMethod(drsFromGeneratedAccessMethod(want))
@@ -136,6 +91,11 @@ func TestAccessMethodsRoundTripPreservesGeneratedWireShape(t *testing.T) {
 	}
 	if !reflect.DeepEqual(wantJSON, gotJSON) {
 		t.Fatalf("access method wire shape changed: want %s got %s", wantJSON, gotJSON)
+	}
+
+	empty := drsToGeneratedAccessMethod(drsFromGeneratedAccessMethod(generated.AccessMethod{Type: generated.AccessMethodTypeS3}))
+	if empty.AccessId != nil || empty.AccessUrl != nil || empty.Type != generated.AccessMethodTypeS3 {
+		t.Fatalf("empty optional access fields changed: %#v", empty)
 	}
 }
 

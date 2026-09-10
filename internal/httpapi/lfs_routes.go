@@ -245,7 +245,6 @@ func fromLFSGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidat
 	out := objects.Candidate{
 		Aliases:     &aliases,
 		Description: value.Description,
-		MimeType:    value.MimeType,
 		Name:        value.Name,
 	}
 	if value.Size != nil {
@@ -263,7 +262,7 @@ func fromLFSGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidat
 	if value.AccessMethods != nil {
 		methods := make([]objects.AccessMethod, 0, len(*value.AccessMethods))
 		for _, method := range *value.AccessMethods {
-			converted := objects.AccessMethod{AccessId: method.AccessId, Cloud: method.Region}
+			converted := objects.AccessMethod{AccessId: method.AccessId}
 			if method.Type != nil {
 				converted.Type = string(*method.Type)
 			}

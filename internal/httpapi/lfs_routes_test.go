@@ -271,7 +271,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 	}
 }
 
-func TestFromGeneratedCandidatePreservesLegacyFields(t *testing.T) {
+func TestFromGeneratedCandidatePreservesDurableAccessFields(t *testing.T) {
 	size := int64(42)
 	id := "lfs-explicit-id"
 	typ := "s3"
@@ -303,11 +303,8 @@ func TestFromGeneratedCandidatePreservesLegacyFields(t *testing.T) {
 		t.Fatalf("access methods = %#v", got.AccessMethods)
 	}
 	method := (*got.AccessMethods)[0]
-	if method.Cloud == nil || *method.Cloud != region || method.Region != nil {
-		t.Fatalf("region/cloud mapping = %#v", method)
-	}
-	if method.Authorizations != nil {
-		t.Fatalf("dropped legacy fields were retained: %#v", method)
+	if method.AccessId == nil || *method.AccessId != "s3" || method.Type != typ {
+		t.Fatalf("durable access fields = %#v", method)
 	}
 	if method.AccessUrl == nil || method.AccessUrl.Url != url {
 		t.Fatalf("access URL mapping = %#v", method.AccessUrl)

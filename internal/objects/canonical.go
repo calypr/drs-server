@@ -144,7 +144,6 @@ func collapseCanonicalGroup(group []Record) Record {
 	merged.Name = latest.Name
 	merged.Size = pickLatestNonZeroSize(group, canonical.Size)
 	merged.Description = pickLatestStringPtr(group, func(obj Record) *string { return obj.Description }, canonical.Description)
-	merged.MimeType = pickLatestStringPtr(group, func(obj Record) *string { return obj.MimeType }, canonical.MimeType)
 	merged.Version = pickLatestStringPtr(group, func(obj Record) *string { return obj.Version }, canonical.Version)
 	updated := canonicalObjectSortTime(latest)
 	merged.UpdatedTime = &updated
