@@ -69,15 +69,6 @@ type bulkOverwriteStore struct {
 	Aliases map[string]string
 }
 
-func (f *bulkOverwriteStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
-	obj, ok := f.Objects[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
-	}
-	copyObj := *obj
-	return &copyObj, nil
-}
-
 func (f *bulkOverwriteStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
 	result := make([]objects.Record, 0, len(ids))
 	for _, id := range ids {
@@ -88,40 +79,15 @@ func (f *bulkOverwriteStore) GetBulkObjects(_ context.Context, ids []string) ([]
 	return result, nil
 }
 
-func (f *bulkOverwriteStore) DeleteObject(_ context.Context, id string) error {
-	delete(f.Objects, id)
-	return nil
-}
-
-func (f *bulkOverwriteStore) CreateObject(_ context.Context, obj *objects.Record) error {
+func (f *bulkOverwriteStore) RegisterObjects(_ context.Context, records []objects.Record) error {
 	if f.Objects == nil {
 		f.Objects = make(map[string]*objects.Record)
 	}
-	copyObj := *obj
-	f.Objects[string(obj.Id)] = &copyObj
-	return nil
-}
-
-func (f *bulkOverwriteStore) BulkDeleteObjects(ctx context.Context, ids []string) error {
-	for _, id := range ids {
-		if err := f.DeleteObject(ctx, id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (f *bulkOverwriteStore) RegisterObjects(ctx context.Context, records []objects.Record) error {
 	for i := range records {
-		if err := f.CreateObject(ctx, &records[i]); err != nil {
-			return err
-		}
+		copyObj := records[i]
+		f.Objects[string(copyObj.Id)] = &copyObj
 	}
 	return nil
-}
-
-func (f *bulkOverwriteStore) ReplaceObjects(ctx context.Context, records []objects.Record) error {
-	return f.RegisterObjects(ctx, records)
 }
 
 func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
@@ -158,8 +124,7 @@ func (f *bulkOverwriteStore) ListScopedObjectIDsByChecksums(_ context.Context, o
 
 type readObjectStore struct {
 	objects.ObjectStore
-	Objects   map[string]*objects.Record
-	BulkCalls [][]string
+	Objects map[string]*objects.Record
 }
 
 func (f *readObjectStore) CreateObject(_ context.Context, obj *objects.Record) error {
@@ -171,17 +136,7 @@ func (f *readObjectStore) CreateObject(_ context.Context, obj *objects.Record) e
 	return nil
 }
 
-func (f *readObjectStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
-	obj, ok := f.Objects[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
-	}
-	copyObj := *obj
-	return &copyObj, nil
-}
-
 func (f *readObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	f.BulkCalls = append(f.BulkCalls, append([]string(nil), ids...))
 	result := make([]objects.Record, 0, len(ids))
 	for _, id := range ids {
 		if obj, ok := f.Objects[id]; ok {

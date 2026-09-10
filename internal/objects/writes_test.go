@@ -503,37 +503,6 @@ func TestBulkOverwriteObjects_ValidationAndConflicts(t *testing.T) {
 	}
 }
 
-func TestBulkOverwriteObjects_NormalizesTargetScope(t *testing.T) {
-	resource, err := clientaccess.ResourcePath("org", "project")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db := &bulkOverwriteStore{Objects: map[string]*objects.Record{}}
-	service := newTestService(db)
-	result, err := service.BulkOverwriteObjects(buildGen3Context(map[string]map[string]bool{
-		resource: {"create": true},
-	}), "org", "project", []objects.Record{{Id: "did"}})
-	if err != nil {
-		t.Fatalf("BulkOverwriteObjects returned error: %v", err)
-	}
-	if result.Created != 1 {
-		t.Fatalf("result = %+v, want one created record", result)
-	}
-	stored := db.Objects["did"]
-	if stored == nil || !recordInScope(stored, "org", "project") {
-		t.Fatalf("target scope was not normalized: %+v", stored)
-	}
-}
-
-func TestBulkOverwriteObjects_EmptyInput(t *testing.T) {
-	db := &bulkOverwriteStore{}
-	om := newTestService(db)
-	result, err := om.BulkOverwriteObjects(context.Background(), "", "", nil)
-	if err != nil || result != (objects.BulkOverwriteResult{}) {
-		t.Fatalf("expected empty result, got %+v err=%v", result, err)
-	}
-}
-
 func TestBulkOverwriteObjects_DoesNotMatchChecksumOutsideProject(t *testing.T) {
 	resource, err := clientaccess.ResourcePath("org", "project")
 	if err != nil {

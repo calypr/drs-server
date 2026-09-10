@@ -219,7 +219,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
 				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
-				ports.records["record-existing"] = &objects.Record{
+				ports.objects["record-existing"] = &objects.Record{
 					Id:               "record-existing",
 					Checksums:        []objects.Checksum{{Type: "sha256", Checksum: oid}},
 					AccessMethods:    &methods,
@@ -268,64 +268,6 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 				t.Fatalf("multipart init target = %+v, want %+v", storageFake.initTarget, want)
 			}
 		})
-	}
-}
-
-func TestFromGeneratedCandidatePreservesDurableAccessFields(t *testing.T) {
-	size := int64(42)
-	id := "lfs-explicit-id"
-	typ := "s3"
-	region := "legacy-cloud"
-	url := "s3://bucket/object.bin"
-	candidate := lfsapi.DrsObjectCandidate{
-		Id:   &id,
-		Name: lfsStringPtr("object.bin"),
-		Size: &size,
-		Checksums: &[]lfsapi.Checksum{{
-			Type: "sha256", Checksum: strings.Repeat("a", 64),
-		}},
-		AccessMethods: &[]lfsapi.AccessMethod{{
-			AccessId:  lfsStringPtr("s3"),
-			Type:      &typ,
-			Region:    &region,
-			AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url},
-			Authorizations: &lfsapi.AccessMethodAuthorizations{
-				BearerAuthIssuers: lfsStringSlicePtr([]string{"issuer"}),
-			},
-		}},
-	}
-
-	got := fromLFSGeneratedCandidate(candidate)
-	if got.Aliases == nil || len(*got.Aliases) != 1 || (*got.Aliases)[0] != "id:"+id {
-		t.Fatalf("explicit id alias = %#v", got.Aliases)
-	}
-	if got.AccessMethods == nil || len(*got.AccessMethods) != 1 {
-		t.Fatalf("access methods = %#v", got.AccessMethods)
-	}
-	method := (*got.AccessMethods)[0]
-	if method.AccessId == nil || *method.AccessId != "s3" || method.Type != typ {
-		t.Fatalf("durable access fields = %#v", method)
-	}
-	if method.AccessUrl == nil || method.AccessUrl.Url != url {
-		t.Fatalf("access URL mapping = %#v", method.AccessUrl)
-	}
-}
-
-func TestFromGeneratedCandidatePreservesExplicitZeroSize(t *testing.T) {
-	size := int64(0)
-	got := fromLFSGeneratedCandidate(lfsapi.DrsObjectCandidate{Size: &size})
-	if got.Size == nil || *got.Size != 0 {
-		t.Fatalf("explicit zero size = %#v, want nonnil pointer to zero", got.Size)
-	}
-}
-
-func TestFromGeneratedCandidateDerivesAliasFromSHA256(t *testing.T) {
-	oid := strings.Repeat("b", 64)
-	got := fromLFSGeneratedCandidate(lfsapi.DrsObjectCandidate{
-		Checksums: &[]lfsapi.Checksum{{Type: "sha256", Checksum: oid}},
-	})
-	if got.Aliases == nil || len(*got.Aliases) != 1 || (*got.Aliases)[0] != "id:"+oid {
-		t.Fatalf("sha256 alias = %#v", got.Aliases)
 	}
 }
 

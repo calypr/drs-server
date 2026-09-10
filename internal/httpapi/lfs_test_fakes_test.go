@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
@@ -22,9 +21,7 @@ import (
 // used by the LFS routes. Keeping the state and implementations together
 // avoids a graph of fakes that only forward calls to one another.
 type lfsTestServicePorts struct {
-	objects.ObjectStore
-	records        map[string]*objects.Record
-	aliases        map[string]string
+	*drsObjectStore
 	credentials    map[string]buckets.Credential
 	pending        map[string]transferlfs.PendingMetadata
 	transferEvents []usage.Event
@@ -41,125 +38,16 @@ func newLFSTestPorts(records map[string]*objects.Record, credentials map[string]
 		credentials = map[string]buckets.Credential{}
 	}
 	return &lfsTestServicePorts{
-		records: records, aliases: map[string]string{}, credentials: credentials,
+		drsObjectStore: newDRSObjectStore(records), credentials: credentials,
 		pending: map[string]transferlfs.PendingMetadata{},
 	}
 }
 
-func (p *lfsTestServicePorts) GetObject(_ context.Context, id string) (*objects.Record, error) {
+func (p *lfsTestServicePorts) GetObject(ctx context.Context, id string) (*objects.Record, error) {
 	if p.getErr != nil {
 		return nil, p.getErr
 	}
-	record, ok := p.records[id]
-	if !ok {
-		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
-	}
-	copyRecord := *record
-	return &copyRecord, nil
-}
-
-func (p *lfsTestServicePorts) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0, len(ids))
-	for _, id := range ids {
-		if record, ok := p.records[id]; ok {
-			result = append(result, *record)
-		}
-	}
-	return result, nil
-}
-
-func (p *lfsTestServicePorts) DeleteObject(_ context.Context, id string) error {
-	delete(p.records, id)
-	return nil
-}
-
-func (p *lfsTestServicePorts) BulkDeleteObjects(_ context.Context, ids []string) error {
-	for _, id := range ids {
-		delete(p.records, id)
-	}
-	return nil
-}
-
-func (p *lfsTestServicePorts) RegisterObjects(_ context.Context, records []objects.Record) error {
-	for i := range records {
-		copyRecord := records[i]
-		p.records[string(copyRecord.Id)] = &copyRecord
-	}
-	return nil
-}
-
-func (p *lfsTestServicePorts) ReplaceObjects(ctx context.Context, records []objects.Record) error {
-	p.records = make(map[string]*objects.Record, len(records))
-	return p.RegisterObjects(ctx, records)
-}
-
-func (p *lfsTestServicePorts) UpdateObjectAccessMethods(_ context.Context, id string, methods []objects.AccessMethod) error {
-	record, ok := p.records[id]
-	if !ok {
-		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
-	}
-	copyMethods := append([]objects.AccessMethod(nil), methods...)
-	record.AccessMethods = &copyMethods
-	return nil
-}
-
-func (p *lfsTestServicePorts) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objects.AccessMethod) error {
-	for id, methods := range updates {
-		if err := p.UpdateObjectAccessMethods(ctx, id, methods); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (p *lfsTestServicePorts) CreateObjectAlias(_ context.Context, id, canonical string) error {
-	p.aliases[id] = canonical
-	return nil
-}
-
-func (p *lfsTestServicePorts) ResolveObjectAlias(_ context.Context, id string) (string, error) {
-	canonical, ok := p.aliases[id]
-	if !ok {
-		return "", fmt.Errorf("%w: object alias not found", errorapi.ErrNotFound)
-	}
-	return canonical, nil
-}
-
-func (p *lfsTestServicePorts) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0)
-	for _, record := range p.records {
-		if lfsRecordMatchesChecksum(record, checksum) {
-			result = append(result, *record)
-		}
-	}
-	return result, nil
-}
-
-func (p *lfsTestServicePorts) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
-	result := make(map[string][]objects.Record, len(checksums))
-	for _, checksum := range checksums {
-		matches, err := p.GetObjectsByChecksum(ctx, checksum)
-		if err != nil {
-			return nil, err
-		}
-		result[checksum] = matches
-	}
-	return result, nil
-}
-
-func lfsRecordMatchesChecksum(record *objects.Record, checksum string) bool {
-	if record == nil {
-		return false
-	}
-	if string(record.Id) == checksum {
-		return true
-	}
-	for _, candidate := range record.Checksums {
-		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), strings.TrimSpace(checksum)) {
-			return true
-		}
-	}
-	return false
+	return p.drsObjectStore.GetObject(ctx, id)
 }
 
 func (p *lfsTestServicePorts) GetS3Credential(_ context.Context, bucket string) (*buckets.Credential, error) {
@@ -340,7 +228,3 @@ func newLFSTestServerForNumericValidation() *lfsServer {
 	ports := newLFSTestPorts(nil, nil)
 	return newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
 }
-
-func lfsStringPtr(value string) *string { return &value }
-
-func lfsStringSlicePtr(value []string) *[]string { return &value }

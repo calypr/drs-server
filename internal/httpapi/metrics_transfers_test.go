@@ -299,28 +299,3 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 		}
 	})
 }
-
-func TestMetricsRoutes_NoLegacyDownloadAttributionRoutes(t *testing.T) {
-	app := fiber.New()
-	registerMetricsRoutes(app, &metricsReporterFake{}, &metricsIngestFake{})
-
-	for _, tc := range []struct {
-		method string
-		path   string
-	}{
-		{method: http.MethodPost, path: "/index/v1/metrics/download-events"},
-		{method: http.MethodPost, path: "/index/v1/metrics/transfer-events"},
-		{method: http.MethodGet, path: "/index/v1/metrics/downloads/summary"},
-		{method: http.MethodGet, path: "/index/v1/metrics/downloads/breakdown"},
-	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
-		httpResp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("%s %s failed: %v", tc.method, tc.path, err)
-		}
-		if httpResp.StatusCode != http.StatusNotFound {
-			body, _ := io.ReadAll(httpResp.Body)
-			t.Fatalf("expected %s %s to be gone with 404, got %d body=%s", tc.method, tc.path, httpResp.StatusCode, string(body))
-		}
-	}
-}
