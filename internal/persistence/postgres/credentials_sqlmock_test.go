@@ -15,11 +15,16 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/store"
-	"github.com/calypr/syfon/internal/persistence/testsuite"
 	"github.com/calypr/syfon/internal/requestid"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
+
+// sqlmockDialect suppresses schema bootstrap while retaining the PostgreSQL
+// dialect used by sqlmock assertions.
+type sqlmockDialect struct{ postgresDialect }
+
+func (sqlmockDialect) Bootstrap(context.Context, *sql.DB) error { return nil }
 
 func newMockPostgresDB(t *testing.T) (*store.Store, sqlmock.Sqlmock, *sql.DB) {
 	t.Helper()
@@ -31,7 +36,7 @@ func newMockPostgresDB(t *testing.T) (*store.Store, sqlmock.Sqlmock, *sql.DB) {
 	if err != nil {
 		t.Fatalf("credentialcipher.NewFromEnv: %v", err)
 	}
-	shared, err := testsuite.OpenSQLMockStore(db, postgresDialect{}, cipher)
+	shared, err := store.Open(db, sqlmockDialect{}, cipher)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

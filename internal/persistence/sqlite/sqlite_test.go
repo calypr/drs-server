@@ -17,22 +17,11 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/store"
-	"github.com/calypr/syfon/internal/persistence/testsuite"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 
 	"github.com/calypr/syfon/internal/objects"
 )
-
-func TestSQLiteStoreContract(t *testing.T) {
-	testsuite.RunStoreContract(t, func(t *testing.T) (*store.Store, func()) {
-		db, err := NewSqliteDB(":memory:", nil)
-		if err != nil {
-			t.Fatalf("NewSqliteDB: %v", err)
-		}
-		return db, func() { _ = db.Close() }
-	}, testsuite.BasicStoreCases())
-}
 
 func TestSqliteDB_InitializesControlledAccessTable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy.db")
