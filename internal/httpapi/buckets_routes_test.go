@@ -14,7 +14,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/gofiber/fiber/v3"
 )
@@ -116,9 +115,7 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          scopes,
-		Visibility: bucketVisibilityQueryFunc(func(context.Context) ([]buckets.VisibilityRow, error) {
-			return nil, nil
-		}),
+		Visibility:      &bucketTestStore{},
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
@@ -170,9 +167,7 @@ func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testi
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          scopes,
-		Visibility: bucketVisibilityQueryFunc(func(context.Context) ([]buckets.VisibilityRow, error) {
-			return nil, nil
-		}),
+		Visibility:      &bucketTestStore{},
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
@@ -208,15 +203,6 @@ func TestHandleInternalPutBucket_PropagatesDerivedCredentialLookupError(t *testi
 func TestHandleInternalBuckets_Gen3Auth(t *testing.T) {
 	mockDB := &bucketTestStore{
 		Credentials: map[string]buckets.Credential{"b1": {Bucket: "b1", Region: "us-east-1"}, "b2": {Bucket: "b2", Region: "us-east-1"}},
-		Objects: map[string]*objects.Record{
-			"obj-1": {Id: "obj-1", Name: ptr("obj-1"), AccessMethods: &[]objects.AccessMethod{
-				{Type: "s3", AccessUrl: &objects.AccessURL{
-					Url: "s3://b1/path/obj-1"}},
-				{Type: "s3", AccessUrl: &objects.AccessURL{
-					Url: "s3://b2/path/obj-1"}},
-			}},
-		},
-		ObjectAuthz: map[string]map[string][]string{"obj-1": {"cbds": {"proj1"}}},
 	}
 	req401 := httptest.NewRequest(http.MethodGet, "/data/buckets", nil)
 	req401 = req401.WithContext(dataTestAuthContext(req401.Context(), "gen3", false, nil))
@@ -269,17 +255,7 @@ func TestHandleInternalBuckets_PrefersExplicitScopeOverObjectDerivedDuplicate(t 
 				Bucket:       "EllrottLab",
 			},
 		},
-		Objects: map[string]*objects.Record{
-			"obj-1": {Id: "obj-1", Name: ptr("obj-1"), AccessMethods: &[]objects.AccessMethod{{
-				Type: "s3",
-				AccessUrl: &objects.AccessURL{
-
-					Url: "s3://cbds/path/obj-1"},
-			}}},
-		},
-		ObjectAuthz: map[string]map[string][]string{
-			"obj-1": {"Ellrott_Lab": {"hla2vec"}},
-		},
+		VisibilityRows: []buckets.VisibilityRow{{AccessURL: "s3://cbds/path/obj-1", Resource: "/organization/Ellrott_Lab/project/hla2vec"}},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/data/buckets", nil)
 	req = req.WithContext(dataTestAuthContext(req.Context(), "gen3", true, map[string]map[string]bool{
