@@ -53,7 +53,7 @@ func registerMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingesto
 }
 
 func (s *metricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {
-	organization, project, _, err := parseScopeQuery(ctx)
+	organization, project, err := parseScopeQuery(ctx)
 	if err != nil {
 		return metricsAccess{}, http.StatusBadRequest, false
 	}
@@ -67,38 +67,24 @@ func (s *metricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool
 	if err != nil {
 		return metricsAccess{}, http.StatusForbidden, false
 	}
-	return metricsAccess{
-		organization: scope.Organization,
-		project:      scope.Project,
-		scope:        scope,
-	}, 0, true
+	return metricsAccess{scope: scope}, 0, true
 }
 
 // metricsAccess is the HTTP response/status projection of an authorized
 // usage scope. Authorization and scope construction live in usage.
 type metricsAccess struct {
-	organization string
-	project      string
-	scope        usage.ScopeQuery
-}
-
-func (a metricsAccess) scopeQuery() usage.ScopeQuery {
-	if a.scope.Organization != "" || a.scope.Project != "" || len(a.scope.Scopes) > 0 || len(a.scope.Resources) > 0 {
-		return a.scope
-	}
-	return usage.ScopeQuery{Organization: a.organization, Project: a.project}
+	scope usage.ScopeQuery
 }
 
 func (a metricsAccess) isScoped() bool {
-	return strings.TrimSpace(a.scopeQuery().Organization) != ""
+	return strings.TrimSpace(a.scope.Organization) != ""
 }
 
 func (a metricsAccess) hasScopeAggregate() bool {
-	query := a.scopeQuery()
-	return !a.isScoped() && len(query.Scopes) > 0
+	return !a.isScoped() && len(a.scope.Scopes) > 0
 }
 
-func parseScopeQuery(ctx context.Context) (string, string, bool, error) {
+func parseScopeQuery(ctx context.Context) (string, string, error) {
 	params, _ := ctx.Value(metricsQueryContextKey{}).(metricsQueryParams)
 	organization := strings.TrimSpace(params.organization)
 	if organization == "" {
@@ -106,12 +92,9 @@ func parseScopeQuery(ctx context.Context) (string, string, bool, error) {
 	}
 	project := strings.TrimSpace(params.project)
 	if project != "" && organization == "" {
-		return "", "", false, fmt.Errorf("organization is required when project is set")
+		return "", "", fmt.Errorf("organization is required when project is set")
 	}
-	if organization != "" {
-		return organization, project, true, nil
-	}
-	return "", "", false, nil
+	return organization, project, nil
 }
 
 func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
@@ -161,7 +144,7 @@ func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 	}
 
 	data, err := s.reporter.ListFileUsage(ctx, usage.FileUsageQuery{
-		Scope:         access.scopeQuery(),
+		Scope:         access.scope,
 		Limit:         limit,
 		Offset:        offset,
 		InactiveSince: inactiveSince,
@@ -209,7 +192,7 @@ func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	}
 
 	data, err := s.reporter.ListFileUsageBatch(ctx, usage.FileUsageBatchQuery{
-		Scope:         access.scopeQuery(),
+		Scope:         access.scope,
 		ObjectIDs:     request.Body.ObjectIds,
 		InactiveSince: inactiveSince,
 	})
@@ -243,7 +226,7 @@ func (s *metricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 	var err error
 	scoped := access.isScoped() || access.hasScopeAggregate()
 	if scoped {
-		fileUsage, err = s.reporter.GetScopedFileUsage(ctx, objectID, access.scopeQuery())
+		fileUsage, err = s.reporter.GetScopedFileUsage(ctx, objectID, access.scope)
 	} else {
 		fileUsage, err = s.reporter.GetFileUsage(ctx, objectID)
 	}
@@ -276,7 +259,7 @@ func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 	}
 
 	summary, err := s.reporter.GetFileUsageSummary(ctx, usage.FileUsageSummaryQuery{
-		Scope:         access.scopeQuery(),
+		Scope:         access.scope,
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
@@ -320,8 +303,8 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 		return http.StatusForbidden, false
 	}
 	for _, item := range body.Events {
-		resource, ok := providerTransferResource(strings.TrimSpace(generatedString(item.Organization)), strings.TrimSpace(generatedString(item.Project)))
-		if !ok {
+		resource, err := clientaccess.ResourcePath(generatedString(item.Organization), generatedString(item.Project))
+		if err != nil || strings.TrimSpace(resource) == "" {
 			return http.StatusForbidden, false
 		}
 		if !access.HasAnyMethodAccess(ctx, []string{resource}, "create", "update") {
@@ -329,14 +312,6 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 		}
 	}
 	return 0, true
-}
-
-func providerTransferResource(organization, project string) (string, bool) {
-	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
-	if err != nil || strings.TrimSpace(resource) == "" {
-		return "", false
-	}
-	return resource, true
 }
 
 func providerTransferGeneratedEventToUsage(item metricsapi.ProviderTransferEvent) (usage.ProviderEvent, error) {
@@ -403,13 +378,13 @@ func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsa
 		return getTransferSummaryAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferSummaryParamsToFilter(request.Params)
-	freshness, _, err := s.transferFreshness(ctx, filter)
+	freshness, err := s.transferFreshness(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 	summary, err := s.reporter.GetTransferAttributionSummary(ctx, usage.TransferSummaryQuery{
 		Filter: filter,
-		Scope:  access.scopeQuery(),
+		Scope:  access.scope,
 	})
 	if err != nil {
 		return nil, err
@@ -425,7 +400,7 @@ func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metric
 		return getTransferBreakdownAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferBreakdownParamsToFilter(request.Params)
-	freshness, _, err := s.transferFreshness(ctx, filter)
+	freshness, err := s.transferFreshness(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +416,7 @@ func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	items, err := s.reporter.GetTransferAttributionBreakdown(ctx, usage.TransferBreakdownQuery{
 		Filter:  filter,
 		GroupBy: groupBy,
-		Scope:   access.scopeQuery(),
+		Scope:   access.scope,
 	})
 	if err != nil {
 		return nil, err
@@ -521,10 +496,10 @@ func generatedTime(v *time.Time) *time.Time {
 	return &t
 }
 
-func (s *metricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, bool, error) {
+func (s *metricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, error) {
 	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
 	if err != nil {
-		return metricsapi.TransferMetricsFreshness{}, false, err
+		return metricsapi.TransferMetricsFreshness{}, err
 	}
-	return freshness, freshness.IsStale != nil && *freshness.IsStale, nil
+	return freshness, nil
 }

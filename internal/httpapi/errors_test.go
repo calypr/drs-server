@@ -16,6 +16,7 @@ import (
 	clientapierror "github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/requestid"
+	providerstorage "github.com/calypr/syfon/internal/storage"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -69,6 +70,7 @@ func TestHandleError(t *testing.T) {
 		{name: "invalid input", err: errorapi.ErrInvalidInput, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeInvalidInput, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: "invalid input"},
 		{name: "rate limited", err: errorapi.ErrRateLimited, wantStatus: http.StatusTooManyRequests, wantCode: errorapi.ErrorCodeRateLimited, wantCategory: errorapi.ErrorCategoryRateLimited, wantMessage: "Rate limit exceeded"},
 		{name: "unavailable", err: errorapi.ErrUnavailable, wantStatus: http.StatusServiceUnavailable, wantCode: errorapi.ErrorCodeUnavailable, wantCategory: errorapi.ErrorCategoryUnavailable, wantMessage: "Service Unavailable"},
+		{name: "storage unavailable", err: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "inventory", Cause: errors.New("private provider detail")}, wantStatus: http.StatusServiceUnavailable, wantCode: errorapi.ErrorCodeStorageUnavailable, wantCategory: errorapi.ErrorCategoryUnavailable, wantMessage: "Service Unavailable"},
 		{name: "invalid checksum", err: errorapi.ErrNoValidSHA256, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeNoValidSha256, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: "A valid SHA256 checksum is required"},
 		{name: "missing access methods", err: errorapi.ErrAccessMethodsRequired, wantStatus: http.StatusBadRequest, wantCode: errorapi.ErrorCodeAccessMethodsRequired, wantCategory: errorapi.ErrorCategoryInvalidInput, wantMessage: errorapi.ErrAccessMethodsRequired.Error()},
 	}
