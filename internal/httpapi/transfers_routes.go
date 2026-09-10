@@ -131,7 +131,7 @@ func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
 	} else if _, err := uuid.Parse(guid); err != nil {
 		guid = uuid.New().String()
 	}
-	result, err := s.transfers.UploadURL(c.Context(), domaintransfers.UploadRequest{Organization: stringValue(req.Organization), Project: stringValue(req.Project), Key: guid})
+	result, err := s.transfers.UploadURL(c.Context(), domaintransfers.UploadRequest{Scope: uploadScope(req.Organization, req.Project), Key: guid})
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -143,7 +143,7 @@ func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params interna
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
-	request := domaintransfers.UploadRequest{ObjectID: c.Params("file_id"), Organization: stringValue(params.Organization), Project: stringValue(params.Project), Key: stringValue(params.Key), Scope: uploadScope(params.Organization, params.Project)}
+	request := domaintransfers.UploadRequest{ObjectID: c.Params("file_id"), Key: stringValue(params.Key), Scope: uploadScope(params.Organization, params.Project)}
 	if params.ExpiresIn != nil {
 		request.ExpiresIn = time.Duration(*params.ExpiresIn) * time.Second
 	}
@@ -165,7 +165,7 @@ func (s *internalServer) InternalUploadBulk(c fiber.Ctx) error {
 	}
 	requests := make([]domaintransfers.UploadRequest, len(req.Requests))
 	for i, item := range req.Requests {
-		requests[i] = domaintransfers.UploadRequest{ObjectID: item.FileId, Organization: stringValue(item.Organization), Project: stringValue(item.Project), Key: stringValue(item.Key)}
+		requests[i] = domaintransfers.UploadRequest{ObjectID: item.FileId, Key: stringValue(item.Key), Scope: uploadScope(item.Organization, item.Project)}
 		if item.ExpiresIn != nil {
 			requests[i].ExpiresIn = time.Duration(*item.ExpiresIn) * time.Second
 		}

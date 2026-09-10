@@ -16,7 +16,26 @@ type bucketServer struct {
 }
 
 func (s *bucketServer) DeleteBucketScope(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
-	return s.deleteBucketScopeRequest(c, bucket, params)
+	routeCredentialID := strings.TrimSpace(bucket)
+	if routeCredentialID == "" {
+		return Reject(c, fiber.StatusBadRequest, "credential id is required")
+	}
+	organization := strings.TrimSpace(params.Organization)
+	scopePath := strings.TrimSpace(params.Path)
+	projectID := ""
+	if params.ProjectId != nil {
+		projectID = strings.TrimSpace(*params.ProjectId)
+	}
+	if organization == "" {
+		return Reject(c, fiber.StatusBadRequest, "organization and path are required")
+	}
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
+	}
+	if err := s.bucketService.DeleteScope(c.Context(), routeCredentialID, organization, projectID, scopePath); err != nil {
+		return HandleError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (s *bucketServer) DeleteProjectData(c fiber.Ctx, organization, projectID string) error {
@@ -31,11 +50,10 @@ func bucketPointer[T any](value T) *T {
 }
 
 func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
-	bucketService := s.bucketService
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	visible, err := bucketService.ListVisibleBuckets(c.Context())
+	visible, err := s.bucketService.ListVisibleBuckets(c.Context())
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -134,29 +152,6 @@ func (s *bucketServer) AddBucketScope(c fiber.Ctx, bucket string) error {
 	return c.SendStatus(fiber.StatusCreated)
 }
 
-func (s *bucketServer) deleteBucketScopeRequest(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
-	routeCredentialID := strings.TrimSpace(bucket)
-	if routeCredentialID == "" {
-		return Reject(c, fiber.StatusBadRequest, "credential id is required")
-	}
-	organization := strings.TrimSpace(params.Organization)
-	scopePath := strings.TrimSpace(params.Path)
-	projectID := ""
-	if params.ProjectId != nil {
-		projectID = strings.TrimSpace(*params.ProjectId)
-	}
-	if organization == "" {
-		return Reject(c, fiber.StatusBadRequest, "organization and path are required")
-	}
-	if access.MissingGen3AuthHeader(c.Context()) {
-		return HandleError(c, errorapi.ErrAuthenticationRequired)
-	}
-	if err := s.bucketService.DeleteScope(c.Context(), routeCredentialID, organization, projectID, scopePath); err != nil {
-		return HandleError(c, err)
-	}
-	return c.SendStatus(fiber.StatusNoContent)
-}
-
 func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return HandleError(c, errorapi.ErrAuthenticationRequired)
@@ -178,12 +173,6 @@ func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 	}
 	return c.JSON(result)
 }
-
-const (
-	RouteBuckets      = "/data/buckets"
-	RouteBucketDetail = "/data/buckets/:bucket"
-	RouteBucketScopes = "/data/buckets/:bucket/scopes"
-)
 
 func registerBucketRoutes(router fiber.Router, bucketService *domainbuckets.Service, projectCleanupHandler fiber.Handler) {
 	bucketapi.RegisterHandlers(router, &bucketServer{

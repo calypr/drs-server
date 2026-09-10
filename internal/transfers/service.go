@@ -48,12 +48,10 @@ type DownloadResult struct {
 }
 
 type UploadRequest struct {
-	ObjectID     string
-	Organization string
-	Project      string
-	Key          string
-	Scope        *AccessScope
-	ExpiresIn    time.Duration
+	ObjectID  string
+	Key       string
+	Scope     *AccessScope
+	ExpiresIn time.Duration
 }
 
 type UploadResult struct {
@@ -147,6 +145,11 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 		return UploadResult{}, fmt.Errorf("transfer service is not configured")
 	}
 	objectID := strings.TrimSpace(req.ObjectID)
+	organization, project := "", ""
+	if req.Scope != nil {
+		organization = req.Scope.Organization
+		project = req.Scope.Project
+	}
 	var obj *objects.Record
 	var err error
 	if s.objects != nil {
@@ -163,14 +166,14 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 	}
 	var target storage.Target
 	if existing {
-		if strings.TrimSpace(req.Organization) != "" {
+		if strings.TrimSpace(organization) != "" {
 			key := strings.Trim(strings.TrimSpace(req.Key), "/")
 			if key == "" && obj != nil {
 				if sha, ok := objects.CanonicalSHA256(obj.Checksums); ok {
 					key = sha
 				}
 			}
-			target, err = s.resolveScopedTarget(ctx, req.Organization, req.Project, key)
+			target, err = s.resolveScopedTarget(ctx, organization, project, key)
 		} else {
 			canonical, resolveErr := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, Key: req.Key, PreferChecksum: true})
 			if resolveErr == nil {
@@ -183,7 +186,7 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 		if key == "" {
 			key = objectID
 		}
-		target, err = s.resolveScopedTarget(ctx, req.Organization, req.Project, key)
+		target, err = s.resolveScopedTarget(ctx, organization, project, key)
 	}
 	if err != nil {
 		return UploadResult{}, err

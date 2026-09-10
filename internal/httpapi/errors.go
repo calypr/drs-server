@@ -137,7 +137,7 @@ func Reject(c fiber.Ctx, status int, msg string) error {
 		code = errorapi.ErrorCodeAccessDenied
 	}
 	category, _ := errorapi.CategoryForCode(code)
-	return sendWithCategory(c, code, category, status, msg, requestID)
+	return c.Status(status).JSON(newAPIError(c.Context(), code, category, status, msg))
 }
 
 // FiberErrorHandler converts errors returned through Fiber into the same API
@@ -148,14 +148,6 @@ func FiberErrorHandler(c fiber.Ctx, err error) error {
 		return Reject(c, fiberErr.Code, fiberErr.Message)
 	}
 	return HandleError(c, err)
-}
-
-func sendWithCategory(c fiber.Ctx, code errorapi.ErrorCode, category errorapi.ErrorCategory, status int, msg, requestID string) error {
-	payload := newAPIError(c.Context(), code, category, status, msg)
-	if requestID != "" {
-		payload.RequestId = &requestID
-	}
-	return c.Status(status).JSON(payload)
 }
 
 // NewAPIError builds the shared wire payload for Fiber and generated handlers.
