@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -65,15 +64,11 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 	normalized := make([]string, 0, len(req.Sha256))
 	seen := make(map[string]struct{}, len(req.Sha256))
 	for _, raw := range req.Sha256 {
-		value := strings.TrimSpace(raw)
-		value = strings.TrimPrefix(strings.ToLower(value), "sha256:")
-		if value == "" {
+		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		if len(value) != 64 {
-			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
-		}
-		if _, err := hex.DecodeString(value); err != nil {
+		value, ok := objects.NormalizeSHA256Query(raw)
+		if !ok {
 			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
 		}
 		if _, ok := seen[value]; ok {
@@ -266,15 +261,12 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 		}
 	}
 
-	var scope objects.Scope
+	scope, err := scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
+	if err != nil {
+		return Reject(c, fiber.StatusBadRequest, err.Error())
+	}
 	if hash == "" {
-		scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
-		if err != nil {
-			return Reject(c, fiber.StatusBadRequest, err.Error())
-		}
 		limit, start, page, err = parseInternalListPageFiber(c)
-	} else {
-		scope, err = scopeFromQuery(c.Query("organization"), c.Query("program"), c.Query("project"))
 	}
 	if err != nil {
 		return Reject(c, fiber.StatusBadRequest, err.Error())
@@ -397,18 +389,7 @@ func (s *internalServer) InternalCreate(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
-	candidates, err := decodeInternalCreateCandidates(c)
-	if err != nil {
-		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
-	}
-	if err := s.objects.RegisterScopedObjects(c.Context(), candidates); err != nil {
-		return HandleError(c, err)
-	}
-	records := make([]internalapi.InternalRecord, len(candidates))
-	for i, scoped := range candidates {
-		records[i] = toInternalRecord(scoped.Record)
-	}
-	return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &records})
+	return s.InternalCreate(c)
 }
 
 func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error) {

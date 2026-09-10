@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-func (s *Service) writeNow() time.Time {
-	clock := s.now
-	if clock == nil {
-		clock = time.Now
-	}
-	return clock().UTC()
-}
-
 func materializeRecordTime(record Record, now time.Time) Record {
 	if record.CreatedTime.IsZero() {
 		record.CreatedTime = now
@@ -34,7 +26,7 @@ func materializeRecordTime(record Record, now time.Time) Record {
 // input slice is updated with materialized values so internal callers can
 // return their submitted records without a durable reread.
 func (s *Service) RegisterScopedObjects(ctx context.Context, scoped []ScopedRecord) error {
-	now := s.writeNow()
+	now := time.Now().UTC()
 	prepared := make([]Record, len(scoped))
 	for i := range scoped {
 		record, err := enforceCanonicalProjectScope(
@@ -59,7 +51,7 @@ func (s *Service) UpdateRecordInScope(ctx context.Context, id string, scope Scop
 	if err != nil {
 		return Record{}, err
 	}
-	return s.UpdateRecord(ctx, id, normalized, explicitSize, s.writeNow())
+	return s.UpdateRecord(ctx, id, normalized, explicitSize, time.Now().UTC())
 }
 
 // RegisterCandidates materializes DRS candidates, persists them through the
@@ -68,7 +60,7 @@ func (s *Service) UpdateRecordInScope(ctx context.Context, id string, scope Scop
 func (s *Service) RegisterCandidates(ctx context.Context, candidates []Candidate) ([]Record, error) {
 	prepared := make([]Record, 0, len(candidates))
 	for _, candidate := range candidates {
-		record, err := CandidateToRecord(candidate, s.writeNow())
+		record, err := CandidateToRecord(candidate, time.Now().UTC())
 		if err != nil {
 			return nil, err
 		}
@@ -322,7 +314,7 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 		return result, err
 	}
 
-	now := s.writeNow()
+	now := time.Now().UTC()
 	prepared := make([]Record, len(candidates))
 	for i, candidate := range candidates {
 		normalized, err := enforceCanonicalProjectScope(candidate, scope.Organization, scope.Project)

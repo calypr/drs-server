@@ -2,7 +2,6 @@ package objects
 
 import (
 	"context"
-	"time"
 )
 
 const (
@@ -16,11 +15,10 @@ const (
 type Service struct {
 	store    ObjectStore
 	resolver PathPrefixResolver
-	now      func() time.Time
 }
 
 func NewService(store ObjectStore, resolver PathPrefixResolver) *Service {
-	return &Service{store: store, resolver: resolver, now: time.Now}
+	return &Service{store: store, resolver: resolver}
 }
 
 // ObjectStore is the persistence capability required by Service.

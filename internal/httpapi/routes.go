@@ -50,12 +50,6 @@ type internalServer struct {
 
 var _ internalapi.ServerInterface = (*internalServer)(nil)
 
-func projectCleanupHandler(server *internalServer) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		return server.InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
-	}
-}
-
 func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	app.Get(RouteHealthz, func(c fiber.Ctx) error {
 		return c.SendString("OK")
@@ -87,21 +81,19 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		registerMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
 	}
 	if options.Internal {
-		server := newInternalServer(deps)
+		server := &internalServer{
+			objects:        deps.Objects,
+			transfers:      deps.Transfers,
+			projectStorage: deps.ProjectStorage,
+			buckets:        deps.Buckets,
+		}
 		internalapi.RegisterHandlers(api, server)
-		registerBucketRoutes(api, deps.Buckets, projectCleanupHandler(server))
+		registerBucketRoutes(api, deps.Buckets, func(c fiber.Ctx) error {
+			return server.InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
+		})
 	}
 	if options.LFS {
 		registerLFSRoutes(api, deps.LFS, options.LFSProtocol)
-	}
-}
-
-func newInternalServer(deps Dependencies) *internalServer {
-	return &internalServer{
-		objects:        deps.Objects,
-		transfers:      deps.Transfers,
-		projectStorage: deps.ProjectStorage,
-		buckets:        deps.Buckets,
 	}
 }
 
