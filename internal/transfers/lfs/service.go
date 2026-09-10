@@ -9,7 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
+	clienthash "github.com/calypr/syfon/client/hash"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -22,7 +26,7 @@ const PendingMetadataTTL = 20 * time.Minute
 
 type PendingMetadata struct {
 	OID       string
-	Candidate objects.Candidate
+	Candidate lfsapi.DrsObjectCandidate
 	CreatedAt time.Time
 	ExpiresAt time.Time
 }
@@ -65,9 +69,8 @@ func uploadSignedMultipartPart(ctx context.Context, signedURL string, content []
 }
 
 type ObjectPort interface {
-	GetObject(context.Context, string, string) (*objects.Record, error)
-	RequireObjectResources(context.Context, string, []string) error
-	RegisterObjects(context.Context, []objects.Record) error
+	GetObject(context.Context, string, string) (*drs.DrsObject, error)
+	RegisterObjects(context.Context, []drs.DrsObject) error
 }
 
 type DownloadPreparation struct{ SignedURL string }
@@ -175,8 +178,8 @@ func (s *Service) PrepareUpload(ctx context.Context, oid string, size int64) (Up
 	if !errorapi.IsNotFoundError(err) {
 		return result, err
 	}
-	if err := s.objects.RequireObjectResources(ctx, "create", []string{"/data_file"}); err != nil {
-		return result, err
+	if !access.HasObjectMethodAccess(ctx, "create", []string{"/data_file"}) {
+		return result, errorapi.ErrAccessDenied
 	}
 	if _, err := s.firstConfiguredBucket(ctx); err != nil {
 		return result, err
@@ -240,13 +243,13 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 func (s *Service) resolveUploadTarget(ctx context.Context, oid string) (storage.Target, string, error) {
 	if object, err := s.objects.GetObject(ctx, oid, "read"); err == nil {
 		target, targetErr := s.targetForObject(ctx, object)
-		return target, string(object.Id), targetErr
+		return target, object.Id, targetErr
 	} else if !errorapi.IsNotFoundError(err) {
 		return storage.Target{}, "", err
 	}
 	if s.pending != nil {
 		if pending, err := s.pending.GetPendingMetadata(ctx, oid); err == nil {
-			object, conversionErr := objects.CandidateToRecord(pending.Candidate, s.currentTime())
+			object, conversionErr := materializeCandidate(pending.Candidate, s.currentTime())
 			if conversionErr != nil {
 				return storage.Target{}, "", conversionErr
 			}
@@ -263,7 +266,7 @@ func (s *Service) resolveUploadTarget(ctx context.Context, oid string) (storage.
 	return storage.Target{Provider: "s3", LookupKey: bucket, PhysicalBucket: bucket, Key: oid, CanonicalURL: address.BucketToURL(bucket, oid), LookupCandidates: []string{bucket}}, oid, nil
 }
 
-func (s *Service) targetForObject(ctx context.Context, object *objects.Record) (storage.Target, error) {
+func (s *Service) targetForObject(ctx context.Context, object *drs.DrsObject) (storage.Target, error) {
 	canonical, err := s.transfer.ResolveCanonicalStorageTarget(ctx, transfers.CanonicalStorageTargetRequest{Object: object, PreferChecksum: true})
 	if err != nil {
 		return storage.Target{}, err
@@ -289,11 +292,11 @@ func (s *Service) firstConfiguredBucket(ctx context.Context) (string, error) {
 	return strings.TrimSpace(credentials[0].Bucket), nil
 }
 
-func (s *Service) Stage(ctx context.Context, candidates []objects.Candidate) error {
+func (s *Service) Stage(ctx context.Context, candidates []lfsapi.DrsObjectCandidate) error {
 	now := s.currentTime()
 	entries := make([]PendingMetadata, 0, len(candidates))
 	for index, candidate := range candidates {
-		internalObject, err := objects.CandidateToRecord(candidate, now)
+		internalObject, err := materializeCandidate(candidate, now)
 		if err != nil {
 			return &MetadataStageError{Index: index, Err: err}
 		}
@@ -312,7 +315,7 @@ func (s *Service) Stage(ctx context.Context, candidates []objects.Candidate) err
 func (s *Service) Verify(ctx context.Context, oid string) error {
 	object, err := s.objects.GetObject(ctx, oid, "read")
 	if err == nil {
-		return s.recordUpload(ctx, string(object.Id))
+		return s.recordUpload(ctx, object.Id)
 	}
 	if !errorapi.IsNotFoundError(err) {
 		return err
@@ -324,14 +327,82 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 	if err != nil {
 		return err
 	}
-	internalObject, err := objects.CandidateToRecord(pending.Candidate, s.currentTime())
+	internalObject, err := materializeCandidate(pending.Candidate, s.currentTime())
 	if err != nil {
 		return &MetadataCandidateError{Err: err}
 	}
-	if err := s.objects.RegisterObjects(ctx, []objects.Record{internalObject}); err != nil {
+	if err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject}); err != nil {
 		return err
 	}
-	return s.recordUpload(ctx, string(internalObject.Id))
+	return s.recordUpload(ctx, internalObject.Id)
+}
+
+func materializeCandidate(value lfsapi.DrsObjectCandidate, now time.Time) (drs.DrsObject, error) {
+	var aliases []string
+	if value.Aliases != nil {
+		aliases = append(aliases, (*value.Aliases)...)
+	}
+	explicitID := ""
+	if value.Id != nil {
+		explicitID = strings.TrimSpace(*value.Id)
+	}
+	if explicitID == "" {
+		var sourceChecksums []lfsapi.Checksum
+		if value.Checksums != nil {
+			sourceChecksums = *value.Checksums
+		}
+		for _, checksum := range sourceChecksums {
+			if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
+				explicitID = clienthash.NormalizeOid(checksum.Checksum)
+				break
+			}
+		}
+	}
+	if explicitID != "" {
+		aliases = append([]string{"id:" + explicitID}, aliases...)
+	}
+	var sourceMethods []lfsapi.AccessMethod
+	if value.AccessMethods != nil {
+		sourceMethods = *value.AccessMethods
+	}
+	methods := make([]drs.AccessMethod, 0, len(sourceMethods))
+	if value.AccessMethods != nil {
+		for _, method := range sourceMethods {
+			converted := drs.AccessMethod{AccessId: method.AccessId}
+			if method.Type != nil {
+				converted.Type = drs.AccessMethodType(*method.Type)
+			}
+			if method.AccessUrl != nil && method.AccessUrl.Url != nil {
+				converted.AccessUrl = &drs.AccessURL{Url: *method.AccessUrl.Url}
+			}
+			methods = append(methods, converted)
+		}
+	}
+	var accessMethods *[]drs.AccessMethod
+	if value.AccessMethods != nil {
+		accessMethods = &methods
+	}
+	var size int64
+	if value.Size != nil {
+		size = *value.Size
+	}
+	var sourceChecksums []lfsapi.Checksum
+	if value.Checksums != nil {
+		sourceChecksums = *value.Checksums
+	}
+	checksums := make([]drs.Checksum, 0, len(sourceChecksums))
+	for _, checksum := range sourceChecksums {
+		checksums = append(checksums, drs.Checksum{Type: checksum.Type, Checksum: checksum.Checksum})
+	}
+	return objects.MaterializeCandidate(drs.DrsObjectCandidate{
+		AccessMethods:    accessMethods,
+		Aliases:          &aliases,
+		Checksums:        checksums,
+		ControlledAccess: value.ControlledAccess,
+		Description:      value.Description,
+		Name:             value.Name,
+		Size:             size,
+	}, now)
 }
 
 func (s *Service) recordUpload(ctx context.Context, objectID string) error {

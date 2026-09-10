@@ -3,21 +3,17 @@ package objects_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
 	"github.com/calypr/syfon/internal/persistence/store"
-	"strings"
-	"testing"
-	"time"
 )
-
-func newTestService(backend objects.ObjectStore) *objects.Service {
-	return objects.NewService(backend, nil)
-}
 
 func buildGen3Context(privileges map[string]map[string]bool) context.Context {
 	session := access.NewSession("gen3")
@@ -35,62 +31,55 @@ func buildLocalAuthzContext(privileges map[string]map[string]bool) context.Conte
 
 func ptr[T any](value T) *T { return &value }
 
-func registerCandidates(ctx context.Context, service *objects.Service, candidates []objects.Candidate) (int, error) {
-	records := make([]objects.Record, 0, len(candidates))
-	for _, candidate := range candidates {
-		record, err := objects.CandidateToRecord(candidate, time.Now().UTC())
-		if err != nil {
-			return 0, err
-		}
-		records = append(records, record)
-	}
-	if err := service.RegisterObjects(ctx, records); err != nil {
-		return 0, err
-	}
-	return len(records), nil
-}
-
 func newSQLiteDatabase(t *testing.T) *store.Store {
 	t.Helper()
-	cipher, err := credentialcipher.NewFromEnv()
-	if err != nil {
-		t.Fatalf("create credential cipher: %v", err)
-	}
-	database, err := sqlite.NewSqliteDB(":memory:", cipher)
+	database, err := sqlite.NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("create in-memory SQLite database: %v", err)
 	}
+	t.Cleanup(func() { _ = database.Close() })
 	return database
 }
 
-type bulkOverwriteStore struct {
+type objectTestStore struct {
 	objects.ObjectStore
-	Objects map[string]*objects.Record
+	Objects map[string]*drs.DrsObject
 	Aliases map[string]string
 }
 
-func (f *bulkOverwriteStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0, len(ids))
+func (f *objectTestStore) GetObject(_ context.Context, id string) (*drs.DrsObject, error) {
+	if canonicalID := f.Aliases[id]; canonicalID != "" {
+		id = canonicalID
+	}
+	obj, ok := f.Objects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
+	}
+	return cloneObjectTestRecord(obj), nil
+}
+
+func (f *objectTestStore) GetBulkObjects(_ context.Context, ids []string) ([]drs.DrsObject, error) {
+	result := make([]drs.DrsObject, 0, len(ids))
 	for _, id := range ids {
 		if obj, ok := f.Objects[id]; ok {
-			result = append(result, *obj)
+			result = append(result, *cloneObjectTestRecord(obj))
 		}
 	}
 	return result, nil
 }
 
-func (f *bulkOverwriteStore) RegisterObjects(_ context.Context, records []objects.Record) error {
+func (f *objectTestStore) RegisterObjects(_ context.Context, records []drs.DrsObject) error {
 	if f.Objects == nil {
-		f.Objects = make(map[string]*objects.Record)
+		f.Objects = make(map[string]*drs.DrsObject)
 	}
 	for i := range records {
-		copyObj := records[i]
-		f.Objects[string(copyObj.Id)] = &copyObj
+		copyObj := *cloneObjectTestRecord(&records[i])
+		f.Objects[copyObj.Id] = &copyObj
 	}
 	return nil
 }
 
-func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
+func (f *objectTestStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := f.Objects[canonicalID]; !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
@@ -101,7 +90,7 @@ func (f *bulkOverwriteStore) CreateObjectAlias(_ context.Context, aliasID, canon
 	return nil
 }
 
-func (f *bulkOverwriteStore) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
+func (f *objectTestStore) ResolveObjectAlias(_ context.Context, aliasID string) (string, error) {
 	canonicalID, ok := f.Aliases[aliasID]
 	if !ok {
 		return "", fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
@@ -109,7 +98,52 @@ func (f *bulkOverwriteStore) ResolveObjectAlias(_ context.Context, aliasID strin
 	return canonicalID, nil
 }
 
-func (f *bulkOverwriteStore) ListScopedObjectIDsByChecksums(_ context.Context, organization, project string, checksums []string) (map[string][]string, error) {
+func (f *objectTestStore) GetObjectsByChecksums(_ context.Context, checksums []string) (map[string][]drs.DrsObject, error) {
+	result := make(map[string][]drs.DrsObject, len(checksums))
+	for _, checksum := range checksums {
+		for _, obj := range f.Objects {
+			if recordHasChecksum(obj, checksum) {
+				result[checksum] = append(result[checksum], *cloneObjectTestRecord(obj))
+			}
+		}
+	}
+	return result, nil
+}
+
+func (f *objectTestStore) GetPublicReadByIDs(_ context.Context, _ []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (f *objectTestStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []drs.AccessMethod) error {
+	record, ok := f.Objects[id]
+	if !ok {
+		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
+	}
+	copyMethods := append([]drs.AccessMethod(nil), methods...)
+	record.AccessMethods = &copyMethods
+	return nil
+}
+
+func (f *objectTestStore) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]drs.AccessMethod) error {
+	for id, methods := range updates {
+		if err := f.UpdateObjectAccessMethods(ctx, id, methods); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cloneObjectTestRecord(obj *drs.DrsObject) *drs.DrsObject {
+	copyObj := *obj
+	if obj.AccessMethods != nil {
+		methods := append([]drs.AccessMethod(nil), (*obj.AccessMethods)...)
+		copyObj.AccessMethods = &methods
+	}
+	copyObj.Checksums = append([]drs.Checksum(nil), obj.Checksums...)
+	return &copyObj
+}
+
+func (f *objectTestStore) ListScopedObjectIDsByChecksums(_ context.Context, organization, project string, checksums []string) (map[string][]string, error) {
 	result := make(map[string][]string, len(checksums))
 	for _, checksum := range checksums {
 		for id, obj := range f.Objects {
@@ -122,65 +156,7 @@ func (f *bulkOverwriteStore) ListScopedObjectIDsByChecksums(_ context.Context, o
 	return result, nil
 }
 
-type readObjectStore struct {
-	objects.ObjectStore
-	Objects map[string]*objects.Record
-}
-
-func (f *readObjectStore) CreateObject(_ context.Context, obj *objects.Record) error {
-	if f.Objects == nil {
-		f.Objects = make(map[string]*objects.Record)
-	}
-	copyObj := *obj
-	f.Objects[string(obj.Id)] = &copyObj
-	return nil
-}
-
-func (f *readObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0, len(ids))
-	for _, id := range ids {
-		if obj, ok := f.Objects[id]; ok {
-			result = append(result, *obj)
-		}
-	}
-	return result, nil
-}
-
-func (f *readObjectStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0)
-	for _, obj := range f.Objects {
-		if recordHasChecksum(obj, checksum) {
-			result = append(result, *obj)
-		}
-	}
-	return result, nil
-}
-
-func (f *readObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
-	result := make(map[string][]objects.Record, len(checksums))
-	for _, checksum := range checksums {
-		matches, err := f.GetObjectsByChecksum(ctx, checksum)
-		if err != nil {
-			return nil, err
-		}
-		result[checksum] = matches
-	}
-	return result, nil
-}
-
-func (f *readObjectStore) ListScopedObjectIDsByChecksums(_ context.Context, organization, project string, checksums []string) (map[string][]string, error) {
-	result := make(map[string][]string, len(checksums))
-	for _, checksum := range checksums {
-		for id, obj := range f.Objects {
-			if recordHasChecksum(obj, checksum) && recordInScope(obj, organization, project) {
-				result[checksum] = append(result[checksum], id)
-			}
-		}
-	}
-	return result, nil
-}
-
-func recordHasChecksum(obj *objects.Record, checksum string) bool {
+func recordHasChecksum(obj *drs.DrsObject, checksum string) bool {
 	for _, candidate := range obj.Checksums {
 		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), strings.TrimSpace(checksum)) {
 			return true
@@ -189,7 +165,7 @@ func recordHasChecksum(obj *objects.Record, checksum string) bool {
 	return false
 }
 
-func recordInScope(obj *objects.Record, organization, project string) bool {
+func recordInScope(obj *drs.DrsObject, organization, project string) bool {
 	projects := clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(obj))[strings.TrimSpace(organization)]
 	if strings.TrimSpace(project) == "" || len(projects) == 0 {
 		return len(projects) > 0

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -74,7 +75,7 @@ func (db *Store) RecordTransferAttributionEvents(ctx context.Context, events []u
 	return tx.Commit()
 }
 
-func (db *Store) RecordProviderTransferEvents(ctx context.Context, events []usage.ProviderEvent) error {
+func (db *Store) RecordProviderTransferEvents(ctx context.Context, events []metricsapi.ProviderTransferEvent) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -103,19 +104,19 @@ func (db *Store) RecordProviderTransferEvents(ctx context.Context, events []usag
 			return err
 		}
 		events[i] = normalized
-		if normalized.ProviderEventID == "" || normalized.Direction == "" || normalized.Provider == "" {
+		if normalized.ProviderEventId == "" || normalized.Direction == "" || normalized.Provider == "" {
 			continue
 		}
-		when := normalized.EventTime
+		when := timeVal(normalized.EventTime)
 		if when.IsZero() {
 			when = time.Now().UTC()
 		}
 		if _, err := stmt.ExecContext(ctx,
-			normalized.ProviderEventID, normalized.AccessGrantID, normalized.Direction, when.UTC(), normalized.RequestID, normalized.ProviderRequestID,
-			normalized.ObjectID, normalized.SHA256, normalized.ObjectSize, normalized.Organization, normalized.Project, normalized.AccessID, normalized.Provider, normalized.Bucket,
-			normalized.ObjectKey, normalized.StorageURL, nullableInt64(normalized.RangeStart), nullableInt64(normalized.RangeEnd), normalized.BytesTransferred, normalized.HTTPMethod, normalized.HTTPStatus,
-			normalized.RequesterPrincipal, normalized.SourceIP, normalized.UserAgent, normalized.RawEventRef, normalized.ActorEmail, normalized.ActorSubject, normalized.AuthMode,
-			normalized.ReconciliationStatus,
+			normalized.ProviderEventId, stringVal(normalized.AccessGrantId), normalized.Direction, when.UTC(), stringVal(normalized.RequestId), stringVal(normalized.ProviderRequestId),
+			stringVal(normalized.ObjectId), stringVal(normalized.Sha256), providerInt64(normalized.ObjectSize), stringVal(normalized.Organization), stringVal(normalized.Project), stringVal(normalized.AccessId), normalized.Provider, normalized.Bucket,
+			stringVal(normalized.ObjectKey), stringVal(normalized.StorageUrl), nullableInt64(normalized.RangeStart), nullableInt64(normalized.RangeEnd), normalized.BytesTransferred, stringVal(normalized.HttpMethod), providerInt(normalized.HttpStatus),
+			stringVal(normalized.RequesterPrincipal), stringVal(normalized.SourceIp), stringVal(normalized.UserAgent), stringVal(normalized.RawEventRef), stringVal(normalized.ActorEmail), stringVal(normalized.ActorSubject), stringVal(normalized.AuthMode),
+			providerReconciliationStatus(normalized.ReconciliationStatus),
 		); err != nil {
 			return err
 		}
@@ -123,19 +124,27 @@ func (db *Store) RecordProviderTransferEvents(ctx context.Context, events []usag
 	return tx.Commit()
 }
 
-func (db *Store) reconcileProviderTransferEvent(ctx context.Context, tx *sql.Tx, ev usage.ProviderEvent) (usage.ProviderEvent, error) {
-	ev.Direction = normalizeProviderDirection(ev.Direction, ev.HTTPMethod)
+func (db *Store) reconcileProviderTransferEvent(ctx context.Context, tx *sql.Tx, ev metricsapi.ProviderTransferEvent) (metricsapi.ProviderTransferEvent, error) {
+	ev.Direction = metricsapi.ProviderTransferDirection(normalizeProviderDirection(string(ev.Direction), stringVal(ev.HttpMethod)))
 	ev.Provider = strings.TrimSpace(ev.Provider)
 	ev.Bucket = strings.TrimSpace(ev.Bucket)
-	ev.ObjectKey = strings.TrimLeft(strings.TrimSpace(ev.ObjectKey), "/")
-	ev.StorageURL = strings.TrimSpace(ev.StorageURL)
-	ev.ReconciliationStatus = usage.ProviderTransferUnmatched
-	if ev.AccessGrantID != "" {
-		if match, ok, err := db.accessGrantByID(ctx, tx, ev.AccessGrantID); err != nil {
+	if ev.ObjectKey != nil {
+		value := strings.TrimLeft(strings.TrimSpace(*ev.ObjectKey), "/")
+		ev.ObjectKey = &value
+	}
+	if ev.StorageUrl != nil {
+		value := strings.TrimSpace(*ev.StorageUrl)
+		ev.StorageUrl = &value
+	}
+	status := metricsapi.ProviderTransferReconciliationStatus(usage.ProviderTransferUnmatched)
+	ev.ReconciliationStatus = &status
+	if stringVal(ev.AccessGrantId) != "" {
+		if match, ok, err := db.accessGrantByID(ctx, tx, stringVal(ev.AccessGrantId)); err != nil {
 			return ev, err
 		} else if ok {
 			mergeAccessGrantIntoProviderEvent(&ev, match)
-			ev.ReconciliationStatus = usage.ProviderTransferMatched
+			matched := metricsapi.ProviderTransferReconciliationStatus(usage.ProviderTransferMatched)
+			ev.ReconciliationStatus = &matched
 			return ev, nil
 		}
 	}
@@ -148,9 +157,11 @@ func (db *Store) reconcileProviderTransferEvent(ctx context.Context, tx *sql.Tx,
 		return ev, nil
 	case 1:
 		mergeAccessGrantIntoProviderEvent(&ev, matches[0])
-		ev.ReconciliationStatus = usage.ProviderTransferMatched
+		matched := metricsapi.ProviderTransferReconciliationStatus(usage.ProviderTransferMatched)
+		ev.ReconciliationStatus = &matched
 	default:
-		ev.ReconciliationStatus = usage.ProviderTransferAmbiguous
+		ambiguous := metricsapi.ProviderTransferReconciliationStatus(usage.ProviderTransferAmbiguous)
+		ev.ReconciliationStatus = &ambiguous
 	}
 	return ev, nil
 }
@@ -160,6 +171,27 @@ func nullableInt64(v *int64) any {
 		return nil
 	}
 	return *v
+}
+
+func providerInt64(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func providerInt(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func providerReconciliationStatus(value *metricsapi.ProviderTransferReconciliationStatus) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func (db *Store) backfillAccessGrants(ctx context.Context) error {
@@ -331,7 +363,7 @@ func (db *Store) accessGrantByID(ctx context.Context, tx *sql.Tx, grantID string
 	return grant, err == nil, err
 }
 
-func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev usage.ProviderEvent) ([]usage.Grant, error) {
+func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev metricsapi.ProviderTransferEvent) ([]usage.Grant, error) {
 	query := `
 		SELECT access_grant_id, first_issued_at, last_issued_at, issue_count,
 			object_id, sha256, object_size, organization, project, access_id,
@@ -342,13 +374,14 @@ func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev usage
 			AND last_issued_at <= ?
 			AND last_issued_at >= ?
 	`
-	args := []any{ev.Provider, ev.Bucket, ev.EventTime.UTC().Add(15 * time.Minute), ev.EventTime.UTC().Add(-24 * time.Hour)}
-	if ev.StorageURL != "" {
+	eventTime := timeVal(ev.EventTime)
+	args := []any{ev.Provider, ev.Bucket, eventTime.UTC().Add(15 * time.Minute), eventTime.UTC().Add(-24 * time.Hour)}
+	if stringVal(ev.StorageUrl) != "" {
 		query += " AND storage_url = ?"
-		args = append(args, ev.StorageURL)
-	} else if ev.ObjectKey != "" {
+		args = append(args, stringVal(ev.StorageUrl))
+	} else if stringVal(ev.ObjectKey) != "" {
 		query += " AND (storage_url = ? OR storage_url LIKE ?)"
-		args = append(args, providerStorageURL(ev.Provider, ev.Bucket, ev.ObjectKey), "%/"+ev.ObjectKey)
+		args = append(args, providerStorageURL(ev.Provider, ev.Bucket, stringVal(ev.ObjectKey)), "%/"+stringVal(ev.ObjectKey))
 	}
 	query += " ORDER BY last_issued_at DESC LIMIT 2"
 	rows, err := db.queryTxContext(ctx, tx, query, args...)
@@ -371,40 +404,40 @@ func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev usage
 	return out, rows.Err()
 }
 
-func mergeAccessGrantIntoProviderEvent(ev *usage.ProviderEvent, grant usage.Grant) {
-	if ev.AccessGrantID == "" {
-		ev.AccessGrantID = grant.AccessGrantID
+func mergeAccessGrantIntoProviderEvent(ev *metricsapi.ProviderTransferEvent, grant usage.Grant) {
+	if stringVal(ev.AccessGrantId) == "" {
+		ev.AccessGrantId = &grant.AccessGrantID
 	}
-	if ev.ObjectID == "" {
-		ev.ObjectID = grant.ObjectID
+	if stringVal(ev.ObjectId) == "" {
+		ev.ObjectId = &grant.ObjectID
 	}
-	if ev.SHA256 == "" {
-		ev.SHA256 = grant.SHA256
+	if stringVal(ev.Sha256) == "" {
+		ev.Sha256 = &grant.SHA256
 	}
-	if ev.ObjectSize == 0 {
-		ev.ObjectSize = grant.ObjectSize
+	if providerInt64(ev.ObjectSize) == 0 {
+		ev.ObjectSize = &grant.ObjectSize
 	}
-	if ev.Organization == "" {
-		ev.Organization = grant.Organization
+	if stringVal(ev.Organization) == "" {
+		ev.Organization = &grant.Organization
 	}
-	if ev.Project == "" {
-		ev.Project = grant.Project
+	if stringVal(ev.Project) == "" {
+		ev.Project = &grant.Project
 	}
-	if ev.AccessID == "" {
-		ev.AccessID = grant.AccessID
+	if stringVal(ev.AccessId) == "" {
+		ev.AccessId = &grant.AccessID
 	}
-	if ev.StorageURL == "" {
-		ev.StorageURL = grant.StorageURL
+	if stringVal(ev.StorageUrl) == "" {
+		ev.StorageUrl = &grant.StorageURL
 	}
-	hasActor := ev.ActorEmail != "" || ev.ActorSubject != ""
+	hasActor := stringVal(ev.ActorEmail) != "" || stringVal(ev.ActorSubject) != ""
 	if !hasActor {
-		ev.ActorEmail = grant.ActorEmail
+		ev.ActorEmail = &grant.ActorEmail
 	}
 	if !hasActor {
-		ev.ActorSubject = grant.ActorSubject
+		ev.ActorSubject = &grant.ActorSubject
 	}
-	if ev.AuthMode == "" {
-		ev.AuthMode = grant.AuthMode
+	if stringVal(ev.AuthMode) == "" {
+		ev.AuthMode = &grant.AuthMode
 	}
 }
 
@@ -436,9 +469,9 @@ func providerStorageURL(provider, bucket, key string) string {
 	}
 }
 
-func (db *Store) QueryTransferSummary(ctx context.Context, filter usage.Filter, resources []string) (usage.Summary, error) {
+func (db *Store) QueryTransferSummary(ctx context.Context, filter usage.Filter, resources []string) (metricsapi.TransferAttributionSummary, error) {
 	where, args := db.transferAttributionWhere(filter, resources)
-	var out usage.Summary
+	var out metricsapi.TransferAttributionSummary
 	err := db.queryRowContext(ctx, `
 		SELECT
 			COUNT(*),
@@ -460,7 +493,7 @@ func (db *Store) QueryTransferSummary(ctx context.Context, filter usage.Filter, 
 	return out, err
 }
 
-func (db *Store) QueryTransferBreakdown(ctx context.Context, filter usage.Filter, groupBy string, resources []string) ([]usage.Breakdown, error) {
+func (db *Store) QueryTransferBreakdown(ctx context.Context, filter usage.Filter, groupBy string, resources []string) ([]metricsapi.TransferAttributionBreakdown, error) {
 	keyExpr, selectExpr := transferAttributionGroupExpr(groupBy)
 	where, args := db.transferAttributionWhere(filter, resources)
 	query := fmt.Sprintf(`
@@ -613,10 +646,10 @@ type transferRows interface {
 	Err() error
 }
 
-func scanTransferAttributionBreakdown(rows transferRows) ([]usage.Breakdown, error) {
-	out := make([]usage.Breakdown, 0)
+func scanTransferAttributionBreakdown(rows transferRows) ([]metricsapi.TransferAttributionBreakdown, error) {
+	out := make([]metricsapi.TransferAttributionBreakdown, 0)
 	for rows.Next() {
-		var item usage.Breakdown
+		var item metricsapi.TransferAttributionBreakdown
 		var last any
 		if err := rows.Scan(
 			&item.Key,

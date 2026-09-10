@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
@@ -15,17 +16,12 @@ type AccessLookupResult struct {
 	Found  bool
 	URL    string
 	Target storage.Target
-	Object *objects.Record
+	Object *drs.DrsObject
 }
 
 type AccessLookupRequest struct {
 	ObjectID string
 	AccessID string
-}
-
-type BulkAccessLookupRequest struct {
-	ObjectID  string
-	AccessIDs []string
 }
 
 type ResolvedAccess struct {
@@ -93,7 +89,7 @@ func (s *Service) IssueAccessBulk(ctx context.Context, requests []AccessLookupRe
 	return result
 }
 
-func accessURLForID(obj *objects.Record, accessID string) string {
+func accessURLForID(obj *drs.DrsObject, accessID string) string {
 	if obj == nil || obj.AccessMethods == nil {
 		return ""
 	}
@@ -113,7 +109,7 @@ func accessURLForID(obj *objects.Record, accessID string) string {
 		if strings.EqualFold(methodAccessID, accessID) {
 			return method.AccessUrl.Url
 		}
-		if strings.EqualFold(strings.TrimSpace(method.Type), accessID) {
+		if strings.EqualFold(strings.TrimSpace(string(method.Type)), accessID) {
 			legacyMatches = append(legacyMatches, method.AccessUrl.Url)
 		}
 	}

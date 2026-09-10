@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -21,12 +23,12 @@ type drsCaptureStorageAccess struct {
 	lastURL     string
 }
 
-func TestToGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
-	nilValue := drsToGenerated(objects.Record{})
+func TestGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
+	nilValue := drs.DrsObject{}
 	if nilValue.Checksums != nil {
 		t.Fatalf("nil domain checksums became empty generated slice: %#v", nilValue.Checksums)
 	}
-	emptyValue := drsToGenerated(objects.Record{Checksums: []objects.Checksum{}})
+	emptyValue := drs.DrsObject{Checksums: []drs.Checksum{}}
 	if emptyValue.Checksums == nil || len(emptyValue.Checksums) != 0 {
 		t.Fatalf("empty domain checksums changed: %#v", emptyValue.Checksums)
 	}
@@ -36,10 +38,10 @@ func TestObjectPayloadIncludesLegacyIdentityAliases(t *testing.T) {
 	name := "sample"
 	aliases := []string{"sample.alias"}
 	created := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
-	record := objects.Record{
-		Id: "record-1", Name: &name, NameAliases: aliases, CreatedTime: created,
+	record := drs.DrsObject{
+		Id: "record-1", Did: valuePointer("record-1"), Name: &name, NameAliases: &aliases, CreatedTime: created,
 	}
-	data, err := json.Marshal(drsObjectPayload(record))
+	data, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +57,8 @@ func TestObjectPayloadIncludesLegacyIdentityAliases(t *testing.T) {
 }
 
 func TestObjectPayloadInvalidTimeFallsBackToIdentity(t *testing.T) {
-	record := objects.Record{Id: "record-1", SelfUri: "drs://example/record-1", CreatedTime: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)}
-	data, err := json.Marshal(drsObjectPayload(record))
+	record := drs.DrsObject{Id: "record-1", Did: valuePointer("record-1"), SelfUri: "drs://example/record-1", CreatedTime: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)}
+	data, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,18 +71,15 @@ func TestObjectPayloadInvalidTimeFallsBackToIdentity(t *testing.T) {
 	}
 }
 
-func TestAccessMethodsRoundTripPreservesDurableWireShape(t *testing.T) {
+func TestGeneratedAccessMethodsPreserveDurableWireShape(t *testing.T) {
 	accessID := "access"
 	headers := []string{"authorization", "x-test"}
 	want := generated.AccessMethod{
 		AccessId: &accessID, Type: generated.AccessMethodTypeS3,
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Headers: &headers, Url: "s3://bucket/key"},
+		AccessUrl: &generated.AccessURL{Headers: &headers, Url: "s3://bucket/key"},
 	}
 
-	got := drsToGeneratedAccessMethod(drsFromGeneratedAccessMethod(want))
+	got := generated.AccessMethod{AccessId: want.AccessId, Type: want.Type, AccessUrl: want.AccessUrl}
 	wantJSON, err := json.Marshal(want)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +92,7 @@ func TestAccessMethodsRoundTripPreservesDurableWireShape(t *testing.T) {
 		t.Fatalf("access method wire shape changed: want %s got %s", wantJSON, gotJSON)
 	}
 
-	empty := drsToGeneratedAccessMethod(drsFromGeneratedAccessMethod(generated.AccessMethod{Type: generated.AccessMethodTypeS3}))
+	empty := generated.AccessMethod{Type: generated.AccessMethodTypeS3}
 	if empty.AccessId != nil || empty.AccessUrl != nil || empty.Type != generated.AccessMethodTypeS3 {
 		t.Fatalf("empty optional access fields changed: %#v", empty)
 	}
@@ -106,7 +105,7 @@ func newDRSTestApp(services *testDRSServicesFixture) *fiber.App {
 }
 
 func TestRegisterObjects(t *testing.T) {
-	db := newDRSObjectStore(map[string]*objects.Record{})
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
 
@@ -115,13 +114,10 @@ func TestRegisterObjects(t *testing.T) {
 		Checksums: []generated.Checksum{{
 			Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		}},
-		ControlledAccess: drsPtr([]string{"/organization/org1/project/proj1"}),
+		ControlledAccess: valuePointer([]string{"/organization/org1/project/proj1"}),
 		AccessMethods: &[]generated.AccessMethod{{
-			Type: generated.AccessMethodTypeS3,
-			AccessUrl: &struct {
-				Headers *[]string `json:"headers,omitempty"`
-				Url     string    `json:"url"`
-			}{Url: "s3://bucket/org1/proj1/object"},
+			Type:      generated.AccessMethodTypeS3,
+			AccessUrl: &generated.AccessURL{Url: "s3://bucket/org1/proj1/object"},
 		}},
 	}
 	body, err := json.Marshal(candidate)
@@ -150,14 +146,14 @@ func TestRegisterObjects(t *testing.T) {
 }
 
 func TestRegisterObjectsRejectsMissingAccessMethods(t *testing.T) {
-	db := newDRSObjectStore(map[string]*objects.Record{})
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
 
 	body, err := json.Marshal(generated.DrsObjectCandidate{
 		Size:             100,
 		Checksums:        []generated.Checksum{{Type: "sha256", Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
-		ControlledAccess: drsPtr([]string{"/organization/org1/project/proj1"}),
+		ControlledAccess: valuePointer([]string{"/organization/org1/project/proj1"}),
 	})
 	if err != nil {
 		t.Fatalf("marshal candidate: %v", err)
@@ -188,14 +184,14 @@ func (m *drsCaptureStorageAccess) CompleteMultipart(context.Context, storage.Com
 }
 
 func TestGetObjectAndAccessURLAliases(t *testing.T) {
-	db := newDRSObjectStore(map[string]*objects.Record{
+	accessID := objects.AccessMethodID("s3", "s3://bucket/object-1")
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
 		"object-1": {
 			Id:   "object-1",
-			Name: drsPtr("test-file"),
-			AccessMethods: &[]objects.AccessMethod{{
-				AccessId:  drsPtr("s3-access"),
+			Name: valuePointer("test-file"),
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/object-1"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/object-1"},
 			}},
 		},
 	})
@@ -221,7 +217,7 @@ func TestGetObjectAndAccessURLAliases(t *testing.T) {
 	}
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		resp, err := app.Test(httptest.NewRequest(method, "/objects/object-1/access/s3-access", nil))
+		resp, err := app.Test(httptest.NewRequest(method, "/objects/object-1/access/"+accessID, nil))
 		if err != nil {
 			t.Fatalf("%s access request failed: %v", method, err)
 		}
@@ -245,18 +241,19 @@ func TestGetObjectAndAccessURLAliases(t *testing.T) {
 }
 
 func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
-	db := newDRSObjectStore(map[string]*objects.Record{
+	accessID := objects.AccessMethodID("s3", "s3://bucket/a")
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
 		"object-1": {
 			Id: "object-1",
-			AccessMethods: &[]objects.AccessMethod{
-				{AccessId: drsPtr("a"), Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/a"}},
+			AccessMethods: &[]drs.AccessMethod{
+				{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/a"}},
 			},
 		},
 	})
 	om := testDRSServices(db, &drsCaptureStorageAccess{})
 	app := newDRSTestApp(om)
 
-	request := []byte(`{"bulk_object_access_ids":[{"bulk_object_id":"object-1","bulk_access_ids":["a","missing"," a "]},{"bulk_object_id":"missing","bulk_access_ids":["a","b"]},{"bulk_object_id":"empty"}]}`)
+	request := []byte(`{"bulk_object_access_ids":[{"bulk_object_id":"object-1","bulk_access_ids":["` + accessID + `","missing"," ` + accessID + ` "]},{"bulk_object_id":"missing","bulk_access_ids":["` + accessID + `","b"]},{"bulk_object_id":"empty"}]}`)
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/objects/access", bytes.NewReader(request)))
 	if err != nil {
 		t.Fatalf("bulk access request failed: %v", err)
@@ -282,7 +279,7 @@ func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
 	if payload.Summary.Requested != 6 || payload.Summary.Resolved != 2 || payload.Summary.Unresolved != 4 {
 		t.Fatalf("summary = %+v", payload.Summary)
 	}
-	if len(payload.Resolved) != 2 || *payload.Resolved[0].DrsAccessId != "a" || *payload.Resolved[1].DrsAccessId != "a" {
+	if len(payload.Resolved) != 2 || *payload.Resolved[0].DrsAccessId != accessID || *payload.Resolved[1].DrsAccessId != accessID {
 		t.Fatalf("resolved = %+v", payload.Resolved)
 	}
 	if len(payload.Unresolved) != 1 || payload.Unresolved[0].ErrorCode != http.StatusNotFound || !reflect.DeepEqual(payload.Unresolved[0].ObjectIDs, []string{"object-1", "missing", "empty"}) {
@@ -292,8 +289,8 @@ func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
 
 func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 	checksum := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	db := newDRSObjectStore(map[string]*objects.Record{
-		"object-1": {Id: "object-1", Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}},
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
+		"object-1": {Id: "object-1", Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}},
 	})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
@@ -319,19 +316,21 @@ func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 		t.Fatalf("bulk summary = %+v", bulk.Summary)
 	}
 
-	resp, err = app.Test(httptest.NewRequest(http.MethodGet, "/objects/checksum/"+checksum, nil))
-	if err != nil {
-		t.Fatalf("checksum request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("checksum status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var byChecksum generated.N200OkDrsObjectsJSONResponse
-	if err := json.NewDecoder(resp.Body).Decode(&byChecksum); err != nil {
-		t.Fatalf("decode checksum response: %v", err)
-	}
-	if byChecksum.Summary == nil || byChecksum.Summary.Resolved == nil || *byChecksum.Summary.Resolved != 1 {
-		t.Fatalf("checksum summary = %+v", byChecksum.Summary)
+	for _, path := range []string{"/objects/checksum/" + checksum, "/objects/checksum/%20" + checksum + "%20"} {
+		resp, err = app.Test(httptest.NewRequest(http.MethodGet, path, nil))
+		if err != nil {
+			t.Fatalf("checksum request %q failed: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("checksum status for %q = %d, want %d", path, resp.StatusCode, http.StatusOK)
+		}
+		var byChecksum generated.N200OkDrsObjectsJSONResponse
+		if err := json.NewDecoder(resp.Body).Decode(&byChecksum); err != nil {
+			t.Fatalf("decode checksum response for %q: %v", path, err)
+		}
+		if byChecksum.Summary == nil || byChecksum.Summary.Resolved == nil || *byChecksum.Summary.Resolved != 1 {
+			t.Fatalf("checksum summary for %q = %+v", path, byChecksum.Summary)
+		}
 	}
 }
 
@@ -343,7 +342,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		{method: http.MethodPut, path: "/objects/object-1/delete"},
 		{method: http.MethodPut, path: "/objects/delete"},
 	} {
-		db := newDRSObjectStore(map[string]*objects.Record{
+		db := newDRSObjectStore(t, map[string]*drs.DrsObject{
 			"object-1": {Id: "object-1"},
 		})
 		om := testDRSServices(db, nil)
@@ -361,17 +360,35 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		}
 	}
 
-	db := newDRSObjectStore(map[string]*objects.Record{
+	for _, request := range []struct {
+		path string
+		body string
+	}{
+		{path: "/objects/object-1/delete", body: `{"delete_storage_data":true}`},
+		{path: "/objects/delete", body: `{"bulk_object_ids":["object-1"],"delete_storage_data":true}`},
+	} {
+		db := newDRSObjectStore(t, map[string]*drs.DrsObject{"object-1": {Id: "object-1"}})
+		app := newDRSTestApp(testDRSServices(db, nil))
+		resp, err := app.Test(httptest.NewRequest(http.MethodPut, request.path, strings.NewReader(request.body)))
+		if err != nil {
+			t.Fatalf("%s request failed: %v", request.path, err)
+		}
+		if resp.StatusCode != http.StatusConflict {
+			t.Errorf("%s status = %d, want %d", request.path, resp.StatusCode, http.StatusConflict)
+		}
+		if _, err := db.GetObject(context.Background(), "object-1"); err != nil {
+			t.Errorf("%s mutated the catalog: %v", request.path, err)
+		}
+	}
+
+	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
 		"object-1": {Id: "object-1"},
 	})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
 	body, err := json.Marshal(generated.AccessMethodUpdateRequest{AccessMethods: []generated.AccessMethod{{
-		Type: generated.AccessMethodTypeS3,
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://bucket/object-1"},
+		Type:      generated.AccessMethodTypeS3,
+		AccessUrl: &generated.AccessURL{Url: "s3://bucket/object-1"},
 	}}})
 	if err != nil {
 		t.Fatalf("marshal access method request: %v", err)

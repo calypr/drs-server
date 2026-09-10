@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
@@ -17,10 +17,10 @@ import (
 )
 
 type fakeRepairRecords struct {
-	pages    [][]objects.Record
+	pages    [][]drs.DrsObject
 	queries  []repairQuery
-	ids      []objects.RecordID
-	updates  []objects.Record
+	ids      []string
+	updates  []drs.DrsObject
 	failNext bool
 	collapse []string
 }
@@ -34,8 +34,8 @@ type repairQuery struct {
 	offset       int
 }
 
-func (f *fakeRepairRecords) ListPreparedObjectsPageByScope(_ context.Context, organization, project, method, start string, limit, offset int) ([]objects.Record, error) {
-	f.queries = append(f.queries, repairQuery{organization: organization, project: project, method: method, start: start, limit: limit, offset: offset})
+func (f *fakeRepairRecords) ListRecords(_ context.Context, query objects.RecordListQuery) ([]drs.DrsObject, error) {
+	f.queries = append(f.queries, repairQuery{organization: query.Scope.Organization, project: query.Scope.Project, method: query.RequiredMethod, start: query.StartAfter, limit: query.Limit, offset: query.Page * query.Limit})
 	index := len(f.queries) - 1
 	if index >= len(f.pages) {
 		return nil, nil
@@ -43,14 +43,18 @@ func (f *fakeRepairRecords) ListPreparedObjectsPageByScope(_ context.Context, or
 	return f.pages[index], nil
 }
 
-func (f *fakeRepairRecords) UpdateRecord(_ context.Context, id string, update objects.Record, _ *int64, _ time.Time) (objects.Record, error) {
-	f.ids = append(f.ids, objects.RecordID(id))
-	f.updates = append(f.updates, update)
+func (f *fakeRepairRecords) ListPhysicalObjectsByScope(context.Context, string, string, string) ([]drs.DrsObject, error) {
+	return nil, nil
+}
+
+func (f *fakeRepairRecords) UpdateRecord(_ context.Context, id string, input objects.RecordInput) (drs.DrsObject, error) {
+	f.ids = append(f.ids, id)
+	f.updates = append(f.updates, input.Record)
 	if f.failNext {
 		f.failNext = false
-		return objects.Record{}, errors.New("write failed")
+		return drs.DrsObject{}, errors.New("write failed")
 	}
-	return update, nil
+	return input.Record, nil
 }
 
 func (f *fakeRepairRecords) CollapseProjectChecksumDuplicates(_ context.Context, organization, project string) (int, error) {
@@ -150,12 +154,12 @@ func newRepairTestService(records RecordRepairer, buckets fakeRepairBuckets, pro
 	})
 }
 
-func repairRecord(id, sha, accessURL string) objects.Record {
+func repairRecord(id, sha, accessURL string) drs.DrsObject {
 	resource := "/programs/org/projects/project"
 	controlled := []string{resource}
-	methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: accessURL}}}
+	methods := []drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: accessURL}}}
 	name := "file.txt"
-	return objects.Record{Id: objects.RecordID(id), Checksums: []objects.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &controlled, AccessMethods: &methods, Name: &name}
+	return drs.DrsObject{Id: id, Checksums: []drs.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &controlled, AccessMethods: &methods, Name: &name}
 }
 
 func TestRepairScopeTargetsReadCatalogOnceForMultipleS3Credentials(t *testing.T) {
@@ -192,7 +196,7 @@ func TestRepairScopeTargetsSkipCatalogWithoutUsableS3Credentials(t *testing.T) {
 }
 
 func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
-	records := &fakeRepairRecords{pages: [][]objects.Record{{repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy")}, nil}}
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy")}, nil}}
 	service := newRepairTestService(records, repairBuckets(), nil)
 	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: " org ", Project: " project ", PageSize: 1})
 	if err != nil {
@@ -213,7 +217,7 @@ func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
 
 func TestRepairApplyCollapsesBeforeAuditAndContinuesAfterWriteFailure(t *testing.T) {
 	records := &fakeRepairRecords{
-		pages: [][]objects.Record{{
+		pages: [][]drs.DrsObject{{
 			repairRecord("did-2", strings.Repeat("b", 64), "s3://repair-bucket/legacy-2"),
 			repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy-1"),
 		}, nil},
@@ -237,7 +241,7 @@ func TestRepairApplyCollapsesBeforeAuditAndContinuesAfterWriteFailure(t *testing
 
 func TestRepairAuditStorageFindingsDistinguishNotFound(t *testing.T) {
 	record := repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/current")
-	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{"s3://repair-bucket/current": true}}
 	service := newRepairTestService(records, repairBuckets(), probe)
 	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})
@@ -261,7 +265,7 @@ func TestRepairAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
 	record.Name = &name
 	canonical := "s3://repair-bucket/prefix/did-1/" + strings.Repeat("a", 64)
 	pathStyle := "s3://repair-bucket/prefix/dir/file.bin"
-	records := &fakeRepairRecords{pages: [][]objects.Record{{record}}}
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
 	probe := &fakeRepairProbe{missing: map[string]bool{canonical: true}}
 	service := newRepairTestService(records, repairBuckets(), probe)
 	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})

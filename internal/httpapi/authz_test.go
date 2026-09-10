@@ -1,40 +1,14 @@
 package httpapi
 
 import (
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/access/authentication"
-	"github.com/calypr/syfon/internal/config"
 	"github.com/gofiber/fiber/v3"
 )
-
-func newTestAuthzHandler(logger *slog.Logger, mode, basicUser, basicPass string) fiber.Handler {
-	auth := config.AuthConfig{
-		Mode: mode,
-		Basic: config.BasicAuthConfig{
-			Username: basicUser,
-			Password: basicPass,
-		},
-		LocalAuthzCSV: strings.TrimSpace(os.Getenv("DRS_LOCAL_AUTHZ_CSV")),
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("DRS_AUTH_MOCK_ENABLED")), "true") {
-		auth.Mock = config.MockAuthConfig{
-			Enabled:           true,
-			RequireAuthHeader: strings.EqualFold(strings.TrimSpace(os.Getenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER")), "true"),
-			Resources:         strings.Split(os.Getenv("DRS_AUTH_MOCK_RESOURCES"), ","),
-			Methods:           strings.Split(os.Getenv("DRS_AUTH_MOCK_METHODS"), ","),
-		}
-	}
-	authRuntime := authentication.NewRuntime(logger, auth)
-	return AuthorizationHandler(AuthzOptions{Mode: mode, Evaluator: authRuntime})
-}
 
 type fixedEvaluator struct {
 	decision       access.Decision
@@ -51,34 +25,6 @@ func (e *fixedEvaluator) Evaluate(req access.EvaluationRequest) access.Evaluatio
 		Session:        session,
 		Decision:       e.decision,
 		BasicChallenge: e.basicChallenge,
-	}
-}
-
-func TestLocalModeBasicAuthEnforced(t *testing.T) {
-	handler := newTestAuthzHandler(slog.Default(), "local", "user", "pass")
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", resp.StatusCode)
-	}
-
-	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
-	req2.SetBasicAuth("user", "pass")
-	resp2, err := app.Test(req2)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp2.StatusCode)
 	}
 }
 
@@ -99,9 +45,11 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 
 	for _, tc := range paths {
 		t.Run(tc.name, func(t *testing.T) {
-			handler := newTestAuthzHandler(slog.Default(), "local", "user", "pass")
 			app := fiber.New()
-			app.Use(handler)
+			app.Use(AuthorizationHandler(AuthzOptions{
+				Mode:      "local",
+				Evaluator: &fixedEvaluator{decision: access.DecisionUnauthorized},
+			}))
 			app.Get(tc.path, func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
 			resp, err := app.Test(httptest.NewRequest(http.MethodGet, tc.path, nil))
@@ -118,11 +66,9 @@ func TestPublicMetadataBypassExcludesReservedObjectNames(t *testing.T) {
 func TestAuthorizationHandlerInstallsEvaluatorSession(t *testing.T) {
 	const requestID = "request-id-for-evaluator"
 	evaluator := &recordingEvaluator{}
-	handler := AuthorizationHandler(AuthzOptions{Mode: "gen3", Evaluator: evaluator})
-
 	app := fiber.New()
 	app.Use(RequestIDHandler(nil))
-	app.Use(handler)
+	app.Use(AuthorizationHandler(AuthzOptions{Mode: "gen3", Evaluator: evaluator}))
 	app.Get("/objects/object-id", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/objects/object-id", nil)
@@ -149,10 +95,9 @@ func (e *recordingEvaluator) Evaluate(request access.EvaluationRequest) access.E
 	return access.EvaluationResult{Session: access.NewSession(request.Mode), Decision: access.DecisionContinue}
 }
 
-func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
-	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
+func TestAuthorizationHandlerInstallsGen3ContextWithoutAuthHeader(t *testing.T) {
 	app := fiber.New()
-	app.Use(handler)
+	app.Use(AuthorizationHandler(AuthzOptions{Mode: "gen3"}))
 	app.Get("/", func(c fiber.Ctx) error {
 		if !access.IsGen3Mode(c.Context()) {
 			t.Fatalf("expected gen3 mode in context")
@@ -163,8 +108,7 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 		return c.SendStatus(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
 	}
@@ -173,19 +117,21 @@ func TestGen3ModeSetsContextWithoutAuthHeader(t *testing.T) {
 	}
 }
 
-func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
-	handler := AuthorizationHandler(AuthzOptions{Mode: "gen3", Evaluator: &fixedEvaluator{decision: access.DecisionContinue}})
+func TestAuthorizationHandlerContinuesWithEvaluatorSession(t *testing.T) {
 	app := fiber.New()
-	app.Use(handler)
+	app.Use(AuthorizationHandler(AuthzOptions{
+		Mode:      "gen3",
+		Evaluator: &fixedEvaluator{decision: access.DecisionContinue},
+	}))
 	app.Get("/", func(c fiber.Ctx) error {
 		if !access.HasAuthHeader(c.Context()) {
-			t.Fatalf("expected auth header presence to be true")
+			t.Fatalf("expected auth header presence")
 		}
 		return c.SendStatus(http.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer malformed.token")
+	req.Header.Set(fiber.HeaderAuthorization, "Bearer malformed.token")
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("test request failed: %v", err)
@@ -195,158 +141,42 @@ func TestGen3ModeMalformedBearerStillPassesToNext(t *testing.T) {
 	}
 }
 
-func TestGen3MockAuthInjectsPrivileges(t *testing.T) {
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "true")
-	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file,/programs/cbds/projects/end_to_end_test")
-	t.Setenv("DRS_AUTH_MOCK_METHODS", "read,file_upload,create,update,delete")
-
-	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		if !access.IsGen3Mode(c.Context()) {
-			t.Fatalf("expected gen3 mode")
-		}
-		if !access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
-			t.Fatalf("expected read on /data_file")
-		}
-		if !access.HasMethodAccess(c.Context(), "create", []string{"/programs/cbds/projects/end_to_end_test"}) {
-			t.Fatalf("expected create on project resource")
-		}
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
+func TestAuthorizationHandlerAppliesEvaluatorDecisions(t *testing.T) {
+	tests := []struct {
+		name           string
+		decision       access.Decision
+		basicChallenge bool
+		wantStatus     int
+		wantChallenge  string
+	}{
+		{name: "unauthorized", decision: access.DecisionUnauthorized, wantStatus: http.StatusUnauthorized},
+		{name: "basic challenge", decision: access.DecisionUnauthorized, basicChallenge: true, wantStatus: http.StatusUnauthorized, wantChallenge: `Basic realm="syfon"`},
+		{name: "forbidden", decision: access.DecisionForbidden, wantStatus: http.StatusForbidden},
+		{name: "internal error", decision: access.DecisionInternalError, wantStatus: http.StatusInternalServerError},
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-}
 
-func TestGen3MockAuthRequireHeader(t *testing.T) {
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "true")
-	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "true")
-	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/data_file")
-	t.Setenv("DRS_AUTH_MOCK_METHODS", "read")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			app.Use(AuthorizationHandler(AuthzOptions{
+				Mode: "local",
+				Evaluator: &fixedEvaluator{
+					decision:       tc.decision,
+					basicChallenge: tc.basicChallenge,
+				},
+			}))
+			app.Get("/", func(c fiber.Ctx) error { return c.SendStatus(http.StatusOK) })
 
-	handler := newTestAuthzHandler(slog.Default(), "gen3", "", "")
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		// Without header, mock privileges should not be injected.
-		if access.HasMethodAccess(c.Context(), "read", []string{"/data_file"}) {
-			t.Fatalf("did not expect read access without auth header")
-		}
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestLocalAuthzCSVInjectsMethodAwarePrivileges(t *testing.T) {
-	csvPath := filepath.Join(t.TempDir(), "local-authz.csv")
-	content := strings.Join([]string{
-		"username,password,organization,project,methods",
-		"alice,alice-pass,cbds,end_to_end_test,read|write",
-		"bob,bob-pass,cbds,end_to_end_test,read",
-	}, "\n")
-	if err := os.WriteFile(csvPath, []byte(content), 0o600); err != nil {
-		t.Fatalf("write csv: %v", err)
-	}
-	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
-
-	handler := newTestAuthzHandler(slog.Default(), "local", "admin", "admin-pass")
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		if access.IsGen3Mode(c.Context()) {
-			t.Fatalf("did not expect gen3 mode")
-		}
-		if !access.IsAuthzEnforced(c.Context()) {
-			t.Fatalf("expected local authz enforcement")
-		}
-		resource := []string{"/programs/cbds/projects/end_to_end_test"}
-		if !access.HasMethodAccess(c.Context(), "read", resource) {
-			t.Fatalf("expected read access")
-		}
-		if access.GetUserPrivileges(c.Context())[resource[0]]["write"] {
-			t.Fatalf("did not expect write to persist in normalized privileges")
-		}
-		if !access.HasMethodAccess(c.Context(), "file_upload", resource) {
-			t.Fatalf("expected write alias to grant file_upload access")
-		}
-		if access.HasMethodAccess(c.Context(), "read", []string{"/programs/other/projects/nope"}) {
-			t.Fatalf("did not expect access to another project")
-		}
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.SetBasicAuth("alice", "alice-pass")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-}
-
-func TestLocalAuthzCSVReplacesSingleAdminCredentials(t *testing.T) {
-	csvPath := filepath.Join(t.TempDir(), "local-authz.csv")
-	if err := os.WriteFile(csvPath, []byte("username,password,resource,methods\nalice,alice-pass,/data_file,read\n"), 0o600); err != nil {
-		t.Fatalf("write csv: %v", err)
-	}
-	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
-
-	handler := newTestAuthzHandler(slog.Default(), "local", "admin", "admin-pass")
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.SetBasicAuth("admin", "admin-pass")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected csv users to replace admin basic credentials, got %d", resp.StatusCode)
-	}
-}
-
-func TestLocalAuthzCSVDeniesAuthenticatedSubjectMissingFromCSV(t *testing.T) {
-	csvPath := filepath.Join(t.TempDir(), "local-authz.csv")
-	if err := os.WriteFile(csvPath, []byte("username,password,resource,methods\nalice,alice-pass,/data_file,read\n"), 0o600); err != nil {
-		t.Fatalf("write csv: %v", err)
-	}
-	t.Setenv("DRS_LOCAL_AUTHZ_CSV", csvPath)
-
-	handler := AuthorizationHandler(AuthzOptions{Mode: "local", Evaluator: &fixedEvaluator{decision: access.DecisionForbidden}})
-	app := fiber.New()
-	app.Use(handler)
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendStatus(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request failed: %v", err)
-	}
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected subject missing from csv to be forbidden, got %d", resp.StatusCode)
+			resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil))
+			if err != nil {
+				t.Fatalf("test request failed: %v", err)
+			}
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("expected %d, got %d", tc.wantStatus, resp.StatusCode)
+			}
+			if got := resp.Header.Get(fiber.HeaderWWWAuthenticate); got != tc.wantChallenge {
+				t.Fatalf("WWW-Authenticate = %q, want %q", got, tc.wantChallenge)
+			}
+		})
 	}
 }

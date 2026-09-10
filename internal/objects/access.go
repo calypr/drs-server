@@ -2,24 +2,16 @@ package objects
 
 import (
 	"context"
+	"sort"
+	"strings"
+
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"sort"
-	"strings"
 )
 
 const maxDeniedAccessResources = 25
-
-func (s *Service) RequireObjectResources(ctx context.Context, method string, resources []string) error {
-	if strings.TrimSpace(method) == "" {
-		return nil
-	}
-	if access.HasObjectMethodAccess(ctx, method, resources) {
-		return nil
-	}
-	return errorapi.ErrAccessDenied
-}
 
 func requireScopeMethod(ctx context.Context, organization, project, method string) error {
 	resource, err := clientaccess.ResourcePath(organization, project)
@@ -35,14 +27,7 @@ func requireScopeMethod(ctx context.Context, organization, project, method strin
 	return errorapi.ErrAccessDenied
 }
 
-func requireObjectMethod(ctx context.Context, obj *Record, method string) error {
-	if hasObjectMethod(ctx, obj, method) {
-		return nil
-	}
-	return errorapi.ErrAccessDenied
-}
-
-func requireAllObjectMethod(ctx context.Context, obj *Record, method string) error {
+func requireAllObjectMethod(ctx context.Context, obj *drs.DrsObject, method string) error {
 	resources := AccessResources(obj)
 	if len(resources) == 0 {
 		if access.HasObjectMethodAccess(ctx, method, resources) {
@@ -56,31 +41,35 @@ func requireAllObjectMethod(ctx context.Context, obj *Record, method string) err
 	return errorapi.ErrAccessDenied
 }
 
-func hasObjectMethod(ctx context.Context, obj *Record, method string) bool {
+func hasObjectMethod(ctx context.Context, obj *drs.DrsObject, method string, publicRead map[string]bool) bool {
 	method = strings.TrimSpace(method)
 	if method == "" {
 		return true
 	}
-	if strings.EqualFold(method, objectMethodRead) && obj != nil && obj.PublicRead {
-		return true
-	}
-	if strings.EqualFold(method, objectMethodRead) && obj != nil && obj.PublicReadPolicyKnown && len(AccessResources(obj)) == 0 {
-		return false
+	if strings.EqualFold(method, objectMethodRead) && obj != nil {
+		if isPublic, known := publicRead[obj.Id]; known {
+			if isPublic {
+				return true
+			}
+			if len(AccessResources(obj)) == 0 {
+				return false
+			}
+		}
 	}
 	return access.HasObjectMethodAccess(ctx, method, AccessResources(obj))
 }
 
-func bulkObjectMethodError(ctx context.Context, objs []Record, method string) error {
+func bulkObjectMethodError(ctx context.Context, objs []drs.DrsObject, method string, publicRead map[string]bool) error {
 	resources := make(map[string]struct{})
 	var firstDeniedID string
 	deniedRecords := 0
 	for i := range objs {
-		if hasObjectMethod(ctx, &objs[i], method) {
+		if hasObjectMethod(ctx, &objs[i], method, publicRead) {
 			continue
 		}
 		deniedRecords++
 		if firstDeniedID == "" {
-			firstDeniedID = string(objs[i].Id)
+			firstDeniedID = objs[i].Id
 		}
 		for _, resource := range AccessResources(&objs[i]) {
 			if strings.TrimSpace(resource) == "" {

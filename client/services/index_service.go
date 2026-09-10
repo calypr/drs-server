@@ -325,12 +325,9 @@ func appendAccessMethod(req *internalapi.InternalRecord, rawURL string) {
 		}
 	}
 	methods = append(methods, drs.AccessMethod{
-		Type:     drs.AccessMethodType(methodType),
-		AccessId: &methodType,
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: rawURL},
+		Type:      drs.AccessMethodType(methodType),
+		AccessId:  &methodType,
+		AccessUrl: &drs.AccessURL{Url: rawURL},
 	})
 	req.AccessMethods = &methods
 }

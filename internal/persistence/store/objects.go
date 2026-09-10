@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
@@ -43,14 +44,14 @@ func normalizeChecksumLookup(value string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "sha256:")
 }
 
-func uniqueObjectsByID(objs []objects.Record) []objects.Record {
+func uniqueObjectsByID(objs []drs.DrsObject) []drs.DrsObject {
 	seen := make(map[string]struct{}, len(objs))
-	out := make([]objects.Record, 0, len(objs))
+	out := make([]drs.DrsObject, 0, len(objs))
 	for _, obj := range objs {
-		if _, ok := seen[string(obj.Id)]; ok {
+		if _, ok := seen[obj.Id]; ok {
 			continue
 		}
-		seen[string(obj.Id)] = struct{}{}
+		seen[obj.Id] = struct{}{}
 		out = append(out, obj)
 	}
 	return out
@@ -81,7 +82,7 @@ func makePlaceholders(n int) string {
 	return strings.Join(parts, ",")
 }
 
-func (db *Store) GetObject(ctx context.Context, id string) (*objects.Record, error) {
+func (db *Store) GetObject(ctx context.Context, id string) (*drs.DrsObject, error) {
 	requestID := strings.TrimSpace(id)
 	objectsByID, err := db.fetchObjectsByIDsOrChecksums(ctx, []string{requestID}, nil)
 	if err != nil {
@@ -112,9 +113,9 @@ func (db *Store) GetObject(ctx context.Context, id string) (*objects.Record, err
 	return nil, errorapi.ErrObjectNotFound
 }
 
-func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string, checksums []string) (map[string]*objects.Record, error) {
+func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string, checksums []string) (map[string]*drs.DrsObject, error) {
 	if len(ids) == 0 && len(checksums) == 0 {
-		return map[string]*objects.Record{}, nil
+		return map[string]*drs.DrsObject{}, nil
 	}
 
 	shaQueries := make([]string, 0, len(checksums))
@@ -187,7 +188,7 @@ func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string,
 	}
 	defer rows.Close()
 
-	objectsByID := make(map[string]*objects.Record)
+	objectsByID := make(map[string]*drs.DrsObject)
 
 	for rows.Next() {
 		var (
@@ -202,8 +203,9 @@ func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string,
 		); err != nil {
 			return nil, err
 		}
-		objectsByID[id] = &objects.Record{
-			Id:          objects.RecordID(id),
+		objectsByID[id] = &drs.DrsObject{
+			Id:          id,
+			Did:         ptr(id),
 			Size:        size,
 			CreatedTime: createdTime,
 			UpdatedTime: ptr(updatedTime),
@@ -229,9 +231,6 @@ func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string,
 	if err := db.attachControlledAccess(ctx, objectsByID); err != nil {
 		return nil, err
 	}
-	if err := db.attachPublicRead(ctx, objectsByID); err != nil {
-		return nil, err
-	}
 	if err := db.attachNameAliases(ctx, objectsByID); err != nil {
 		return nil, err
 	}
@@ -239,7 +238,7 @@ func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string,
 	return objectsByID, nil
 }
 
-func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[string]*drs.DrsObject) error {
 	ids := sortedObjectIDs(objectsByID)
 	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
@@ -272,18 +271,18 @@ func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[st
 		}
 		seenAccess[objectID][key] = struct{}{}
 		if obj.AccessMethods == nil {
-			obj.AccessMethods = &[]objects.AccessMethod{}
+			obj.AccessMethods = &[]drs.AccessMethod{}
 		}
-		*obj.AccessMethods = append(*obj.AccessMethods, objects.AccessMethod{
-			AccessUrl: &objects.AccessURL{Url: accessURL},
-			Type:      accessType,
+		*obj.AccessMethods = append(*obj.AccessMethods, drs.AccessMethod{
+			AccessUrl: &drs.AccessURL{Url: accessURL},
+			Type:      drs.AccessMethodType(accessType),
 			AccessId:  ptr(objects.AccessMethodID(accessType, accessURL)),
 		})
 	}
 	return rows.Err()
 }
 
-func (db *Store) attachBulkChecksums(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachBulkChecksums(ctx context.Context, objectsByID map[string]*drs.DrsObject) error {
 	ids := sortedObjectIDs(objectsByID)
 	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
@@ -315,19 +314,22 @@ func (db *Store) attachBulkChecksums(ctx context.Context, objectsByID map[string
 			continue
 		}
 		seenChecksums[objectID][key] = struct{}{}
-		obj.Checksums = append(obj.Checksums, objects.Checksum{Type: checksumType, Checksum: checksumValue})
+		obj.Checksums = append(obj.Checksums, drs.Checksum{Type: checksumType, Checksum: checksumValue})
 	}
 	return rows.Err()
 }
 
-func normalizeObjectNameAliases(obj *objects.Record) []string {
+func normalizeObjectNameAliases(obj *drs.DrsObject) []string {
 	if obj == nil {
 		return nil
 	}
-	return objects.NormalizeNameAliases(stringVal(obj.Name), obj.NameAliases)
+	if obj.NameAliases == nil {
+		return nil
+	}
+	return objects.NormalizeNameAliases(stringVal(obj.Name), *obj.NameAliases)
 }
 
-func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
+func sortedObjectIDs(objectsByID map[string]*drs.DrsObject) []string {
 	ids := make([]string, 0, len(objectsByID))
 	for id := range objectsByID {
 		ids = append(ids, id)
@@ -336,7 +338,7 @@ func sortedObjectIDs(objectsByID map[string]*objects.Record) []string {
 	return ids
 }
 
-func (db *Store) attachControlledAccess(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachControlledAccess(ctx context.Context, objectsByID map[string]*drs.DrsObject) error {
 	if len(objectsByID) == 0 {
 		return nil
 	}
@@ -378,44 +380,51 @@ func (db *Store) attachControlledAccess(ctx context.Context, objectsByID map[str
 	return nil
 }
 
-func (db *Store) attachPublicRead(ctx context.Context, objectsByID map[string]*objects.Record) error {
-	if len(objectsByID) == 0 {
-		return nil
+func (db *Store) GetPublicReadByIDs(ctx context.Context, ids []string) (map[string]bool, error) {
+	result := make(map[string]bool)
+	if len(ids) == 0 {
+		return result, nil
 	}
-	ids := sortedObjectIDs(objectsByID)
-	condition, args := db.dialect.ListArgs("object_id", ids)
+	cleanIDs := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		cleanIDs = append(cleanIDs, id)
+	}
+	if len(cleanIDs) == 0 {
+		return result, nil
+	}
+	condition, args := db.dialect.ListArgs("object_id", cleanIDs)
 	rows, err := db.queryContext(ctx, fmt.Sprintf(`
 		SELECT object_id, public_read
 		FROM drs_object_read_policy
 		WHERE %s`, condition), args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
-	known := make(map[string]bool, len(ids))
 	for rows.Next() {
 		var id string
 		var public bool
 		if err := rows.Scan(&id, &public); err != nil {
-			return err
+			return nil, err
 		}
-		known[id] = public
+		result[id] = public
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	for id, obj := range objectsByID {
-		public, ok := known[id]
-		if !ok {
-			public = len(objects.AccessResources(obj)) == 0
-		}
-		obj.PublicRead = public
-		obj.PublicReadPolicyKnown = ok
-	}
-	return nil
+	return result, nil
 }
 
-func (db *Store) attachNameAliases(ctx context.Context, objectsByID map[string]*objects.Record) error {
+func (db *Store) attachNameAliases(ctx context.Context, objectsByID map[string]*drs.DrsObject) error {
 	if len(objectsByID) == 0 {
 		return nil
 	}
@@ -449,7 +458,8 @@ func (db *Store) attachNameAliases(ctx context.Context, objectsByID map[string]*
 		if obj == nil {
 			continue
 		}
-		obj.NameAliases = objects.NormalizeNameAliases(stringVal(obj.Name), aliases)
+		normalized := objects.NormalizeNameAliases(stringVal(obj.Name), aliases)
+		obj.NameAliases = &normalized
 	}
 	return nil
 }

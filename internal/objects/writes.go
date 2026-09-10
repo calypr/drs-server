@@ -3,14 +3,17 @@ package objects
 import (
 	"context"
 	"fmt"
-	"github.com/calypr/syfon/apigen/errorapi"
-	clientaccess "github.com/calypr/syfon/client/access"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 )
 
-func materializeRecordTime(record Record, now time.Time) Record {
+func materializeRecordTime(record drs.DrsObject, now time.Time) drs.DrsObject {
 	if record.CreatedTime.IsZero() {
 		record.CreatedTime = now
 	}
@@ -21,46 +24,30 @@ func materializeRecordTime(record Record, now time.Time) Record {
 	return record
 }
 
-// RegisterScopedObjects applies each record's own project scope before the
-// existing-content read, create authorization, and single writer call. The
-// input slice is updated with materialized values so internal callers can
-// return their submitted records without a durable reread.
-func (s *Service) RegisterScopedObjects(ctx context.Context, scoped []ScopedRecord) error {
+// CreateRecords returns the submitted records after scope and time preparation.
+func (s *Service) CreateRecords(ctx context.Context, inputs []RecordInput) ([]drs.DrsObject, error) {
 	now := time.Now().UTC()
-	prepared := make([]Record, len(scoped))
-	for i := range scoped {
-		record, err := enforceCanonicalProjectScope(
-			scoped[i].Record,
-			scoped[i].Scope.Organization,
-			scoped[i].Scope.Project,
-		)
+	prepared := make([]drs.DrsObject, len(inputs))
+	for i, input := range inputs {
+		record, err := enforceCanonicalProjectScope(input.Record, input.Scope.Organization, input.Scope.Project)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		record = materializeRecordTime(record, now)
-		scoped[i].Record = record
-		prepared[i] = record
+		prepared[i] = materializeRecordTime(record, now)
 	}
-	return s.RegisterObjects(ctx, prepared)
-}
-
-// UpdateRecordInScope applies the caller's project scope before the existing
-// update authorization, immutable-field checks, merge, and replacement.
-func (s *Service) UpdateRecordInScope(ctx context.Context, id string, scope Scope, update Record, explicitSize *int64) (Record, error) {
-	normalized, err := enforceCanonicalProjectScope(update, scope.Organization, scope.Project)
-	if err != nil {
-		return Record{}, err
+	if err := s.RegisterObjects(ctx, prepared); err != nil {
+		return nil, err
 	}
-	return s.UpdateRecord(ctx, id, normalized, explicitSize, time.Now().UTC())
+	return prepared, nil
 }
 
 // RegisterCandidates materializes DRS candidates, persists them through the
 // existing registration policy, and rereads each durable record with read
 // authorization in request order.
-func (s *Service) RegisterCandidates(ctx context.Context, candidates []Candidate) ([]Record, error) {
-	prepared := make([]Record, 0, len(candidates))
+func (s *Service) RegisterCandidates(ctx context.Context, candidates []drs.DrsObjectCandidate) ([]drs.DrsObject, error) {
+	prepared := make([]drs.DrsObject, 0, len(candidates))
 	for _, candidate := range candidates {
-		record, err := CandidateToRecord(candidate, time.Now().UTC())
+		record, err := MaterializeCandidate(candidate, time.Now().UTC())
 		if err != nil {
 			return nil, err
 		}
@@ -70,9 +57,9 @@ func (s *Service) RegisterCandidates(ctx context.Context, candidates []Candidate
 		return nil, err
 	}
 
-	registered := make([]Record, 0, len(prepared))
+	registered := make([]drs.DrsObject, 0, len(prepared))
 	for _, record := range prepared {
-		read, err := s.GetObject(ctx, string(record.Id), objectMethodRead)
+		read, err := s.GetObject(ctx, record.Id, objectMethodRead)
 		if err != nil {
 			return nil, err
 		}
@@ -81,16 +68,17 @@ func (s *Service) RegisterCandidates(ctx context.Context, candidates []Candidate
 	return registered, nil
 }
 
-// AccessMethodUpdate replaces the access methods for one object.
-type AccessMethodUpdate struct {
-	ObjectID string
-	Methods  []AccessMethod
-}
-
 // UpdateAccessMethodsAndRead updates one record and returns its durable,
 // read-authorized representation.
-func (s *Service) UpdateAccessMethodsAndRead(ctx context.Context, objectID string, methods []AccessMethod) (*Record, error) {
-	if err := s.UpdateObjectAccessMethods(ctx, objectID, methods); err != nil {
+func (s *Service) UpdateAccessMethodsAndRead(ctx context.Context, objectID string, methods []drs.AccessMethod) (*drs.DrsObject, error) {
+	obj, err := s.store.GetObject(ctx, objectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+		return nil, err
+	}
+	if err := s.store.UpdateObjectAccessMethods(ctx, objectID, methods); err != nil {
 		return nil, err
 	}
 	return s.GetObject(ctx, objectID, objectMethodRead)
@@ -98,25 +86,42 @@ func (s *Service) UpdateAccessMethodsAndRead(ctx context.Context, objectID strin
 
 // BulkUpdateAccessMethodsAndRead retains first-seen response order; the last
 // update for a duplicate object ID wins.
-func (s *Service) BulkUpdateAccessMethodsAndRead(ctx context.Context, updates []AccessMethodUpdate) ([]Record, error) {
+func (s *Service) BulkUpdateAccessMethodsAndRead(ctx context.Context, updates []drs.AccessMethodUpdate) ([]drs.DrsObject, error) {
 	if len(updates) == 0 {
 		return nil, nil
 	}
 
 	orderedIDs := make([]string, 0, len(updates))
-	latest := make(map[string][]AccessMethod, len(updates))
+	latest := make(map[string][]drs.AccessMethod, len(updates))
 	for _, update := range updates {
-		if _, seen := latest[update.ObjectID]; !seen {
-			orderedIDs = append(orderedIDs, update.ObjectID)
+		if _, seen := latest[update.ObjectId]; !seen {
+			orderedIDs = append(orderedIDs, update.ObjectId)
 		}
-		latest[update.ObjectID] = update.Methods
+		latest[update.ObjectId] = update.AccessMethods
 	}
 
-	if err := s.BulkUpdateAccessMethods(ctx, latest); err != nil {
+	objects, err := s.store.GetBulkObjects(ctx, orderedIDs)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*drs.DrsObject, len(objects))
+	for i := range objects {
+		byID[objects[i].Id] = &objects[i]
+	}
+	for _, objectID := range orderedIDs {
+		obj, ok := byID[objectID]
+		if !ok {
+			return nil, errorapi.ErrObjectNotFound
+		}
+		if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.store.BulkUpdateAccessMethods(ctx, latest); err != nil {
 		return nil, err
 	}
 
-	read := make([]Record, 0, len(orderedIDs))
+	read := make([]drs.DrsObject, 0, len(orderedIDs))
 	for _, objectID := range orderedIDs {
 		obj, err := s.GetObject(ctx, objectID, objectMethodRead)
 		if err != nil {
@@ -127,53 +132,13 @@ func (s *Service) BulkUpdateAccessMethodsAndRead(ctx context.Context, updates []
 	return read, nil
 }
 
-func (s *Service) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []AccessMethod) error {
-	obj, err := s.store.GetObject(ctx, objectID)
-	if err != nil {
-		return err
-	}
-	if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-		return err
-	}
-	return s.store.UpdateObjectAccessMethods(ctx, objectID, accessMethods)
-}
-
-func (s *Service) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]AccessMethod) error {
-	if len(updates) == 0 {
-		return nil
-	}
-
-	ids := make([]string, 0, len(updates))
-	for objectID := range updates {
-		ids = append(ids, objectID)
-	}
-	objects, err := s.store.GetBulkObjects(ctx, ids)
-	if err != nil {
-		return err
-	}
-	byID := make(map[string]*Record, len(objects))
-	for i := range objects {
-		byID[string(objects[i].Id)] = &objects[i]
-	}
-	for _, objectID := range ids {
-		obj, ok := byID[objectID]
-		if !ok {
-			return errorapi.ErrObjectNotFound
-		}
-		if err := requireAllObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-			return err
-		}
-	}
-	return s.store.BulkUpdateAccessMethods(ctx, updates)
-}
-
-func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*Record, error) {
+func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, resource string) (*drs.DrsObject, error) {
 	obj, err := s.store.GetObject(ctx, objectID)
 	if err != nil {
 		return nil, err
 	}
-	if err := requireObjectMethod(ctx, obj, objectMethodUpdate); err != nil {
-		return nil, err
+	if !hasObjectMethod(ctx, obj, objectMethodUpdate, nil) {
+		return nil, errorapi.ErrAccessDenied
 	}
 
 	normalized := clientaccess.NormalizeAccessResources([]string{resource})
@@ -204,18 +169,19 @@ func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, re
 	return updated, nil
 }
 
-func (s *Service) RegisterObjects(ctx context.Context, objs []Record) error {
+func (s *Service) RegisterObjects(ctx context.Context, objs []drs.DrsObject) error {
 	if err := s.validateExistingContentRead(ctx, objs); err != nil {
 		return err
 	}
-	if err := bulkObjectMethodError(ctx, objs, objectMethodCreate); err != nil {
+	if err := bulkObjectMethodError(ctx, objs, objectMethodCreate, nil); err != nil {
 		return err
 	}
 	return s.store.RegisterObjects(ctx, objs)
 }
 
-func (s *Service) validateExistingContentRead(ctx context.Context, objs []Record) error {
+func (s *Service) validateExistingContentRead(ctx context.Context, objs []drs.DrsObject) error {
 	seen := make(map[string]struct{})
+	hashes := make([]string, 0, len(objs))
 	for i := range objs {
 		sha, ok := CanonicalSHA256(objs[i].Checksums)
 		if !ok || sha == "" {
@@ -225,12 +191,24 @@ func (s *Service) validateExistingContentRead(ctx context.Context, objs []Record
 			continue
 		}
 		seen[sha] = struct{}{}
-		existing, err := s.store.GetObjectsByChecksum(ctx, sha)
-		if err != nil {
-			return err
-		}
+		hashes = append(hashes, sha)
+	}
+	existingByChecksum, err := s.store.GetObjectsByChecksums(ctx, hashes)
+	if err != nil {
+		return err
+	}
+	allExisting := make([]drs.DrsObject, 0)
+	for _, existing := range existingByChecksum {
+		allExisting = append(allExisting, existing...)
+	}
+	policy, err := s.publicReadPolicy(ctx, allExisting)
+	if err != nil {
+		return err
+	}
+	for _, sha := range hashes {
+		existing := existingByChecksum[sha]
 		for j := range existing {
-			if existing[j].PublicRead || hasObjectMethod(ctx, &existing[j], objectMethodRead) {
+			if hasObjectMethod(ctx, &existing[j], objectMethodRead, policy) {
 				continue
 			}
 			return errorapi.ErrAccessDenied
@@ -239,23 +217,27 @@ func (s *Service) validateExistingContentRead(ctx context.Context, objs []Record
 	return nil
 }
 
-func (s *Service) UpdateRecord(ctx context.Context, id string, update Record, explicitSize *int64, now time.Time) (Record, error) {
+func (s *Service) UpdateRecord(ctx context.Context, id string, input RecordInput) (drs.DrsObject, error) {
+	update, err := enforceCanonicalProjectScope(input.Record, input.Scope.Organization, input.Scope.Project)
+	if err != nil {
+		return drs.DrsObject{}, err
+	}
 	existing, err := s.GetObject(ctx, id, objectMethodUpdate)
 	if err != nil {
-		return Record{}, err
+		return drs.DrsObject{}, err
 	}
-	if explicitSize != nil && *explicitSize != existing.Size {
-		return Record{}, errorapi.ErrObjectSizeImmutable
+	if input.ExplicitSize != nil && *input.ExplicitSize != existing.Size {
+		return drs.DrsObject{}, errorapi.ErrObjectSizeImmutable
 	}
 	if incomingSHA, ok := CanonicalSHA256(update.Checksums); ok {
 		storedSHA, stored := CanonicalSHA256(existing.Checksums)
 		if stored && incomingSHA != storedSHA {
-			return Record{}, errorapi.ErrObjectChecksumImmutable
+			return drs.DrsObject{}, errorapi.ErrObjectChecksumImmutable
 		}
 	}
 	merged := *existing
-	merged.Id = RecordID(id)
-	updatedAt := now.UTC()
+	merged.Id = id
+	updatedAt := time.Now().UTC()
 	merged.UpdatedTime = &updatedAt
 	if update.Name != nil {
 		name := CleanToBasename(*update.Name)
@@ -283,8 +265,8 @@ func (s *Service) UpdateRecord(ctx context.Context, id string, update Record, ex
 	if update.Checksums != nil {
 		merged.Checksums = mergeAdditionalChecksums(existing.Checksums, update.Checksums)
 	}
-	if err := s.store.ReplaceObjects(ctx, []Record{merged}); err != nil {
-		return Record{}, err
+	if err := s.store.ReplaceObjects(ctx, []drs.DrsObject{merged}); err != nil {
+		return drs.DrsObject{}, err
 	}
 	return merged, nil
 }
@@ -300,7 +282,7 @@ type BulkOverwriteResult struct {
 // BulkOverwriteObjects replaces records from one project snapshot without
 // canonicalizing checksum siblings. A checksum can therefore exist in more
 // than one project, while still identifying an existing record in this scope.
-func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, project string, candidates []Record) (BulkOverwriteResult, error) {
+func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, project string, candidates []drs.DrsObject) (BulkOverwriteResult, error) {
 	var result BulkOverwriteResult
 	if len(candidates) == 0 {
 		return result, nil
@@ -315,7 +297,7 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 	}
 
 	now := time.Now().UTC()
-	prepared := make([]Record, len(candidates))
+	prepared := make([]drs.DrsObject, len(candidates))
 	for i, candidate := range candidates {
 		normalized, err := enforceCanonicalProjectScope(candidate, scope.Organization, scope.Project)
 		if err != nil {
@@ -328,7 +310,7 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 	byDID := make(map[string]int, len(candidates))
 	hashes := make([]string, 0, len(candidates))
 	for i := range candidates {
-		did := strings.TrimSpace(string(candidates[i].Id))
+		did := strings.TrimSpace(candidates[i].Id)
 		if did == "" {
 			return result, fmt.Errorf("record[%d]: did is required", i)
 		}
@@ -356,15 +338,15 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 	if err != nil {
 		return result, err
 	}
-	existing := make(map[string]Record, len(existingList))
+	existing := make(map[string]drs.DrsObject, len(existingList))
 	for _, obj := range existingList {
-		existing[string(obj.Id)] = obj
+		existing[obj.Id] = obj
 	}
 
-	resolved := make([]Record, len(candidates))
+	resolved := make([]drs.DrsObject, len(candidates))
 	usedTargets := make(map[string]string, len(candidates))
 	for i, candidate := range candidates {
-		sourceDID := string(candidate.Id)
+		sourceDID := candidate.Id
 		canonicalID, aliasErr := s.store.ResolveObjectAlias(ctx, sourceDID)
 		if aliasErr == nil && canonicalID != sourceDID {
 			return result, fmt.Errorf("%w: target DID %q is an alias for %q", errorapi.ErrBulkOverwriteConflict, sourceDID, canonicalID)
@@ -396,26 +378,26 @@ func (s *Service) BulkOverwriteObjects(ctx context.Context, organization, projec
 			return result, fmt.Errorf("%w: source records %q and %q resolve to target DID %q", errorapi.ErrBulkOverwriteConflict, prior, sourceDID, targetDID)
 		}
 		usedTargets[targetDID] = sourceDID
-		candidate.Id = RecordID(targetDID)
+		candidate.Id = targetDID
 		candidate.SelfUri = "drs://" + targetDID
 		resolved[i] = candidate
 		if matched {
-			if err := s.RequireObjectResources(ctx, objectMethodUpdate, []string{resource}); err != nil {
-				return result, err
+			if !access.HasObjectMethodAccess(ctx, objectMethodUpdate, []string{resource}) {
+				return result, errorapi.ErrAccessDenied
 			}
 			current := existing[targetDID]
 			if err := requireAllObjectMethod(ctx, &current, objectMethodUpdate); err != nil {
 				return result, err
 			}
-			if !hasObjectMethod(ctx, &candidate, objectMethodUpdate) {
+			if !hasObjectMethod(ctx, &candidate, objectMethodUpdate, nil) {
 				return result, errorapi.ErrAccessDenied
 			}
 			result.Replaced++
 		} else {
-			if err := s.RequireObjectResources(ctx, objectMethodCreate, []string{resource}); err != nil {
-				return result, err
+			if !access.HasObjectMethodAccess(ctx, objectMethodCreate, []string{resource}) {
+				return result, errorapi.ErrAccessDenied
 			}
-			if !hasObjectMethod(ctx, &candidate, objectMethodCreate) {
+			if !hasObjectMethod(ctx, &candidate, objectMethodCreate, nil) {
 				return result, errorapi.ErrAccessDenied
 			}
 			result.Created++

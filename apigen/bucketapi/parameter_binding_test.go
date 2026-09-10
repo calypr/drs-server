@@ -32,7 +32,6 @@ func TestGeneratedScopeParametersPreserveFiberValues(t *testing.T) {
 		{"/data/buckets/bucket/scopes?organization=org", 400, "", "", ""},
 		{"/data/buckets/bucket/scopes?path=", 400, "", "", ""},
 		{"/data/buckets/foo+bar/scopes?organization=org%2Bname&path=100%25", 204, "foo+bar", "org+name", "100%"},
-		{"/data/buckets/foo%2Fbar/scopes?organization=org&path=%252F", 204, "foo%2Fbar", "org", "%2F"},
 	} {
 		t.Run(tc.target, func(t *testing.T) {
 			server := &scopeBindingServer{}

@@ -127,11 +127,8 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 	pType := u.Scheme
 
 	am := drsapi.AccessMethod{
-		Type: drsapi.AccessMethodType(pType),
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: canonical},
+		Type:      drsapi.AccessMethodType(pType),
+		AccessUrl: &drsapi.AccessURL{Url: canonical},
 	}
 
 	found := false

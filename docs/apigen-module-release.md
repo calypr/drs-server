@@ -43,7 +43,7 @@ imports and missing published package paths.
 
 The generated package layout and shared `errorapi` contract must be present in
 the published `apigen` version selected by both the root and client modules.
-Regenerate the bindings with the current parser and strict templates before
+Regenerate the bindings with the pinned parser and native Fiber v3/strict templates before
 publishing. Validate the exact released versions with this gate; do not rely on
 the workspace to hide missing package paths.
 

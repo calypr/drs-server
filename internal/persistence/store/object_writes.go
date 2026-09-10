@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"
@@ -84,7 +85,7 @@ type contentRow struct {
 // RegisterObjects is the content identity write boundary. Every SHA-bearing
 // registration is merged while the SQLite writer lock is held, so the parent
 // row, children, aliases, and public policy commit together.
-func (db *Store) RegisterObjects(ctx context.Context, objects []objects.Record) error {
+func (db *Store) RegisterObjects(ctx context.Context, objects []drs.DrsObject) error {
 	if len(objects) == 0 {
 		return nil
 	}
@@ -107,8 +108,8 @@ func (db *Store) RegisterObjects(ctx context.Context, objects []objects.Record) 
 		return nil
 	})
 }
-func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (string, error) {
-	id := strings.TrimSpace(string(obj.Id))
+func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *drs.DrsObject) (string, error) {
+	id := strings.TrimSpace(obj.Id)
 	if id == "" {
 		return "", fmt.Errorf("object id is required")
 	}
@@ -273,7 +274,7 @@ func (db *Store) loadContentRowTx(ctx context.Context, tx *sql.Tx, id string) (c
 	return row, true, nil
 }
 
-func (db *Store) insertContentRowTx(ctx context.Context, tx *sql.Tx, id string, obj *objects.Record) error {
+func (db *Store) insertContentRowTx(ctx context.Context, tx *sql.Tx, id string, obj *drs.DrsObject) error {
 	_, err := db.txExecContext(ctx, tx, `
 		INSERT INTO drs_object (id, size, created_time, updated_time, name, version, description)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`, id, obj.Size, obj.CreatedTime, timeVal(obj.UpdatedTime),
@@ -284,7 +285,7 @@ func (db *Store) insertContentRowTx(ctx context.Context, tx *sql.Tx, id string, 
 	return nil
 }
 
-func (db *Store) mergeContentRowTx(ctx context.Context, tx *sql.Tx, row contentRow, obj *objects.Record, resources, currentResources []string) error {
+func (db *Store) mergeContentRowTx(ctx context.Context, tx *sql.Tx, row contentRow, obj *drs.DrsObject, resources, currentResources []string) error {
 	merged := objects.MergeRegistrationMetadata(objects.RegistrationMergeInput{
 		ExistingName:        row.name,
 		ExistingVersion:     row.version,
@@ -315,7 +316,7 @@ func (db *Store) mergeContentRowTx(ctx context.Context, tx *sql.Tx, row contentR
 	return nil
 }
 
-func (db *Store) mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, hasSHA bool, resources []string, obj *objects.Record) error {
+func (db *Store) mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha string, hasSHA bool, resources []string, obj *drs.DrsObject) error {
 	for _, resource := range resources {
 		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO drs_object_controlled_access (object_id, resource)
@@ -471,7 +472,7 @@ func (db *Store) objectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]str
 	return values, rows.Err()
 }
 
-func identityAliases(obj *objects.Record) []string {
+func identityAliases(obj *drs.DrsObject) []string {
 	if obj == nil || obj.Aliases == nil {
 		return nil
 	}

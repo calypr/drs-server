@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
@@ -83,35 +83,31 @@ func (f *eventFake) RecordTransferAttributionEvents(_ context.Context, events []
 	return f.err
 }
 
-func testRecord() *objects.Record {
+func testRecord() *drs.DrsObject {
 	sha := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	accessID := "s3"
 	url := "s3://legacy/object"
-	methods := []objects.AccessMethod{{AccessId: &accessID, Type: "s3", AccessUrl: &objects.AccessURL{Url: url}}}
+	methods := []drs.AccessMethod{{AccessId: &accessID, Type: "s3", AccessUrl: &drs.AccessURL{Url: url}}}
 	resources := []string{"/organization/org/project/project"}
-	return &objects.Record{
+	return &drs.DrsObject{
 		Id:               "record-1",
 		Size:             42,
-		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
 		AccessMethods:    &methods,
 		ControlledAccess: &resources,
 	}
 }
 
 type downloadObjectFake struct {
-	object *objects.Record
+	object *drs.DrsObject
 }
 
-func (f downloadObjectFake) GetObject(context.Context, string, string) (*objects.Record, error) {
+func (f downloadObjectFake) GetObject(context.Context, string, string) (*drs.DrsObject, error) {
 	return f.object, nil
 }
 
-func (downloadObjectFake) GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error) {
+func (downloadObjectFake) GetObjectsByChecksums(context.Context, []string, string) (map[string][]drs.DrsObject, error) {
 	return nil, nil
-}
-
-func (downloadObjectFake) RequireObjectResources(context.Context, string, []string) error {
-	return nil
 }
 
 type downloadAccountingFake struct {

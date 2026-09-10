@@ -27,13 +27,6 @@ func TestResolveStorageScopeComposesOrganizationAndProjectPrefixes(t *testing.T)
 	if got.Credential.CredentialID != "credential" {
 		t.Fatalf("resolved credential = %+v", got.Credential)
 	}
-	prefix, err := service.ResolvePathPrefix(context.Background(), " org ", " project ", " /CONFIG/ ")
-	if err != nil {
-		t.Fatalf("ResolvePathPrefix() error = %v", err)
-	}
-	if prefix != "prefix/project/CONFIG" {
-		t.Fatalf("resolved path prefix = %q, want %q", prefix, "prefix/project/CONFIG")
-	}
 }
 
 func TestResolveStorageScopeClassifiesMissingScopeAndCredential(t *testing.T) {

@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -15,19 +17,22 @@ import (
 )
 
 type serverObjectStore struct {
-	records map[string]*objects.Record
+	records map[string]*drs.DrsObject
 	aliases map[string]string
 }
 
-func newServerObjectStore(records map[string]*objects.Record) *serverObjectStore {
-	store := &serverObjectStore{records: make(map[string]*objects.Record), aliases: make(map[string]string)}
+func newServerObjectStore(records map[string]*drs.DrsObject) *serverObjectStore {
+	store := &serverObjectStore{records: make(map[string]*drs.DrsObject), aliases: make(map[string]string)}
 	for id, record := range records {
 		store.records[id] = cloneServerRecord(record)
 	}
 	return store
 }
 
-func (s *serverObjectStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
+func (s *serverObjectStore) GetObject(_ context.Context, id string) (*drs.DrsObject, error) {
+	if _, found := s.records[id]; !found {
+		id = s.aliases[id]
+	}
 	record, ok := s.records[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
@@ -35,8 +40,8 @@ func (s *serverObjectStore) GetObject(_ context.Context, id string) (*objects.Re
 	return cloneServerRecord(record), nil
 }
 
-func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0, len(ids))
+func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]drs.DrsObject, error) {
+	result := make([]drs.DrsObject, 0, len(ids))
 	for _, id := range ids {
 		if record, ok := s.records[id]; ok {
 			result = append(result, *cloneServerRecord(record))
@@ -45,19 +50,23 @@ func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]o
 	return result, nil
 }
 
+func (s *serverObjectStore) GetPublicReadByIDs(_ context.Context, _ []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 func (s *serverObjectStore) DeleteObject(_ context.Context, id string) error {
 	delete(s.records, id)
 	return nil
 }
 
-func (s *serverObjectStore) CreateObject(_ context.Context, record *objects.Record) error {
+func (s *serverObjectStore) CreateObject(_ context.Context, record *drs.DrsObject) error {
 	if record == nil {
 		return fmt.Errorf("record is required")
 	}
 	if s.records == nil {
-		s.records = make(map[string]*objects.Record)
+		s.records = make(map[string]*drs.DrsObject)
 	}
-	s.records[string(record.Id)] = cloneServerRecord(record)
+	s.records[record.Id] = cloneServerRecord(record)
 	return nil
 }
 
@@ -70,7 +79,7 @@ func (s *serverObjectStore) BulkDeleteObjects(ctx context.Context, ids []string)
 	return nil
 }
 
-func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []objects.Record) error {
+func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []drs.DrsObject) error {
 	for i := range records {
 		if err := s.CreateObject(ctx, &records[i]); err != nil {
 			return err
@@ -79,22 +88,22 @@ func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []objec
 	return nil
 }
 
-func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []objects.Record) error {
-	s.records = make(map[string]*objects.Record, len(records))
+func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []drs.DrsObject) error {
+	s.records = make(map[string]*drs.DrsObject, len(records))
 	return s.RegisterObjects(ctx, records)
 }
 
-func (s *serverObjectStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []objects.AccessMethod) error {
+func (s *serverObjectStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []drs.AccessMethod) error {
 	record, ok := s.records[id]
 	if !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
-	copyMethods := append([]objects.AccessMethod(nil), methods...)
+	copyMethods := append([]drs.AccessMethod(nil), methods...)
 	record.AccessMethods = &copyMethods
 	return nil
 }
 
-func (s *serverObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objects.AccessMethod) error {
+func (s *serverObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]drs.AccessMethod) error {
 	for id, methods := range updates {
 		if err := s.UpdateObjectAccessMethods(ctx, id, methods); err != nil {
 			return err
@@ -161,19 +170,19 @@ func (s *serverObjectStore) ResolveObjectAlias(_ context.Context, aliasID string
 	return canonicalID, nil
 }
 
-func (s *serverObjectStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0)
+func (s *serverObjectStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]drs.DrsObject, error) {
+	result := make([]drs.DrsObject, 0)
 	checksum = strings.TrimSpace(checksum)
 	for id, record := range s.records {
-		if id == checksum || string(record.Id) == checksum || serverRecordHasChecksum(record, checksum) {
+		if id == checksum || record.Id == checksum || serverRecordHasChecksum(record, checksum) {
 			result = append(result, *cloneServerRecord(record))
 		}
 	}
 	return result, nil
 }
 
-func (s *serverObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
-	result := make(map[string][]objects.Record, len(checksums))
+func (s *serverObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]drs.DrsObject, error) {
+	result := make(map[string][]drs.DrsObject, len(checksums))
 	for _, checksum := range checksums {
 		matches, err := s.GetObjectsByChecksum(ctx, checksum)
 		if err != nil {
@@ -193,7 +202,7 @@ func (s *serverObjectStore) ListScopedObjectIDsByChecksums(ctx context.Context, 
 		}
 		for _, record := range matches {
 			if serverRecordInScope(&record, organization, project) {
-				result[checksum] = append(result[checksum], string(record.Id))
+				result[checksum] = append(result[checksum], record.Id)
 			}
 		}
 	}
@@ -253,53 +262,7 @@ func (s *serverObjectStore) ListObjectIDsPageByURL(ctx context.Context, objectUR
 	return pageServerIDs(ids, startAfter, limit, offset), nil
 }
 
-func (s *serverObjectStore) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, includeUnscoped bool) ([]string, error) {
-	ids, err := s.ListObjectIDsByScope(ctx, organization, project)
-	if err != nil {
-		return nil, err
-	}
-	allowed, err := s.ListObjectIDsByResources(ctx, resources, includeUnscoped)
-	if err != nil {
-		return nil, err
-	}
-	set := make(map[string]struct{}, len(allowed))
-	for _, id := range allowed {
-		set[id] = struct{}{}
-	}
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if _, ok := set[id]; ok {
-			out = append(out, id)
-		}
-	}
-	return out, nil
-}
-
-func (s *serverObjectStore) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
-	result := make(map[string][]string, len(checksums))
-	for _, checksum := range checksums {
-		matches, err := s.GetObjectsByChecksum(ctx, checksum)
-		if err != nil {
-			return nil, err
-		}
-		for _, record := range matches {
-			if !restrictToResources || len(resources) == 0 {
-				result[checksum] = append(result[checksum], string(record.Id))
-				continue
-			}
-			for _, candidate := range objects.AccessResources(&record) {
-				for _, resource := range resources {
-					if candidate == resource {
-						result[checksum] = append(result[checksum], string(record.Id))
-					}
-				}
-			}
-		}
-	}
-	return result, nil
-}
-
-func serverRecordHasURL(record *objects.Record, wanted string) bool {
+func serverRecordHasURL(record *drs.DrsObject, wanted string) bool {
 	if record == nil || record.AccessMethods == nil {
 		return false
 	}
@@ -327,7 +290,7 @@ func pageServerIDs(ids []string, startAfter string, limit, offset int) []string 
 	return append([]string(nil), ids[start:end]...)
 }
 
-func serverRecordHasChecksum(record *objects.Record, checksum string) bool {
+func serverRecordHasChecksum(record *drs.DrsObject, checksum string) bool {
 	for _, candidate := range record.Checksums {
 		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), checksum) {
 			return true
@@ -336,7 +299,7 @@ func serverRecordHasChecksum(record *objects.Record, checksum string) bool {
 	return false
 }
 
-func serverRecordInScope(record *objects.Record, organization, project string) bool {
+func serverRecordInScope(record *drs.DrsObject, organization, project string) bool {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
@@ -363,14 +326,14 @@ func serverRecordInScope(record *objects.Record, organization, project string) b
 	return false
 }
 
-func cloneServerRecord(record *objects.Record) *objects.Record {
+func cloneServerRecord(record *drs.DrsObject) *drs.DrsObject {
 	if record == nil {
 		return nil
 	}
 	copyRecord := *record
-	copyRecord.Checksums = append([]objects.Checksum(nil), record.Checksums...)
+	copyRecord.Checksums = append([]drs.Checksum(nil), record.Checksums...)
 	if record.AccessMethods != nil {
-		methods := append([]objects.AccessMethod(nil), (*record.AccessMethods)...)
+		methods := append([]drs.AccessMethod(nil), (*record.AccessMethods)...)
 		copyRecord.AccessMethods = &methods
 	}
 	if record.ControlledAccess != nil {
@@ -510,41 +473,41 @@ func (serverUsageStore) RecordFileDownload(context.Context, string) error { retu
 func (serverUsageStore) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
 	return nil
 }
-func (serverUsageStore) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
+func (serverUsageStore) RecordProviderTransferEvents(context.Context, []metricsapi.ProviderTransferEvent) error {
 	return nil
 }
-func (serverUsageStore) GetFileUsage(context.Context, string) (*usage.FileUsage, error) {
+func (serverUsageStore) GetFileUsage(context.Context, string) (*metricsapi.FileUsage, error) {
 	return nil, fmt.Errorf("%w: file usage not found", errorapi.ErrNotFound)
 }
-func (serverUsageStore) ListFileUsageByObjectIDs(context.Context, []string) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsageByObjectIDs(context.Context, []string) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) ListFileUsage(context.Context, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsage(context.Context, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) GetFileUsageSummary(context.Context, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
+func (serverUsageStore) GetFileUsageSummary(context.Context, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
 }
-func (serverUsageStore) ListFileUsagePageByScope(context.Context, string, string, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsagePageByScope(context.Context, string, string, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) ListFileUsagePageByResources(context.Context, []string, bool, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsagePageByResources(context.Context, []string, bool, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
+func (serverUsageStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
 }
-func (serverUsageStore) GetFileUsageSummaryByResources(context.Context, []string, bool, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
+func (serverUsageStore) GetFileUsageSummaryByResources(context.Context, []string, bool, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
 }
-func (serverUsageStore) GetProjectRecordSummaryByScope(context.Context, string, string) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
+func (serverUsageStore) GetProjectRecordSummaryByScope(context.Context, string, string) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
 }
-func (serverUsageStore) QueryTransferSummary(context.Context, usage.Filter, []string) (usage.Summary, error) {
-	return usage.Summary{}, nil
+func (serverUsageStore) QueryTransferSummary(context.Context, usage.Filter, []string) (metricsapi.TransferAttributionSummary, error) {
+	return metricsapi.TransferAttributionSummary{}, nil
 }
-func (serverUsageStore) QueryTransferBreakdown(context.Context, usage.Filter, string, []string) ([]usage.Breakdown, error) {
-	return []usage.Breakdown{}, nil
+func (serverUsageStore) QueryTransferBreakdown(context.Context, usage.Filter, string, []string) ([]metricsapi.TransferAttributionBreakdown, error) {
+	return []metricsapi.TransferAttributionBreakdown{}, nil
 }
 
 var (

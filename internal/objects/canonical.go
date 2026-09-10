@@ -2,14 +2,16 @@ package objects
 
 import (
 	"context"
-	clientaccess "github.com/calypr/syfon/client/access"
-	clienthash "github.com/calypr/syfon/client/hash"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/calypr/syfon/apigen/drs"
+	clientaccess "github.com/calypr/syfon/client/access"
+	clienthash "github.com/calypr/syfon/client/hash"
 )
 
-func canonicalizeProjectScopedObjects(objects []Record, organization, project string) []Record {
+func canonicalizeProjectScopedObjects(objects []drs.DrsObject, organization, project string, publicRead map[string]bool) []drs.DrsObject {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
 	}
@@ -23,8 +25,8 @@ func canonicalizeProjectScopedObjects(objects []Record, organization, project st
 		}
 	}
 
-	grouped := make(map[string][]Record)
-	passthrough := make([]Record, 0)
+	grouped := make(map[string][]drs.DrsObject)
+	passthrough := make([]drs.DrsObject, 0)
 	for _, obj := range objects {
 		key, ok := canonicalProjectChecksumKey(&obj, forcedResource)
 		if !ok {
@@ -40,9 +42,9 @@ func canonicalizeProjectScopedObjects(objects []Record, organization, project st
 	}
 	sort.Strings(keys)
 
-	out := make([]Record, 0, len(keys)+len(passthrough))
+	out := make([]drs.DrsObject, 0, len(keys)+len(passthrough))
 	for _, key := range keys {
-		out = append(out, collapseCanonicalGroup(grouped[key]))
+		out = append(out, collapseCanonicalGroup(grouped[key], publicRead))
 	}
 	out = append(out, passthrough...)
 	sort.Slice(out, func(i, j int) bool {
@@ -54,7 +56,7 @@ func canonicalizeProjectScopedObjects(objects []Record, organization, project st
 	return out
 }
 
-func canonicalProjectChecksumKey(obj *Record, forcedResource string) (string, bool) {
+func canonicalProjectChecksumKey(obj *drs.DrsObject, forcedResource string) (string, bool) {
 	if obj == nil {
 		return "", false
 	}
@@ -82,12 +84,12 @@ func canonicalProjectChecksumKey(obj *Record, forcedResource string) (string, bo
 	return resource + "|" + sha, true
 }
 
-func canonicalizeContentObjects(objects []Record) []Record {
+func canonicalizeContentObjects(objects []drs.DrsObject, publicRead map[string]bool) []drs.DrsObject {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
 	}
-	grouped := make(map[string][]Record)
-	passthrough := make([]Record, 0)
+	grouped := make(map[string][]drs.DrsObject)
+	passthrough := make([]drs.DrsObject, 0)
 	for _, obj := range objects {
 		sha, ok := CanonicalSHA256(obj.Checksums)
 		if !ok {
@@ -96,21 +98,21 @@ func canonicalizeContentObjects(objects []Record) []Record {
 		}
 		grouped[sha] = append(grouped[sha], obj)
 	}
-	out := make([]Record, 0, len(grouped)+len(passthrough))
+	out := make([]drs.DrsObject, 0, len(grouped)+len(passthrough))
 	for _, group := range grouped {
-		out = append(out, collapseCanonicalGroup(group))
+		out = append(out, collapseCanonicalGroup(group, publicRead))
 	}
 	out = append(out, passthrough...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Id < out[j].Id })
 	return out
 }
 
-func objectsWithSHA256(objects []Record, checksum string) []Record {
+func objectsWithSHA256(objects []drs.DrsObject, checksum string) []drs.DrsObject {
 	target := clienthash.NormalizeOid(checksum)
 	if target == "" {
 		return objects
 	}
-	matched := make([]Record, 0, len(objects))
+	matched := make([]drs.DrsObject, 0, len(objects))
 	for _, obj := range objects {
 		sha, ok := CanonicalSHA256(obj.Checksums)
 		if ok && sha == target {
@@ -120,9 +122,9 @@ func objectsWithSHA256(objects []Record, checksum string) []Record {
 	return matched
 }
 
-func collapseCanonicalGroup(group []Record) Record {
+func collapseCanonicalGroup(group []drs.DrsObject, publicRead map[string]bool) drs.DrsObject {
 	if len(group) == 0 {
-		return Record{}
+		return drs.DrsObject{}
 	}
 	canonical := group[0]
 	latest := group[0]
@@ -146,51 +148,53 @@ func collapseCanonicalGroup(group []Record) Record {
 	merged.UpdatedTime = &updated
 	merged.Checksums = mergeChecksums(group)
 	merged.AccessMethods = mergeAccessMethods(group)
-	controlled, public := mergeControlledAccess(group)
-	merged.PublicRead = public
-	for _, obj := range group {
-		if obj.PublicReadPolicyKnown {
-			merged.PublicReadPolicyKnown = true
-			break
-		}
-	}
+	controlled, public := mergeControlledAccess(group, publicRead)
+	publicRead[merged.Id] = public
 	if len(controlled) > 0 {
 		merged.ControlledAccess = &controlled
 	} else {
 		merged.ControlledAccess = nil
 	}
-	merged.NameAliases = mergeNameAliases(merged.Name, group)
-	merged.Aliases = mergeStringPointerValues(func(obj Record) []string {
+	nameAliases := mergeNameAliases(merged.Name, group)
+	if nameAliases != nil {
+		merged.NameAliases = &nameAliases
+	} else {
+		merged.NameAliases = nil
+	}
+	merged.Aliases = mergeStringPointerValues(func(obj drs.DrsObject) []string {
 		if obj.Aliases == nil {
 			return nil
 		}
 		return *obj.Aliases
 	}, group)
-	merged.SelfUri = "drs://" + string(merged.Id)
+	merged.SelfUri = "drs://" + merged.Id
 	return merged
 }
 
-func canonicalObjectSortTime(obj Record) time.Time {
+func canonicalObjectSortTime(obj drs.DrsObject) time.Time {
 	if obj.UpdatedTime != nil && !obj.UpdatedTime.IsZero() {
 		return obj.UpdatedTime.UTC()
 	}
 	return obj.CreatedTime.UTC()
 }
 
-func cloneObjects(objects []Record) []Record {
-	out := make([]Record, 0, len(objects))
+func cloneObjects(objects []drs.DrsObject) []drs.DrsObject {
+	out := make([]drs.DrsObject, 0, len(objects))
 	for _, obj := range objects {
 		out = append(out, cloneObject(obj))
 	}
 	return out
 }
 
-func cloneObject(obj Record) Record {
+func cloneObject(obj drs.DrsObject) drs.DrsObject {
 	cloned := obj
-	cloned.Checksums = append([]Checksum(nil), obj.Checksums...)
-	cloned.NameAliases = append([]string(nil), obj.NameAliases...)
+	cloned.Checksums = append([]drs.Checksum(nil), obj.Checksums...)
+	if obj.NameAliases != nil {
+		nameAliases := append([]string(nil), (*obj.NameAliases)...)
+		cloned.NameAliases = &nameAliases
+	}
 	if obj.AccessMethods != nil {
-		methods := append([]AccessMethod(nil), (*obj.AccessMethods)...)
+		methods := append([]drs.AccessMethod(nil), (*obj.AccessMethods)...)
 		cloned.AccessMethods = &methods
 	}
 	if obj.ControlledAccess != nil {
@@ -204,9 +208,9 @@ func cloneObject(obj Record) Record {
 	return cloned
 }
 
-func mergeChecksums(group []Record) []Checksum {
+func mergeChecksums(group []drs.DrsObject) []drs.Checksum {
 	seen := make(map[string]struct{})
-	merged := make([]Checksum, 0)
+	merged := make([]drs.Checksum, 0)
 	for _, obj := range group {
 		for _, checksum := range obj.Checksums {
 			key := checksum.Type + "|" + checksum.Checksum
@@ -226,9 +230,9 @@ func mergeChecksums(group []Record) []Checksum {
 	return merged
 }
 
-func mergeAccessMethods(group []Record) *[]AccessMethod {
+func mergeAccessMethods(group []drs.DrsObject) *[]drs.AccessMethod {
 	seen := make(map[string]struct{})
-	methods := make([]AccessMethod, 0)
+	methods := make([]drs.AccessMethod, 0)
 	for _, obj := range group {
 		if obj.AccessMethods == nil {
 			continue
@@ -238,12 +242,12 @@ func mergeAccessMethods(group []Record) *[]AccessMethod {
 			if method.AccessUrl != nil {
 				url = method.AccessUrl.Url
 			}
-			key := method.Type + "|" + url
+			key := string(method.Type) + "|" + url
 			if _, ok := seen[key]; ok {
 				continue
 			}
 			seen[key] = struct{}{}
-			accessID := AccessMethodID(method.Type, url)
+			accessID := AccessMethodID(string(method.Type), url)
 			method.AccessId = &accessID
 			methods = append(methods, method)
 		}
@@ -268,30 +272,36 @@ func mergeAccessMethods(group []Record) *[]AccessMethod {
 	return &methods
 }
 
-func mergeControlledAccess(group []Record) ([]string, bool) {
+func mergeControlledAccess(group []drs.DrsObject, publicRead map[string]bool) ([]string, bool) {
 	resources := make([]string, 0)
 	public := false
 	for _, obj := range group {
 		objectResources := AccessResources(&obj)
 		if len(objectResources) == 0 {
-			public = public || obj.PublicRead || !obj.PublicReadPolicyKnown
+			if value, known := publicRead[obj.Id]; known {
+				public = public || value
+			} else {
+				public = true
+			}
 			continue
 		}
 		resources = append(resources, objectResources...)
 	}
 	for _, obj := range group {
-		public = public || obj.PublicRead
+		public = public || publicRead[obj.Id]
 	}
 	return clientaccess.NormalizeAccessResources(resources), public
 }
 
-func mergeNameAliases(primary *string, group []Record) []string {
+func mergeNameAliases(primary *string, group []drs.DrsObject) []string {
 	candidates := make([]string, 0)
 	for _, obj := range group {
 		if obj.Name != nil {
 			candidates = append(candidates, *obj.Name)
 		}
-		candidates = append(candidates, obj.NameAliases...)
+		if obj.NameAliases != nil {
+			candidates = append(candidates, (*obj.NameAliases)...)
+		}
 	}
 	primaryName := ""
 	if primary != nil {
@@ -300,7 +310,7 @@ func mergeNameAliases(primary *string, group []Record) []string {
 	return NormalizeNameAliases(primaryName, candidates)
 }
 
-func pickLatestNonZeroSize(group []Record, fallback int64) int64 {
+func pickLatestNonZeroSize(group []drs.DrsObject, fallback int64) int64 {
 	best := fallback
 	var bestTime time.Time
 	bestID := ""
@@ -309,21 +319,21 @@ func pickLatestNonZeroSize(group []Record, fallback int64) int64 {
 			continue
 		}
 		when := canonicalObjectSortTime(obj)
-		if best <= 0 || when.After(bestTime) || when.Equal(bestTime) && string(obj.Id) > bestID {
+		if best <= 0 || when.After(bestTime) || when.Equal(bestTime) && obj.Id > bestID {
 			best = obj.Size
 			bestTime = when
-			bestID = string(obj.Id)
+			bestID = obj.Id
 		}
 	}
 	return best
 }
 
-func pickLatestStrings(group []Record, description, version *string) (*string, *string) {
+func pickLatestStrings(group []drs.DrsObject, description, version *string) (*string, *string) {
 	var descriptionTime, versionTime time.Time
 	descriptionID, versionID := "", ""
 	for _, obj := range group {
 		when := canonicalObjectSortTime(obj)
-		id := string(obj.Id)
+		id := obj.Id
 		if value := obj.Description; value != nil && strings.TrimSpace(*value) != "" && (description == nil || when.After(descriptionTime) || when.Equal(descriptionTime) && id > descriptionID) {
 			trimmed := strings.TrimSpace(*value)
 			description, descriptionTime, descriptionID = &trimmed, when, id
@@ -336,7 +346,7 @@ func pickLatestStrings(group []Record, description, version *string) (*string, *
 	return description, version
 }
 
-func mergeStringPointerValues(getter func(Record) []string, group []Record) *[]string {
+func mergeStringPointerValues(getter func(drs.DrsObject) []string, group []drs.DrsObject) *[]string {
 	seen := make(map[string]struct{})
 	values := make([]string, 0)
 	for _, obj := range group {
@@ -368,11 +378,11 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 	if err != nil {
 		return 0, err
 	}
-	if err := bulkObjectMethodError(ctx, objects, objectMethodUpdate); err != nil {
+	if err := bulkObjectMethodError(ctx, objects, objectMethodUpdate, nil); err != nil {
 		return 0, err
 	}
 
-	grouped := make(map[string][]Record)
+	grouped := make(map[string][]drs.DrsObject)
 	for _, obj := range objects {
 		key, ok := canonicalProjectChecksumKey(&obj, "")
 		if !ok {
@@ -381,7 +391,7 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 		grouped[key] = append(grouped[key], obj)
 	}
 
-	merged := make([]Record, 0, len(grouped))
+	merged := make([]drs.DrsObject, 0, len(grouped))
 	aliasMap := make(map[string]string)
 	toDelete := make([]string, 0)
 	keys := make([]string, 0, len(grouped))
@@ -394,14 +404,14 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 	sort.Strings(keys)
 	for _, key := range keys {
 		group := grouped[key]
-		canonical := collapseCanonicalGroup(group)
+		canonical := collapseCanonicalGroup(group, nil)
 		merged = append(merged, canonical)
 		for _, obj := range group {
 			if obj.Id == canonical.Id {
 				continue
 			}
-			aliasMap[string(obj.Id)] = string(canonical.Id)
-			toDelete = append(toDelete, string(obj.Id))
+			aliasMap[obj.Id] = canonical.Id
+			toDelete = append(toDelete, obj.Id)
 		}
 	}
 
@@ -416,21 +426,7 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 			return 0, err
 		}
 	}
-	seen := make(map[string]struct{}, len(toDelete))
-	uniqueIDs := make([]string, 0, len(toDelete))
-	for _, id := range toDelete {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		uniqueIDs = append(uniqueIDs, id)
-	}
-	sort.Strings(uniqueIDs)
-	if err := s.store.BulkDeleteObjects(ctx, uniqueIDs); err != nil {
+	if err := s.store.BulkDeleteObjects(ctx, uniqueOverwriteStrings(toDelete)); err != nil {
 		return 0, err
 	}
 	return len(aliasMap), nil

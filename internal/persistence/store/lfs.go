@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
@@ -75,7 +75,7 @@ func (db *Store) GetPendingMetadata(ctx context.Context, oid string) (*transferl
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}
 
-	var c objects.Candidate
+	var c lfsapi.DrsObjectCandidate
 	if err := json.Unmarshal([]byte(raw), &c); err != nil {
 		return nil, fmt.Errorf("failed to parse pending metadata candidate for oid %s: %w", oid, err)
 	}
@@ -119,7 +119,7 @@ func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferl
 		return nil, fmt.Errorf("failed to consume pending metadata for oid %s: %w", oid, err)
 	}
 
-	var c objects.Candidate
+	var c lfsapi.DrsObjectCandidate
 	if err := json.Unmarshal([]byte(raw), &c); err != nil {
 		return nil, fmt.Errorf("failed to parse pending metadata candidate for oid %s: %w", oid, err)
 	}

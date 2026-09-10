@@ -8,8 +8,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
@@ -27,6 +32,76 @@ type validationWork struct {
 	key            string
 	base           internalapi.InternalInspectObjectBulkItem
 	requestIndexes []int
+}
+
+// InspectProjectRecords returns the physical catalog rows associated with a
+// project and optionally restricts them to a logical or configured S3 prefix.
+func (s *Service) InspectProjectRecords(ctx context.Context, organization, project, pathPrefix string) ([]drs.DrsObject, error) {
+	organization = strings.TrimSpace(organization)
+	project = strings.TrimSpace(project)
+	if organization == "" || project == "" {
+		return nil, errorapi.Define(errorapi.ErrorCodeInvalidInput, errorapi.ErrorCategoryInvalidInput, "organization and project are required")
+	}
+	if s == nil || s.records == nil {
+		return nil, errorapi.Define(errorapi.ErrorCodeStorageUnsupported, errorapi.ErrorCategoryInvalidInput, "object service is not configured")
+	}
+	records, err := s.records.ListPhysicalObjectsByScope(ctx, organization, project, readMethod)
+	if err != nil {
+		return nil, err
+	}
+
+	prefixes := make([]string, 0, 2)
+	if prefix := strings.Trim(strings.TrimSpace(pathPrefix), "/"); prefix != "" {
+		prefixes = append(prefixes, prefix)
+		if canResolveProjectRecordPrefix(ctx, organization, project) {
+			if target, resolveErr := s.resolveScope(ctx, organization, project, readMethod); resolveErr == nil {
+				resolved := target.withPathPrefix(prefix).Prefix
+				if resolved != "" && !strings.EqualFold(resolved, prefix) {
+					prefixes = append(prefixes, resolved)
+				}
+			}
+		}
+	}
+
+	result := make([]drs.DrsObject, 0, len(records))
+	for _, record := range records {
+		if _, ok := objects.CanonicalSHA256(record.Checksums); !ok || len(prefixes) > 0 && !projectRecordMatchesPrefix(record, prefixes...) {
+			continue
+		}
+		result = append(result, record)
+	}
+	return result, nil
+}
+
+func canResolveProjectRecordPrefix(ctx context.Context, organization, project string) bool {
+	if !access.IsAuthzEnforced(ctx) {
+		return true
+	}
+	resource, err := clientaccess.ResourcePath(organization, project)
+	return err == nil && access.HasMethodAccess(ctx, readMethod, []string{resource})
+}
+
+func projectRecordMatchesPrefix(record drs.DrsObject, prefixes ...string) bool {
+	for _, rawPrefix := range prefixes {
+		prefix := strings.Trim(strings.TrimSpace(rawPrefix), "/")
+		if prefix == "" {
+			return true
+		}
+		if record.AccessMethods == nil {
+			continue
+		}
+		for _, method := range *record.AccessMethods {
+			if method.AccessUrl == nil {
+				continue
+			}
+			_, key, ok := address.ParseS3URL(method.AccessUrl.Url)
+			key = strings.Trim(strings.TrimSpace(key), "/")
+			if ok && (key == prefix || strings.HasPrefix(key, prefix+"/")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ValidateInventoryObjects compares requested physical S3 locations with

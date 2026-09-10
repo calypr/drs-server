@@ -13,7 +13,6 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
 	clienthash "github.com/calypr/syfon/client/hash"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/gofiber/fiber/v3"
@@ -23,18 +22,6 @@ import (
 // reverse-proxy prefix is protocol state and must not leak into transfers or
 // the object domain.
 type baseURLKey struct{}
-
-// withLFSBaseURL attaches the Fiber request base URL to a request context.
-func withLFSBaseURL(ctx context.Context, baseURL string) context.Context {
-	return context.WithValue(ctx, baseURLKey{}, baseURL)
-}
-
-// getLFSBaseURL returns the request base URL previously attached by the route
-// adapter.
-func getLFSBaseURL(ctx context.Context) string {
-	value, _ := ctx.Value(baseURLKey{}).(string)
-	return value
-}
 
 type windowCounter struct {
 	Minute int64
@@ -207,73 +194,19 @@ type LFSOptions struct {
 }
 
 func registerLFSRoutes(router fiber.Router, service *transferlfs.Service, opts LFSOptions) {
-	server := newLFSServer(service, opts)
+	server := &lfsServer{opts: opts, service: service}
 	strict := lfsapi.NewStrictHandler(server, []lfsapi.StrictMiddlewareFunc{
 		lfsRequestMiddleware(opts),
 	})
 	router.Use(func(c fiber.Ctx) error {
-		c.SetContext(withLFSBaseURL(c.Context(), c.BaseURL()))
-		return c.Next()
+		c.SetContext(context.WithValue(c.Context(), baseURLKey{}, c.BaseURL()))
+		err := c.Next()
+		if c.Method() == http.MethodPost && (c.Path() == "/objects/batch" || strings.HasSuffix(c.Path(), "/verify")) {
+			c.Set(fiber.HeaderContentType, "application/vnd.git-lfs+json")
+		}
+		return err
 	})
 	lfsapi.RegisterHandlers(router, strict)
-}
-
-// fromLFSGeneratedCandidate converts the LFS metadata shape to the plain value
-// stored by the transfer workflow. The selected fields preserve the legacy
-// DRS candidate JSON written by the previous LFS adapter.
-func fromLFSGeneratedCandidate(value lfsapi.DrsObjectCandidate) objects.Candidate {
-	aliases := []string(nil)
-	if value.Aliases != nil {
-		aliases = append(aliases, (*value.Aliases)...)
-	}
-	explicitID := ""
-	if value.Id != nil {
-		explicitID = strings.TrimSpace(*value.Id)
-	}
-	if explicitID == "" && value.Checksums != nil {
-		for _, checksum := range *value.Checksums {
-			if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
-				explicitID = clienthash.NormalizeOid(checksum.Checksum)
-				break
-			}
-		}
-	}
-	if explicitID != "" {
-		aliases = append([]string{"id:" + explicitID}, aliases...)
-	}
-
-	out := objects.Candidate{
-		Aliases:     &aliases,
-		Description: value.Description,
-		Name:        value.Name,
-	}
-	if value.Size != nil {
-		out.Size = value.Size
-	}
-	if value.Checksums != nil {
-		checksums := make([]objects.Checksum, 0, len(*value.Checksums))
-		for _, checksum := range *value.Checksums {
-			checksums = append(checksums, objects.Checksum{Type: checksum.Type, Checksum: checksum.Checksum})
-		}
-		if len(checksums) > 0 {
-			out.Checksums = &checksums
-		}
-	}
-	if value.AccessMethods != nil {
-		methods := make([]objects.AccessMethod, 0, len(*value.AccessMethods))
-		for _, method := range *value.AccessMethods {
-			converted := objects.AccessMethod{AccessId: method.AccessId}
-			if method.Type != nil {
-				converted.Type = string(*method.Type)
-			}
-			if method.AccessUrl != nil && method.AccessUrl.Url != nil {
-				converted.AccessUrl = &objects.AccessURL{Url: *method.AccessUrl.Url}
-			}
-			methods = append(methods, converted)
-		}
-		out.AccessMethods = &methods
-	}
-	return out
 }
 
 type lfsServer struct {
@@ -281,11 +214,8 @@ type lfsServer struct {
 	service *transferlfs.Service
 }
 
-func newLFSServer(service *transferlfs.Service, opts LFSOptions) *lfsServer {
-	return &lfsServer{opts: opts, service: service}
-}
-
 func (s *lfsServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequestObject) (lfsapi.LfsBatchResponseObject, error) {
+	baseURL, _ := ctx.Value(baseURLKey{}).(string)
 	req := request.Body
 	if req == nil {
 		return lfsapi.LfsBatch500ApplicationVndGitLfsPlusJSONResponse{Message: "missing request body"}, nil
@@ -335,7 +265,7 @@ func (s *lfsServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequest
 			responseObjects[responseIndex].Actions = &lfsapi.BatchActions{Download: &lfsapi.Action{Href: item.DownloadURL}}
 		} else if !item.Existing {
 			oid := responseObjects[responseIndex].Oid
-			responseObjects[responseIndex].Actions = &lfsapi.BatchActions{Upload: &lfsapi.Action{Href: getLFSBaseURL(ctx) + "/info/lfs/objects/" + oid}, Verify: &lfsapi.Action{Href: getLFSBaseURL(ctx) + "/info/lfs/verify"}}
+			responseObjects[responseIndex].Actions = &lfsapi.BatchActions{Upload: &lfsapi.Action{Href: baseURL + "/info/lfs/objects/" + oid}, Verify: &lfsapi.Action{Href: baseURL + "/info/lfs/verify"}}
 		}
 	}
 	transfer := "basic"
@@ -382,11 +312,7 @@ func (s *lfsServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 			return lfsapi.LfsStageMetadata400JSONResponse{Message: fmt.Sprintf("candidate[%d] size must be non-negative", index)}, nil
 		}
 	}
-	candidates := make([]objects.Candidate, 0, len(input.Candidates))
-	for _, candidate := range input.Candidates {
-		candidates = append(candidates, fromLFSGeneratedCandidate(candidate))
-	}
-	if err := s.service.Stage(ctx, candidates); err != nil {
+	if err := s.service.Stage(ctx, input.Candidates); err != nil {
 		var stageErr *transferlfs.MetadataStageError
 		if errors.As(err, &stageErr) {
 			if stageErr.MissingSHA {
@@ -396,7 +322,7 @@ func (s *lfsServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 		}
 		return lfsapi.LfsStageMetadata500JSONResponse{Message: lfsInternalError(ctx, "stage metadata", http.StatusInternalServerError, err)}, nil
 	}
-	return lfsapi.LfsStageMetadata200JSONResponse{Staged: int32(len(candidates))}, nil
+	return lfsapi.LfsStageMetadata200JSONResponse{Staged: int32(len(input.Candidates))}, nil
 }
 
 func (s *lfsServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUploadProxyRequestObject) (lfsapi.LfsUploadProxyResponseObject, error) {

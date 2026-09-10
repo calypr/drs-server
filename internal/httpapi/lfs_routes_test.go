@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/buckets"
@@ -43,15 +44,15 @@ func TestWriteLFSErrorPreservesLFSContentType(t *testing.T) {
 
 func TestLFSBatchDownloadUsesTransferAndUsagePorts(t *testing.T) {
 	oid := strings.Repeat("a", 64)
-	ports := newLFSTestPorts(
-		map[string]*objects.Record{
+	ports := newLFSTestPorts(t,
+		map[string]*drs.DrsObject{
 			oid: {
-				Id:        objects.RecordID(oid),
+				Id:        oid,
 				Size:      10,
-				Checksums: []objects.Checksum{{Type: "sha256", Checksum: oid}},
-				AccessMethods: &[]objects.AccessMethod{{
+				Checksums: []drs.Checksum{{Type: "sha256", Checksum: oid}},
+				AccessMethods: &[]drs.AccessMethod{{
 					Type:      "s3",
-					AccessUrl: &objects.AccessURL{Url: "s3://bucket/" + oid},
+					AccessUrl: &drs.AccessURL{Url: "s3://bucket/" + oid},
 				}},
 			},
 		},
@@ -88,7 +89,7 @@ func TestLFSBatchDownloadUsesTransferAndUsagePorts(t *testing.T) {
 
 func TestLFSMetadataVerifyPreservesPendingPopBeforeRegister(t *testing.T) {
 	oid := strings.Repeat("b", 64)
-	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
+	ports := newLFSTestPorts(t, map[string]*drs.DrsObject{}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
 	router := newLFSTestRouter(ports, &lfsTestStorage{}, defaultLFSOptions())
 	metadata, _ := json.Marshal(map[string]any{"candidates": []map[string]any{{
 		"name": "object.bin", "size": 12,
@@ -122,7 +123,7 @@ func TestLFSMetadataVerifyPreservesPendingPopBeforeRegister(t *testing.T) {
 
 func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 	oid := strings.Repeat("c", 64)
-	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
+	ports := newLFSTestPorts(t, map[string]*drs.DrsObject{}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
 	storageFake := &lfsTestStorage{}
 	deps := newLFSTestDependencies(ports, storageFake)
 	storageFake.uploadPart = func(content []byte) (string, error) {
@@ -131,7 +132,7 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 		}
 		return "etag", nil
 	}
-	server := newLFSServer(deps, defaultLFSOptions())
+	server := &lfsServer{service: deps, opts: defaultLFSOptions()}
 	response, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
 		Oid:  oid,
 		Body: bytes.NewReader([]byte("payload")),
@@ -157,9 +158,9 @@ func TestLFSUploadProxyPreservesOpaqueMultipartAndPartOrder(t *testing.T) {
 func TestLFSTopLevelInternalErrorsDoNotExposeDetails(t *testing.T) {
 	const detail = "postgres://user:secret@database"
 	oid := strings.Repeat("e", 64)
-	ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{})
+	ports := newLFSTestPorts(t, map[string]*drs.DrsObject{}, map[string]buckets.Credential{})
 	ports.getErr = errors.New(detail)
-	server := newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
+	server := &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
 
 	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
 		Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 1},
@@ -202,7 +203,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 	oid := strings.Repeat("d", 64)
 	newTransferService := func(ports *lfsTestServicePorts, storageFake *lfsTestStorage) *transfers.Service {
 		return transfers.NewService(transfers.Dependencies{
-			Objects:     objects.NewService(ports, nil),
+			Objects:     objects.NewService(ports),
 			Storage:     storageFake,
 			Scopes:      lfsTestScopeReader{scopes: map[string]buckets.Scope{"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "project-prefix"}}},
 			Credentials: ports,
@@ -218,12 +219,14 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			name: "existing object",
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
-				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
-				ports.objects["record-existing"] = &objects.Record{
+				methods := []drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://legacy/stale-key"}}}
+				if err := ports.RegisterObjects(context.Background(), []drs.DrsObject{{
 					Id:               "record-existing",
-					Checksums:        []objects.Checksum{{Type: "sha256", Checksum: oid}},
+					Checksums:        []drs.Checksum{{Type: "sha256", Checksum: oid}},
 					AccessMethods:    &methods,
 					ControlledAccess: &resources,
+				}}); err != nil {
+					t.Fatal(err)
 				}
 			},
 		},
@@ -231,12 +234,13 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 			name: "pending metadata",
 			populate: func(ports *lfsTestServicePorts) {
 				resources := []string{"/programs/org/projects/project"}
-				methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://legacy/stale-key"}}}
+				typeName := "s3"
+				url := "s3://legacy/stale-key"
 				ports.pending[oid] = transferlfs.PendingMetadata{
 					OID: oid,
-					Candidate: objects.Candidate{
-						Checksums:        &[]objects.Checksum{{Type: "sha256", Checksum: oid}},
-						AccessMethods:    &methods,
+					Candidate: lfsapi.DrsObjectCandidate{
+						Checksums:        &[]lfsapi.Checksum{{Type: "sha256", Checksum: oid}},
+						AccessMethods:    &[]lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}},
 						ControlledAccess: &resources,
 					},
 				}
@@ -246,12 +250,12 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ports := newLFSTestPorts(map[string]*objects.Record{}, map[string]buckets.Credential{"physical": {Bucket: "physical"}})
+			ports := newLFSTestPorts(t, map[string]*drs.DrsObject{}, map[string]buckets.Credential{"physical": {Bucket: "physical"}})
 			tt.populate(ports)
 			storageFake := &lfsTestStorage{}
 			deps := newLFSTestDependenciesWithTransfer(ports, storageFake, newTransferService(ports, storageFake))
 			storageFake.uploadPart = func([]byte) (string, error) { return "etag", nil }
-			server := newLFSServer(deps, defaultLFSOptions())
+			server := &lfsServer{service: deps, opts: defaultLFSOptions()}
 
 			response, err := server.LfsUploadProxy(context.Background(), lfsapi.LfsUploadProxyRequestObject{
 				Oid:  oid,
@@ -272,7 +276,7 @@ func TestLFSUploadProxyUsesCanonicalOIDForScopedTargets(t *testing.T) {
 }
 
 func TestLFSBatchRejectsNegativeObjectSize(t *testing.T) {
-	server := newLFSTestServerForNumericValidation()
+	server := newLFSTestServerForNumericValidation(t)
 	response, err := server.LfsBatch(context.Background(), lfsapi.LfsBatchRequestObject{
 		Body: &lfsapi.LfsBatchApplicationVndGitLfsPlusJSONRequestBody{
 			Operation: "upload",
@@ -292,7 +296,7 @@ func TestLFSBatchRejectsNegativeObjectSize(t *testing.T) {
 }
 
 func TestLFSVerifyRejectsNegativeSize(t *testing.T) {
-	server := newLFSTestServerForNumericValidation()
+	server := newLFSTestServerForNumericValidation(t)
 	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
 		Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: strings.Repeat("b", 64), Size: -1},
 	})
@@ -305,7 +309,7 @@ func TestLFSVerifyRejectsNegativeSize(t *testing.T) {
 }
 
 func TestLFSStageMetadataRejectsNegativeCandidateSize(t *testing.T) {
-	server := newLFSTestServerForNumericValidation()
+	server := newLFSTestServerForNumericValidation(t)
 	size := int64(-1)
 	response, err := server.LfsStageMetadata(context.Background(), lfsapi.LfsStageMetadataRequestObject{
 		JSONBody: &lfsapi.LfsStageMetadataJSONRequestBody{
@@ -321,7 +325,7 @@ func TestLFSStageMetadataRejectsNegativeCandidateSize(t *testing.T) {
 }
 
 func TestLFSNegativeVerifySizeUsesHTTPErrorContract(t *testing.T) {
-	ports := newLFSTestPorts(nil, nil)
+	ports := newLFSTestPorts(t, nil, nil)
 	router := newLFSTestRouter(ports, &lfsTestStorage{}, defaultLFSOptions())
 	body, _ := json.Marshal(map[string]any{"oid": strings.Repeat("c", 64), "size": -1})
 	request := httptest.NewRequest(http.MethodPost, "/info/lfs/verify", strings.NewReader(string(body)))
@@ -343,17 +347,17 @@ func TestLFSNegativeVerifySizeUsesHTTPErrorContract(t *testing.T) {
 func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 	oid := strings.Repeat("d", 64)
 	t.Run("batch", func(t *testing.T) {
-		ports := newLFSTestPorts(map[string]*objects.Record{
+		ports := newLFSTestPorts(t, map[string]*drs.DrsObject{
 			oid: {
-				Id:        objects.RecordID(oid),
-				Checksums: []objects.Checksum{{Type: "sha256", Checksum: oid}},
-				AccessMethods: &[]objects.AccessMethod{{
+				Id:        oid,
+				Checksums: []drs.Checksum{{Type: "sha256", Checksum: oid}},
+				AccessMethods: &[]drs.AccessMethod{{
 					Type:      "s3",
-					AccessUrl: &objects.AccessURL{Url: "s3://bucket/" + oid},
+					AccessUrl: &drs.AccessURL{Url: "s3://bucket/" + oid},
 				}},
 			},
 		}, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
-		server := newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
+		server := &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
 		response, err := server.LfsBatch(context.Background(), lfsapi.LfsBatchRequestObject{
 			Body: &lfsapi.LfsBatchApplicationVndGitLfsPlusJSONRequestBody{
 				Operation: "download",
@@ -370,8 +374,8 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 	})
 
 	t.Run("verify", func(t *testing.T) {
-		ports := newLFSTestPorts(map[string]*objects.Record{oid: {Id: objects.RecordID(oid)}}, nil)
-		server := newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
+		ports := newLFSTestPorts(t, map[string]*drs.DrsObject{oid: {Id: oid}}, nil)
+		server := &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
 		response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
 			Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 0},
 		})
@@ -387,8 +391,8 @@ func TestLFSZeroSizesRemainAccepted(t *testing.T) {
 		size := int64(0)
 		typ := "s3"
 		url := "s3://bucket/" + oid
-		ports := newLFSTestPorts(nil, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
-		server := newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
+		ports := newLFSTestPorts(t, nil, map[string]buckets.Credential{"bucket": {Bucket: "bucket"}})
+		server := &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
 		response, err := server.LfsStageMetadata(context.Background(), lfsapi.LfsStageMetadataRequestObject{
 			JSONBody: &lfsapi.LfsStageMetadataJSONRequestBody{Candidates: []lfsapi.DrsObjectCandidate{{
 				Size:      &size,

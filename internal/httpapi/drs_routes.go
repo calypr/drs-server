@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"strings"
 
 	generated "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
@@ -32,54 +35,44 @@ func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	requests := make([]transfers.BulkAccessLookupRequest, 0, len(*body.BulkObjectAccessIds))
+	requests := make([]transfers.AccessLookupRequest, 0, len(*body.BulkObjectAccessIds))
 	for _, item := range *body.BulkObjectAccessIds {
-		accessIDs := []string(nil)
-		if item.BulkAccessIds != nil {
-			accessIDs = append(accessIDs, (*item.BulkAccessIds)...)
-		}
 		objectID := ""
 		if item.BulkObjectId != nil {
 			objectID = strings.TrimSpace(*item.BulkObjectId)
 		}
-		requests = append(requests, transfers.BulkAccessLookupRequest{
-			ObjectID:  objectID,
-			AccessIDs: accessIDs,
-		})
-	}
-	lookup := make([]transfers.AccessLookupRequest, 0, len(requests))
-	for _, request := range requests {
-		if len(request.AccessIDs) == 0 {
-			lookup = append(lookup, transfers.AccessLookupRequest{ObjectID: request.ObjectID})
+		if item.BulkAccessIds == nil || len(*item.BulkAccessIds) == 0 {
+			requests = append(requests, transfers.AccessLookupRequest{ObjectID: objectID})
 			continue
 		}
-		for _, accessID := range request.AccessIDs {
-			lookup = append(lookup, transfers.AccessLookupRequest{ObjectID: request.ObjectID, AccessID: accessID})
+		for _, accessID := range *item.BulkAccessIds {
+			requests = append(requests, transfers.AccessLookupRequest{ObjectID: objectID, AccessID: accessID})
 		}
 	}
-	result := s.accessService.IssueAccessBulk(c.Context(), lookup)
+	result := s.accessService.IssueAccessBulk(c.Context(), requests)
 	resolved := make([]generated.BulkAccessURL, 0, len(result.Resolved))
 	for _, item := range result.Resolved {
 		resolved = append(resolved, generated.BulkAccessURL{
-			DrsObjectId: drsPtr(item.ObjectID),
-			DrsAccessId: drsPtr(item.AccessID),
+			DrsObjectId: valuePointer(item.ObjectID),
+			DrsAccessId: valuePointer(item.AccessID),
 			Url:         item.URL,
 		})
 	}
 
-	resp := fiber.Map{
-		"resolved_drs_object_access_urls": resolved,
-		"summary": generated.Summary{
-			Requested:  drsPtr(result.Requested),
-			Resolved:   drsPtr(len(resolved)),
-			Unresolved: drsPtr(result.Requested - len(resolved)),
-		},
+	summary := generated.Summary{
+		Requested:  valuePointer(result.Requested),
+		Resolved:   valuePointer(len(resolved)),
+		Unresolved: valuePointer(result.Requested - len(resolved)),
+	}
+	resp := generated.N200OkAccesses{
+		ResolvedDrsObjectAccessUrls: &resolved,
+		Summary:                     &summary,
 	}
 	if len(result.UnresolvedObjectIDs) > 0 {
-		resp["unresolved_drs_objects"] = []fiber.Map{{
-			"error_code": fiber.StatusNotFound,
-			"object_ids": result.UnresolvedObjectIDs,
-		}}
+		unresolved := make(generated.Unresolved, 1)
+		unresolved[0].ErrorCode = valuePointer(fiber.StatusNotFound)
+		unresolved[0].ObjectIds = &result.UnresolvedObjectIDs
+		resp.UnresolvedDrsObjects = &unresolved
 	}
 	return c.JSON(resp)
 }
@@ -99,11 +92,7 @@ func (s *drsServer) PostUploadRequest(c fiber.Ctx) error {
 	}
 	for _, item := range req.Requests {
 		key := strings.TrimSpace(item.Name)
-		checksums := make([]objects.Checksum, len(item.Checksums))
-		for i, checksum := range item.Checksums {
-			checksums[i] = objects.Checksum{Type: checksum.Type, Checksum: checksum.Checksum}
-		}
-		if oid, ok := objects.CanonicalSHA256(checksums); ok && oid != "" {
+		if oid, ok := objects.CanonicalSHA256(item.Checksums); ok && oid != "" {
 			key = oid
 		}
 		if key == "" {
@@ -121,10 +110,10 @@ func (s *drsServer) DeleteObject(c fiber.Ctx, objectID generated.ObjectId) error
 			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
-	opts := objects.DeleteOptions{
-		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
+	if body.DeleteStorageData != nil && *body.DeleteStorageData {
+		return HandleError(c, unsupportedStorageDeletion())
 	}
-	if err := s.objectService.DeleteObject(c.Context(), string(objectID), opts); err != nil {
+	if err := s.objectService.DeleteObject(c.Context(), string(objectID)); err != nil {
 		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -136,11 +125,12 @@ func (s *drsServer) UpdateObjectAccessMethods(c fiber.Ctx, objectID string) erro
 	if err := c.Bind().JSON(&body); err != nil || len(body.AccessMethods) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	obj, err := s.objectService.UpdateAccessMethodsAndRead(c.Context(), objectID, drsFromGeneratedAccessMethods(body.AccessMethods))
+	obj, err := s.objectService.UpdateAccessMethodsAndRead(c.Context(), objectID, body.AccessMethods)
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(drsObjectPayload(*obj))
+	setDRSIdentity(obj)
+	return c.JSON(*obj)
 }
 
 func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
@@ -149,28 +139,22 @@ func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	updates := make([]objects.AccessMethodUpdate, 0, len(body.Updates))
 	for _, update := range body.Updates {
 		id := strings.TrimSpace(update.ObjectId)
 		if id == "" || len(update.AccessMethods) == 0 {
 			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
-		updates = append(updates, objects.AccessMethodUpdate{
-			ObjectID: id,
-			Methods:  drsFromGeneratedAccessMethods(update.AccessMethods),
-		})
 	}
 
-	updated, err := s.objectService.BulkUpdateAccessMethodsAndRead(c.Context(), updates)
+	updated, err := s.objectService.BulkUpdateAccessMethodsAndRead(c.Context(), body.Updates)
 	if err != nil {
 		return HandleError(c, err)
 	}
 
-	response := make([]drsObjectResponse, 0, len(updated))
-	for _, obj := range updated {
-		response = append(response, drsObjectPayload(obj))
+	for i := range updated {
+		setDRSIdentity(&updated[i])
 	}
-	return c.JSON(fiber.Map{"objects": response})
+	return c.JSON(generated.N200BulkAccessMethodUpdate{Objects: updated})
 }
 
 func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
@@ -196,10 +180,10 @@ func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 		ids = append(ids, id)
 	}
 
-	opts := objects.DeleteOptions{
-		DeleteStorageData: body.DeleteStorageData != nil && *body.DeleteStorageData,
+	if body.DeleteStorageData != nil && *body.DeleteStorageData {
+		return HandleError(c, unsupportedStorageDeletion())
 	}
-	if err := s.objectService.BulkDeleteObjects(c.Context(), ids, opts); err != nil {
+	if err := s.objectService.BulkDeleteObjects(c.Context(), ids); err != nil {
 		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -213,12 +197,17 @@ func unsupportedChecksumAddition(c fiber.Ctx) error {
 	return Reject(c, fiber.StatusNotFound, "Checksum addition is not supported")
 }
 
+func unsupportedStorageDeletion() error {
+	return fmt.Errorf("%w: physical storage deletion is not atomic with catalog mutation", errorapi.ErrConflict)
+}
+
 func (s *drsServer) GetObject(c fiber.Ctx, objectID generated.ObjectId, _ generated.GetObjectParams) error {
 	obj, err := s.objectService.GetObject(c.Context(), string(objectID), "")
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(drsObjectPayload(*obj))
+	setDRSIdentity(obj)
+	return c.JSON(*obj)
 }
 
 func (s *drsServer) PostObject(c fiber.Ctx, objectID generated.ObjectId) error {
@@ -226,9 +215,7 @@ func (s *drsServer) PostObject(c fiber.Ctx, objectID generated.ObjectId) error {
 }
 
 func (s *drsServer) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams) error {
-	var body struct {
-		BulkObjectIds []string `json:"bulk_object_ids"`
-	}
+	var body generated.GetBulkObjectsJSONBody
 	if err := c.Bind().JSON(&body); err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
@@ -238,52 +225,53 @@ func (s *drsServer) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams
 		return HandleError(c, err)
 	}
 
-	resolved := make([]drsObjectResponse, 0, len(objects))
-	for _, obj := range objects {
-		resolved = append(resolved, drsObjectPayload(obj))
+	for i := range objects {
+		setDRSIdentity(&objects[i])
 	}
-
-	return c.JSON(fiber.Map{
-		"resolved_drs_object": resolved,
-		"summary": generated.Summary{
-			Requested: drsPtr(len(body.BulkObjectIds)),
-			Resolved:  drsPtr(len(resolved)),
-		},
+	summary := generated.Summary{
+		Requested: valuePointer(len(body.BulkObjectIds)),
+		Resolved:  valuePointer(len(objects)),
+	}
+	return c.JSON(generated.N200OkDrsObjects{
+		ResolvedDrsObject: &objects,
+		Summary:           &summary,
 	})
 }
 
 func (s *drsServer) GetObjectsByChecksum(c fiber.Ctx, checksum generated.ChecksumParameter) error {
-	fetched, err := s.objectService.GetObjectsByChecksum(c.Context(), string(checksum), "")
+	key := string(checksum)
+	if decoded, err := url.PathUnescape(key); err == nil {
+		key = decoded
+	}
+	key = strings.TrimSpace(key)
+	byChecksum, err := s.objectService.GetObjectsByChecksums(c.Context(), []string{key}, "")
 	if err != nil {
 		return HandleError(c, err)
 	}
+	fetched := byChecksum[key]
 
-	resolved := make([]drsObjectResponse, 0)
-	for _, obj := range fetched {
-		resolved = append(resolved, drsObjectPayload(obj))
+	for i := range fetched {
+		setDRSIdentity(&fetched[i])
 	}
-
-	return c.JSON(fiber.Map{
-		"resolved_drs_object": resolved,
-		"summary": generated.Summary{
-			Requested: drsPtr(1),
-			Resolved:  drsPtr(len(resolved)),
-		},
+	summary := generated.Summary{
+		Requested: valuePointer(1),
+		Resolved:  valuePointer(len(fetched)),
+	}
+	return c.JSON(generated.N200OkDrsObjects{
+		ResolvedDrsObject: &fetched,
+		Summary:           &summary,
 	})
 }
 
 func (s *drsServer) RegisterObjects(c fiber.Ctx) error {
 	var body generated.RegisterObjectsJSONBody
-	var candidates []objects.Candidate
+	var candidates []generated.DrsObjectCandidate
 	if err := json.Unmarshal(c.Body(), &body); err == nil && len(body.Candidates) > 0 {
-		candidates = make([]objects.Candidate, 0, len(body.Candidates))
-		for _, candidate := range body.Candidates {
-			candidates = append(candidates, drsFromGeneratedCandidate(candidate))
-		}
+		candidates = body.Candidates
 	} else {
 		var single generated.DrsObjectCandidate
 		if err2 := json.Unmarshal(c.Body(), &single); err2 == nil && len(single.Checksums) > 0 {
-			candidates = []objects.Candidate{drsFromGeneratedCandidate(single)}
+			candidates = []generated.DrsObjectCandidate{single}
 		} else {
 			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
@@ -294,12 +282,10 @@ func (s *drsServer) RegisterObjects(c fiber.Ctx) error {
 		return HandleError(c, err)
 	}
 
-	response := make([]drsObjectResponse, len(registered))
-	for i, record := range registered {
-		response[i] = drsObjectPayload(record)
+	for i := range registered {
+		setDRSIdentity(&registered[i])
 	}
-
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"objects": response})
+	return c.Status(fiber.StatusCreated).JSON(generated.N201ObjectsCreated{Objects: registered})
 }
 
 func registerDRSRoutes(router fiber.Router, objectService *objects.Service, accessService *transfers.Service, serviceInfo generated.Service) {
@@ -328,136 +314,12 @@ func (s *drsServer) OptionsObject(c fiber.Ctx, _ generated.ObjectId) error {
 
 func (s *drsServer) GetServiceInfo(c fiber.Ctx) error { return c.JSON(s.serviceInfo) }
 
-// drsFromGeneratedCandidate translates the DRS registration request into an object candidate.
-func drsFromGeneratedCandidate(value generated.DrsObjectCandidate) objects.Candidate {
-	out := objects.Candidate{
-		Aliases:          value.Aliases,
-		Description:      value.Description,
-		Name:             value.Name,
-		ControlledAccess: value.ControlledAccess,
-		Size:             &value.Size,
+func setDRSIdentity(object *generated.DrsObject) {
+	if object == nil || object.Id == "" {
+		return
 	}
-	if value.Checksums != nil {
-		out.Checksums = &value.Checksums
+	if object.Did == nil || *object.Did == "" {
+		did := object.Id
+		object.Did = &did
 	}
-	if value.AccessMethods != nil {
-		methods := make([]objects.AccessMethod, 0, len(*value.AccessMethods))
-		for _, method := range *value.AccessMethods {
-			methods = append(methods, drsFromGeneratedAccessMethod(method))
-		}
-		out.AccessMethods = &methods
-	}
-	return out
-}
-
-func drsToGenerated(record objects.Record) generated.DrsObject {
-	out := generated.DrsObject{
-		Id:               string(record.Id),
-		ControlledAccess: record.ControlledAccess,
-		CreatedTime:      record.CreatedTime,
-		Description:      record.Description,
-		Name:             record.Name,
-		SelfUri:          record.SelfUri,
-		Size:             record.Size,
-		UpdatedTime:      record.UpdatedTime,
-		Version:          record.Version,
-	}
-	out.Checksums = record.Checksums
-	if record.AccessMethods != nil {
-		methods := make([]generated.AccessMethod, 0, len(*record.AccessMethods))
-		for _, method := range *record.AccessMethods {
-			methods = append(methods, drsToGeneratedAccessMethod(method))
-		}
-		out.AccessMethods = &methods
-	}
-	if record.Aliases != nil {
-		out.Aliases = record.Aliases
-	}
-	return out
-}
-
-// drsObjectResponse is the typed DRS response with the legacy identity and alias
-// fields retained by this server's wire contract.
-type drsObjectResponse struct {
-	generated.DrsObject
-	Did         string    `json:"did,omitempty"`
-	NameAliases *[]string `json:"name_aliases,omitempty"`
-}
-
-// MarshalJSON preserves the minimal identity response when a generated DRS
-// field cannot be encoded, such as an invalid timestamp.
-func (value drsObjectResponse) MarshalJSON() ([]byte, error) {
-	type response struct {
-		generated.DrsObject
-		Did         string    `json:"did,omitempty"`
-		NameAliases *[]string `json:"name_aliases,omitempty"`
-	}
-	encoded, err := json.Marshal(response(value))
-	if err == nil {
-		return encoded, nil
-	}
-	type fallback struct {
-		ID      string `json:"id,omitempty"`
-		DID     string `json:"did,omitempty"`
-		SelfURI string `json:"self_uri"`
-	}
-	return json.Marshal(fallback{ID: value.Id, DID: value.Did, SelfURI: value.SelfUri})
-}
-
-// drsObjectPayload projects a domain record into the typed DRS response.
-func drsObjectPayload(record objects.Record) drsObjectResponse {
-	var aliases *[]string
-	if record.NameAliases != nil {
-		copyAliases := append([]string(nil), record.NameAliases...)
-		aliases = &copyAliases
-	}
-	return drsObjectResponse{
-		DrsObject:   drsToGenerated(record),
-		Did:         string(record.Id),
-		NameAliases: aliases,
-	}
-}
-
-func drsFromGeneratedAccessMethods(methods []generated.AccessMethod) []objects.AccessMethod {
-	out := make([]objects.AccessMethod, 0, len(methods))
-	for _, method := range methods {
-		out = append(out, drsFromGeneratedAccessMethod(method))
-	}
-	return out
-}
-
-// drsToGeneratedAccessMethods translates domain access methods for generated
-// request/response models that embed the DRS access contract.
-func drsToGeneratedAccessMethods(methods *[]objects.AccessMethod) *[]generated.AccessMethod {
-	if methods == nil {
-		return nil
-	}
-	out := make([]generated.AccessMethod, 0, len(*methods))
-	for _, method := range *methods {
-		out = append(out, drsToGeneratedAccessMethod(method))
-	}
-	return &out
-}
-
-func drsToGeneratedAccessMethod(method objects.AccessMethod) generated.AccessMethod {
-	out := generated.AccessMethod{AccessId: method.AccessId, Type: generated.AccessMethodType(method.Type)}
-	if method.AccessUrl != nil {
-		out.AccessUrl = &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Headers: method.AccessUrl.Headers, Url: method.AccessUrl.Url}
-	}
-	return out
-}
-
-func drsFromGeneratedAccessMethod(method generated.AccessMethod) objects.AccessMethod {
-	out := objects.AccessMethod{AccessId: method.AccessId, Type: string(method.Type)}
-	if method.AccessUrl != nil {
-		out.AccessUrl = &objects.AccessURL{Headers: method.AccessUrl.Headers, Url: method.AccessUrl.Url}
-	}
-	return out
-}
-
-func drsPtr[T any](value T) *T {
-	return &value
 }

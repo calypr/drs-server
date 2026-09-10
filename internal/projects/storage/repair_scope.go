@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -89,7 +90,7 @@ func parseScopePath(raw string) (string, string, bool) {
 	return strings.TrimSpace(parsed.Host), strings.Trim(strings.TrimSpace(parsed.Path), "/"), true
 }
 
-func inferRecordResource(record objects.Record, sha string, scopes map[string][]repairScopeTarget) (string, bool, bool) {
+func inferRecordResource(record drs.DrsObject, sha string, scopes map[string][]repairScopeTarget) (string, bool, bool) {
 	resources := recordProjectResources(record, "")
 	if len(resources) == 1 {
 		resource := resources[0]
@@ -123,7 +124,7 @@ func inferRecordResource(record objects.Record, sha string, scopes map[string][]
 	return "", false, false
 }
 
-func recordProjectResources(record objects.Record, inferred string) []string {
+func recordProjectResources(record drs.DrsObject, inferred string) []string {
 	seen := make(map[string]struct{})
 	result := make([]string, 0)
 	for _, resource := range objects.AccessResources(&record) {

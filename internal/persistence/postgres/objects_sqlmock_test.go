@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/lib/pq"
 )
 
@@ -142,9 +142,6 @@ func TestGetObject_DeduplicatesAndPropagatesAuthz(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"object_id", "resource"}).
 			AddRow("obj-1", "/programs/p1/projects/a").
 			AddRow("obj-1", "/programs/p1/projects/b"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, public_read\n\t\tFROM drs_object_read_policy\n\t\tWHERE object_id = ANY($1)")).
-		WithArgs(pq.Array([]string{"obj-1"})).
-		WillReturnRows(sqlmock.NewRows([]string{"object_id", "public_read"}))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT object_id, name_alias\n\t\tFROM drs_object_name_alias\n\t\tWHERE object_id = ANY($1)\n\t\tORDER BY object_id, name_alias")).
 		WithArgs(pq.Array([]string{"obj-1"})).
 		WillReturnRows(sqlmock.NewRows([]string{"object_id", "name_alias"}).
@@ -160,7 +157,7 @@ func TestGetObject_DeduplicatesAndPropagatesAuthz(t *testing.T) {
 	if obj.AccessMethods == nil || len(*obj.AccessMethods) != 2 {
 		t.Fatalf("expected 2 deduplicated access methods, got %+v", obj.AccessMethods)
 	}
-	if len(obj.NameAliases) != 1 || obj.NameAliases[0] != "file-old.txt" {
+	if obj.NameAliases == nil || len(*obj.NameAliases) != 1 || (*obj.NameAliases)[0] != "file-old.txt" {
 		t.Fatalf("expected propagated name aliases, got %+v", obj.NameAliases)
 	}
 	if len(obj.Checksums) != 2 {
@@ -224,13 +221,6 @@ func TestGetBulkObjects_UsesSplitHydrationQueries(t *testing.T) {
 			AddRow("obj-2", "/organization/org/project/p1"))
 
 	mock.ExpectQuery(regexp.QuoteMeta(`
-		SELECT object_id, public_read
-		FROM drs_object_read_policy
-		WHERE object_id = ANY($1)`)).
-		WithArgs(pq.Array([]string{"obj-1", "obj-2"})).
-		WillReturnRows(sqlmock.NewRows([]string{"object_id", "public_read"}))
-
-	mock.ExpectQuery(regexp.QuoteMeta(`
 		SELECT object_id, name_alias
 		FROM drs_object_name_alias
 		WHERE object_id = ANY($1)
@@ -250,7 +240,7 @@ func TestGetBulkObjects_UsesSplitHydrationQueries(t *testing.T) {
 	if objects[0].AccessMethods == nil || len(*objects[0].AccessMethods) != 1 {
 		t.Fatalf("expected one access method on obj-2, got %+v", objects[0].AccessMethods)
 	}
-	if len(objects[0].NameAliases) != 1 || objects[0].NameAliases[0] != "file-2-old" {
+	if objects[0].NameAliases == nil || len(*objects[0].NameAliases) != 1 || (*objects[0].NameAliases)[0] != "file-2-old" {
 		t.Fatalf("expected propagated aliases on obj-2, got %+v", objects[0].NameAliases)
 	}
 	if len(objects[1].Checksums) != 1 || objects[1].Checksums[0].Checksum != "aaa" {
@@ -381,9 +371,9 @@ func TestUpdateObjectAccessMethods(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	err := pg.UpdateObjectAccessMethods(context.Background(), "obj-1", []objects.AccessMethod{{
+	err := pg.UpdateObjectAccessMethods(context.Background(), "obj-1", []drs.AccessMethod{{
 		Type:      "s3",
-		AccessUrl: &objects.AccessURL{Url: "s3://bucket/key"},
+		AccessUrl: &drs.AccessURL{Url: "s3://bucket/key"},
 	}})
 	if err != nil {
 		t.Fatalf("UpdateObjectAccessMethods returned error: %v", err)
@@ -417,11 +407,11 @@ func TestBulkUpdateAccessMethods(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	err := pg.BulkUpdateAccessMethods(context.Background(), map[string][]objects.AccessMethod{
+	err := pg.BulkUpdateAccessMethods(context.Background(), map[string][]drs.AccessMethod{
 		"obj-1": {
 			{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/key"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/key"},
 			},
 		},
 		"obj-2": {

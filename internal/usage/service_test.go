@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/apigen/metricsapi"
 )
 
 var (
@@ -18,17 +19,17 @@ var (
 func ptr[T any](value T) *T { return &value }
 
 type reportStoreSpy struct {
-	files          []FileUsage
-	summaries      FileUsageSummary
-	transfer       map[string]Summary
-	breakdowns     map[string][]Breakdown
+	files          []metricsapi.FileUsage
+	summaries      metricsapi.FileUsageSummary
+	transfer       map[string]metricsapi.TransferAttributionSummary
+	breakdowns     map[string][]metricsapi.TransferAttributionBreakdown
 	listCalls      int
 	summaryCalls   int
 	transferCalls  int
 	breakdownCalls int
 }
 
-func (s *reportStoreSpy) GetFileUsage(_ context.Context, objectID string) (*FileUsage, error) {
+func (s *reportStoreSpy) GetFileUsage(_ context.Context, objectID string) (*metricsapi.FileUsage, error) {
 	for _, item := range s.files {
 		if item.ObjectId != nil && *item.ObjectId == objectID {
 			copy := item
@@ -38,11 +39,11 @@ func (s *reportStoreSpy) GetFileUsage(_ context.Context, objectID string) (*File
 	return nil, nil
 }
 
-func (s *reportStoreSpy) ListFileUsageByObjectIDs(_ context.Context, ids []string) ([]FileUsage, error) {
+func (s *reportStoreSpy) ListFileUsageByObjectIDs(_ context.Context, ids []string) ([]metricsapi.FileUsage, error) {
 	if ids == nil {
 		return nil, nil
 	}
-	items := make([]FileUsage, 0, len(ids))
+	items := make([]metricsapi.FileUsage, 0, len(ids))
 	for _, id := range ids {
 		for _, item := range s.files {
 			if item.ObjectId != nil && *item.ObjectId == id {
@@ -53,33 +54,33 @@ func (s *reportStoreSpy) ListFileUsageByObjectIDs(_ context.Context, ids []strin
 	return items, nil
 }
 
-func (s *reportStoreSpy) ListFileUsage(_ context.Context, _, _ int, _ *time.Time) ([]FileUsage, error) {
+func (s *reportStoreSpy) ListFileUsage(_ context.Context, _, _ int, _ *time.Time) ([]metricsapi.FileUsage, error) {
 	s.listCalls++
-	return append([]FileUsage(nil), s.files...), nil
+	return append([]metricsapi.FileUsage(nil), s.files...), nil
 }
 
-func (s *reportStoreSpy) GetFileUsageSummary(_ context.Context, _ *time.Time) (FileUsageSummary, error) {
+func (s *reportStoreSpy) GetFileUsageSummary(_ context.Context, _ *time.Time) (metricsapi.FileUsageSummary, error) {
 	s.summaryCalls++
 	return s.summaries, nil
 }
 
-func (s *reportStoreSpy) ListFileUsagePageByScope(ctx context.Context, _ string, _ string, limit, offset int, inactiveSince *time.Time) ([]FileUsage, error) {
+func (s *reportStoreSpy) ListFileUsagePageByScope(ctx context.Context, _ string, _ string, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	return s.ListFileUsage(ctx, limit, offset, inactiveSince)
 }
 
-func (s *reportStoreSpy) ListFileUsagePageByResources(ctx context.Context, _ []string, _ bool, limit, offset int, inactiveSince *time.Time) ([]FileUsage, error) {
+func (s *reportStoreSpy) ListFileUsagePageByResources(ctx context.Context, _ []string, _ bool, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	return s.ListFileUsage(ctx, limit, offset, inactiveSince)
 }
 
-func (s *reportStoreSpy) GetFileUsageSummaryByScope(ctx context.Context, _ string, _ string, inactiveSince *time.Time) (FileUsageSummary, error) {
+func (s *reportStoreSpy) GetFileUsageSummaryByScope(ctx context.Context, _ string, _ string, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	return s.GetFileUsageSummary(ctx, inactiveSince)
 }
 
-func (s *reportStoreSpy) GetFileUsageSummaryByResources(ctx context.Context, _ []string, _ bool, inactiveSince *time.Time) (FileUsageSummary, error) {
+func (s *reportStoreSpy) GetFileUsageSummaryByResources(ctx context.Context, _ []string, _ bool, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	return s.GetFileUsageSummary(ctx, inactiveSince)
 }
 
-func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ string, _ string) (FileUsageSummary, error) {
+func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ string, _ string) (metricsapi.FileUsageSummary, error) {
 	result := s.summaries
 	if result.RecordCount == nil {
 		result.RecordCount = result.TotalFiles
@@ -87,14 +88,14 @@ func (s *reportStoreSpy) GetProjectRecordSummaryByScope(_ context.Context, _ str
 	return result, nil
 }
 
-func (s *reportStoreSpy) QueryTransferSummary(_ context.Context, filter Filter, _ []string) (Summary, error) {
+func (s *reportStoreSpy) QueryTransferSummary(_ context.Context, filter Filter, _ []string) (metricsapi.TransferAttributionSummary, error) {
 	s.transferCalls++
 	return s.transfer[filter.Organization], nil
 }
 
-func (s *reportStoreSpy) QueryTransferBreakdown(_ context.Context, filter Filter, _ string, _ []string) ([]Breakdown, error) {
+func (s *reportStoreSpy) QueryTransferBreakdown(_ context.Context, filter Filter, _ string, _ []string) ([]metricsapi.TransferAttributionBreakdown, error) {
 	s.breakdownCalls++
-	return append([]Breakdown(nil), s.breakdowns[filter.Organization]...), nil
+	return append([]metricsapi.TransferAttributionBreakdown(nil), s.breakdowns[filter.Organization]...), nil
 }
 
 type optimizedReportStore struct {
@@ -110,53 +111,53 @@ type optimizedReportStore struct {
 	lastIncludeUnscoped    bool
 }
 
-func (s *optimizedReportStore) ListFileUsagePageByScope(_ context.Context, organization, project string, limit, offset int, _ *time.Time) ([]FileUsage, error) {
+func (s *optimizedReportStore) ListFileUsagePageByScope(_ context.Context, organization, project string, limit, offset int, _ *time.Time) ([]metricsapi.FileUsage, error) {
 	s.pageByScopeCalls++
-	return []FileUsage{{ObjectId: ptr(organization + "/" + project), Size: ptr(int64(limit + offset))}}, nil
+	return []metricsapi.FileUsage{{ObjectId: ptr(organization + "/" + project), Size: ptr(int64(limit + offset))}}, nil
 }
 
-func (s *optimizedReportStore) ListFileUsagePageByResources(_ context.Context, resources []string, includeUnscoped bool, _, _ int, _ *time.Time) ([]FileUsage, error) {
+func (s *optimizedReportStore) ListFileUsagePageByResources(_ context.Context, resources []string, includeUnscoped bool, _, _ int, _ *time.Time) ([]metricsapi.FileUsage, error) {
 	s.pageByResourcesCalls++
 	s.lastResources = append([]string(nil), resources...)
 	s.lastIncludeUnscoped = includeUnscoped
-	return []FileUsage{{ObjectId: ptr("resource-fast-path")}}, nil
+	return []metricsapi.FileUsage{{ObjectId: ptr("resource-fast-path")}}, nil
 }
 
-func (s *optimizedReportStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (FileUsageSummary, error) {
+func (s *optimizedReportStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (metricsapi.FileUsageSummary, error) {
 	s.summaryByScopeCalls++
-	return FileUsageSummary{TotalFiles: ptr(int64(2))}, nil
+	return metricsapi.FileUsageSummary{TotalFiles: ptr(int64(2))}, nil
 }
 
-func (s *optimizedReportStore) GetFileUsageSummaryByResources(_ context.Context, resources []string, includeUnscoped bool, _ *time.Time) (FileUsageSummary, error) {
+func (s *optimizedReportStore) GetFileUsageSummaryByResources(_ context.Context, resources []string, includeUnscoped bool, _ *time.Time) (metricsapi.FileUsageSummary, error) {
 	s.summaryByResourceCalls++
 	s.lastResources = append([]string(nil), resources...)
 	s.lastIncludeUnscoped = includeUnscoped
-	return FileUsageSummary{TotalFiles: ptr(int64(3))}, nil
+	return metricsapi.FileUsageSummary{TotalFiles: ptr(int64(3))}, nil
 }
 
-func (s *optimizedReportStore) GetProjectRecordSummaryByScope(context.Context, string, string) (FileUsageSummary, error) {
+func (s *optimizedReportStore) GetProjectRecordSummaryByScope(context.Context, string, string) (metricsapi.FileUsageSummary, error) {
 	s.recordSummaryCalls++
-	return FileUsageSummary{RecordCount: ptr(int64(7))}, nil
+	return metricsapi.FileUsageSummary{RecordCount: ptr(int64(7))}, nil
 }
 
-func (s *optimizedReportStore) QueryTransferSummary(_ context.Context, _ Filter, resources []string) (Summary, error) {
+func (s *optimizedReportStore) QueryTransferSummary(_ context.Context, _ Filter, resources []string) (metricsapi.TransferAttributionSummary, error) {
 	s.transferByResources++
 	s.lastResources = append([]string(nil), resources...)
-	return Summary{EventCount: ptr(int64(9))}, nil
+	return metricsapi.TransferAttributionSummary{EventCount: ptr(int64(9))}, nil
 }
 
-func (s *optimizedReportStore) QueryTransferBreakdown(_ context.Context, _ Filter, _ string, resources []string) ([]Breakdown, error) {
+func (s *optimizedReportStore) QueryTransferBreakdown(_ context.Context, _ Filter, _ string, resources []string) ([]metricsapi.TransferAttributionBreakdown, error) {
 	s.breakdownByResources++
 	s.lastResources = append([]string(nil), resources...)
-	return []Breakdown{{Key: ptr("resource-fast-path")}}, nil
+	return []metricsapi.TransferAttributionBreakdown{{Key: ptr("resource-fast-path")}}, nil
 }
 
 type objectReaderSpy struct {
 	ids     map[string][]string
-	objects map[string]*objects.Record
+	objects map[string]*drs.DrsObject
 }
 
-func (s *objectReaderSpy) GetObject(_ context.Context, ident, _ string) (*objects.Record, error) {
+func (s *objectReaderSpy) GetObject(_ context.Context, ident, _ string) (*drs.DrsObject, error) {
 	obj, ok := s.objects[ident]
 	if !ok {
 		return nil, errors.New("missing object")
@@ -224,7 +225,7 @@ func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testin
 	old := time.Now().UTC().Add(-48 * time.Hour)
 	recent := time.Now().UTC().Add(-2 * time.Hour)
 	objects := &objectReaderSpy{ids: map[string][]string{"org/project": {"a", "b"}}}
-	store := &reportStoreSpy{files: []FileUsage{
+	store := &reportStoreSpy{files: []metricsapi.FileUsage{
 		{ObjectId: ptr("a"), LastDownloadTime: &old},
 		{ObjectId: ptr("b"), LastDownloadTime: &recent},
 	}}
@@ -238,7 +239,7 @@ func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testin
 	if err != nil {
 		t.Fatalf("ListFileUsageBatch error: %v", err)
 	}
-	if !reflect.DeepEqual(items, []FileUsage{{ObjectId: ptr("a"), LastDownloadTime: &old}}) {
+	if !reflect.DeepEqual(items, []metricsapi.FileUsage{{ObjectId: ptr("a"), LastDownloadTime: &old}}) {
 		t.Fatalf("items = %+v", items)
 	}
 	if _, err := service.GetScopedFileUsage(context.Background(), "missing", ScopeQuery{Organization: "org", Project: "project"}); !errors.Is(err, errorapi.ErrNotFound) {
@@ -247,28 +248,33 @@ func TestScopedFileUsageBatchPreservesOrderMembershipAndInactiveCutoff(t *testin
 }
 
 func TestProviderEventNormalizationPreservesValidationAndCounts(t *testing.T) {
-	event, err := NormalizeProviderEvent(ProviderEvent{
-		ProviderEventID:      " event-1 ",
-		Direction:            " DOWNLOAD ",
+	direction := metricsapi.ProviderTransferDirection(" DOWNLOAD ")
+	objectKey := "///key"
+	httpMethod := " get "
+	reconciliation := metricsapi.ProviderTransferReconciliationStatus(" matched ")
+	eventTime := time.Date(2026, 9, 8, 1, 2, 3, 0, time.FixedZone("PDT", -7*60*60))
+	event, err := NormalizeProviderEvent(metricsapi.ProviderTransferEvent{
+		ProviderEventId:      " event-1 ",
+		Direction:            direction,
 		Provider:             " s3 ",
 		Bucket:               " bucket ",
-		ObjectKey:            "///key",
-		HTTPMethod:           " get ",
+		ObjectKey:            &objectKey,
+		HttpMethod:           &httpMethod,
 		BytesTransferred:     4,
-		ReconciliationStatus: " matched ",
-		EventTime:            time.Date(2026, 9, 8, 1, 2, 3, 0, time.FixedZone("PDT", -7*60*60)),
+		ReconciliationStatus: &reconciliation,
+		EventTime:            &eventTime,
 	})
 	if err != nil {
 		t.Fatalf("NormalizeProviderEvent error: %v", err)
 	}
-	if event.ProviderEventID != "event-1" || event.Direction != ProviderTransferDirectionDownload || event.ObjectKey != "key" || event.HTTPMethod != "GET" || event.ReconciliationStatus != ProviderTransferMatched || !event.EventTime.Equal(event.EventTime.UTC()) {
+	if event.ProviderEventId != "event-1" || event.Direction != metricsapi.ProviderTransferDirection(ProviderTransferDirectionDownload) || event.ObjectKey == nil || *event.ObjectKey != "key" || event.HttpMethod == nil || *event.HttpMethod != "GET" || event.ReconciliationStatus == nil || string(*event.ReconciliationStatus) != ProviderTransferMatched || event.EventTime == nil || !event.EventTime.Equal(event.EventTime.UTC()) {
 		t.Fatalf("normalized event = %+v", event)
 	}
-	for _, invalid := range []ProviderEvent{
-		{ProviderEventID: "id", Direction: "bad", Provider: "s3", Bucket: "b"},
-		{Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b"},
-		{ProviderEventID: "id", Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b", BytesTransferred: -1},
-		{ProviderEventID: "id", Direction: ProviderTransferDirectionDownload, Provider: "s3", Bucket: "b", ReconciliationStatus: "bad"},
+	for _, invalid := range []metricsapi.ProviderTransferEvent{
+		{ProviderEventId: "id", Direction: "bad", Provider: "s3", Bucket: "b"},
+		{Direction: metricsapi.Download, Provider: "s3", Bucket: "b"},
+		{ProviderEventId: "id", Direction: metricsapi.Download, Provider: "s3", Bucket: "b", BytesTransferred: -1},
+		{ProviderEventId: "id", Direction: metricsapi.Download, Provider: "s3", Bucket: "b", ReconciliationStatus: ptr(metricsapi.ProviderTransferReconciliationStatus("bad"))},
 	} {
 		if _, err := NormalizeProviderEvent(invalid); err == nil {
 			t.Fatalf("NormalizeProviderEvent(%+v) unexpectedly succeeded", invalid)
@@ -278,10 +284,10 @@ func TestProviderEventNormalizationPreservesValidationAndCounts(t *testing.T) {
 
 func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	store := &reportStoreSpy{
-		files:      []FileUsage{{ObjectId: ptr("object-1"), Size: ptr(int64(17))}},
-		summaries:  FileUsageSummary{TotalFiles: ptr(int64(4))},
-		transfer:   map[string]Summary{"": {EventCount: ptr(int64(3))}},
-		breakdowns: map[string][]Breakdown{"": {{Key: ptr("provider"), EventCount: ptr(int64(2))}}},
+		files:      []metricsapi.FileUsage{{ObjectId: ptr("object-1"), Size: ptr(int64(17))}},
+		summaries:  metricsapi.FileUsageSummary{TotalFiles: ptr(int64(4))},
+		transfer:   map[string]metricsapi.TransferAttributionSummary{"": {EventCount: ptr(int64(3))}},
+		breakdowns: map[string][]metricsapi.TransferAttributionBreakdown{"": {{Key: ptr("provider"), EventCount: ptr(int64(2))}}},
 	}
 	service := NewService(Dependencies{Reports: store})
 	ctx := context.Background()

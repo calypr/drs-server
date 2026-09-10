@@ -140,7 +140,7 @@ s3_credentials:
 	}
 	invalidator.manager = storageManager
 	app := fiber.New()
-	objectService := objects.NewService(backend.objectStore, bucketService)
+	objectService := objects.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{Reports: backend.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService, Storage: storageManager, Scopes: bucketService, Credentials: bucketService,

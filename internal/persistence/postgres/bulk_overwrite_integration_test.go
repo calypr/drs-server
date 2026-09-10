@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
 	postgresdb "github.com/calypr/syfon/internal/persistence/postgres"
@@ -28,25 +29,25 @@ func TestPostgresBulkOverwriteObjects(t *testing.T) {
 	sha := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 	now := time.Now().UTC()
 	oldName := "old"
-	if err := db.RegisterObjects(context.Background(), []objects.Record{{
+	if err := db.RegisterObjects(context.Background(), []drs.DrsObject{{
 		Id:               "ci-overwrite-target",
 		Name:             &oldName,
 		CreatedTime:      now,
 		UpdatedTime:      &now,
-		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
 	}}); err != nil {
 		t.Fatalf("seed target record: %v", err)
 	}
 
 	newName := "new"
-	service := objects.NewService(db, nil)
-	result, err := service.BulkOverwriteObjects(context.Background(), "ci-overwrite", "project", []objects.Record{{
+	service := objects.NewService(db)
+	result, err := service.BulkOverwriteObjects(context.Background(), "ci-overwrite", "project", []drs.DrsObject{{
 		Id:               "ci-overwrite-source",
 		Name:             &newName,
 		CreatedTime:      now,
 		UpdatedTime:      &now,
-		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
 		ControlledAccess: &[]string{resource},
 	}})
 	if err != nil {

@@ -445,14 +445,17 @@ components:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
         last_download_time:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
         last_access_time:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
     FileUsageSummary:
       type: object
       properties:
@@ -475,6 +478,7 @@ components:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
     FileUsageBulkRequest:
       type: object
       required:
@@ -560,10 +564,12 @@ components:
           type: integer
           format: int64
           nullable: true
+          x-omitempty: false
         range_end:
           type: integer
           format: int64
           nullable: true
+          x-omitempty: false
         bytes_transferred:
           type: integer
           format: int64
@@ -612,10 +618,12 @@ components:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
         required_to:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
         missing_buckets:
           type: array
           items:
@@ -624,6 +632,7 @@ components:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
     TransferAttributionSummary:
       type: object
       properties:
@@ -685,6 +694,7 @@ components:
           type: string
           format: date-time
           nullable: true
+          x-omitempty: false
     TransferBreakdownResponse:
       type: object
       properties:

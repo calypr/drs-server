@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -51,7 +52,7 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		}
 		object.findings = append(object.findings, newFinding(FindingLegacyAccessURLRewritable, SeverityWarn, object.record, object.sha256, object.currentURLs, targetURL, true, fmt.Sprintf("URL %q can be rewritten to target URL %q", raw, targetURL)))
 		if methods[index].AccessUrl == nil {
-			methods[index].AccessUrl = &objects.AccessURL{}
+			methods[index].AccessUrl = &drs.AccessURL{}
 		}
 		methods[index].AccessUrl.Url = targetURL
 		changed = true
@@ -60,7 +61,7 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 	if !changed {
 		return
 	}
-	filtered := make([]objects.AccessMethod, 0, len(methods))
+	filtered := make([]drs.AccessMethod, 0, len(methods))
 	for _, method := range methods {
 		if accessMethodURL(method) != "" {
 			filtered = append(filtered, method)
@@ -138,7 +139,7 @@ func (s *Service) addDuplicateFindings(objectsToAudit []*auditedObject) {
 	}
 }
 
-func accessMethodURLs(methods *[]objects.AccessMethod) []string {
+func accessMethodURLs(methods *[]drs.AccessMethod) []string {
 	if methods == nil {
 		return nil
 	}
@@ -151,15 +152,15 @@ func accessMethodURLs(methods *[]objects.AccessMethod) []string {
 	return result
 }
 
-func accessMethodURL(method objects.AccessMethod) string {
+func accessMethodURL(method drs.AccessMethod) string {
 	if method.AccessUrl == nil {
 		return ""
 	}
 	return strings.TrimSpace(method.AccessUrl.Url)
 }
 
-func cloneAccessMethods(input []objects.AccessMethod) []objects.AccessMethod {
-	output := make([]objects.AccessMethod, len(input))
+func cloneAccessMethods(input []drs.AccessMethod) []drs.AccessMethod {
+	output := make([]drs.AccessMethod, len(input))
 	for index, method := range input {
 		output[index] = method
 		if method.AccessUrl != nil {
@@ -174,7 +175,7 @@ func cloneAccessMethods(input []objects.AccessMethod) []objects.AccessMethod {
 	return output
 }
 
-func cloneRecord(record objects.Record) objects.Record {
+func cloneRecord(record drs.DrsObject) drs.DrsObject {
 	result := record
 	if record.AccessMethods != nil {
 		methods := cloneAccessMethods(*record.AccessMethods)
@@ -188,8 +189,11 @@ func cloneRecord(record objects.Record) objects.Record {
 		aliases := append([]string(nil), (*record.Aliases)...)
 		result.Aliases = &aliases
 	}
-	result.Checksums = append([]objects.Checksum(nil), record.Checksums...)
-	result.NameAliases = append([]string(nil), record.NameAliases...)
+	result.Checksums = append([]drs.Checksum(nil), record.Checksums...)
+	if record.NameAliases != nil {
+		nameAliases := append([]string(nil), (*record.NameAliases)...)
+		result.NameAliases = &nameAliases
+	}
 	return result
 }
 
@@ -217,8 +221,8 @@ func pathStyleAccessURL(target repairScopeTarget, name string) string {
 	return "s3://" + strings.TrimSpace(target.Bucket) + "/" + strings.Join(parts, "/")
 }
 
-func newFinding(kind, severity string, record objects.Record, sha string, currentURLs []string, canonical string, autoFixable bool, message string) internalapi.ScopeRepairFinding {
-	finding := internalapi.ScopeRepairFinding{Kind: kind, Severity: severity, ObjectId: string(record.Id), Sha256: sha, CurrentAccessUrls: append([]string(nil), currentURLs...), ProposedCanonicalUrl: canonical, AutoFixable: autoFixable, Message: message}
+func newFinding(kind, severity string, record drs.DrsObject, sha string, currentURLs []string, canonical string, autoFixable bool, message string) internalapi.ScopeRepairFinding {
+	finding := internalapi.ScopeRepairFinding{Kind: kind, Severity: severity, ObjectId: record.Id, Sha256: sha, CurrentAccessUrls: append([]string(nil), currentURLs...), ProposedCanonicalUrl: canonical, AutoFixable: autoFixable, Message: message}
 	for _, resource := range objects.AccessResources(&record) {
 		organization, project, ok := clientaccess.ResourceScope(resource)
 		if ok && organization != "" {

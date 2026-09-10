@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	clientservices "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"
@@ -122,40 +123,40 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record access grant: %v", err)
 	}
-	if err := server.providerEvents.RecordProviderTransferEvents(context.Background(), []usage.ProviderEvent{
+	if err := server.providerEvents.RecordProviderTransferEvents(context.Background(), []metricsapi.ProviderTransferEvent{
 		{
-			ProviderEventID:      "cli-transfer-1",
-			AccessGrantID:        "cli-grant-1",
-			Direction:            usage.ProviderTransferDirectionDownload,
-			EventTime:            now,
-			ObjectID:             "did-cli-1",
-			SHA256:               "sha-cli-1",
-			Organization:         "syfon",
-			Project:              "e2e",
+			ProviderEventId:      "cli-transfer-1",
+			AccessGrantId:        stringPtr("cli-grant-1"),
+			Direction:            metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+			EventTime:            &now,
+			ObjectId:             stringPtr("did-cli-1"),
+			Sha256:               stringPtr("sha-cli-1"),
+			Organization:         stringPtr("syfon"),
+			Project:              stringPtr("e2e"),
 			Provider:             "file",
 			Bucket:               "syfon-bucket",
-			StorageURL:           "s3://syfon-bucket/sha-cli-1",
+			StorageUrl:           stringPtr("s3://syfon-bucket/sha-cli-1"),
 			BytesTransferred:     123,
-			ActorEmail:           "user@example.com",
-			ActorSubject:         "user@example.com",
-			ReconciliationStatus: usage.ProviderTransferMatched,
+			ActorEmail:           stringPtr("user@example.com"),
+			ActorSubject:         stringPtr("user@example.com"),
+			ReconciliationStatus: ptrProviderStatus(usage.ProviderTransferMatched),
 		},
 		{
-			ProviderEventID:      "cli-transfer-2",
-			AccessGrantID:        "cli-grant-3",
-			Direction:            usage.ProviderTransferDirectionDownload,
-			EventTime:            now.Add(10 * time.Second),
-			ObjectID:             "did-cli-3",
-			SHA256:               "sha-cli-3",
-			Organization:         "syfon",
-			Project:              "e2e",
+			ProviderEventId:      "cli-transfer-2",
+			AccessGrantId:        stringPtr("cli-grant-3"),
+			Direction:            metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+			EventTime:            timePtr(now.Add(10 * time.Second)),
+			ObjectId:             stringPtr("did-cli-3"),
+			Sha256:               stringPtr("sha-cli-3"),
+			Organization:         stringPtr("syfon"),
+			Project:              stringPtr("e2e"),
 			Provider:             "file",
 			Bucket:               "syfon-bucket",
-			StorageURL:           "s3://syfon-bucket/sha-cli-3",
+			StorageUrl:           stringPtr("s3://syfon-bucket/sha-cli-3"),
 			BytesTransferred:     7,
-			ActorEmail:           "other@example.com",
-			ActorSubject:         "other@example.com",
-			ReconciliationStatus: usage.ProviderTransferMatched,
+			ActorEmail:           stringPtr("other@example.com"),
+			ActorSubject:         stringPtr("other@example.com"),
+			ReconciliationStatus: ptrProviderStatus(usage.ProviderTransferMatched),
 		},
 	}); err != nil {
 		t.Fatalf("record transfer event: %v", err)
@@ -250,6 +251,13 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("expected file-level billing rows, got %+v", billing.Files)
 	}
 }
+
+func ptrProviderStatus(value string) *metricsapi.ProviderTransferReconciliationStatus {
+	status := metricsapi.ProviderTransferReconciliationStatus(value)
+	return &status
+}
+
+func timePtr(value time.Time) *time.Time { return &value }
 
 func resetCommandFlags(cmd *cobra.Command) {
 	resetFlagSet(cmd.PersistentFlags())
@@ -369,7 +377,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
 	}
-	objectService := objects.NewService(database, bucketService)
+	objectService := objects.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService, Storage: cliFileStorageAccess{root: storageDir}, FileCounters: database,

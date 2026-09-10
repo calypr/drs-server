@@ -97,11 +97,8 @@ func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetCli
 	uploadProgress.Finish()
 
 	targetAccessMethod := drsapi.AccessMethod{
-		Type: drsapi.AccessMethodType(storageSchemeFromURL(targetObjectURL)),
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: targetObjectURL},
+		Type:      drsapi.AccessMethodType(storageSchemeFromURL(targetObjectURL)),
+		AccessUrl: &drsapi.AccessURL{Url: targetObjectURL},
 	}
 
 	registerReq := drsapi.RegisterObjectsJSONRequestBody{

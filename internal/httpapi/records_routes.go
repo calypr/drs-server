@@ -1,14 +1,12 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/internalapi"
-	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/gofiber/fiber/v3"
@@ -30,9 +28,9 @@ func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, err.Error())
 	}
 
-	candidates := make([]objects.Record, 0, len(req.Records))
+	candidates := make([]drs.DrsObject, 0, len(req.Records))
 	for i, record := range req.Records {
-		obj, err := fromInternalRecord(record, time.Time{})
+		obj, err := fromInternalRecord(record)
 		if err != nil {
 			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 		}
@@ -99,8 +97,7 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 
 	queries := make([]objects.ChecksumQuery, 0, len(req.Hashes))
 	for _, raw := range req.Hashes {
-		typ, value := objects.ParseHashQuery(raw, "")
-		queries = append(queries, objects.ChecksumQuery{Type: typ, Value: value})
+		queries = append(queries, objects.ChecksumQuery{Value: raw})
 	}
 	matches, err := s.objects.LookupChecksumQueries(c.Context(), queries, "read")
 	if err != nil {
@@ -109,9 +106,9 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 
 	finalRes := make(map[string][]internalapi.InternalRecord, len(req.Hashes))
 	for i, h := range req.Hashes {
-		var records []objects.Record
+		var records []drs.DrsObject
 		if i < len(matches) {
-			records = matches[i].Records
+			records = matches[i]
 		}
 		compatibilityMatches := make([]internalapi.InternalRecord, 0, len(records))
 		for _, match := range records {
@@ -153,19 +150,14 @@ func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
 		return HandleError(c, err)
 	}
 	for _, hash := range hashes {
-		for _, obj := range records[hash] {
-			if objects.RecordHasChecksumTypeAndValue(obj, "sha256", hash) {
-				out[hash] = true
-				break
-			}
-		}
+		out[hash] = len(records[hash]) > 0
 	}
 	return c.JSON(out)
 }
 
 func (s *internalServer) InternalDelete(c fiber.Ctx, _ string) error {
 	id := c.Params("id")
-	if err := s.objects.DeleteObject(c.Context(), id, objects.DeleteOptions{}); err != nil {
+	if err := s.objects.DeleteObject(c.Context(), id); err != nil {
 		return HandleError(c, err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -236,12 +228,7 @@ func (s *internalServer) InternalGet(c fiber.Ctx, _ string) error {
 	if err != nil {
 		return HandleError(c, err)
 	}
-	encoded, err := json.Marshal(projectGet(*obj))
-	if err != nil {
-		return HandleError(c, err)
-	}
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.Send(encoded)
+	return c.JSON(projectGet(*obj))
 }
 
 func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListParams) error {
@@ -284,7 +271,7 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 		hashType, hashValue := objects.ParseHashQuery(hash, c.Query("hash_type"))
 		query.Checksum = &objects.ChecksumQuery{Type: hashType, Value: hashValue}
 	}
-	objs, err := s.objects.ListPreparedPage(c.Context(), query)
+	objs, err := s.objects.ListRecords(c.Context(), query)
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -327,9 +314,9 @@ func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 		return HandleError(c, err)
 	}
 
-	out := make([]internalapi.InternalRecordResponse, 0, len(records))
+	out := make([]internalapi.InternalRecord, 0, len(records))
 	for _, obj := range records {
-		out = append(out, toInternalRecordResponse(obj))
+		out = append(out, toInternalRecord(obj))
 	}
 	return c.JSON(out)
 }
@@ -374,58 +361,54 @@ func (s *internalServer) InternalCreate(c fiber.Ctx) error {
 	if err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	if err := s.objects.RegisterScopedObjects(c.Context(), candidates); err != nil {
+	created, err := s.objects.CreateRecords(c.Context(), candidates)
+	if err != nil {
 		return HandleError(c, err)
 	}
 
 	if strings.HasSuffix(c.Path(), "/bulk") {
-		records := make([]internalapi.InternalRecord, len(candidates))
-		for i, scoped := range candidates {
-			records[i] = toInternalRecord(scoped.Record)
+		records := make([]internalapi.InternalRecord, len(created))
+		for i, record := range created {
+			records[i] = toInternalRecord(record)
+			records[i].Name = nil
 		}
 		return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &records})
 	}
-	return c.Status(fiber.StatusCreated).JSON(toInternalRecordResponse(candidates[0].Record))
+	response := toInternalRecord(created[0])
+	response.Name = nil
+	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
 func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
 	return s.InternalCreate(c)
 }
 
-func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.ScopedRecord, error) {
-	var bulkReq internalapi.BulkCreateRequest
-	candidates := make([]objects.ScopedRecord, 0)
-	if err := c.Bind().JSON(&bulkReq); err == nil && len(bulkReq.Records) > 0 {
-		for i, r := range bulkReq.Records {
-			obj, err := fromInternalRecord(r, time.Time{})
-			if err != nil {
+func decodeInternalCreateCandidates(c fiber.Ctx) ([]objects.RecordInput, error) {
+	var request internalapi.BulkCreateRequest
+	bulk := c.Bind().JSON(&request) == nil && len(request.Records) > 0
+	if !bulk {
+		var single internalapi.InternalRecord
+		if err := c.Bind().JSON(&single); err != nil || single.Did == "" {
+			return nil, fmt.Errorf("no records found")
+		}
+		request.Records = []internalapi.InternalRecord{single}
+	}
+	inputs := make([]objects.RecordInput, len(request.Records))
+	for i, value := range request.Records {
+		record, err := fromInternalRecord(value)
+		var scope objects.Scope
+		if err == nil {
+			scope, err = internalRecordScope(value)
+		}
+		if err != nil {
+			if bulk {
 				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
 			}
-			scope, err := internalRecordScope(r)
-			if err != nil {
-				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
-			}
-			candidates = append(candidates, objects.ScopedRecord{Record: obj, Scope: scope})
-		}
-		return candidates, nil
-	}
-
-	var singleReq internalapi.InternalRecord
-	if err := c.Bind().JSON(&singleReq); err == nil && singleReq.Did != "" {
-		obj, err := fromInternalRecord(singleReq, time.Time{})
-		if err != nil {
 			return nil, fmt.Errorf("record invalid: %w", err)
 		}
-		scope, err := internalRecordScope(singleReq)
-		if err != nil {
-			return nil, fmt.Errorf("record invalid: %w", err)
-		}
-		candidates = append(candidates, objects.ScopedRecord{Record: obj, Scope: scope})
+		inputs[i] = objects.RecordInput{Record: record, Scope: scope}
 	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no records found")
-	}
-	return candidates, nil
+	return inputs, nil
 }
 
 func internalRecordScope(value internalapi.InternalRecord) (objects.Scope, error) {
@@ -449,7 +432,7 @@ func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) e
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(toInternalRecordResponse(*obj))
+	return c.JSON(toInternalRecord(*obj))
 }
 
 func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
@@ -465,172 +448,14 @@ func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	if err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	update, err := fromInternalRecord(req, time.Time{})
+	update, err := fromInternalRecord(req)
 	if err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
 
-	merged, err := s.objects.UpdateRecordInScope(c.Context(), id, scope, update, req.Size)
+	merged, err := s.objects.UpdateRecord(c.Context(), id, objects.RecordInput{Record: update, Scope: scope, ExplicitSize: req.Size})
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(toInternalRecordResponse(merged))
-}
-
-func fromInternalRecord(value internalapi.InternalRecord, now time.Time) (objects.Record, error) {
-	size := int64(0)
-	if value.Size != nil {
-		size = *value.Size
-	}
-
-	record := objects.Record{
-		Id:          objects.RecordID(value.Did),
-		Size:        size,
-		CreatedTime: parseRecordTime(value.CreatedTime, time.Time{}),
-		Version:     value.Version,
-		Description: value.Description,
-	}
-	if value.UpdatedTime != nil {
-		updated := parseRecordTime(value.UpdatedTime, time.Time{})
-		record.UpdatedTime = &updated
-	}
-	if value.Hashes != nil {
-		record.Checksums = make([]objects.Checksum, 0, len(*value.Hashes))
-		for typ, checksum := range *value.Hashes {
-			record.Checksums = append(record.Checksums, objects.Checksum{Type: typ, Checksum: checksum})
-		}
-	}
-	if value.ControlledAccess != nil {
-		controlled := clientaccess.NormalizeAccessResources(*value.ControlledAccess)
-		record.ControlledAccess = &controlled
-	}
-	if value.AccessMethods != nil {
-		methods := drsFromGeneratedAccessMethods(*value.AccessMethods)
-		record.AccessMethods = &methods
-	}
-	if value.NameAliases != nil {
-		record.NameAliases = append([]string(nil), (*value.NameAliases)...)
-	}
-	return objects.NormalizeRecord(record, now)
-}
-
-func toInternalRecord(record objects.Record) internalapi.InternalRecord {
-	createdTime := record.CreatedTime.Format(time.RFC3339)
-	name := ""
-	if record.Name != nil {
-		name = *record.Name
-	}
-	nameAliases := objects.NormalizeNameAliases(name, record.NameAliases)
-	result := internalapi.InternalRecord{
-		Did:           string(record.Id),
-		Size:          &record.Size,
-		CreatedTime:   &createdTime,
-		Description:   record.Description,
-		Name:          record.Name,
-		NameAliases:   &nameAliases,
-		Version:       record.Version,
-		AccessMethods: drsToGeneratedAccessMethods(record.AccessMethods),
-	}
-	if controlled := record.ControlledAccess; controlled != nil {
-		values := append([]string(nil), (*controlled)...)
-		result.ControlledAccess = &values
-	}
-	if record.UpdatedTime != nil {
-		updatedTime := record.UpdatedTime.Format(time.RFC3339)
-		result.UpdatedTime = &updatedTime
-	}
-	if len(record.Checksums) > 0 {
-		hashes := make(internalapi.HashInfo)
-		for _, checksum := range record.Checksums {
-			hashes[checksum.Type] = checksum.Checksum
-		}
-		result.Hashes = &hashes
-	}
-	return result
-}
-
-func toInternalRecordResponse(record objects.Record) internalapi.InternalRecordResponse {
-	value := toInternalRecord(record)
-	return internalapi.InternalRecordResponse{
-		Did:              value.Did,
-		AccessMethods:    value.AccessMethods,
-		ControlledAccess: value.ControlledAccess,
-		Size:             value.Size,
-		CreatedTime:      value.CreatedTime,
-		Description:      value.Description,
-		Name:             value.Name,
-		NameAliases:      value.NameAliases,
-		Version:          value.Version,
-		UpdatedTime:      value.UpdatedTime,
-		Hashes:           value.Hashes,
-		Organization:     value.Organization,
-		Project:          value.Project,
-	}
-}
-
-func parseRecordTime(raw *string, fallback time.Time) time.Time {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return fallback.UTC()
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.999999", "2006-01-02 15:04:05.999999", "2006-01-02T15:04:05", "2006-01-02 15:04:05"} {
-		if parsed, err := time.Parse(layout, strings.TrimSpace(*raw)); err == nil {
-			return parsed.UTC()
-		}
-	}
-	return fallback.UTC()
-}
-
-type getResponse struct {
-	ID               string                  `json:"id,omitempty"`
-	DID              string                  `json:"did"`
-	Checksums        []objects.Checksum      `json:"checksums,omitempty"`
-	Hashes           map[string]string       `json:"hashes,omitempty"`
-	AccessMethods    *[]objects.AccessMethod `json:"access_methods,omitempty"`
-	ControlledAccess *[]string               `json:"controlled_access,omitempty"`
-	Created          string                  `json:"created_time,omitempty"`
-	Updated          *string                 `json:"updated_time,omitempty"`
-	Name             *string                 `json:"name,omitempty"`
-	NameAliases      *[]string               `json:"name_aliases,omitempty"`
-	Description      *string                 `json:"description,omitempty"`
-	Size             int64                   `json:"size,omitempty"`
-}
-
-func projectGet(record objects.Record) getResponse {
-	response := getResponse{
-		ID:               string(record.Id),
-		DID:              string(record.Id),
-		Checksums:        record.Checksums,
-		AccessMethods:    record.AccessMethods,
-		ControlledAccess: record.ControlledAccess,
-		Name:             record.Name,
-		Description:      record.Description,
-	}
-	if !record.CreatedTime.IsZero() {
-		response.Created = record.CreatedTime.Format(time.RFC3339)
-	}
-	if record.UpdatedTime != nil {
-		updated := record.UpdatedTime.Format(time.RFC3339)
-		response.Updated = &updated
-	}
-	if record.Size > 0 {
-		response.Size = record.Size
-	}
-	if len(record.NameAliases) > 0 {
-		name := ""
-		if record.Name != nil {
-			name = *record.Name
-		}
-		aliases := objects.NormalizeNameAliases(name, record.NameAliases)
-		response.NameAliases = &aliases
-	}
-	for _, checksum := range record.Checksums {
-		if checksum.Type == "" || checksum.Checksum == "" {
-			continue
-		}
-		if response.Hashes == nil {
-			response.Hashes = make(map[string]string)
-		}
-		response.Hashes[checksum.Type] = checksum.Checksum
-	}
-	return response
+	return c.JSON(toInternalRecord(merged))
 }

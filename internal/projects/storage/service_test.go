@@ -7,19 +7,44 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 )
 
 type fakeScopeResolver struct {
-	scope buckets.StorageScope
-	err   error
+	scope  buckets.StorageScope
+	err    error
+	events *[]string
 }
 
 func (f fakeScopeResolver) ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error) {
+	if f.events != nil {
+		*f.events = append(*f.events, "resolve")
+	}
 	return f.scope, f.err
+}
+
+type fakeProjectRecords struct {
+	RecordRepairer
+	records []drs.DrsObject
+	events  *[]string
+}
+
+func (f fakeProjectRecords) ListPhysicalObjectsByScope(ctx context.Context, _, _ string, method string) ([]drs.DrsObject, error) {
+	if f.events != nil {
+		*f.events = append(*f.events, "list")
+	}
+	result := make([]drs.DrsObject, 0, len(f.records))
+	for _, record := range f.records {
+		if access.HasObjectMethodAccess(ctx, method, objects.AccessResources(&record)) {
+			result = append(result, record)
+		}
+	}
+	return result, nil
 }
 
 type fakeCredentials struct {
@@ -160,6 +185,80 @@ func projectServiceWithTarget(inventory *fakeInventory, deletePort DeletePort, t
 		Providers:     Providers{Inventory: inventory, Delete: deletePort},
 	})
 	return service, visibility
+}
+
+func TestInspectProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *testing.T) {
+	first := drs.DrsObject{
+		Id:        "one",
+		Checksums: []drs.Checksum{{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		AccessMethods: &[]drs.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
+		}},
+	}
+	duplicate := first
+	duplicate.Id = "two"
+	falsePrefix := drs.DrsObject{
+		Id:        "three",
+		Checksums: []drs.Checksum{{Type: "sha256", Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+		AccessMethods: &[]drs.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/prefix/project/CONFIGURATION/file"},
+		}},
+	}
+	missingChecksum := drs.DrsObject{Id: "four", AccessMethods: first.AccessMethods}
+	events := []string{}
+	service := NewService(Dependencies{
+		ScopeResolver: fakeScopeResolver{scope: buckets.StorageScope{Provider: "s3", Bucket: "bucket", Prefix: "prefix/project"}, events: &events},
+		Records:       fakeProjectRecords{records: []drs.DrsObject{first, duplicate, falsePrefix, missingChecksum}, events: &events},
+	})
+
+	result, err := service.InspectProjectRecords(context.Background(), " org ", " project ", " /CONFIG/ ")
+	if err != nil {
+		t.Fatalf("InspectProjectRecords() error = %v", err)
+	}
+	if len(result) != 2 || result[0].Id != "one" || result[1].Id != "two" {
+		t.Fatalf("project records = %+v", result)
+	}
+	if len(*result[0].AccessMethods) != 1 || result[0].Checksums[0].Checksum != first.Checksums[0].Checksum {
+		t.Fatalf("project record = %+v", result[0])
+	}
+	if !reflect.DeepEqual(events, []string{"list", "resolve"}) {
+		t.Fatalf("inspection order = %v, want list then resolve", events)
+	}
+}
+
+func TestInspectProjectRecordsSkipsPhysicalResolutionWithoutProjectRead(t *testing.T) {
+	projectResource := "/organization/org/project/project"
+	otherResource := "/organization/org/project/other"
+	record := drs.DrsObject{
+		Id:               "visible-via-other",
+		ControlledAccess: &[]string{projectResource, otherResource},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
+		AccessMethods: &[]drs.AccessMethod{{
+			Type:      "s3",
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
+		}},
+	}
+	events := []string{}
+	service := NewService(Dependencies{
+		ScopeResolver: fakeScopeResolver{scope: buckets.StorageScope{Provider: "s3", Bucket: "bucket", Prefix: "prefix/project"}, events: &events},
+		Records:       fakeProjectRecords{records: []drs.DrsObject{record}, events: &events},
+	})
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{otherResource: {"read": true}}, true)
+
+	result, err := service.InspectProjectRecords(access.WithSession(context.Background(), session), "org", "project", "CONFIG")
+	if err != nil {
+		t.Fatalf("InspectProjectRecords() error = %v", err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("project records = %+v, want no records without project-scope read", result)
+	}
+	if !reflect.DeepEqual(events, []string{"list"}) {
+		t.Fatalf("inspection order = %v, want list only", events)
+	}
 }
 
 func TestInspectProjectPreservesPartialInventoryAndCanonicalItems(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -75,32 +76,52 @@ func TestRecordProviderTransferEvents_NormalizesAndRecordsUnmatchedEvent(t *test
 	defer rawDB.Close()
 
 	when := time.Date(2026, time.February, 3, 4, 5, 6, 0, time.UTC)
-	event := usage.ProviderEvent{
-		ProviderEventID:    "provider-event-1",
-		Direction:          "GET",
-		EventTime:          when,
-		RequestID:          "request-1",
-		ProviderRequestID:  "provider-request-1",
-		ObjectID:           "object-1",
-		SHA256:             "sha-1",
-		ObjectSize:         42,
-		Organization:       "org",
-		Project:            "project",
-		AccessID:           "access-1",
+	direction := metricsapi.ProviderTransferDirection("GET")
+	requestID := "request-1"
+	providerRequestID := "provider-request-1"
+	objectID := "object-1"
+	sha256 := "sha-1"
+	objectSize := int64(42)
+	organization := "org"
+	project := "project"
+	accessID := "access-1"
+	objectKey := " /object-1 "
+	storageURL := " s3://bucket/object-1 "
+	httpMethod := "GET"
+	httpStatus := 206
+	requesterPrincipal := "principal"
+	sourceIP := "127.0.0.1"
+	userAgent := "client"
+	rawEventRef := "raw-1"
+	actorEmail := "actor@example.com"
+	actorSubject := "subject-1"
+	authMode := "session"
+	event := metricsapi.ProviderTransferEvent{
+		ProviderEventId:    "provider-event-1",
+		Direction:          direction,
+		EventTime:          &when,
+		RequestId:          &requestID,
+		ProviderRequestId:  &providerRequestID,
+		ObjectId:           &objectID,
+		Sha256:             &sha256,
+		ObjectSize:         &objectSize,
+		Organization:       &organization,
+		Project:            &project,
+		AccessId:           &accessID,
 		Provider:           " s3 ",
 		Bucket:             " bucket ",
-		ObjectKey:          " /object-1 ",
-		StorageURL:         " s3://bucket/object-1 ",
+		ObjectKey:          &objectKey,
+		StorageUrl:         &storageURL,
 		BytesTransferred:   42,
-		HTTPMethod:         "GET",
-		HTTPStatus:         206,
-		RequesterPrincipal: "principal",
-		SourceIP:           "127.0.0.1",
-		UserAgent:          "client",
-		RawEventRef:        "raw-1",
-		ActorEmail:         "actor@example.com",
-		ActorSubject:       "subject-1",
-		AuthMode:           "session",
+		HttpMethod:         &httpMethod,
+		HttpStatus:         &httpStatus,
+		RequesterPrincipal: &requesterPrincipal,
+		SourceIp:           &sourceIP,
+		UserAgent:          &userAgent,
+		RawEventRef:        &rawEventRef,
+		ActorEmail:         &actorEmail,
+		ActorSubject:       &actorSubject,
+		AuthMode:           &authMode,
 	}
 
 	mock.ExpectBegin()
@@ -113,16 +134,16 @@ func TestRecordProviderTransferEvents_NormalizesAndRecordsUnmatchedEvent(t *test
 		}))
 	prepared.ExpectExec().
 		WithArgs(
-			event.ProviderEventID, "", usage.ProviderTransferDirectionDownload, when, event.RequestID, event.ProviderRequestID,
-			event.ObjectID, event.SHA256, event.ObjectSize, event.Organization, event.Project, event.AccessID, "s3", "bucket",
-			"object-1", "s3://bucket/object-1", nil, nil, event.BytesTransferred, event.HTTPMethod, event.HTTPStatus,
-			event.RequesterPrincipal, event.SourceIP, event.UserAgent, event.RawEventRef, event.ActorEmail, event.ActorSubject, event.AuthMode,
+			event.ProviderEventId, "", usage.ProviderTransferDirectionDownload, when, requestID, providerRequestID,
+			objectID, sha256, objectSize, organization, project, accessID, "s3", "bucket",
+			"object-1", "s3://bucket/object-1", nil, nil, event.BytesTransferred, httpMethod, httpStatus,
+			requesterPrincipal, sourceIP, userAgent, rawEventRef, actorEmail, actorSubject, authMode,
 			usage.ProviderTransferUnmatched,
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	if err := pg.RecordProviderTransferEvents(context.Background(), []usage.ProviderEvent{event}); err != nil {
+	if err := pg.RecordProviderTransferEvents(context.Background(), []metricsapi.ProviderTransferEvent{event}); err != nil {
 		t.Fatalf("RecordProviderTransferEvents returned error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

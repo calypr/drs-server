@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 )
 
 var (
@@ -89,16 +90,16 @@ type TransferBreakdownQuery struct {
 }
 
 type Reporter interface {
-	GetFileUsage(ctx context.Context, objectID string) (*FileUsage, error)
-	ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]FileUsage, error)
+	GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error)
+	ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]metricsapi.FileUsage, error)
 	ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error)
-	ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]FileUsage, error)
-	GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*FileUsage, error)
-	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]FileUsage, error)
-	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (FileUsageSummary, error)
-	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (Summary, error)
-	GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]Breakdown, error)
-	GetTransferFreshness(ctx context.Context, filter Filter) (Freshness, error)
+	ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error)
+	GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error)
+	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]metricsapi.FileUsage, error)
+	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error)
+	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error)
+	GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error)
+	GetTransferFreshness(ctx context.Context, filter Filter) (metricsapi.TransferMetricsFreshness, error)
 }
 
 type Dependencies struct {
@@ -124,14 +125,14 @@ func (s *Service) requireReports() error {
 	return nil
 }
 
-func (s *Service) GetFileUsage(ctx context.Context, objectID string) (*FileUsage, error) {
+func (s *Service) GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
 	return s.reports.GetFileUsage(ctx, objectID)
 }
 
-func (s *Service) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]FileUsage, error) {
+func (s *Service) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]metricsapi.FileUsage, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, r
 // ListFileUsageBatch normalizes requested IDs, filters them through the
 // authorized scope, queries persistence once, and applies inactivity filtering
 // without changing persistence order.
-func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]FileUsage, error) {
+func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error) {
 	requested := uniqueNonEmptyStrings(query.ObjectIDs)
 	readable, err := s.ListReadableObjectIDs(ctx, query.Scope, requested)
 	if err != nil {
@@ -200,7 +201,7 @@ func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQu
 	if query.InactiveSince == nil {
 		return items, nil
 	}
-	filtered := make([]FileUsage, 0, len(items))
+	filtered := make([]metricsapi.FileUsage, 0, len(items))
 	for _, item := range items {
 		if item.LastDownloadTime == nil || item.LastDownloadTime.Before(*query.InactiveSince) {
 			filtered = append(filtered, item)
@@ -211,7 +212,7 @@ func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQu
 
 // GetScopedFileUsage enforces object membership before exposing a single
 // report. Inaccessible objects intentionally look absent at the HTTP boundary.
-func (s *Service) GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*FileUsage, error) {
+func (s *Service) GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error) {
 	if scope.isSingle() || scope.isAggregate() {
 		readable, err := s.ListReadableObjectIDs(ctx, scope, []string{objectID})
 		if err != nil {
@@ -249,7 +250,7 @@ func errorsIsNotFoundOrDenied(err error) bool {
 }
 
 // ListFileUsage routes scoped reports through the required Store capability.
-func (s *Service) ListFileUsage(ctx context.Context, query FileUsageQuery) ([]FileUsage, error) {
+func (s *Service) ListFileUsage(ctx context.Context, query FileUsageQuery) ([]metricsapi.FileUsage, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
@@ -265,19 +266,19 @@ func (s *Service) ListFileUsage(ctx context.Context, query FileUsageQuery) ([]Fi
 
 // GetFileUsageSummary routes scoped summaries through the required Store
 // capability and supplements single-scope reports with record metadata.
-func (s *Service) GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (FileUsageSummary, error) {
+func (s *Service) GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error) {
 	if err := s.requireReports(); err != nil {
-		return FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	scope := query.Scope
 	if scope.isSingle() {
 		summary, err := s.reports.GetFileUsageSummaryByScope(ctx, scope.Organization, scope.Project, query.InactiveSince)
 		if err != nil {
-			return FileUsageSummary{}, err
+			return metricsapi.FileUsageSummary{}, err
 		}
 		recordSummary, err := s.reports.GetProjectRecordSummaryByScope(ctx, scope.Organization, scope.Project)
 		if err != nil {
-			return FileUsageSummary{}, err
+			return metricsapi.FileUsageSummary{}, err
 		}
 		summary.RecordCount = recordSummary.RecordCount
 		summary.RecordLatestUpdatedTime = recordSummary.RecordLatestUpdatedTime
@@ -291,9 +292,9 @@ func (s *Service) GetFileUsageSummary(ctx context.Context, query FileUsageSummar
 
 // GetTransferAttributionSummary routes aggregate scope reports directly to the
 // resource-scoped Store capability when no explicit organization filter exists.
-func (s *Service) GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (Summary, error) {
+func (s *Service) GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error) {
 	if err := s.requireReports(); err != nil {
-		return Summary{}, err
+		return metricsapi.TransferAttributionSummary{}, err
 	}
 	var resources []string
 	if query.Scope.isAggregate() && strings.TrimSpace(query.Filter.Organization) == "" {
@@ -304,7 +305,7 @@ func (s *Service) GetTransferAttributionSummary(ctx context.Context, query Trans
 
 // GetTransferAttributionBreakdown preserves group validation and routes
 // aggregate scope reports directly to the resource-scoped Store capability.
-func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]Breakdown, error) {
+func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
@@ -318,10 +319,10 @@ func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query Tra
 	return s.reports.QueryTransferBreakdown(ctx, query.Filter, query.GroupBy, resources)
 }
 
-func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (Freshness, error) {
+func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (metricsapi.TransferMetricsFreshness, error) {
 	isStale := false
 	missingBuckets := []string{}
-	return Freshness{
+	return metricsapi.TransferMetricsFreshness{
 		IsStale:             &isStale,
 		MissingBuckets:      &missingBuckets,
 		RequiredFrom:        filter.From,

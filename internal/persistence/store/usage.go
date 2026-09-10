@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -28,11 +29,11 @@ func (db *Store) RecordFileDownload(ctx context.Context, objectID string) error 
 	return err
 }
 
-func (db *Store) GetFileUsage(ctx context.Context, objectID string) (*usage.FileUsage, error) {
+func (db *Store) GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error) {
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return nil, err
 	}
-	var item usage.FileUsage
+	var item metricsapi.FileUsage
 	var lastUpload, lastDownload sql.NullTime
 	err := db.queryRowContext(ctx, `
 		SELECT o.id, o.name, o.size,
@@ -60,9 +61,9 @@ func (db *Store) GetFileUsage(ctx context.Context, objectID string) (*usage.File
 	return &item, nil
 }
 
-func (db *Store) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]usage.FileUsage, error) {
+func (db *Store) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]metricsapi.FileUsage, error) {
 	if len(ids) == 0 {
-		return []usage.FileUsage{}, nil
+		return []metricsapi.FileUsage{}, nil
 	}
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return nil, err
@@ -71,7 +72,7 @@ func (db *Store) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]
 	if maxIDs <= 0 {
 		maxIDs = len(ids)
 	}
-	out := make([]usage.FileUsage, 0, len(ids))
+	out := make([]metricsapi.FileUsage, 0, len(ids))
 	for start := 0; start < len(ids); start += maxIDs {
 		end := start + maxIDs
 		if end > len(ids) {
@@ -103,7 +104,7 @@ func (db *Store) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]
 	return out, nil
 }
 
-func (db *Store) ListFileUsage(ctx context.Context, limit, offset int, inactiveSince *time.Time) ([]usage.FileUsage, error) {
+func (db *Store) ListFileUsage(ctx context.Context, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return nil, err
 	}
@@ -139,7 +140,7 @@ func (db *Store) ListFileUsage(ctx context.Context, limit, offset int, inactiveS
 	return scanFileUsageRows(rows, limit)
 }
 
-func (db *Store) ListFileUsagePageByScope(ctx context.Context, organization, project string, limit, offset int, inactiveSince *time.Time) ([]usage.FileUsage, error) {
+func (db *Store) ListFileUsagePageByScope(ctx context.Context, organization, project string, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
 		return nil, err
@@ -147,28 +148,28 @@ func (db *Store) ListFileUsagePageByScope(ctx context.Context, organization, pro
 	return db.listScopedFileUsagePage(ctx, []string{resource}, false, limit, offset, inactiveSince)
 }
 
-func (db *Store) ListFileUsagePageByResources(ctx context.Context, resources []string, includeUnscoped bool, limit, offset int, inactiveSince *time.Time) ([]usage.FileUsage, error) {
+func (db *Store) ListFileUsagePageByResources(ctx context.Context, resources []string, includeUnscoped bool, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	return db.listScopedFileUsagePage(ctx, resources, includeUnscoped, limit, offset, inactiveSince)
 }
 
-func (db *Store) GetFileUsageSummaryByScope(ctx context.Context, organization, project string, inactiveSince *time.Time) (usage.FileUsageSummary, error) {
+func (db *Store) GetFileUsageSummaryByScope(ctx context.Context, organization, project string, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	return db.getScopedFileUsageSummary(ctx, []string{resource}, false, inactiveSince)
 }
 
-func (db *Store) GetFileUsageSummaryByResources(ctx context.Context, resources []string, includeUnscoped bool, inactiveSince *time.Time) (usage.FileUsageSummary, error) {
+func (db *Store) GetFileUsageSummaryByResources(ctx context.Context, resources []string, includeUnscoped bool, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	return db.getScopedFileUsageSummary(ctx, resources, includeUnscoped, inactiveSince)
 }
 
-func (db *Store) GetProjectRecordSummaryByScope(ctx context.Context, organization, project string) (usage.FileUsageSummary, error) {
+func (db *Store) GetProjectRecordSummaryByScope(ctx context.Context, organization, project string) (metricsapi.FileUsageSummary, error) {
 	resource, err := clientaccess.ResourcePath(strings.TrimSpace(organization), strings.TrimSpace(project))
 	if err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
-	var summary usage.FileUsageSummary
+	var summary metricsapi.FileUsageSummary
 	var latest any
 	if err := db.queryRowContext(ctx, `
 		SELECT COUNT(DISTINCT o.id), MAX(o.updated_time)
@@ -176,7 +177,7 @@ func (db *Store) GetProjectRecordSummaryByScope(ctx context.Context, organizatio
 		INNER JOIN drs_object_controlled_access ca ON ca.object_id = o.id
 		WHERE ca.resource = ?
 	`, resource).Scan(&summary.RecordCount, &latest); err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	if parsed, ok := parseSQLiteTransferTime(latest); ok {
 		t := parsed.UTC()
@@ -185,15 +186,15 @@ func (db *Store) GetProjectRecordSummaryByScope(ctx context.Context, organizatio
 	return summary, nil
 }
 
-func (db *Store) GetFileUsageSummary(ctx context.Context, inactiveSince *time.Time) (usage.FileUsageSummary, error) {
+func (db *Store) GetFileUsageSummary(ctx context.Context, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	cutoff := time.Now().UTC().AddDate(0, 0, -730)
 	if inactiveSince != nil {
 		cutoff = inactiveSince.UTC()
 	}
-	var summary usage.FileUsageSummary
+	var summary metricsapi.FileUsageSummary
 	if err := db.queryRowContext(ctx, `
 		SELECT
 			COUNT(o.id),
@@ -203,24 +204,24 @@ func (db *Store) GetFileUsageSummary(ctx context.Context, inactiveSince *time.Ti
 		FROM drs_object o
 		LEFT JOIN object_usage u ON u.object_id = o.id
 	`, cutoff).Scan(&summary.TotalFiles, &summary.TotalUploads, &summary.TotalDownloads, &summary.InactiveFileCount); err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	return summary, nil
 }
 
-func (db *Store) listScopedFileUsagePage(ctx context.Context, resources []string, includeUnscoped bool, limit, offset int, inactiveSince *time.Time) ([]usage.FileUsage, error) {
+func (db *Store) listScopedFileUsagePage(ctx context.Context, resources []string, includeUnscoped bool, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return nil, err
 	}
 	if limit <= 0 {
-		return []usage.FileUsage{}, nil
+		return []metricsapi.FileUsage{}, nil
 	}
 	if offset < 0 {
 		offset = 0
 	}
 	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
-		return []usage.FileUsage{}, nil
+		return []metricsapi.FileUsage{}, nil
 	}
 	query, args := db.scopedFileUsageQuery(resources, includeUnscoped, inactiveSince, false)
 	query += ` ORDER BY COALESCE(u.last_download_time, '1970-01-01T00:00:00Z') ASC, o.id ASC LIMIT ? OFFSET ?`
@@ -233,18 +234,18 @@ func (db *Store) listScopedFileUsagePage(ctx context.Context, resources []string
 	return scanFileUsageRows(rows, limit)
 }
 
-func (db *Store) getScopedFileUsageSummary(ctx context.Context, resources []string, includeUnscoped bool, inactiveSince *time.Time) (usage.FileUsageSummary, error) {
+func (db *Store) getScopedFileUsageSummary(ctx context.Context, resources []string, includeUnscoped bool, inactiveSince *time.Time) (metricsapi.FileUsageSummary, error) {
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	resources = clientaccess.NormalizeAccessResources(resources)
 	if len(resources) == 0 && !includeUnscoped {
-		return usage.FileUsageSummary{}, nil
+		return metricsapi.FileUsageSummary{}, nil
 	}
 	query, args := db.scopedFileUsageQuery(resources, includeUnscoped, inactiveSince, true)
-	var summary usage.FileUsageSummary
+	var summary metricsapi.FileUsageSummary
 	if err := db.queryRowContext(ctx, query, args...).Scan(&summary.TotalFiles, &summary.TotalUploads, &summary.TotalDownloads, &summary.InactiveFileCount); err != nil {
-		return usage.FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	return summary, nil
 }
@@ -332,10 +333,10 @@ func (db *Store) flushObjectUsageEvents(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func scanFileUsageRows(rows *sql.Rows, capacity int) ([]usage.FileUsage, error) {
-	out := make([]usage.FileUsage, 0, capacity)
+func scanFileUsageRows(rows *sql.Rows, capacity int) ([]metricsapi.FileUsage, error) {
+	out := make([]metricsapi.FileUsage, 0, capacity)
 	for rows.Next() {
-		var item usage.FileUsage
+		var item metricsapi.FileUsage
 		var lastUpload, lastDownload sql.NullTime
 		if err := rows.Scan(&item.ObjectId, &item.Name, &item.Size, &item.UploadCount, &item.DownloadCount, &lastUpload, &lastDownload); err != nil {
 			return nil, err

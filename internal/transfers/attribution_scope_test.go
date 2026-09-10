@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -64,7 +64,7 @@ func TestScopeForAccessUsesOnlyOneCanonicalResource(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			obj := &objects.Record{}
+			obj := &drs.DrsObject{}
 			if test.authorizations != nil {
 				controlled := clientaccess.AuthzMapToControlledAccess(test.authorizations)
 				obj.ControlledAccess = &controlled
@@ -81,7 +81,7 @@ func TestScopeForAccessUsesOnlyOneCanonicalResource(t *testing.T) {
 }
 
 func TestScopeForAccessHonorsValidExplicitScopeOnly(t *testing.T) {
-	obj := &objects.Record{ControlledAccess: &[]string{
+	obj := &drs.DrsObject{ControlledAccess: &[]string{
 		"/organization/org/project/project",
 		"/organization/org/project/other",
 	}}
@@ -119,7 +119,7 @@ func TestScopeForAccessHonorsValidExplicitScopeOnly(t *testing.T) {
 }
 
 func TestEventFromObjectFixedRequestIdentityHasStableScopedIDs(t *testing.T) {
-	obj := &objects.Record{
+	obj := &drs.DrsObject{
 		Id:               "object-1",
 		Size:             42,
 		ControlledAccess: &[]string{"/organization/org/project/project"},
@@ -146,7 +146,7 @@ func TestEventFromObjectFixedRequestIdentityHasStableScopedIDs(t *testing.T) {
 }
 
 func TestEventFromObjectRejectsExplicitScopeWithoutOperationAuthorization(t *testing.T) {
-	obj := &objects.Record{ControlledAccess: &[]string{
+	obj := &drs.DrsObject{ControlledAccess: &[]string{
 		"/organization/org/project/authorized",
 		"/organization/org/project/other",
 	}}

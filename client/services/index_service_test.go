@@ -347,12 +347,9 @@ func testRecordForURL(did, rawURL string, authorizations map[string][]string) in
 	controlled := clientaccess.AuthzMapToControlledAccess(authorizations)
 	methodType := methodTypeForURL(rawURL)
 	methods := []drs.AccessMethod{{
-		Type:     drs.AccessMethodType(methodType),
-		AccessId: &methodType,
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: rawURL},
+		Type:      drs.AccessMethodType(methodType),
+		AccessId:  &methodType,
+		AccessUrl: &drs.AccessURL{Url: rawURL},
 	}}
 	return internalapi.InternalRecord{
 		Did:              did,

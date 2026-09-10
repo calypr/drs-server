@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -44,7 +45,7 @@ type DownloadResult struct {
 	URL       string
 	SourceURL string
 	Target    storage.Target
-	Object    *objects.Record
+	Object    *drs.DrsObject
 }
 
 type UploadRequest struct {
@@ -125,7 +126,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 		if s.fileCounters != nil {
 			counterID := strings.TrimSpace(req.AccountingObjectID)
 			if counterID == "" {
-				counterID = string(obj.Id)
+				counterID = obj.Id
 			}
 			if err := s.fileCounters.RecordFileDownload(ctx, counterID); err != nil {
 				return DownloadResult{}, err
@@ -150,7 +151,7 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 		organization = req.Scope.Organization
 		project = req.Scope.Project
 	}
-	var obj *objects.Record
+	var obj *drs.DrsObject
 	var err error
 	if s.objects != nil {
 		obj, err = s.objects.GetObject(ctx, objectID, "update")

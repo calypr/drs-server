@@ -18,8 +18,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func ptr[T any](value T) *T { return &value }
-
 func dataTestAuthContext(base context.Context, mode string, authHeader bool, privileges map[string]map[string]bool) context.Context {
 	sessionMode := mode
 	if mode == "local-authz" {

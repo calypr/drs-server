@@ -15,38 +15,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type metricsProviderErrorIngestor struct {
-	err error
-}
-
-type metricsTransferErrorReporter struct {
-	usage.Reporter
-	freshnessErr error
-	summaryErr   error
-	breakdownErr error
-}
-
-func (r metricsTransferErrorReporter) GetTransferFreshness(context.Context, usage.Filter) (usage.Freshness, error) {
-	return usage.Freshness{}, r.freshnessErr
-}
-
-func (r metricsTransferErrorReporter) GetTransferAttributionSummary(context.Context, usage.TransferSummaryQuery) (usage.Summary, error) {
-	return usage.Summary{}, r.summaryErr
-}
-
-func (r metricsTransferErrorReporter) GetTransferAttributionBreakdown(context.Context, usage.TransferBreakdownQuery) ([]usage.Breakdown, error) {
-	return nil, r.breakdownErr
-}
-
-func (i metricsProviderErrorIngestor) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
-	return i.err
-}
-
 func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	ingest := &metricsIngestFake{}
 	reports := &metricsReporterFake{
-		transferSummary:   usage.Summary{EventCount: metricsInt64(1), DownloadEventCount: metricsInt64(1), BytesDownloaded: metricsInt64(42)},
-		transferBreakdown: []usage.Breakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
+		transferSummary:   metricsapi.TransferAttributionSummary{EventCount: metricsInt64(1), DownloadEventCount: metricsInt64(1), BytesDownloaded: metricsInt64(42)},
+		transferBreakdown: []metricsapi.TransferAttributionBreakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
 	}
 	app := fiber.New()
 	registerMetricsRoutes(app, reports, ingest)
@@ -88,7 +61,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		t.Fatalf("expected one provider transfer event, got %+v", ingest.events)
 	}
 	event := ingest.events[0]
-	if event.ProviderEventID != "event-download-1" || event.AccessGrantID != "grant-1" || event.ObjectID != "did-1" || event.ObjectKey != "root/sha-1" || event.HTTPMethod != "GET" || event.HTTPStatus != 200 || event.RangeStart == nil || *event.RangeStart != 0 || event.RangeEnd == nil || *event.RangeEnd != 41 {
+	if event.ProviderEventId != "event-download-1" || generatedString(event.AccessGrantId) != "grant-1" || generatedString(event.ObjectId) != "did-1" || generatedString(event.ObjectKey) != "root/sha-1" || generatedString(event.HttpMethod) != "GET" || event.HttpStatus == nil || *event.HttpStatus != 200 || event.RangeStart == nil || *event.RangeStart != 0 || event.RangeEnd == nil || *event.RangeEnd != 41 {
 		t.Fatalf("unexpected provider transfer event: %+v", event)
 	}
 
@@ -101,7 +74,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	if summaryResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", summaryResp.StatusCode, string(summaryBody))
 	}
-	var summary usage.Summary
+	var summary metricsapi.TransferAttributionSummary
 	if err := json.Unmarshal(summaryBody, &summary); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
@@ -119,8 +92,8 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", breakdownResp.StatusCode, string(breakdownBody))
 	}
 	var breakdown struct {
-		GroupBy string            `json:"group_by"`
-		Data    []usage.Breakdown `json:"data"`
+		GroupBy string                                    `json:"group_by"`
+		Data    []metricsapi.TransferAttributionBreakdown `json:"data"`
 	}
 	if err := json.Unmarshal(breakdownBody, &breakdown); err != nil {
 		t.Fatalf("decode breakdown: %v", err)
@@ -137,7 +110,7 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 		Provider:        "s3",
 		Bucket:          "bucket",
 	}}}
-	server := newMetricsServer(nil, &metricsIngestFake{})
+	server := &metricsServer{ingestor: &metricsIngestFake{}}
 
 	response, err := server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", false, false, nil), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
 	if err != nil {
@@ -161,7 +134,7 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 		t.Fatalf("invalid event response = %T", response)
 	}
 	wantErr := errors.New("ingest failed")
-	failing := newMetricsServer(nil, metricsProviderErrorIngestor{err: wantErr})
+	failing := &metricsServer{ingestor: &metricsIngestFake{err: wantErr}}
 	_, err = failing.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("dependency error = %v, want %v", err, wantErr)
@@ -170,14 +143,14 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 
 func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing.T) {
 	wantErr := errors.New("transfer report unavailable")
-	server := newMetricsServer(metricsTransferErrorReporter{freshnessErr: wantErr}, nil)
+	server := &metricsServer{reporter: &metricsReporterFake{freshnessErr: wantErr}}
 	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("summary freshness error = %v", err)
 	}
 	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("breakdown freshness error = %v", err)
 	}
-	server = newMetricsServer(metricsTransferErrorReporter{summaryErr: wantErr, breakdownErr: wantErr}, nil)
+	server = &metricsServer{reporter: &metricsReporterFake{transferSummaryErr: wantErr, transferBreakdownErr: wantErr}}
 	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("summary dependency error = %v", err)
 	}
@@ -194,7 +167,7 @@ func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing
 		t.Fatalf("breakdown dependency error = %v", err)
 	}
 	unauthorized := metricsTestContext(context.Background(), "gen3", false, false, nil)
-	server = newMetricsServer(metricsTransferErrorReporter{}, nil)
+	server = &metricsServer{reporter: &metricsReporterFake{}}
 	if _, err := server.GetTransferSummary(unauthorized, metricsapi.GetTransferSummaryRequestObject{}); err != nil {
 		t.Fatalf("unauthorized summary error = %v", err)
 	}
@@ -202,8 +175,8 @@ func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing
 
 func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 	reports := &metricsReporterFake{
-		transferSummary:   usage.Summary{BytesDownloaded: metricsInt64(141)},
-		transferBreakdown: []usage.Breakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
+		transferSummary:   metricsapi.TransferAttributionSummary{BytesDownloaded: metricsInt64(141)},
+		transferBreakdown: []metricsapi.TransferAttributionBreakdown{{Key: metricsString("user@example.com"), BytesDownloaded: metricsInt64(42)}},
 	}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 
@@ -228,7 +201,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
 		}
 		var resp struct {
-			Data []usage.Breakdown `json:"data"`
+			Data []metricsapi.TransferAttributionBreakdown `json:"data"`
 		}
 		if err := json.Unmarshal(body, &resp); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -267,7 +240,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
 		}
 		var resp struct {
-			Data []usage.Breakdown `json:"data"`
+			Data []metricsapi.TransferAttributionBreakdown `json:"data"`
 		}
 		if err := json.Unmarshal(body, &resp); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -290,7 +263,7 @@ func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
 		if httpResp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", httpResp.StatusCode, string(body))
 		}
-		var summary usage.Summary
+		var summary metricsapi.TransferAttributionSummary
 		if err := json.Unmarshal(body, &summary); err != nil {
 			t.Fatalf("decode: %v", err)
 		}

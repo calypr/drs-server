@@ -6,24 +6,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 )
 
 func registerScopedCandidate(t *testing.T, om *objects.Service, id, checksum, org, project string) {
 	t.Helper()
 	controlled := []string{"/organization/" + org + "/project/" + project}
-	_, err := registerCandidates(context.Background(), om, []objects.Candidate{{
+	_, err := om.RegisterCandidates(context.Background(), []drs.DrsObjectCandidate{{
 		Aliases:          ptr([]string{"id:" + id}),
 		ControlledAccess: &controlled,
-		Checksums: &[]objects.Checksum{{
+		Checksums: []drs.Checksum{{
 			Type:     "sha256",
 			Checksum: checksum,
 		}},
-		AccessMethods: &[]objects.AccessMethod{{
+		AccessMethods: &[]drs.AccessMethod{{
 			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/" + id},
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/" + id},
 		}},
-		Size: ptr(int64(1)),
+		Size: 1,
 	}})
 	if err != nil {
 		t.Fatalf("RegisterBulk(%s): %v", id, err)
@@ -38,17 +39,17 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 	created := drsISOTime("2026-01-01T00:00:00Z")
 	updated := ptrTime("2026-01-01T00:00:00Z")
 
-	for _, obj := range []objects.Record{
+	for _, obj := range []drs.DrsObject{
 		{
 
 			Id:               "uuid-a",
 			CreatedTime:      created,
 			UpdatedTime:      updated,
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &[]string{firstResource},
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/uuid-a"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/uuid-a"},
 			}},
 		},
 		{
@@ -56,20 +57,20 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 			Id:               "uuid-b",
 			CreatedTime:      created,
 			UpdatedTime:      updated,
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &[]string{secondResource},
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/uuid-b"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/uuid-b"},
 			}},
 		},
 	} {
-		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+		if err := database.RegisterObjects(context.Background(), []drs.DrsObject{obj}); err != nil {
 			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
-	om := newTestService(database)
+	om := objects.NewService(database)
 	ctx := buildLocalAuthzContext(map[string]map[string]bool{
 		firstResource: {"read": true},
 	})
@@ -85,7 +86,7 @@ func TestGetObjectUsesGlobalSHAIdentityAcrossUUIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject(checksum) failed: %v", err)
 	}
-	for lookup, got := range map[string]*objects.Record{
+	for lookup, got := range map[string]*drs.DrsObject{
 		"uuid-a":   byFirstUUID,
 		"uuid-b":   bySecondUUID,
 		"checksum": byChecksum,
@@ -107,35 +108,35 @@ func TestGetObjectPreservesPublicSiblingAccess(t *testing.T) {
 	checksum := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	controlledResource := "/organization/org/project/controlled"
 	created := drsISOTime("2026-01-01T00:00:00Z")
-	for _, obj := range []objects.Record{
+	for _, obj := range []drs.DrsObject{
 		{
 
 			Id:          "public-uuid",
 			CreatedTime: created,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: checksum}},
-			AccessMethods: &[]objects.AccessMethod{{
+			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: checksum}},
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/public"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/public"},
 			}},
 		},
 		{
 
 			Id:               "controlled-uuid",
 			CreatedTime:      created,
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &[]string{controlledResource},
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/controlled"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/controlled"},
 			}},
 		},
 	} {
-		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+		if err := database.RegisterObjects(context.Background(), []drs.DrsObject{obj}); err != nil {
 			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
-	om := newTestService(database)
+	om := objects.NewService(database)
 	got, err := om.GetObject(buildLocalAuthzContext(nil), "controlled-uuid", "read")
 	if err != nil {
 		t.Fatalf("public checksum family should be readable: %v", err)
@@ -149,16 +150,16 @@ func TestGetObjectPrefersSHAIdentityOverCollidingPhysicalID(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	requestedSHA := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	otherSHA := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-	for _, obj := range []objects.Record{
-		{Id: objects.RecordID(requestedSHA), Checksums: []objects.Checksum{{Type: "sha256", Checksum: otherSHA}}},
-		{Id: "checksum-record", Checksums: []objects.Checksum{{Type: "sha256", Checksum: requestedSHA}}},
+	for _, obj := range []drs.DrsObject{
+		{Id: requestedSHA, Checksums: []drs.Checksum{{Type: "sha256", Checksum: otherSHA}}},
+		{Id: "checksum-record", Checksums: []drs.Checksum{{Type: "sha256", Checksum: requestedSHA}}},
 	} {
-		if err := database.RegisterObjects(context.Background(), []objects.Record{obj}); err != nil {
+		if err := database.RegisterObjects(context.Background(), []drs.DrsObject{obj}); err != nil {
 			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
-	got, err := newTestService(database).GetObject(context.Background(), requestedSHA, "")
+	got, err := objects.NewService(database).GetObject(context.Background(), requestedSHA, "")
 	if err != nil {
 		t.Fatalf("GetObject failed: %v", err)
 	}
@@ -168,22 +169,22 @@ func TestGetObjectPrefersSHAIdentityOverCollidingPhysicalID(t *testing.T) {
 }
 
 func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
-	database := &readObjectStore{}
+	database := &objectTestStore{}
 	checksum := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	firstResource := "/organization/org/project/first"
 	secondResource := "/organization/org/project/second"
 	created := drsISOTime("2026-01-01T00:00:00Z")
-	for _, obj := range []objects.Record{
-		{Id: "bulk-a", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{firstResource}},
-		{Id: "bulk-b", CreatedTime: created, Checksums: []objects.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{secondResource}},
+	for _, obj := range []drs.DrsObject{
+		{Id: "bulk-a", CreatedTime: created, Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{firstResource}},
+		{Id: "bulk-b", CreatedTime: created, Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}, ControlledAccess: &[]string{secondResource}},
 	} {
-		if err := database.CreateObject(context.Background(), &obj); err != nil {
-			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
+		if err := database.RegisterObjects(context.Background(), []drs.DrsObject{obj}); err != nil {
+			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
 
 	ctx := buildLocalAuthzContext(map[string]map[string]bool{firstResource: {"read": true}})
-	service := newTestService(database)
+	service := objects.NewService(database)
 	got, err := service.GetBulkObjects(ctx, []string{"bulk-b"}, "read")
 	if err != nil {
 		t.Fatalf("GetBulkObjects failed: %v", err)
@@ -193,31 +194,31 @@ func TestGetBulkObjectsUsesGlobalSHAIdentity(t *testing.T) {
 	}
 }
 
-func TestListObjectIDsPageByChecksum_ReturnsCanonicalObjectID(t *testing.T) {
+func TestListRecordsChecksumIdentityAndCursor(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database)
+	om := objects.NewService(database)
 	checksum := "1111111111111111111111111111111111111111111111111111111111111111"
 
 	registerScopedCandidate(t, om, "chk-a", checksum, "org1", "proj1")
 	registerScopedCandidate(t, om, "chk-b", checksum, "org1", "proj2")
 	registerScopedCandidate(t, om, "chk-c", checksum, "org2", "proj1")
 
-	ids, err := om.ListObjectIDsPageByChecksum(context.Background(), checksum, "sha256", "", "", "read", "", 2, 0)
+	ids, err := om.ListRecords(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", Limit: 2})
 	if err != nil {
-		t.Fatalf("ListObjectIDsPageByChecksum error: %v", err)
+		t.Fatalf("ListRecords checksum error: %v", err)
 	}
-	if len(ids) != 1 || ids[0] != "chk-a" {
+	if len(ids) != 1 || ids[0].Id != "chk-a" {
 		t.Fatalf("unexpected page ids: %+v", ids)
 	}
-	ids, err = om.ListObjectIDsPageByChecksum(context.Background(), checksum, "sha256", "", "", "read", "chk-a", 2, 0)
+	ids, err = om.ListRecords(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", StartAfter: "chk-a", Limit: 2})
 	if err != nil || len(ids) != 0 {
 		t.Fatalf("aliases appeared after the canonical pagination cursor: ids=%v err=%v", ids, err)
 	}
 }
 
-func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
+func TestListRecords_UsesTypedScopeAndPagePolicy(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	service := newTestService(database)
+	service := objects.NewService(database)
 	registerScopedCandidate(t, service, "prepared-a", "7777777777777777777777777777777777777777777777777777777777777777", "org", "proj")
 	registerScopedCandidate(t, service, "prepared-b", "8888888888888888888888888888888888888888888888888888888888888888", "org", "proj")
 
@@ -225,14 +226,14 @@ func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewScope failed: %v", err)
 	}
-	page, err := service.ListPreparedPage(context.Background(), objects.RecordListQuery{
+	page, err := service.ListRecords(context.Background(), objects.RecordListQuery{
 		Scope:          scope,
 		Limit:          1,
 		Page:           1,
 		RequiredMethod: "read",
 	})
 	if err != nil {
-		t.Fatalf("ListPreparedPage failed: %v", err)
+		t.Fatalf("ListRecords failed: %v", err)
 	}
 	if len(page) != 1 || page[0].Id != "prepared-b" {
 		t.Fatalf("unexpected typed page: %+v", page)
@@ -241,7 +242,7 @@ func TestListPreparedPage_UsesTypedScopeAndPagePolicy(t *testing.T) {
 
 func TestLookupChecksumQueries_PreservesInputOrderAndDuplicates(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	service := newTestService(database)
+	service := objects.NewService(database)
 	checksum := "9999999999999999999999999999999999999999999999999999999999999999"
 	registerScopedCandidate(t, service, "checksum-a", checksum, "org", "proj")
 
@@ -258,11 +259,11 @@ func TestLookupChecksumQueries_PreservesInputOrderAndDuplicates(t *testing.T) {
 		t.Fatalf("match count = %d, want %d", len(matches), len(queries))
 	}
 	for i := 0; i < 2; i++ {
-		if matches[i].Query != queries[i] || len(matches[i].Records) != 1 || matches[i].Records[0].Id != "checksum-a" {
+		if len(matches[i]) != 1 || matches[i][0].Id != "checksum-a" {
 			t.Fatalf("duplicate query %d mismatch: %+v", i, matches[i])
 		}
 	}
-	if matches[2].Query != queries[2] || len(matches[2].Records) != 0 {
+	if len(matches[2]) != 0 {
 		t.Fatalf("typed mismatch should be empty: %+v", matches[2])
 	}
 }
@@ -280,9 +281,9 @@ func TestNewScope_RejectsProjectWithoutOrganization(t *testing.T) {
 	}
 }
 
-func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
+func TestListRecordsScopeAndCursor(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database)
+	om := objects.NewService(database)
 	checksumA := "2222222222222222222222222222222222222222222222222222222222222222"
 	checksumB := "3333333333333333333333333333333333333333333333333333333333333333"
 
@@ -290,27 +291,27 @@ func TestListObjectIDsPageByScope_StartAfterAndScopeFilter(t *testing.T) {
 	registerScopedCandidate(t, om, "scope-b", checksumB, "org1", "proj1")
 	registerScopedCandidate(t, om, "scope-c", "4444444444444444444444444444444444444444444444444444444444444444", "org1", "proj2")
 
-	ids, err := om.ListObjectIDsPageByScope(context.Background(), "org1", "proj1", "read", "scope-a", 10, 0)
+	ids, err := om.ListRecords(context.Background(), objects.RecordListQuery{Scope: objects.Scope{Organization: "org1", Project: "proj1"}, RequiredMethod: "read", StartAfter: "scope-a", Limit: 10})
 	if err != nil {
-		t.Fatalf("ListObjectIDsPageByScope error: %v", err)
+		t.Fatalf("ListRecords scope error: %v", err)
 	}
-	if len(ids) != 1 || ids[0] != "scope-b" {
+	if len(ids) != 1 || ids[0].Id != "scope-b" {
 		t.Fatalf("unexpected scoped page ids: %+v", ids)
 	}
 }
 
-func TestListObjectIDsPageByScope_FallsBackWhenAuthzRestrictsResources(t *testing.T) {
+func TestListRecordsFiltersUnauthorizedScopes(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database)
+	om := objects.NewService(database)
 
 	registerScopedCandidate(t, om, "secure-obj", "5555555555555555555555555555555555555555555555555555555555555555", "secure", "p1")
 	restrictedCtx := buildLocalAuthzContext(map[string]map[string]bool{
 		"/organization/other/project/p2": {"read": true},
 	})
 
-	ids, err := om.ListObjectIDsPageByScope(restrictedCtx, "secure", "p1", "read", "", 10, 0)
+	ids, err := om.ListRecords(restrictedCtx, objects.RecordListQuery{Scope: objects.Scope{Organization: "secure", Project: "p1"}, RequiredMethod: "read", Limit: 10})
 	if err != nil {
-		t.Fatalf("ListObjectIDsPageByScope error: %v", err)
+		t.Fatalf("ListRecords scope error: %v", err)
 	}
 	if len(ids) != 0 {
 		t.Fatalf("expected authz fallback to filter ids, got %+v", ids)
@@ -319,7 +320,7 @@ func TestListObjectIDsPageByScope_FallsBackWhenAuthzRestrictsResources(t *testin
 
 func TestListObjectIDsByScope_AuthzFiltering(t *testing.T) {
 	database := newSQLiteDatabase(t)
-	om := newTestService(database)
+	om := objects.NewService(database)
 	checksum := "5555555555555555555555555555555555555555555555555555555555555555"
 
 	registerScopedCandidate(t, om, "secure-obj", checksum, "secure", "p1")
@@ -347,174 +348,53 @@ func TestListObjectIDsByScope_AuthzFiltering(t *testing.T) {
 	}
 }
 
-func TestPrepareScopedObjects_HydratesOnlyMissingSiblingIDs(t *testing.T) {
+func TestListRecordsPreservesLegacySiblingMethods(t *testing.T) {
 	checksum := "6666666666666666666666666666666666666666666666666666666666666666"
 	controlled := []string{"/organization/org/project/proj"}
-	tracked := &readObjectStore{}
-	for _, obj := range []objects.Record{
+	tracked := &objectTestStore{}
+	for _, obj := range []drs.DrsObject{
 		{
 			Id:               "dup-a",
 			CreatedTime:      drsISOTime("2026-01-01T00:00:00Z"),
 			UpdatedTime:      ptrTime("2026-01-01T00:00:00Z"),
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &controlled,
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/dup-a"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/dup-a"},
 			}},
 		},
 		{
 			Id:               "dup-b",
 			CreatedTime:      drsISOTime("2026-01-02T00:00:00Z"),
 			UpdatedTime:      ptrTime("2026-01-02T00:00:00Z"),
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: checksum}},
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 			ControlledAccess: &controlled,
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/dup-b"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/dup-b"},
 			}},
 		},
 	} {
-		if err := tracked.CreateObject(context.Background(), &obj); err != nil {
-			t.Fatalf("CreateObject(%s) failed: %v", obj.Id, err)
+		if err := tracked.RegisterObjects(context.Background(), []drs.DrsObject{obj}); err != nil {
+			t.Fatalf("RegisterObjects(%s) failed: %v", obj.Id, err)
 		}
 	}
-	om := newTestService(tracked)
+	om := objects.NewService(tracked)
 
-	initial, err := tracked.GetBulkObjects(context.Background(), []string{"dup-a"})
+	prepared, err := om.ListRecords(context.Background(), objects.RecordListQuery{
+		Scope:    objects.Scope{Organization: "org", Project: "proj"},
+		Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum},
+		Limit:    1,
+	})
 	if err != nil {
-		t.Fatalf("GetBulkObjects failed: %v", err)
-	}
-	prepared, err := om.PrepareScopedObjects(context.Background(), initial, "org", "proj", "")
-	if err != nil {
-		t.Fatalf("PrepareScopedObjects failed: %v", err)
+		t.Fatalf("ListRecords failed: %v", err)
 	}
 	if len(prepared) != 1 {
 		t.Fatalf("expected 1 canonical record, got %d", len(prepared))
 	}
 	if prepared[0].AccessMethods == nil || len(*prepared[0].AccessMethods) != 2 {
 		t.Fatalf("expected merged access methods, got %+v", prepared[0].AccessMethods)
-	}
-}
-
-type projectRecordAuditStore struct {
-	objects.ObjectStore
-	records []objects.Record
-	events  *[]string
-}
-
-func (s *projectRecordAuditStore) ListObjectIDsByScope(context.Context, string, string) ([]string, error) {
-	if s.events != nil {
-		*s.events = append(*s.events, "list")
-	}
-	ids := make([]string, 0, len(s.records))
-	for _, record := range s.records {
-		ids = append(ids, string(record.Id))
-	}
-	return ids, nil
-}
-
-func (s *projectRecordAuditStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	byID := make(map[string]objects.Record, len(s.records))
-	for _, record := range s.records {
-		byID[string(record.Id)] = record
-	}
-	result := make([]objects.Record, 0, len(ids))
-	for _, id := range ids {
-		if record, ok := byID[id]; ok {
-			result = append(result, record)
-		}
-	}
-	return result, nil
-}
-
-type projectRecordAuditPrefixResolver struct {
-	resolved string
-	events   *[]string
-}
-
-func (r projectRecordAuditPrefixResolver) ResolvePathPrefix(context.Context, string, string, string) (string, error) {
-	if r.events != nil {
-		*r.events = append(*r.events, "resolve")
-	}
-	return r.resolved, nil
-}
-
-func TestAuditProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *testing.T) {
-	first := objects.Record{
-		Id:        "one",
-		Checksums: []objects.Checksum{{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
-		AccessMethods: &[]objects.AccessMethod{{
-			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
-		}},
-	}
-	duplicate := first
-	duplicate.Id = "two"
-	falsePrefix := objects.Record{
-		Id:        "three",
-		Checksums: []objects.Checksum{{Type: "sha256", Checksum: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
-		AccessMethods: &[]objects.AccessMethod{{
-			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIGURATION/file"},
-		}},
-	}
-	missingChecksum := objects.Record{Id: "four", AccessMethods: first.AccessMethods}
-	events := []string{}
-	service := objects.NewService(
-		&projectRecordAuditStore{records: []objects.Record{first, duplicate, falsePrefix, missingChecksum}, events: &events},
-		projectRecordAuditPrefixResolver{resolved: "prefix/project/CONFIG", events: &events},
-	)
-
-	result, err := service.AuditProjectRecords(context.Background(), objects.ProjectRecordAuditQuery{
-		Organization: " org ",
-		Project:      " project ",
-		PathPrefix:   " /CONFIG/ ",
-	})
-	if err != nil {
-		t.Fatalf("AuditProjectRecords() error = %v", err)
-	}
-	if len(result) != 2 || result[0].Id != "one" || result[1].Id != "two" {
-		t.Fatalf("audit records = %+v", result)
-	}
-	if len(*result[0].AccessMethods) != 1 || result[0].Checksums[0].Checksum != first.Checksums[0].Checksum {
-		t.Fatalf("audit record = %+v", result[0])
-	}
-	if len(events) != 2 || events[0] != "list" || events[1] != "resolve" {
-		t.Fatalf("audit operation order = %v, want list then resolve", events)
-	}
-}
-
-func TestAuditProjectRecordsSkipsPhysicalResolutionWithoutProjectRead(t *testing.T) {
-	projectResource := "/organization/org/project/project"
-	otherResource := "/organization/org/project/other"
-	record := objects.Record{
-		Id:               "visible-via-other",
-		ControlledAccess: &[]string{projectResource, otherResource},
-		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
-		AccessMethods: &[]objects.AccessMethod{{
-			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/prefix/project/CONFIG/file"},
-		}},
-	}
-	events := []string{}
-	service := objects.NewService(
-		&projectRecordAuditStore{records: []objects.Record{record}, events: &events},
-		projectRecordAuditPrefixResolver{resolved: "prefix/project/CONFIG", events: &events},
-	)
-
-	result, err := service.AuditProjectRecords(
-		buildLocalAuthzContext(map[string]map[string]bool{otherResource: {"read": true}}),
-		objects.ProjectRecordAuditQuery{Organization: "org", Project: "project", PathPrefix: "CONFIG"},
-	)
-	if err != nil {
-		t.Fatalf("AuditProjectRecords() error = %v", err)
-	}
-	if len(result) != 0 {
-		t.Fatalf("audit records = %+v, want no records without project-scope read", result)
-	}
-	if len(events) != 1 || events[0] != "list" {
-		t.Fatalf("audit operation order = %v, want list only", events)
 	}
 }
 

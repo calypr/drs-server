@@ -45,10 +45,6 @@ func (s *bucketServer) DeleteProjectData(c fiber.Ctx, organization, projectID st
 	return s.projectCleanupHandler(c)
 }
 
-func bucketPointer[T any](value T) *T {
-	return &value
-}
-
 func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return HandleError(c, errorapi.ErrAuthenticationRequired)
@@ -62,10 +58,10 @@ func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
 	for _, entry := range visible {
 		cred := entry.Credential
 		meta := bucketapi.BucketMetadata{
-			Bucket:      bucketPointer(cred.Bucket),
-			EndpointUrl: bucketPointer(cred.Endpoint),
-			Provider:    bucketPointer(cred.Provider),
-			Region:      bucketPointer(cred.Region),
+			Bucket:      valuePointer(cred.Bucket),
+			EndpointUrl: valuePointer(cred.Endpoint),
+			Provider:    valuePointer(cred.Provider),
+			Region:      valuePointer(cred.Region),
 		}
 		if len(entry.Programs) > 0 {
 			programs := append([]string(nil), entry.Programs...)

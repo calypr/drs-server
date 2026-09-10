@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -16,85 +15,45 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type metricsQueryContextKey struct{}
-
-type metricsQueryParams struct {
-	organization string
-	program      string
-	project      string
-}
-
 type metricsServer struct {
 	reporter usage.Reporter
 	ingestor usage.ProviderEventRecorder
 }
 
-func newMetricsServer(reporter usage.Reporter, ingestor usage.ProviderEventRecorder) *metricsServer {
-	return &metricsServer{
-		reporter: reporter,
-		ingestor: ingestor,
-	}
-}
-
 func registerMetricsRoutes(router fiber.Router, reporter usage.Reporter, ingestor usage.ProviderEventRecorder) {
 	router.Use(func(c fiber.Ctx) error {
-		params := metricsQueryParams{
-			organization: strings.TrimSpace(c.Query("organization")),
-			program:      strings.TrimSpace(c.Query("program")),
-			project:      strings.TrimSpace(c.Query("project")),
+		if strings.TrimSpace(c.Query("organization")) == "" {
+			if program := strings.TrimSpace(c.Query("program")); program != "" {
+				query := c.Request().URI().QueryArgs()
+				query.Set("organization", program)
+				c.Request().URI().SetQueryString(query.String())
+			}
 		}
-		c.SetContext(context.WithValue(c.Context(), metricsQueryContextKey{}, params))
 		return c.Next()
 	})
 
-	server := newMetricsServer(reporter, ingestor)
+	server := &metricsServer{reporter: reporter, ingestor: ingestor}
 	strict := metricsapi.NewStrictHandler(server, nil)
 	metricsapi.RegisterHandlers(router, strict)
 }
 
-func (s *metricsServer) checkAuth(ctx context.Context) (metricsAccess, int, bool) {
-	organization, project, err := parseScopeQuery(ctx)
-	if err != nil {
-		return metricsAccess{}, http.StatusBadRequest, false
+func (s *metricsServer) checkAuth(ctx context.Context, organization, project string) (usage.ScopeQuery, int, bool) {
+	organization = strings.TrimSpace(organization)
+	project = strings.TrimSpace(project)
+	if project != "" && organization == "" {
+		return usage.ScopeQuery{}, http.StatusBadRequest, false
 	}
 	if access.IsAuthzEnforced(ctx) && access.MissingGen3AuthHeader(ctx) {
-		return metricsAccess{}, http.StatusUnauthorized, false
+		return usage.ScopeQuery{}, http.StatusUnauthorized, false
 	}
 	scope, err := usage.ResolveMetricsScope(ctx, usage.ScopeSelection{
 		Organization: organization,
 		Project:      project,
 	})
 	if err != nil {
-		return metricsAccess{}, http.StatusForbidden, false
+		return usage.ScopeQuery{}, http.StatusForbidden, false
 	}
-	return metricsAccess{scope: scope}, 0, true
-}
-
-// metricsAccess is the HTTP response/status projection of an authorized
-// usage scope. Authorization and scope construction live in usage.
-type metricsAccess struct {
-	scope usage.ScopeQuery
-}
-
-func (a metricsAccess) isScoped() bool {
-	return strings.TrimSpace(a.scope.Organization) != ""
-}
-
-func (a metricsAccess) hasScopeAggregate() bool {
-	return !a.isScoped() && len(a.scope.Scopes) > 0
-}
-
-func parseScopeQuery(ctx context.Context) (string, string, error) {
-	params, _ := ctx.Value(metricsQueryContextKey{}).(metricsQueryParams)
-	organization := strings.TrimSpace(params.organization)
-	if organization == "" {
-		organization = strings.TrimSpace(params.program)
-	}
-	project := strings.TrimSpace(params.project)
-	if project != "" && organization == "" {
-		return "", "", fmt.Errorf("organization is required when project is set")
-	}
-	return organization, project, nil
+	return scope, 0, true
 }
 
 func metricsAPIError(ctx context.Context, status int) metricsapi.APIError {
@@ -131,7 +90,7 @@ func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 		return metricsapi.ListMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
@@ -144,7 +103,7 @@ func (s *metricsServer) ListMetricsFiles(ctx context.Context, request metricsapi
 	}
 
 	data, err := s.reporter.ListFileUsage(ctx, usage.FileUsageQuery{
-		Scope:         access.scope,
+		Scope:         scope,
 		Limit:         limit,
 		Offset:        offset,
 		InactiveSince: inactiveSince,
@@ -179,7 +138,7 @@ func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 		return metricsapi.BulkMetricsFiles400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
@@ -192,7 +151,7 @@ func (s *metricsServer) BulkMetricsFiles(ctx context.Context, request metricsapi
 	}
 
 	data, err := s.reporter.ListFileUsageBatch(ctx, usage.FileUsageBatchQuery{
-		Scope:         access.scope,
+		Scope:         scope,
 		ObjectIDs:     request.Body.ObjectIds,
 		InactiveSince: inactiveSince,
 	})
@@ -210,7 +169,7 @@ func (s *metricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 		return metricsapi.GetMetricsFile400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
@@ -222,11 +181,11 @@ func (s *metricsServer) GetMetricsFile(ctx context.Context, request metricsapi.G
 		}
 	}
 
-	var fileUsage *usage.FileUsage
+	var fileUsage *metricsapi.FileUsage
 	var err error
-	scoped := access.isScoped() || access.hasScopeAggregate()
+	scoped := strings.TrimSpace(scope.Organization) != "" || len(scope.Scopes) > 0
 	if scoped {
-		fileUsage, err = s.reporter.GetScopedFileUsage(ctx, objectID, access.scope)
+		fileUsage, err = s.reporter.GetScopedFileUsage(ctx, objectID, scope)
 	} else {
 		fileUsage, err = s.reporter.GetFileUsage(ctx, objectID)
 	}
@@ -246,7 +205,7 @@ func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 		return metricsapi.GetMetricsSummary400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
 
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		switch statusCode {
 		case http.StatusUnauthorized:
@@ -259,7 +218,7 @@ func (s *metricsServer) GetMetricsSummary(ctx context.Context, request metricsap
 	}
 
 	summary, err := s.reporter.GetFileUsageSummary(ctx, usage.FileUsageSummaryQuery{
-		Scope:         access.scope,
+		Scope:         scope,
 		InactiveSince: inactiveSince,
 	})
 	if err != nil {
@@ -277,9 +236,9 @@ func (s *metricsServer) RecordProviderTransferEvents(ctx context.Context, reques
 	if request.Body == nil || len(request.Body.Events) == 0 {
 		return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 	}
-	events := make([]usage.ProviderEvent, 0, len(request.Body.Events))
+	events := make([]metricsapi.ProviderTransferEvent, 0, len(request.Body.Events))
 	for _, item := range request.Body.Events {
-		ev, err := providerTransferGeneratedEventToUsage(item)
+		ev, err := usage.NormalizeProviderEvent(item)
 		if err != nil {
 			return metricsapi.RecordProviderTransferEvents400JSONResponse(metricsAPIError(ctx, http.StatusBadRequest)), nil
 		}
@@ -314,53 +273,6 @@ func checkProviderMetricsIngestAuth(ctx context.Context, body *metricsapi.Record
 	return 0, true
 }
 
-func providerTransferGeneratedEventToUsage(item metricsapi.ProviderTransferEvent) (usage.ProviderEvent, error) {
-	when := time.Time{}
-	if item.EventTime != nil {
-		when = *item.EventTime
-	}
-	objectSize := int64(0)
-	if item.ObjectSize != nil {
-		objectSize = *item.ObjectSize
-	}
-	httpStatus := 0
-	if item.HttpStatus != nil {
-		httpStatus = *item.HttpStatus
-	}
-	event := usage.ProviderEvent{
-		ProviderEventID:      item.ProviderEventId,
-		AccessGrantID:        generatedString(item.AccessGrantId),
-		Direction:            string(item.Direction),
-		EventTime:            when,
-		RequestID:            generatedString(item.RequestId),
-		ProviderRequestID:    generatedString(item.ProviderRequestId),
-		ObjectID:             generatedString(item.ObjectId),
-		SHA256:               generatedString(item.Sha256),
-		ObjectSize:           objectSize,
-		Organization:         generatedString(item.Organization),
-		Project:              generatedString(item.Project),
-		AccessID:             generatedString(item.AccessId),
-		Provider:             item.Provider,
-		Bucket:               item.Bucket,
-		ObjectKey:            generatedString(item.ObjectKey),
-		StorageURL:           generatedString(item.StorageUrl),
-		RangeStart:           item.RangeStart,
-		RangeEnd:             item.RangeEnd,
-		BytesTransferred:     item.BytesTransferred,
-		HTTPMethod:           generatedString(item.HttpMethod),
-		HTTPStatus:           httpStatus,
-		RequesterPrincipal:   generatedString(item.RequesterPrincipal),
-		SourceIP:             generatedString(item.SourceIp),
-		UserAgent:            generatedString(item.UserAgent),
-		RawEventRef:          generatedString(item.RawEventRef),
-		ActorEmail:           generatedString(item.ActorEmail),
-		ActorSubject:         generatedString(item.ActorSubject),
-		AuthMode:             generatedString(item.AuthMode),
-		ReconciliationStatus: generatedString(item.ReconciliationStatus),
-	}
-	return usage.NormalizeProviderEvent(event)
-}
-
 func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode int) metricsapi.RecordProviderTransferEventsResponseObject {
 	switch statusCode {
 	case http.StatusUnauthorized:
@@ -373,18 +285,18 @@ func recordProviderTransferEventsAuthResponse(ctx context.Context, statusCode in
 }
 
 func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsapi.GetTransferSummaryRequestObject) (metricsapi.GetTransferSummaryResponseObject, error) {
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		return getTransferSummaryAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferSummaryParamsToFilter(request.Params)
-	freshness, err := s.transferFreshness(ctx, filter)
+	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 	summary, err := s.reporter.GetTransferAttributionSummary(ctx, usage.TransferSummaryQuery{
 		Filter: filter,
-		Scope:  access.scope,
+		Scope:  scope,
 	})
 	if err != nil {
 		return nil, err
@@ -395,12 +307,12 @@ func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsa
 }
 
 func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metricsapi.GetTransferBreakdownRequestObject) (metricsapi.GetTransferBreakdownResponseObject, error) {
-	access, statusCode, ok := s.checkAuth(ctx)
+	scope, statusCode, ok := s.checkAuth(ctx, generatedString(request.Params.Organization), generatedString(request.Params.Project))
 	if !ok {
 		return getTransferBreakdownAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferBreakdownParamsToFilter(request.Params)
-	freshness, err := s.transferFreshness(ctx, filter)
+	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +328,7 @@ func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metric
 	items, err := s.reporter.GetTransferAttributionBreakdown(ctx, usage.TransferBreakdownQuery{
 		Filter:  filter,
 		GroupBy: groupBy,
-		Scope:   access.scope,
+		Scope:   scope,
 	})
 	if err != nil {
 		return nil, err
@@ -481,25 +393,10 @@ func transferBreakdownParamsToFilter(params metricsapi.GetTransferBreakdownParam
 	}
 }
 
-func generatedString[T ~string](v *T) string {
-	if v == nil {
-		return ""
-	}
-	return string(*v)
-}
-
 func generatedTime(v *time.Time) *time.Time {
 	if v == nil {
 		return nil
 	}
 	t := v.UTC()
 	return &t
-}
-
-func (s *metricsServer) transferFreshness(ctx context.Context, filter usage.Filter) (metricsapi.TransferMetricsFreshness, error) {
-	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
-	if err != nil {
-		return metricsapi.TransferMetricsFreshness{}, err
-	}
-	return freshness, nil
 }

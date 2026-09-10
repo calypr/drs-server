@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 
@@ -33,7 +34,7 @@ func (db *Store) ResolveObjectAlias(ctx context.Context, aliasID string) (string
 	return canonicalID, nil
 }
 
-func (db *Store) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Record, error) {
+func (db *Store) GetBulkObjects(ctx context.Context, ids []string) ([]drs.DrsObject, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -41,7 +42,7 @@ func (db *Store) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Re
 	if err != nil {
 		return nil, err
 	}
-	objects := make([]objects.Record, 0, len(ids))
+	objects := make([]drs.DrsObject, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		obj, ok := objectsByID[id]
@@ -63,16 +64,16 @@ func (db *Store) GetBulkObjects(ctx context.Context, ids []string) ([]objects.Re
 		if !ok || obj == nil {
 			continue
 		}
-		if _, already := seen[string(obj.Id)]; already {
+		if _, already := seen[obj.Id]; already {
 			continue
 		}
-		seen[string(obj.Id)] = struct{}{}
+		seen[obj.Id] = struct{}{}
 		objects = append(objects, *obj)
 	}
 	return objects, nil
 }
 
-func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
+func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]drs.DrsObject, error) {
 	if len(checksums) == 0 {
 		return nil, nil
 	}
@@ -80,9 +81,9 @@ func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) 
 	if err != nil {
 		return nil, err
 	}
-	index := make(map[string][]objects.Record, len(objectsByID)*2)
+	index := make(map[string][]drs.DrsObject, len(objectsByID)*2)
 	for _, obj := range objectsByID {
-		index[string(obj.Id)] = append(index[string(obj.Id)], *obj)
+		index[obj.Id] = append(index[obj.Id], *obj)
 		for _, cs := range obj.Checksums {
 			value := strings.TrimSpace(cs.Checksum)
 			if value == "" {
@@ -96,7 +97,7 @@ func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) 
 			}
 		}
 	}
-	result := make(map[string][]objects.Record, len(checksums))
+	result := make(map[string][]drs.DrsObject, len(checksums))
 	for _, cs := range checksums {
 		requested := strings.TrimSpace(cs)
 		if requested == "" {
@@ -341,133 +342,6 @@ func (db *Store) ListObjectIDsPageByScope(ctx context.Context, organization, pro
 	return scanObjectIDs(rows)
 }
 
-func (db *Store) ListObjectIDsByScopeAndResources(ctx context.Context, organization, project string, resources []string, restrictToResources bool) ([]string, error) {
-	organization = strings.TrimSpace(organization)
-	project = strings.TrimSpace(project)
-	if organization == "" {
-		if !restrictToResources {
-			rows, err := db.queryContext(ctx, `SELECT id FROM drs_object ORDER BY id`)
-			if err != nil {
-				return nil, err
-			}
-			defer rows.Close()
-			return scanObjectIDs(rows)
-		}
-		return db.ListObjectIDsByResources(ctx, resources, false)
-	}
-
-	scopeCondition, scopeArgs, err := scopeResourceCondition("ca_scope.resource", organization, project)
-	if err != nil {
-		return nil, err
-	}
-	args := make([]any, 0, len(resources)+1)
-	args = append(args, scopeArgs...)
-	query := `
-		SELECT DISTINCT o.id
-		FROM drs_object o
-		WHERE EXISTS (
-			SELECT 1
-			FROM drs_object_controlled_access ca_scope
-		WHERE ca_scope.object_id = o.id AND ` + scopeCondition + `
-		)`
-	if restrictToResources {
-		resources = clientaccess.NormalizeAccessResources(resources)
-		if len(resources) == 0 {
-			return []string{}, nil
-		}
-		placeholders := make([]string, 0, len(resources))
-		for _, resource := range resources {
-			args = append(args, resource)
-			placeholders = append(placeholders, "?")
-		}
-		query += `
-		AND EXISTS (
-			SELECT 1
-			FROM drs_object_controlled_access ca_auth
-			WHERE ca_auth.object_id = o.id AND ca_auth.resource IN (` + strings.Join(placeholders, ",") + `)
-		)`
-	}
-	query += ` ORDER BY o.id`
-	rows, err := db.queryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanObjectIDs(rows)
-}
-
-func (db *Store) ListObjectIDsByChecksumsAndResources(ctx context.Context, checksums []string, resources []string, includeUnscoped, restrictToResources bool) (map[string][]string, error) {
-	normalized := make([]string, 0, len(checksums))
-	for _, checksum := range checksums {
-		if trimmed := strings.TrimSpace(checksum); trimmed != "" {
-			normalized = append(normalized, trimmed)
-		}
-	}
-	checksums = normalized
-	if len(checksums) == 0 {
-		return map[string][]string{}, nil
-	}
-
-	args := make([]any, 0, len(checksums)*2+len(resources))
-	idPlaceholders := make([]string, 0, len(checksums))
-	checksumPlaceholders := make([]string, 0, len(checksums))
-	for _, checksum := range checksums {
-		args = append(args, checksum)
-		idPlaceholders = append(idPlaceholders, "?")
-	}
-	for _, checksum := range checksums {
-		args = append(args, checksum)
-		checksumPlaceholders = append(checksumPlaceholders, "?")
-	}
-	query := `
-		WITH matched AS (
-			SELECT id AS object_id, id AS match_key
-			FROM drs_object
-			WHERE id IN (` + strings.Join(idPlaceholders, ",") + `)
-			UNION
-			SELECT c.object_id, c.checksum AS match_key
-			FROM drs_object_checksum c
-			WHERE replace(lower(trim(c.checksum)), 'sha256:', '') IN (` + strings.Join(checksumPlaceholders, ",") + `)
-		)
-		SELECT m.match_key, m.object_id
-		FROM matched m
-		INNER JOIN drs_object o ON o.id = m.object_id`
-	if restrictToResources {
-		resources = clientaccess.NormalizeAccessResources(resources)
-		if len(resources) == 0 && !includeUnscoped {
-			return map[string][]string{}, nil
-		}
-		parts := make([]string, 0, 2)
-		if len(resources) > 0 {
-			placeholders := make([]string, 0, len(resources))
-			for _, resource := range resources {
-				args = append(args, resource)
-				placeholders = append(placeholders, "?")
-			}
-			parts = append(parts, `EXISTS (
-				SELECT 1
-				FROM drs_object_controlled_access ca_auth
-				WHERE ca_auth.object_id = o.id AND ca_auth.resource IN (`+strings.Join(placeholders, ",")+`)
-			)`)
-		}
-		if includeUnscoped {
-			parts = append(parts, `NOT EXISTS (
-				SELECT 1
-				FROM drs_object_controlled_access ca_auth
-				WHERE ca_auth.object_id = o.id
-			)`)
-		}
-		query += ` WHERE (` + strings.Join(parts, " OR ") + `)`
-	}
-	query += ` ORDER BY m.match_key, m.object_id`
-	rows, err := db.queryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanChecksumMatchRows(rows)
-}
-
 func (db *Store) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
 	objectURL = strings.TrimSpace(objectURL)
 	organization = strings.TrimSpace(organization)
@@ -545,25 +419,6 @@ func (db *Store) ListObjectIDsPageByURL(ctx context.Context, objectURL, organiza
 	return scanObjectIDs(rows)
 }
 
-func (db *Store) GetObjectsByChecksum(ctx context.Context, checksum string) ([]objects.Record, error) {
-	checksum = strings.TrimSpace(checksum)
-	if checksum == "" {
-		return []objects.Record{}, nil
-	}
-	objectsByID, err := db.fetchObjectsByIDsOrChecksums(ctx, nil, []string{checksum})
-	if err != nil {
-		return nil, err
-	}
-	if len(objectsByID) == 0 {
-		return []objects.Record{}, nil
-	}
-	out := make([]objects.Record, 0, len(objectsByID))
-	for _, obj := range objectsByID {
-		out = append(out, *obj)
-	}
-	return uniqueObjectsByID(out), nil
-}
-
 func scopeResourceCondition(column, organization, project string) (string, []any, error) {
 	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
@@ -593,23 +448,4 @@ func scanObjectIDs(rows *sql.Rows) ([]string, error) {
 		return nil, err
 	}
 	return ids, nil
-}
-
-func scanChecksumMatchRows(rows *sql.Rows) (map[string][]string, error) {
-	out := make(map[string][]string)
-	for rows.Next() {
-		var checksum, objectID string
-		if err := rows.Scan(&checksum, &objectID); err != nil {
-			return nil, err
-		}
-		ids := out[checksum]
-		if len(ids) > 0 && ids[len(ids)-1] == objectID {
-			continue
-		}
-		out[checksum] = append(ids, objectID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
 }

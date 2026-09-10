@@ -29,12 +29,9 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 			name := "object.bin"
 			accessID := "acc-1"
 			accessMethods := []drsapi.AccessMethod{{
-				AccessId: &accessID,
-				AccessUrl: &struct {
-					Headers *[]string `json:"headers,omitempty"`
-					Url     string    `json:"url"`
-				}{Url: "https://signed.example/object.bin"},
-				Type: drsapi.AccessMethodType("https"),
+				AccessId:  &accessID,
+				AccessUrl: &drsapi.AccessURL{Url: "https://signed.example/object.bin"},
+				Type:      drsapi.AccessMethodType("https"),
 			}}
 			writeJSON(t, w, http.StatusOK, drsapi.DrsObject{Id: "obj-1", Name: &name, Size: 99, Checksums: []drsapi.Checksum{{Type: "sha256", Checksum: "abc"}}, CreatedTime: time.Now(), AccessMethods: &accessMethods})
 		case r.Method == http.MethodGet && r.URL.Path == "/objects/no-access":
@@ -214,12 +211,9 @@ func TestDRSServiceResolveAndList(t *testing.T) {
 	}
 	updatedAccessID := "acc-2"
 	updated, err := service.UpdateObjectAccessMethods(ctx, "obj-1", []drsapi.AccessMethod{{
-		AccessId: &updatedAccessID,
-		Type:     drsapi.AccessMethodType("https"),
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "https://signed.example/updated.bin"},
+		AccessId:  &updatedAccessID,
+		Type:      drsapi.AccessMethodType("https"),
+		AccessUrl: &drsapi.AccessURL{Url: "https://signed.example/updated.bin"},
 	}})
 	if err != nil || updated.AccessMethods == nil || len(*updated.AccessMethods) != 1 || (*updated.AccessMethods)[0].AccessUrl == nil || (*updated.AccessMethods)[0].AccessUrl.Url != "https://signed.example/updated.bin" {
 		t.Fatalf("UpdateObjectAccessMethods returned updated=%+v err=%v", updated, err)

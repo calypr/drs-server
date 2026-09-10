@@ -4,32 +4,26 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
 )
 
 type lfsPreparationObjectSpy struct {
-	calls      []string
-	object     *objects.Record
-	getErr     error
-	requireErr error
+	calls  []string
+	object *drs.DrsObject
+	getErr error
 }
 
-func (s *lfsPreparationObjectSpy) GetObject(_ context.Context, _, method string) (*objects.Record, error) {
+func (s *lfsPreparationObjectSpy) GetObject(_ context.Context, _, method string) (*drs.DrsObject, error) {
 	s.calls = append(s.calls, "get:"+method)
 	return s.object, s.getErr
 }
 
-func (s *lfsPreparationObjectSpy) RequireObjectResources(_ context.Context, method string, resources []string) error {
-	s.calls = append(s.calls, "require:"+method+":"+strings.Join(resources, ","))
-	return s.requireErr
-}
-func (s *lfsPreparationObjectSpy) RegisterObjects(context.Context, []objects.Record) error {
+func (s *lfsPreparationObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) error {
 	return nil
 }
 
@@ -60,7 +54,7 @@ func TestLFSPreparationWorkflowPreservesUploadPreflightAndSizeRules(t *testing.T
 	if result.Existing || result.Size != 0 {
 		t.Fatalf("PrepareUpload() result = %+v", result)
 	}
-	if !reflect.DeepEqual(objectsPort.calls, []string{"get:read", "require:create:/data_file"}) {
+	if !reflect.DeepEqual(objectsPort.calls, []string{"get:read"}) {
 		t.Fatalf("preflight calls = %v", objectsPort.calls)
 	}
 	if credentials.calls != 1 {

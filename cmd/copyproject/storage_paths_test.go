@@ -167,14 +167,8 @@ func TestStoragePathHelpers(t *testing.T) {
 func TestPreferredUploadKey(t *testing.T) {
 	accessMethods := []drsapi.AccessMethod{
 		{AccessUrl: nil},
-		{AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: " "}},
-		{AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://bucket/from-access-method"}},
+		{AccessUrl: &drsapi.AccessURL{Url: " "}},
+		{AccessUrl: &drsapi.AccessURL{Url: "s3://bucket/from-access-method"}},
 	}
 	if got := preferredUploadKey(&accessMethods, " sha256-value ", "name.txt", "/tmp/temp"); got != "sha256-value" {
 		t.Fatalf("checksum upload key = %q", got)

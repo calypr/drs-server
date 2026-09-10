@@ -7,10 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
 )
 
-func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
+func recordPtr[T any](value T) *T { return &value }
+
+func TestMaterializeCandidatePreservesRegistrationContract(t *testing.T) {
 	checksum := strings.Repeat("a", 64)
 	now := time.Unix(123, 0).UTC()
 	name := `/nested/path/object.bin`
@@ -18,25 +21,25 @@ func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
 	controlled := []string{"/organization/org/project/proj"}
 	aliases := []string{"legacy-name", "id:explicit-id"}
 	accessID := "provided"
-	candidate := Candidate{
+	candidate := drs.DrsObjectCandidate{
 		Name:             &name,
-		Size:             &size,
+		Size:             size,
 		Aliases:          &aliases,
-		Checksums:        &[]Checksum{{Type: "sha256", Checksum: checksum}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
 		ControlledAccess: &controlled,
-		AccessMethods: &[]AccessMethod{{
+		AccessMethods: &[]drs.AccessMethod{{
 			AccessId:  &accessID,
 			Type:      "https",
-			AccessUrl: &AccessURL{Url: "https://storage.example/object.bin"},
+			AccessUrl: &drs.AccessURL{Url: "https://storage.example/object.bin"},
 		}, {
 			Type:      "s3",
-			AccessUrl: &AccessURL{Url: "s3://bucket/object.bin"},
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/object.bin"},
 		}},
 	}
 
-	got, err := CandidateToRecord(candidate, now)
+	got, err := MaterializeCandidate(candidate, now)
 	if err != nil {
-		t.Fatalf("CandidateToRecord() error = %v", err)
+		t.Fatalf("MaterializeCandidate() error = %v", err)
 	}
 	if got.Id != "explicit-id" || got.SelfUri != "drs://explicit-id" {
 		t.Fatalf("explicit ID was not preserved: id=%q self=%q", got.Id, got.SelfUri)
@@ -58,22 +61,22 @@ func TestCandidateToRecordPreservesRegistrationContract(t *testing.T) {
 	}
 }
 
-func TestCandidateToRecordUsesDeterministicScopedIDAndDefaultName(t *testing.T) {
+func TestMaterializeCandidateUsesDeterministicScopedIDAndDefaultName(t *testing.T) {
 	checksum := strings.Repeat("b", 64)
 	controlled := []string{"/organization/org/project/proj"}
-	candidate := Candidate{
+	candidate := drs.DrsObjectCandidate{
 		ControlledAccess: &controlled,
-		Checksums:        &[]Checksum{{Type: "sha256", Checksum: checksum}},
-		AccessMethods:    &[]AccessMethod{{Type: "s3", AccessUrl: &AccessURL{Url: "s3://bucket/object"}}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: checksum}},
+		AccessMethods:    &[]drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/object"}}},
 	}
 
-	first, err := CandidateToRecord(candidate, time.Unix(1, 0))
+	first, err := MaterializeCandidate(candidate, time.Unix(1, 0))
 	if err != nil {
-		t.Fatalf("first CandidateToRecord() error = %v", err)
+		t.Fatalf("first MaterializeCandidate() error = %v", err)
 	}
-	second, err := CandidateToRecord(candidate, time.Unix(2, 0))
+	second, err := MaterializeCandidate(candidate, time.Unix(2, 0))
 	if err != nil {
-		t.Fatalf("second CandidateToRecord() error = %v", err)
+		t.Fatalf("second MaterializeCandidate() error = %v", err)
 	}
 	if first.Id == "" || first.Id != second.Id {
 		t.Fatalf("IDs are not deterministic: %q vs %q", first.Id, second.Id)
@@ -83,9 +86,9 @@ func TestCandidateToRecordUsesDeterministicScopedIDAndDefaultName(t *testing.T) 
 	}
 }
 
-func TestCandidateToRecordRejectsMissingAccessMethods(t *testing.T) {
-	checksums := []Checksum{{Type: "sha256", Checksum: strings.Repeat("c", 64)}}
-	if _, err := CandidateToRecord(Candidate{Checksums: &checksums}, time.Unix(0, 0)); err == nil || !strings.Contains(err.Error(), "access method") {
+func TestMaterializeCandidateRejectsMissingAccessMethods(t *testing.T) {
+	checksums := []drs.Checksum{{Type: "sha256", Checksum: strings.Repeat("c", 64)}}
+	if _, err := MaterializeCandidate(drs.DrsObjectCandidate{Checksums: checksums}, time.Unix(0, 0)); err == nil || !strings.Contains(err.Error(), "access method") {
 		t.Fatalf("error = %v, want access-method validation", err)
 	}
 }
@@ -142,14 +145,14 @@ func TestNormalizeRecordAppliesIncomingRecordPolicy(t *testing.T) {
 	controlled := []string{"https://example.test/programs/org/projects/proj", " /organization/org ", ""}
 	valid := strings.Repeat("A", 64)
 	invalid := "not-a-sha256"
-	record := Record{
+	record := drs.DrsObject{
 		Id:               "  did:example:1  ",
 		CreatedTime:      created,
 		UpdatedTime:      &updated,
 		Name:             &name,
-		Checksums:        []Checksum{{Type: "SHA-256", Checksum: "sha256:" + valid}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
+		Checksums:        []drs.Checksum{{Type: "SHA-256", Checksum: "sha256:" + valid}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
 		ControlledAccess: &controlled,
-		NameAliases:      []string{"/primary.txt", `other\alias.txt`, "alias.txt", `other\alias.txt`, ""},
+		NameAliases:      recordPtr([]string{"/primary.txt", `other\alias.txt`, "alias.txt", `other\alias.txt`, ""}),
 	}
 
 	got, err := NormalizeRecord(record, fallback)
@@ -157,21 +160,21 @@ func TestNormalizeRecordAppliesIncomingRecordPolicy(t *testing.T) {
 		t.Fatalf("NormalizeRecord() error = %v", err)
 	}
 	wantControlled := []string{"/organization/org/project/proj", "/organization/org"}
-	want := Record{
+	want := drs.DrsObject{
 		Id:               "did:example:1",
 		CreatedTime:      created,
 		UpdatedTime:      &updated,
 		Name:             objectStringPtr("primary.txt"),
 		Version:          objectStringPtr("1"),
-		Checksums:        []Checksum{{Type: "sha256", Checksum: strings.ToLower(valid)}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: strings.ToLower(valid)}, {Type: "md5", Checksum: "kept"}, {Type: "sha256", Checksum: invalid}},
 		ControlledAccess: &wantControlled,
-		NameAliases:      []string{"alias.txt"},
+		NameAliases:      recordPtr([]string{"alias.txt"}),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("NormalizeRecord() = %#v, want %#v", got, want)
 	}
 
-	got, err = NormalizeRecord(Record{Id: "did:example:2"}, fallback)
+	got, err = NormalizeRecord(drs.DrsObject{Id: "did:example:2"}, fallback)
 	if err != nil {
 		t.Fatalf("NormalizeRecord() zero times error = %v", err)
 	}
@@ -181,14 +184,14 @@ func TestNormalizeRecordAppliesIncomingRecordPolicy(t *testing.T) {
 }
 
 func TestNormalizeRecordRejectsMissingID(t *testing.T) {
-	if _, err := NormalizeRecord(Record{Id: "  "}, time.Time{}); err == nil || err.Error() != "did is required" {
+	if _, err := NormalizeRecord(drs.DrsObject{Id: "  "}, time.Time{}); err == nil || err.Error() != "did is required" {
 		t.Fatalf("NormalizeRecord() error = %v, want did is required", err)
 	}
 }
 
 func TestEnforceCanonicalProjectScope(t *testing.T) {
 	initial := []string{"/organization/other/project/proj"}
-	obj, err := enforceCanonicalProjectScope(Record{
+	obj, err := enforceCanonicalProjectScope(drs.DrsObject{
 		Id: "obj-1", ControlledAccess: &initial,
 	}, "org", "proj")
 	if err != nil {
@@ -281,21 +284,25 @@ func TestMergeRegistrationMetadata(t *testing.T) {
 
 type recordUpdateStore struct {
 	ObjectStore
-	existing Record
-	replaced []Record
+	existing drs.DrsObject
+	replaced []drs.DrsObject
 }
 
-func (s *recordUpdateStore) GetObject(context.Context, string) (*Record, error) {
+func (s *recordUpdateStore) GetObject(context.Context, string) (*drs.DrsObject, error) {
 	copy := s.existing
 	return &copy, nil
 }
 
-func (s *recordUpdateStore) GetObjectsByChecksum(context.Context, string) ([]Record, error) {
-	return []Record{s.existing}, nil
+func (s *recordUpdateStore) GetObjectsByChecksums(_ context.Context, checksums []string) (map[string][]drs.DrsObject, error) {
+	return map[string][]drs.DrsObject{checksums[0]: {s.existing}}, nil
 }
 
-func (s *recordUpdateStore) ReplaceObjects(_ context.Context, records []Record) error {
-	s.replaced = append([]Record(nil), records...)
+func (s *recordUpdateStore) GetPublicReadByIDs(context.Context, []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (s *recordUpdateStore) ReplaceObjects(_ context.Context, records []drs.DrsObject) error {
+	s.replaced = append([]drs.DrsObject(nil), records...)
 	return nil
 }
 
@@ -303,16 +310,16 @@ func TestServiceUpdateRecordMergesRecordState(t *testing.T) {
 	oldChecksum := strings.Repeat("a", 64)
 	newChecksum := strings.Repeat("b", 64)
 	created := time.Unix(10, 0)
-	now := time.Unix(20, 0)
+	before := time.Now().UTC()
 	name := "/nested/new-name.txt"
 	description := "updated"
 	controlled := []string{"/organization/org/project/proj"}
 	existingControlled := []string{"/organization/org/project/proj"}
-	store := &recordUpdateStore{existing: Record{
+	store := &recordUpdateStore{existing: drs.DrsObject{
 		Id:               "old-id",
 		CreatedTime:      created,
 		Name:             objectStringPtr("old.txt"),
-		Checksums:        []Checksum{{Type: "sha256", Checksum: oldChecksum}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: oldChecksum}},
 		ControlledAccess: &existingControlled,
 	}}
 	session := access.NewSession("local")
@@ -321,12 +328,12 @@ func TestServiceUpdateRecordMergesRecordState(t *testing.T) {
 		"/organization/org/project/proj": {"update": true},
 	}, true)
 	ctx := access.WithSession(context.Background(), session)
-	got, err := NewService(store, nil).UpdateRecord(ctx, "new-id", Record{
+	got, err := NewService(store).UpdateRecord(ctx, "new-id", RecordInput{Record: drs.DrsObject{
 		Name:             &name,
 		Description:      &description,
 		ControlledAccess: &controlled,
-		Checksums:        []Checksum{{Type: "md5", Checksum: newChecksum}},
-	}, nil, now)
+		Checksums:        []drs.Checksum{{Type: "md5", Checksum: newChecksum}},
+	}})
 	if err != nil {
 		t.Fatalf("Service.UpdateRecord() error = %v", err)
 	}
@@ -336,7 +343,7 @@ func TestServiceUpdateRecordMergesRecordState(t *testing.T) {
 	if !reflect.DeepEqual(got, store.replaced[0]) {
 		t.Fatalf("returned record = %#v, replaced record = %#v", got, store.replaced[0])
 	}
-	if got.Id != "new-id" || got.UpdatedTime == nil || !got.UpdatedTime.Equal(now) || got.Name == nil || *got.Name != "new-name.txt" {
+	if got.Id != "new-id" || got.UpdatedTime == nil || got.UpdatedTime.Before(before) || got.UpdatedTime.After(time.Now()) || got.Name == nil || *got.Name != "new-name.txt" {
 		t.Fatalf("unexpected identity/name: %#v", got)
 	}
 	if len(got.Checksums) != 2 || got.ControlledAccess == nil || (*got.ControlledAccess)[0] != controlled[0] {

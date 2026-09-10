@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"
@@ -17,7 +18,7 @@ import (
 // ReplaceObjects is the checked, atomic boundary for whole-object updates.
 // Registration remains additive; replacement is reserved for callers that
 // have update authority over every current grant.
-func (db *Store) ReplaceObjects(ctx context.Context, objects []objects.Record) error {
+func (db *Store) ReplaceObjects(ctx context.Context, objects []drs.DrsObject) error {
 	if len(objects) == 0 {
 		return nil
 	}
@@ -40,8 +41,8 @@ func (db *Store) ReplaceObjects(ctx context.Context, objects []objects.Record) e
 		return nil
 	})
 }
-func (db *Store) replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.Record) (string, error) {
-	id := strings.TrimSpace(string(obj.Id))
+func (db *Store) replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *drs.DrsObject) (string, error) {
+	id := strings.TrimSpace(obj.Id)
 	if id == "" {
 		return "", fmt.Errorf("object id is required")
 	}
@@ -137,7 +138,7 @@ func (db *Store) replaceObjectTx(ctx context.Context, tx *sql.Tx, obj *objects.R
 	return canonicalID, nil
 }
 
-func (db *Store) replaceMetadataTx(ctx context.Context, tx *sql.Tx, row contentRow, obj *objects.Record) error {
+func (db *Store) replaceMetadataTx(ctx context.Context, tx *sql.Tx, row contentRow, obj *drs.DrsObject) error {
 	name := objects.CleanToBasename(stringVal(obj.Name))
 	if name == "" {
 		name = row.name
@@ -173,7 +174,7 @@ func (db *Store) replaceMetadataTx(ctx context.Context, tx *sql.Tx, row contentR
 	return nil
 }
 
-func (db *Store) replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, obj *objects.Record, sha string, hasSHA bool) error {
+func (db *Store) replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, obj *drs.DrsObject, sha string, hasSHA bool) error {
 	if obj.AccessMethods != nil {
 		if _, err := db.txExecContext(ctx, tx, `DELETE FROM drs_object_access_method WHERE object_id = ?`, id); err != nil {
 			return fmt.Errorf("replace access methods: %w", err)
@@ -244,13 +245,10 @@ func (db *Store) replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, o
 	return nil
 }
 
-func (db *Store) replacePolicyTx(ctx context.Context, tx *sql.Tx, id string, currentResources []string, obj *objects.Record) error {
+func (db *Store) replacePolicyTx(ctx context.Context, tx *sql.Tx, id string, currentResources []string, obj *drs.DrsObject) error {
 	public, err := db.publicReadTx(ctx, tx, id, len(currentResources) == 0)
 	if err != nil {
 		return err
-	}
-	if obj.PublicRead {
-		public = true
 	}
 	return db.setPublicReadTx(ctx, tx, id, public)
 }
@@ -386,7 +384,7 @@ func (db *Store) BulkDeleteObjects(ctx context.Context, ids []string) error {
 	})
 }
 
-func (db *Store) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []objects.AccessMethod) error {
+func (db *Store) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []drs.AccessMethod) error {
 	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
 		canonicalID, found, err := db.objectIDTx(ctx, tx, strings.TrimSpace(objectID))
 		if err != nil {
@@ -527,7 +525,7 @@ func (db *Store) RemoveObjectControlledAccessBulk(ctx context.Context, objectIDs
 	return removed, err
 }
 
-func (db *Store) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objects.AccessMethod) error {
+func (db *Store) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]drs.AccessMethod) error {
 	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
 		for objectID, methods := range updates {
 			canonicalID, found, resolveErr := db.objectIDTx(ctx, tx, strings.TrimSpace(objectID))

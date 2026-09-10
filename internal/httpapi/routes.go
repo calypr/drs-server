@@ -48,6 +48,15 @@ type internalServer struct {
 	buckets        *buckets.Service
 }
 
+func valuePointer[T any](value T) *T { return &value }
+
+func generatedString[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
 var _ internalapi.ServerInterface = (*internalServer)(nil)
 
 func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {

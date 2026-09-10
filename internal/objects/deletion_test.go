@@ -4,16 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
-	"github.com/calypr/syfon/internal/persistence/sqlite"
-	"github.com/calypr/syfon/internal/persistence/store"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 )
 
 const deleteResource = "/organization/org/project/owned"
@@ -31,12 +33,12 @@ func seedDeletionRecords(t *testing.T) *store.Store {
 		{"shared", "b", []string{deleteResource, otherResource}},
 		{"other", "c", []string{otherResource}},
 	} {
-		record := objects.Record{
-			Id: objects.RecordID(seed.id), CreatedTime: time.Now().UTC(), Size: 1,
-			Checksums:        []objects.Checksum{{Type: "sha256", Checksum: strings.Repeat(seed.hash, 64)}},
+		record := drs.DrsObject{
+			Id: seed.id, CreatedTime: time.Now().UTC(), Size: 1,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: strings.Repeat(seed.hash, 64)}},
 			ControlledAccess: &seed.resources,
 		}
-		if err := db.RegisterObjects(context.Background(), []objects.Record{record}); err != nil {
+		if err := db.RegisterObjects(context.Background(), []drs.DrsObject{record}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -60,54 +62,41 @@ func assertRecordExists(t *testing.T, db *store.Store, id string, exists bool) {
 
 func TestDeleteObjectRequiresEveryResource(t *testing.T) {
 	db := seedDeletionRecords(t)
-	service := newTestService(db)
-	if err := service.DeleteObject(deletionContext(), "shared", objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrAccessDenied) {
+	service := objects.NewService(db)
+	if err := service.DeleteObject(deletionContext(), "shared"); !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("shared delete: %v", err)
 	}
 	assertRecordExists(t, db, "shared", true)
-	if err := service.DeleteObject(deletionContext(), "owned", objects.DeleteOptions{}); err != nil {
+	if err := service.DeleteObject(deletionContext(), "owned"); err != nil {
 		t.Fatal(err)
 	}
 	assertRecordExists(t, db, "owned", false)
-	if err := service.DeleteObject(deletionContext(), "missing", objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrNotFound) {
+	if err := service.DeleteObject(deletionContext(), "missing"); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("missing delete: %v", err)
 	}
 }
 
-func TestDeleteRejectsPhysicalStorageOptionWithoutMutation(t *testing.T) {
-	db := seedDeletionRecords(t)
-	service := newTestService(db)
-	opts := objects.DeleteOptions{DeleteStorageData: true}
-	if err := service.DeleteObject(deletionContext(), "owned", opts); !errors.Is(err, errorapi.ErrConflict) {
-		t.Fatalf("single delete: %v", err)
-	}
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned"}, opts); !errors.Is(err, errorapi.ErrConflict) {
-		t.Fatalf("bulk delete: %v", err)
-	}
-	assertRecordExists(t, db, "owned", true)
-}
-
 func TestBulkDeleteFiltersUnauthorizedAndDuplicateIDs(t *testing.T) {
 	db := seedDeletionRecords(t)
-	service := newTestService(db)
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "owned", "shared", "other", "missing", " "}, objects.DeleteOptions{}); err != nil {
+	service := objects.NewService(db)
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "owned", "shared", "other", "missing", " "}); err != nil {
 		t.Fatal(err)
 	}
 	assertRecordExists(t, db, "owned", false)
 	assertRecordExists(t, db, "shared", true)
 	assertRecordExists(t, db, "other", true)
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"missing", "shared"}, objects.DeleteOptions{}); err != nil {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"missing", "shared"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 	db := seedDeletionRecords(t)
-	service := newTestService(db)
+	service := objects.NewService(db)
 	if err := db.CreateObjectAlias(context.Background(), "alias", "owned"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}, objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.BulkDeleteObjects(deletionContext(), []string{"owned", "alias"}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("alias delete: %v", err)
 	}
 	assertRecordExists(t, db, "owned", true)
@@ -118,7 +107,7 @@ func TestBulkDeleteRejectsAliasBeforeDeletingAnyRecord(t *testing.T) {
 
 func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
 	db := seedDeletionRecords(t)
-	service := newTestService(db)
+	service := objects.NewService(db)
 	hashes := []string{strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), "missing"}
 	count, err := service.DeleteObjectsByChecksums(deletionContext(), hashes)
 	if err != nil || count != 1 {
@@ -135,7 +124,7 @@ func TestDeleteByChecksumsPreservesSharedRecords(t *testing.T) {
 
 func TestDeleteByScopeRemovesOnlyThatProjectReference(t *testing.T) {
 	db := seedDeletionRecords(t)
-	service := newTestService(db)
+	service := objects.NewService(db)
 	count, err := service.DeleteBulkByScope(deletionContext(), "org", "owned")
 	if err != nil || count != 2 {
 		t.Fatalf("scope delete = %d, %v", count, err)
@@ -220,17 +209,17 @@ func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("close fixture database: %v", err)
 	}
 
-	service := newTestService(database)
+	service := objects.NewService(database)
 	authenticatedTargetProject := buildGen3Context(map[string]map[string]bool{
-		resource: {"update": true, "delete": true},
+		resource: {"read": true, "update": true, "delete": true},
 	})
-	if err := service.BulkUpdateAccessMethods(authenticatedTargetProject, map[string][]objects.AccessMethod{
-		objectA: {{
+	if _, err := service.BulkUpdateAccessMethodsAndRead(authenticatedTargetProject, []drs.AccessMethodUpdate{
+		{ObjectId: objectA, AccessMethods: []drs.AccessMethod{{
 			Type:      "s3",
-			AccessUrl: &objects.AccessURL{Url: "s3://bucket/repaired-a"},
-		}},
+			AccessUrl: &drs.AccessURL{Url: "s3://bucket/repaired-a"},
+		}}},
 	}); err != nil {
-		t.Fatalf("BulkUpdateAccessMethods through object service failed: %v", err)
+		t.Fatalf("BulkUpdateAccessMethodsAndRead through object service failed: %v", err)
 	}
 
 	readAccessURL := func(id string) string {
@@ -251,7 +240,7 @@ func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("expected sibling physical UUID %q to remain unchanged, got %q", objectB, got)
 	}
 
-	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}, objects.DeleteOptions{}); !errors.Is(err, errorapi.ErrConflict) {
+	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{aliasID}); !errors.Is(err, errorapi.ErrConflict) {
 		t.Fatalf("expected alias bulk deletion to be rejected with conflict, got %v", err)
 	}
 	if _, err := database.GetObject(ctx, objectA); err != nil {
@@ -264,7 +253,7 @@ func TestObjectServiceBulkMutationsTargetLegacyDuplicatePhysicalUUID(t *testing.
 		t.Fatalf("expected direct database alias bulk deletion to preserve ambiguity guard, got %v", err)
 	}
 
-	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{objectA}, objects.DeleteOptions{}); err != nil {
+	if err := service.BulkDeleteObjects(authenticatedTargetProject, []string{objectA}); err != nil {
 		t.Fatalf("BulkDeleteObjects through object service failed: %v", err)
 	}
 	if _, err := database.GetObject(ctx, objectA); err == nil {

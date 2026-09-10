@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -18,7 +19,7 @@ import (
 // CanonicalStorageTargetRequest describes the object-backed target selection
 // used by upload signing and by repairable logical download URLs.
 type CanonicalStorageTargetRequest struct {
-	Object         *objects.Record
+	Object         *drs.DrsObject
 	AccessURL      string
 	Bucket         string
 	Key            string
@@ -34,7 +35,7 @@ type CanonicalStorageTarget struct {
 	URL    string
 }
 
-func (s *Service) resolveDownloadTarget(ctx context.Context, obj *objects.Record, sourceURL string) (storage.Target, error) {
+func (s *Service) resolveDownloadTarget(ctx context.Context, obj *drs.DrsObject, sourceURL string) (storage.Target, error) {
 	canonical, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, AccessURL: sourceURL})
 	if err != nil {
 		return storage.Target{}, err
@@ -114,7 +115,7 @@ func (s *Service) ResolveCanonicalStorageTarget(ctx context.Context, req Canonic
 			}
 		}
 		if targetBucket == "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage bucket for object %s", string(obj.Id))
+			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage bucket for object %s", obj.Id)
 		}
 		targetKey := canonicalObjectKey(obj, req.Key, existingKey, req.PreferChecksum)
 		if existingOK && strings.EqualFold(strings.TrimSpace(existingBucket), targetBucket) && len(normalizedScopePrefixes(scopes)) == 0 && strings.TrimSpace(existingKey) != "" {
@@ -122,7 +123,7 @@ func (s *Service) ResolveCanonicalStorageTarget(ctx context.Context, req Canonic
 		}
 		targetKey = normalizeScopedStorageKey(targetKey, scopes)
 		if strings.TrimSpace(targetKey) == "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage key for object %s", string(obj.Id))
+			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage key for object %s", obj.Id)
 		}
 		return newCanonicalStorageTarget(targetBucket, targetKey), nil
 	}
@@ -190,7 +191,7 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 	return newCanonicalStorageTarget(bucket, key), nil
 }
 
-func (s *Service) bucketScopesForObject(ctx context.Context, obj *objects.Record) ([]buckets.Scope, error) {
+func (s *Service) bucketScopesForObject(ctx context.Context, obj *drs.DrsObject) ([]buckets.Scope, error) {
 	if obj == nil || s.scopes == nil {
 		return nil, nil
 	}
@@ -236,7 +237,7 @@ func (s *Service) bucketScopesForObject(ctx context.Context, obj *objects.Record
 	return scopes, nil
 }
 
-func canonicalObjectKey(obj *objects.Record, explicitKey, existingKey string, preferChecksum bool) string {
+func canonicalObjectKey(obj *drs.DrsObject, explicitKey, existingKey string, preferChecksum bool) string {
 	explicitKey = strings.Trim(strings.TrimSpace(explicitKey), "/")
 	if explicitKey != "" {
 		return explicitKey
@@ -261,7 +262,7 @@ func canonicalObjectKey(obj *objects.Record, explicitKey, existingKey string, pr
 			return checksum
 		}
 	}
-	return strings.Trim(strings.TrimSpace(string(obj.Id)), "/")
+	return strings.Trim(strings.TrimSpace(obj.Id), "/")
 }
 
 func newCanonicalStorageTarget(bucket, key string) CanonicalStorageTarget {
@@ -270,7 +271,7 @@ func newCanonicalStorageTarget(bucket, key string) CanonicalStorageTarget {
 	return CanonicalStorageTarget{Bucket: bucket, Key: key, URL: address.BucketToURL(bucket, key)}
 }
 
-func firstSupportedAccessURL(obj *objects.Record) string {
+func firstSupportedAccessURL(obj *drs.DrsObject) string {
 	if obj == nil || obj.AccessMethods == nil {
 		return ""
 	}

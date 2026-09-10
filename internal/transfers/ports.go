@@ -4,17 +4,16 @@ import (
 	"context"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 // ObjectPort is the catalog capability required by transfer operations.
 type ObjectPort interface {
-	GetObject(context.Context, string, string) (*objects.Record, error)
-	GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error)
-	RequireObjectResources(context.Context, string, []string) error
+	GetObject(context.Context, string, string) (*drs.DrsObject, error)
+	GetObjectsByChecksums(context.Context, []string, string) (map[string][]drs.DrsObject, error)
 }
 
 // StoragePort is the provider-neutral storage capability required by

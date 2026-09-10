@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
-	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 )
@@ -53,16 +54,15 @@ type lfsUploadAccountingSpy struct {
 
 type lfsUploadObjectSpy struct{}
 
-func (lfsUploadObjectSpy) GetObject(context.Context, string, string) (*objects.Record, error) {
+func (lfsUploadObjectSpy) GetObject(context.Context, string, string) (*drs.DrsObject, error) {
 	url := "s3://bucket/object"
-	methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: url}}}
-	return &objects.Record{Id: "record", AccessMethods: &methods}, nil
+	methods := []drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: url}}}
+	return &drs.DrsObject{Id: "record", AccessMethods: &methods}, nil
 }
-func (lfsUploadObjectSpy) GetObjectsByChecksum(context.Context, string, string) ([]objects.Record, error) {
+func (lfsUploadObjectSpy) GetObjectsByChecksums(context.Context, []string, string) (map[string][]drs.DrsObject, error) {
 	return nil, nil
 }
-func (lfsUploadObjectSpy) RequireObjectResources(context.Context, string, []string) error { return nil }
-func (lfsUploadObjectSpy) RegisterObjects(context.Context, []objects.Record) error        { return nil }
+func (lfsUploadObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) error { return nil }
 
 func (s *lfsUploadAccountingSpy) RecordFileUpload(_ context.Context, objectID string) error {
 	*s.events = append(*s.events, "account")
@@ -108,23 +108,19 @@ func TestLFSUploadWorkflowPreservesPartSizeOrderAndAccountingOrder(t *testing.T)
 type lfsMetadataObjectSpy struct {
 	events      *[]string
 	getErr      error
-	object      *objects.Record
-	registered  []objects.Record
+	object      *drs.DrsObject
+	registered  []drs.DrsObject
 	registerErr error
 }
 
-func (lfsMetadataObjectSpy) RequireObjectResources(context.Context, string, []string) error {
-	return nil
-}
-
-func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*objects.Record, error) {
+func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*drs.DrsObject, error) {
 	*s.events = append(*s.events, "get")
 	return s.object, s.getErr
 }
 
-func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []objects.Record) error {
+func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []drs.DrsObject) error {
 	*s.events = append(*s.events, "register")
-	s.registered = append([]objects.Record(nil), records...)
+	s.registered = append([]drs.DrsObject(nil), records...)
 	return s.registerErr
 }
 
@@ -149,10 +145,12 @@ func (s *metadataPendingSpy) PopPendingMetadata(context.Context, string) (*Pendi
 func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	events := make([]string, 0, 5)
 	sha := strings.Repeat("a", 64)
-	methods := []objects.AccessMethod{{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/" + sha}}}
-	candidate := objects.Candidate{
+	typeName := "s3"
+	url := "s3://bucket/" + sha
+	methods := []lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}}
+	candidate := lfsapi.DrsObjectCandidate{
 		Aliases:       &[]string{"id:" + sha},
-		Checksums:     &[]objects.Checksum{{Type: "sha256", Checksum: sha}},
+		Checksums:     &[]lfsapi.Checksum{{Type: "sha256", Checksum: sha}},
 		AccessMethods: &methods,
 	}
 	pending := &metadataPendingSpy{
@@ -174,14 +172,14 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	if len(objectsPort.registered) != 1 {
 		t.Fatalf("registered records = %+v", objectsPort.registered)
 	}
-	if accounting.object != string(objectsPort.registered[0].Id) {
+	if accounting.object != objectsPort.registered[0].Id {
 		t.Fatalf("accounted object = %q, registered object = %q", accounting.object, objectsPort.registered[0].Id)
 	}
 }
 
 func TestLFSMetadataWorkflowExistingObjectOnlyAccounts(t *testing.T) {
 	events := make([]string, 0, 2)
-	object := &objects.Record{Id: "existing"}
+	object := &drs.DrsObject{Id: "existing"}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, object: object}
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, nil, accounting, nil)

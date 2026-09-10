@@ -156,14 +156,15 @@ func (s *Service) resolveMultipartTarget(ctx context.Context, req MultipartInitR
 		return s.resolveScopedMultipartTarget(ctx, req, guid, key)
 	}
 	if objects.LooksLikeSHA256(key) {
-		existing, err := s.objects.GetObjectsByChecksum(ctx, key, "read")
+		byChecksum, err := s.objects.GetObjectsByChecksums(ctx, []string{key}, "read")
 		if err != nil {
 			return storage.Target{}, "", err
 		}
+		existing := byChecksum[key]
 		if len(existing) == 0 {
 			return storage.Target{}, "", fmt.Errorf("%w: checksum-only multipart init requires an explicit guid or a project-scoped object id", errorapi.ErrInvalidInput)
 		}
-		guid = string(existing[0].Id)
+		guid = existing[0].Id
 		canonical, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: &existing[0], PreferChecksum: true})
 		if err != nil {
 			return storage.Target{}, "", err
@@ -175,7 +176,7 @@ func (s *Service) resolveMultipartTarget(ctx context.Context, req MultipartInitR
 		if targetErr != nil {
 			return storage.Target{}, "", targetErr
 		}
-		return storageTargetFromCanonical(canonical.URL, canonical), string(existing.Id), nil
+		return storageTargetFromCanonical(canonical.URL, canonical), existing.Id, nil
 	} else if !isNotFound(err) {
 		return storage.Target{}, "", err
 	}

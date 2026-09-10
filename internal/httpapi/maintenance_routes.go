@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
@@ -33,6 +34,14 @@ func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
 }
 
 func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
+	return s.internalScopeRepair(c, false)
+}
+
+func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
+	return s.internalScopeRepair(c, true)
+}
+
+func (s *internalServer) internalScopeRepair(c fiber.Ctx, apply bool) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -45,33 +54,19 @@ func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 	req.CheckStorage = true
 	if req.Organization == "" || req.Project == "" {
 		return Reject(c, fiber.StatusBadRequest, "organization and project are required")
+	}
+	if apply {
+		result, err := s.projectStorage.ApplyAuthorized(c.Context(), req)
+		if err != nil {
+			return HandleError(c, err)
+		}
+		return c.JSON(result)
 	}
 	report, err := s.projectStorage.AuditAuthorized(c.Context(), req)
 	if err != nil {
 		return HandleError(c, err)
 	}
 	return c.JSON(report)
-}
-
-func (s *internalServer) InternalScopeRepairApply(c fiber.Ctx) error {
-	if access.MissingGen3AuthHeader(c.Context()) {
-		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
-	}
-	var req internalapi.ScopeRepairOptions
-	if err := decodeStrictJSON(c.Body(), &req); err != nil {
-		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
-	}
-	req.Organization = strings.TrimSpace(req.Organization)
-	req.Project = strings.TrimSpace(req.Project)
-	req.CheckStorage = true
-	if req.Organization == "" || req.Project == "" {
-		return Reject(c, fiber.StatusBadRequest, "organization and project are required")
-	}
-	result, err := s.projectStorage.ApplyAuthorized(c.Context(), req)
-	if err != nil {
-		return HandleError(c, err)
-	}
-	return c.JSON(result)
 }
 
 func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
@@ -153,25 +148,14 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalInspectProjectBucket(c fiber.Ctx) error {
-	if access.MissingGen3AuthHeader(c.Context()) {
-		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
-	}
-	var req internalapi.InternalInspectProjectBucketRequest
-	if err := decodeStrictJSON(c.Body(), &req); err != nil {
-		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
-	}
-	result, err := s.projectStorage.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
-		Mode:        projectstorage.InspectionMode(strings.TrimSpace(req.Mode)),
-		IncludeHead: req.IncludeHead,
-		PathPrefix:  strings.TrimSpace(req.PathPrefix),
-	})
-	if err != nil {
-		return HandleError(c, err)
-	}
-	return c.JSON(result)
+	return s.internalInspectProjectBucket(c, false)
 }
 
 func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) error {
+	return s.internalInspectProjectBucket(c, true)
+}
+
+func (s *internalServer) internalInspectProjectBucket(c fiber.Ctx, inventory bool) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -179,10 +163,16 @@ func (s *internalServer) InternalInspectProjectBucketInventory(c fiber.Ctx) erro
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	result, err := s.projectStorage.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), projectstorage.InspectionOptions{
-		Mode:       projectstorage.ModeItems,
-		PathPrefix: strings.TrimSpace(req.PathPrefix),
-	})
+	options := projectstorage.InspectionOptions{
+		Mode:        projectstorage.InspectionMode(strings.TrimSpace(req.Mode)),
+		IncludeHead: req.IncludeHead,
+		PathPrefix:  strings.TrimSpace(req.PathPrefix),
+	}
+	if inventory {
+		options.Mode = projectstorage.ModeItems
+		options.IncludeHead = false
+	}
+	result, err := s.projectStorage.InspectProjectStorage(c.Context(), strings.TrimSpace(req.Organization), strings.TrimSpace(req.Project), options)
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -202,14 +192,10 @@ func (s *internalServer) InternalInspectProjectRecords(c fiber.Ctx) error {
 	if organization == "" || project == "" {
 		return Reject(c, fiber.StatusBadRequest, "organization and project are required")
 	}
-	if s.objects == nil {
+	if s.projectStorage == nil {
 		return HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnsupported, errorapi.ErrorCategoryInvalidInput, "object service is not configured"))
 	}
-	records, err := s.objects.AuditProjectRecords(c.Context(), objects.ProjectRecordAuditQuery{
-		Organization: organization,
-		Project:      project,
-		PathPrefix:   req.PathPrefix,
-	})
+	records, err := s.projectStorage.InspectProjectRecords(c.Context(), organization, project, req.PathPrefix)
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -276,13 +262,13 @@ func (s *internalServer) InternalDeleteProjectBucketObjects(c fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-func projectRecordAuditItemFromObjects(record objects.Record, organization, project string) internalapi.InternalInspectProjectRecordItem {
+func projectRecordAuditItemFromObjects(record drs.DrsObject, organization, project string) internalapi.InternalInspectProjectRecordItem {
 	accessURLs := []string{}
 	accessMethods := []internalapi.InternalProjectAccessMethod{}
 	if record.AccessMethods != nil {
 		accessMethods = make([]internalapi.InternalProjectAccessMethod, 0, len(*record.AccessMethods))
 		for _, method := range *record.AccessMethods {
-			item := internalapi.InternalProjectAccessMethod{Type: strings.TrimSpace(method.Type)}
+			item := internalapi.InternalProjectAccessMethod{Type: strings.TrimSpace(string(method.Type))}
 			if method.AccessId != nil {
 				item.AccessId = strings.TrimSpace(*method.AccessId)
 			}
@@ -300,7 +286,7 @@ func projectRecordAuditItemFromObjects(record objects.Record, organization, proj
 	}
 	checksum, _ := objects.CanonicalSHA256(record.Checksums)
 	item := internalapi.InternalInspectProjectRecordItem{
-		ObjectId:      string(record.Id),
+		ObjectId:      record.Id,
 		Checksum:      checksum,
 		Organization:  organization,
 		Project:       project,

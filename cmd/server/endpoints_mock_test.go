@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
@@ -88,19 +89,19 @@ func TestHealthOnlyServerExposesNoOptionalRoutes(t *testing.T) {
 }
 
 func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
-	objectStore := newServerObjectStore(map[string]*objects.Record{
+	objectStore := newServerObjectStore(map[string]*drs.DrsObject{
 		"sha-1": {
 			Id:          "sha-1",
 			Name:        endpointPtr("mock-object"),
 			Size:        1,
 			Version:     endpointPtr("1"),
 			Description: endpointPtr("mock"),
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "sha-1"}},
-			AccessMethods: &[]objects.AccessMethod{
+			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: "sha-1"}},
+			AccessMethods: &[]drs.AccessMethod{
 				{
 					Type:      "s3",
 					AccessId:  endpointPtr("s3"),
-					AccessUrl: &objects.AccessURL{Url: "s3://test-bucket-1/sha-1"},
+					AccessUrl: &drs.AccessURL{Url: "s3://test-bucket-1/sha-1"},
 				},
 			},
 			ControlledAccess: &[]string{"/programs/data_file"},
@@ -122,7 +123,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	requestIDHandler := httpapi.RequestIDHandler(logger)
 	cfg := &config.Config{Routes: routes}
 	dependencies := mockServerDependencies(objectStore, bucketStore)
-	objectService := objects.NewService(dependencies.objects, nil)
+	objectService := objects.NewService(dependencies.objects)
 	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
 		Objects: objectService,

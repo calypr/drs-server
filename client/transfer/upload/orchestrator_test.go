@@ -108,10 +108,7 @@ func TestRegisterFilePreservesScopedRoutingMetadata(t *testing.T) {
 	controlledAccess := []string{"/organization/syfon/project/e2e"}
 	accessMethods := []drsapi.AccessMethod{{
 		Type: "s3",
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://syfon-e2e-bucket/project-subpath/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
+		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-e2e-bucket/project-subpath/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{
 		Id:               "requested-object-id",
@@ -175,10 +172,7 @@ func TestRegisterFilePrefersExplicitControlledAccessOverExistingObject(t *testin
 	sourceControlledAccess := []string{"/organization/src/project/original"}
 	accessMethods := []drsapi.AccessMethod{{
 		Type: "s3",
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://syfon-bucket/original/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
+		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-bucket/original/3d71f043937a09db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{
 		Id:               "requested-object-id",

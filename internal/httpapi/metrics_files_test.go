@@ -16,18 +16,17 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/client/apierror"
-	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
 
 func TestMetricsRoutes_ListAndSummary(t *testing.T) {
 	now := time.Now().UTC()
 	reports := &metricsReporterFake{
-		files: []usage.FileUsage{
+		files: []metricsapi.FileUsage{
 			{ObjectId: metricsString("sha-1"), Name: metricsString("f1"), Size: metricsInt64(1), UploadCount: metricsInt64(1), DownloadCount: metricsInt64(3), LastDownloadTime: metricsTimePtr(now.AddDate(0, 0, -10))},
 			{ObjectId: metricsString("sha-2"), Name: metricsString("f2"), Size: metricsInt64(2), UploadCount: metricsInt64(1)},
 		},
-		summary: usage.FileUsageSummary{
+		summary: metricsapi.FileUsageSummary{
 			TotalFiles:        metricsInt64(2),
 			TotalUploads:      metricsInt64(0),
 			TotalDownloads:    metricsInt64(0),
@@ -107,7 +106,7 @@ func TestMetricsRoutes_GetNotFoundAndValidation(t *testing.T) {
 }
 
 func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
-	server := newMetricsServer(&metricsReporterFake{}, nil)
+	server := &metricsServer{reporter: &metricsReporterFake{}}
 	limit := 0
 	response, err := server.ListMetricsFiles(context.Background(), metricsapi.ListMetricsFilesRequestObject{Params: metricsapi.ListMetricsFilesParams{Limit: &limit}})
 	if err != nil {
@@ -133,7 +132,7 @@ func TestMetricsFileHandlersCoverBoundaryErrors(t *testing.T) {
 }
 
 func TestMetricsRoutes_BulkFiles(t *testing.T) {
-	reports := &metricsReporterFake{batch: []usage.FileUsage{{ObjectId: metricsString("obj-a"), Name: metricsString("a.txt"), Size: metricsInt64(10)}}}
+	reports := &metricsReporterFake{batch: []metricsapi.FileUsage{{ObjectId: metricsString("obj-a"), Name: metricsString("a.txt"), Size: metricsInt64(10)}}}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 	request := httptest.NewRequest(http.MethodPost, "/index/v1/metrics/files/bulk?organization=cbds&project=end_to_end_test", strings.NewReader(`{"object_ids":["obj-a","obj-b","missing","obj-a"],"inactive_days":30}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -157,7 +156,7 @@ func TestMetricsRoutes_BulkFiles(t *testing.T) {
 }
 
 func TestMetricsSummaryAuthzAndScope(t *testing.T) {
-	reports := &metricsReporterFake{summary: usage.FileUsageSummary{TotalFiles: metricsInt64(1), TotalUploads: metricsInt64(2), TotalDownloads: metricsInt64(3), RecordCount: metricsInt64(1)}}
+	reports := &metricsReporterFake{summary: metricsapi.FileUsageSummary{TotalFiles: metricsInt64(1), TotalUploads: metricsInt64(2), TotalDownloads: metricsInt64(3), RecordCount: metricsInt64(1)}}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 
 	request := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
@@ -178,6 +177,13 @@ func TestMetricsSummaryAuthzAndScope(t *testing.T) {
 		t.Fatalf("unexpected scoped summary: %+v", payload)
 	}
 
+	request = httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?program=cbds&project=end_to_end_test", nil)
+	setMetricsAuthHeaders(request, "gen3", true, map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}})
+	resp, err = app.Test(request)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("legacy program scope response = %v, %v", resp, err)
+	}
+
 	request = httptest.NewRequest(http.MethodGet, "/index/v1/metrics/summary?organization=cbds&project=end_to_end_test", nil)
 	setMetricsAuthHeaders(request, "gen3", false, nil)
 	resp, err = app.Test(request)
@@ -191,9 +197,9 @@ func TestMetricsSummaryAuthzAndScope(t *testing.T) {
 
 func TestMetricsFilesAuthzAndScope(t *testing.T) {
 	reports := &metricsReporterFake{
-		files:           []usage.FileUsage{{ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1), UploadCount: metricsInt64(2), DownloadCount: metricsInt64(3)}},
-		fileUsage:       map[string]usage.FileUsage{"other-1": {ObjectId: metricsString("other-1"), Name: metricsString("f2"), Size: metricsInt64(2)}},
-		scopedFileUsage: map[string]usage.FileUsage{"scoped-1": {ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1)}},
+		files:           []metricsapi.FileUsage{{ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1), UploadCount: metricsInt64(2), DownloadCount: metricsInt64(3)}},
+		fileUsage:       map[string]metricsapi.FileUsage{"other-1": {ObjectId: metricsString("other-1"), Name: metricsString("f2"), Size: metricsInt64(2)}},
+		scopedFileUsage: map[string]metricsapi.FileUsage{"scoped-1": {ObjectId: metricsString("scoped-1"), Name: metricsString("f1"), Size: metricsInt64(1)}},
 	}
 	app := newMetricsTestApp(reports, &metricsIngestFake{})
 	privileges := map[string]map[string]bool{"/programs/cbds/projects/end_to_end_test": {"read": true}}
@@ -240,15 +246,6 @@ func TestMetricsFilesAuthzAndScope(t *testing.T) {
 
 func metricsTimePtr(value time.Time) *time.Time { return &value }
 
-type metricsErrorPropagationReporter struct {
-	usage.Reporter
-	err error
-}
-
-func (r metricsErrorPropagationReporter) GetFileUsage(context.Context, string) (*usage.FileUsage, error) {
-	return nil, r.err
-}
-
 func TestMetricsRoutesPropagateSourceErrorsThroughSDKBoundary(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -264,7 +261,7 @@ func TestMetricsRoutesPropagateSourceErrorsThroughSDKBoundary(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
 			app.Use(RequestIDHandler(nil))
-			registerMetricsRoutes(app, metricsErrorPropagationReporter{err: test.source}, nil)
+			registerMetricsRoutes(app, &metricsReporterFake{getFileUsageErr: test.source}, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/missing", nil)
 			req.Header.Set("X-Request-Id", test.requestID)
@@ -305,7 +302,7 @@ func TestMetricsRoutesRedactAndLogUntypedSourceErrors(t *testing.T) {
 
 	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
 	app.Use(RequestIDHandler(nil))
-	registerMetricsRoutes(app, metricsErrorPropagationReporter{err: privateCause}, nil)
+	registerMetricsRoutes(app, &metricsReporterFake{getFileUsageErr: privateCause}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/files/private", nil)
 	req.Header.Set("X-Request-Id", requestID)

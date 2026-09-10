@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/apigen/lfsapi"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
@@ -49,7 +49,7 @@ func TestPendingMetaCandidateJSONPreservesExplicitZeroSize(t *testing.T) {
 
 	const oid = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	size := int64(0)
-	candidate := objects.Candidate{Size: &size}
+	candidate := lfsapi.DrsObjectCandidate{Size: &size}
 	now := time.Now().UTC().Truncate(time.Second)
 	if err := db.SavePendingMetadata(context.Background(), []transferlfs.PendingMetadata{{OID: oid, Candidate: candidate, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}}); err != nil {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)

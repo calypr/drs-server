@@ -2,8 +2,8 @@ package storage
 
 import (
 	"context"
-	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -42,8 +42,9 @@ type ObjectScopeDeleter interface {
 // deliberately narrower than the objects service so tests can exercise repair
 // behavior without constructing a persistence backend.
 type RecordRepairer interface {
-	ListPreparedObjectsPageByScope(context.Context, string, string, string, string, int, int) ([]objects.Record, error)
-	UpdateRecord(context.Context, string, objects.Record, *int64, time.Time) (objects.Record, error)
+	ListRecords(context.Context, objects.RecordListQuery) ([]drs.DrsObject, error)
+	ListPhysicalObjectsByScope(context.Context, string, string, string) ([]drs.DrsObject, error)
+	UpdateRecord(context.Context, string, objects.RecordInput) (drs.DrsObject, error)
 	CollapseProjectChecksumDuplicates(context.Context, string, string) (int, error)
 }
 

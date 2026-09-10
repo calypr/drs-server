@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
@@ -39,7 +39,7 @@ type repairScopeTarget struct {
 }
 
 type auditedObject struct {
-	record         objects.Record
+	record         drs.DrsObject
 	sha256         string
 	currentURLs    []string
 	scope          repairScopeTarget
@@ -48,7 +48,7 @@ type auditedObject struct {
 	inferredScope  string
 	canonicalURL   string
 	findings       []internalapi.ScopeRepairFinding
-	updated        *objects.Record
+	updated        *drs.DrsObject
 }
 
 // AuditAuthorized checks read access for the requested scope before auditing it.
@@ -104,7 +104,7 @@ func (s *Service) apply(ctx context.Context, options internalapi.ScopeRepairOpti
 			result.Skipped++
 			continue
 		}
-		if _, err := s.records.UpdateRecord(ctx, string(object.record.Id), *object.updated, nil, time.Now().UTC()); err != nil {
+		if _, err := s.records.UpdateRecord(ctx, object.record.Id, objects.RecordInput{Record: *object.updated}); err != nil {
 			result.Skipped++
 			continue
 		}
@@ -139,7 +139,7 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
-	records := make([]objects.Record, 0)
+	records := make([]drs.DrsObject, 0)
 	start := ""
 	scanned := 0
 	for {
@@ -150,7 +150,7 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 		if limit <= 0 && options.Limit > 0 {
 			break
 		}
-		page, err := s.records.ListPreparedObjectsPageByScope(ctx, options.Organization, options.Project, "read", start, limit, 0)
+		page, err := s.records.ListRecords(ctx, objects.RecordListQuery{Scope: objects.Scope{Organization: options.Organization, Project: options.Project}, RequiredMethod: "read", StartAfter: start, Limit: limit})
 		if err != nil {
 			return internalapi.ScopeRepairReport{}, nil, err
 		}
@@ -159,7 +159,7 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 		}
 		records = append(records, page...)
 		scanned += len(page)
-		start = strings.TrimSpace(string(page[len(page)-1].Id))
+		start = strings.TrimSpace(page[len(page)-1].Id)
 		if len(page) < limit || start == "" {
 			break
 		}
@@ -173,13 +173,13 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 		}
 	}
 	s.addDuplicateFindings(audited)
-	sort.Slice(audited, func(i, j int) bool { return string(audited[i].record.Id) < string(audited[j].record.Id) })
+	sort.Slice(audited, func(i, j int) bool { return audited[i].record.Id < audited[j].record.Id })
 	for _, object := range audited {
 		if len(object.findings) == 0 {
 			continue
 		}
 		report.Objects = append(report.Objects, internalapi.ScopeRepairObjectReport{
-			ObjectId:             string(object.record.Id),
+			ObjectId:             object.record.Id,
 			Sha256:               object.sha256,
 			Organization:         object.scope.Organization,
 			Project:              object.scope.Project,
@@ -192,7 +192,7 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 	return report, audited, nil
 }
 
-func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes map[string][]repairScopeTarget, options internalapi.ScopeRepairOptions) (*auditedObject, bool) {
+func (s *Service) auditRecord(ctx context.Context, record drs.DrsObject, scopes map[string][]repairScopeTarget, options internalapi.ScopeRepairOptions) (*auditedObject, bool) {
 	sha, _ := objects.CanonicalSHA256(record.Checksums)
 	object := &auditedObject{record: record, sha256: sha, currentURLs: accessMethodURLs(record.AccessMethods)}
 	resource, known, ambiguous := inferRecordResource(record, sha, scopes)
@@ -201,7 +201,7 @@ func (s *Service) auditRecord(ctx context.Context, record objects.Record, scopes
 	object.inferredScope = resource
 	if known && len(scopes[resource]) > 0 {
 		object.scope = scopes[resource][0]
-		object.canonicalURL = canonicalAccessURL(object.scope, string(record.Id), sha)
+		object.canonicalURL = canonicalAccessURL(object.scope, record.Id, sha)
 	}
 	targetResource := ""
 	if strings.TrimSpace(options.Organization) != "" && strings.TrimSpace(options.Project) != "" {

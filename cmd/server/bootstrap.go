@@ -127,7 +127,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		return nil, fmt.Errorf("failed to load configured bucket scopes: %w", err)
 	}
 
-	objectService := objects.NewService(backend.objectStore, bucketService)
+	objectService := objects.NewService(backend.objectStore)
 	usageService := usage.NewService(usage.Dependencies{
 		Reports: backend.usageReports,
 		Objects: objectService,

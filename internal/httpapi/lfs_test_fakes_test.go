@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -30,20 +32,21 @@ type lfsTestServicePorts struct {
 	getErr         error
 }
 
-func newLFSTestPorts(records map[string]*objects.Record, credentials map[string]buckets.Credential) *lfsTestServicePorts {
+func newLFSTestPorts(t testing.TB, records map[string]*drs.DrsObject, credentials map[string]buckets.Credential) *lfsTestServicePorts {
+	t.Helper()
 	if records == nil {
-		records = map[string]*objects.Record{}
+		records = map[string]*drs.DrsObject{}
 	}
 	if credentials == nil {
 		credentials = map[string]buckets.Credential{}
 	}
 	return &lfsTestServicePorts{
-		drsObjectStore: newDRSObjectStore(records), credentials: credentials,
+		drsObjectStore: newDRSObjectStore(t, records), credentials: credentials,
 		pending: map[string]transferlfs.PendingMetadata{},
 	}
 }
 
-func (p *lfsTestServicePorts) GetObject(ctx context.Context, id string) (*objects.Record, error) {
+func (p *lfsTestServicePorts) GetObject(ctx context.Context, id string) (*drs.DrsObject, error) {
 	if p.getErr != nil {
 		return nil, p.getErr
 	}
@@ -118,7 +121,7 @@ var _ usage.FileCounterRecorder = (*lfsTestServicePorts)(nil)
 
 func newLFSTransferService(storageFake *lfsTestStorage, ports *lfsTestServicePorts) *transfers.Service {
 	return transfers.NewService(transfers.Dependencies{
-		Objects:      objects.NewService(ports, nil),
+		Objects:      objects.NewService(ports),
 		Storage:      storageFake,
 		Credentials:  ports,
 		Events:       ports,
@@ -186,7 +189,7 @@ func newLFSTestDependencies(ports *lfsTestServicePorts, storageFake *lfsTestStor
 }
 
 func newLFSTestDependenciesWithTransfer(ports *lfsTestServicePorts, storageFake *lfsTestStorage, transferService *transfers.Service) *transferlfs.Service {
-	objectService := objects.NewService(ports, nil)
+	objectService := objects.NewService(ports)
 	lfsService := transferlfs.NewService(transferService, objectService, ports, ports, ports, storageFakeUploader(storageFake))
 	return lfsService
 }
@@ -224,7 +227,8 @@ func (r lfsTestScopeReader) LookupBucketScope(_ context.Context, organization, p
 	return scope, ok, nil
 }
 
-func newLFSTestServerForNumericValidation() *lfsServer {
-	ports := newLFSTestPorts(nil, nil)
-	return newLFSServer(newLFSTestDependencies(ports, &lfsTestStorage{}), defaultLFSOptions())
+func newLFSTestServerForNumericValidation(t testing.TB) *lfsServer {
+	t.Helper()
+	ports := newLFSTestPorts(t, nil, nil)
+	return &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
 }

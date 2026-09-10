@@ -1,5 +1,5 @@
-// Package objects owns persisted DRS record values and the policies that normalize, identify, and merge them.
-// Adapters translate transport models at the boundary; persistence depends on these values without importing HTTP code.
+// Package objects owns the policies that normalize, identify, authorize, and
+// merge generated DRS objects.
 package objects
 
 import (
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	generated "github.com/calypr/syfon/apigen/drs"
+	drs "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	clienthash "github.com/calypr/syfon/client/hash"
@@ -31,13 +31,6 @@ type ChecksumQuery struct {
 	Value string
 }
 
-// ChecksumMatches keeps one checksum query's result separate from the other
-// queries in an ordered batch.
-type ChecksumMatches struct {
-	Query   ChecksumQuery
-	Records []Record
-}
-
 // RecordListQuery describes the selection and pagination policy for a record
 // listing. Only domain values cross into the records service.
 type RecordListQuery struct {
@@ -50,9 +43,12 @@ type RecordListQuery struct {
 	RequiredMethod string
 }
 
-type ScopedRecord struct {
-	Record Record
-	Scope  Scope
+// RecordInput carries mutation intent separately from the stored record.
+// ExplicitSize distinguishes an omitted update from an explicit zero.
+type RecordInput struct {
+	Record       drs.DrsObject
+	Scope        Scope
+	ExplicitSize *int64
 }
 
 // NewScope validates and normalizes an organization/project scope. A project
@@ -68,54 +64,7 @@ func NewScope(organization, project string) (Scope, error) {
 	return scope, nil
 }
 
-// RecordID identifies one physical persisted record.  Two records may refer
-// to the same content while retaining distinct record IDs.
-type RecordID string
-
-// Transport-shaped values use the generated DRS models as their canonical shape.
-type Checksum = generated.Checksum
-type AccessURL = generated.AccessURL
-
-type AccessMethod struct {
-	AccessId  *string    `json:"access_id,omitempty"`
-	AccessUrl *AccessURL `json:"access_url,omitempty"`
-	Type      string     `json:"type"`
-}
-
-// Candidate is the plain request value accepted by object registration and
-// LFS metadata staging. HTTP adapters translate generated request models into
-// this value before it crosses into core or persistence.
-type Candidate struct {
-	AccessMethods    *[]AccessMethod `json:"access_methods,omitempty"`
-	Aliases          *[]string       `json:"aliases,omitempty"`
-	Checksums        *[]Checksum     `json:"checksums,omitempty"`
-	ControlledAccess *[]string       `json:"controlled_access,omitempty"`
-	Description      *string         `json:"description,omitempty"`
-	Name             *string         `json:"name,omitempty"`
-	Size             *int64          `json:"size,omitempty"`
-}
-
-// Record is one physical object record. ControlledAccess is the sole modeled
-// scope state carried by the record.
-type Record struct {
-	Id                    RecordID        `json:"id"`
-	AccessMethods         *[]AccessMethod `json:"access_methods,omitempty"`
-	Aliases               *[]string       `json:"aliases,omitempty"`
-	Checksums             []Checksum      `json:"checksums"`
-	ControlledAccess      *[]string       `json:"controlled_access,omitempty"`
-	CreatedTime           time.Time       `json:"created_time"`
-	Description           *string         `json:"description,omitempty"`
-	Name                  *string         `json:"name,omitempty"`
-	NameAliases           []string        `json:"name_aliases,omitempty"`
-	PublicRead            bool            `json:"-"`
-	PublicReadPolicyKnown bool            `json:"-"`
-	SelfUri               string          `json:"self_uri"`
-	Size                  int64           `json:"size"`
-	UpdatedTime           *time.Time      `json:"updated_time,omitempty"`
-	Version               *string         `json:"version,omitempty"`
-}
-
-func AccessResources(obj *Record) []string {
+func AccessResources(obj *drs.DrsObject) []string {
 	if obj == nil {
 		return nil
 	}
@@ -152,7 +101,7 @@ func ParseHashQuery(rawHash string, rawType string) (string, string) {
 	return hashType, hashValue
 }
 
-func RecordHasChecksumTypeAndValue(obj Record, hashType, hashValue string) bool {
+func RecordHasChecksumTypeAndValue(obj drs.DrsObject, hashType, hashValue string) bool {
 	if hashType == "" {
 		return true
 	}
@@ -169,8 +118,8 @@ func RecordHasChecksumTypeAndValue(obj Record, hashType, hashValue string) bool 
 	return false
 }
 
-func mergeAdditionalChecksums(existing, additions []Checksum) []Checksum {
-	out := make([]Checksum, 0, len(existing)+len(additions))
+func mergeAdditionalChecksums(existing, additions []drs.Checksum) []drs.Checksum {
+	out := make([]drs.Checksum, 0, len(existing)+len(additions))
 	seenTypes := make(map[string]struct{}, len(existing)+len(additions))
 	for _, cs := range existing {
 		if t := NormalizeChecksumType(cs.Type); t != "" {
@@ -187,13 +136,13 @@ func mergeAdditionalChecksums(existing, additions []Checksum) []Checksum {
 		if _, exists := seenTypes[t]; exists {
 			continue
 		}
-		out = append(out, Checksum{Type: strings.TrimSpace(cs.Type), Checksum: v})
+		out = append(out, drs.Checksum{Type: strings.TrimSpace(cs.Type), Checksum: v})
 		seenTypes[t] = struct{}{}
 	}
 	return out
 }
 
-func CanonicalSHA256(checksums []Checksum) (string, bool) {
+func CanonicalSHA256(checksums []drs.Checksum) (string, bool) {
 	values := sha256Values(checksums)
 	if len(values) == 0 {
 		return "", false
@@ -201,7 +150,7 @@ func CanonicalSHA256(checksums []Checksum) (string, bool) {
 	return values[0], true
 }
 
-func sha256Values(checksums []Checksum) []string {
+func sha256Values(checksums []drs.Checksum) []string {
 	seen := make(map[string]struct{})
 	values := make([]string, 0, 1)
 	for _, cs := range checksums {
@@ -221,7 +170,7 @@ func sha256Values(checksums []Checksum) []string {
 	return values
 }
 
-func ValidateCanonicalSHA256(checksums []Checksum) (string, bool, error) {
+func ValidateCanonicalSHA256(checksums []drs.Checksum) (string, bool, error) {
 	values := sha256Values(checksums)
 	if len(values) > 1 {
 		return "", false, fmt.Errorf("%w: %s", errorapi.ErrConflictingSHA256, strings.Join(values, ", "))
@@ -314,7 +263,7 @@ func canonicalProjectScope(authz []string) (string, error) {
 
 // MintRecordIDFromChecksum returns a deterministic record ID for a checksum
 // and one canonical project scope.
-func MintRecordIDFromChecksum(checksum string, authz []string) (RecordID, error) {
+func MintRecordIDFromChecksum(checksum string, authz []string) (string, error) {
 	checksum = normalizeSHA256Checksum(checksum)
 	if checksum == "" {
 		return "", fmt.Errorf("%w: sha256 checksum is required when object id is not provided", errorapi.ErrInvalidInput)
@@ -324,20 +273,17 @@ func MintRecordIDFromChecksum(checksum string, authz []string) (RecordID, error)
 		return "", err
 	}
 	seed := fmt.Sprintf("sha256:%s|%s", checksum, scope)
-	return RecordID(uuid.NewSHA1(drsObjectIDNamespace, []byte(seed)).String()), nil
+	return uuid.NewSHA1(drsObjectIDNamespace, []byte(seed)).String(), nil
 }
 
-func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
-	var checksums []Checksum
-	if c.Checksums != nil {
-		checksums = append([]Checksum(nil), (*c.Checksums)...)
-	}
+func MaterializeCandidate(c drs.DrsObjectCandidate, now time.Time) (drs.DrsObject, error) {
+	checksums := append([]drs.Checksum(nil), c.Checksums...)
 	oid, ok := CanonicalSHA256(checksums)
 	if !ok {
-		return Record{}, errorapi.ErrNoValidSHA256
+		return drs.DrsObject{}, errorapi.ErrNoValidSHA256
 	}
 	if c.AccessMethods == nil || len(*c.AccessMethods) == 0 {
-		return Record{}, errorapi.ErrAccessMethodsRequired
+		return drs.DrsObject{}, errorapi.ErrAccessMethodsRequired
 	}
 	var controlled []string
 	if c.ControlledAccess != nil {
@@ -356,58 +302,54 @@ func CandidateToRecord(c Candidate, now time.Time) (Record, error) {
 	if id == "" {
 		mintedID, err := MintRecordIDFromChecksum(oid, controlled)
 		if err != nil {
-			return Record{}, err
+			return drs.DrsObject{}, err
 		}
-		id = string(mintedID)
+		id = mintedID
 	}
 
-	size := int64(0)
-	if c.Size != nil {
-		size = *c.Size
-	}
-	obj := Record{
-		Id:          RecordID(id),
-		Size:        size,
+	obj := drs.DrsObject{
+		Id:          id,
+		Size:        c.Size,
 		Name:        c.Name,
 		Description: c.Description,
 		Aliases:     c.Aliases,
-		Checksums:   []Checksum{{Type: "sha256", Checksum: oid}},
+		Checksums:   []drs.Checksum{{Type: "sha256", Checksum: oid}},
 	}
 	if c.ControlledAccess != nil {
 		obj.ControlledAccess = &controlled
 	}
 	obj, err := NormalizeRecord(obj, now)
 	if err != nil {
-		return Record{}, err
+		return drs.DrsObject{}, err
 	}
 	if obj.Name == nil {
 		obj.Name = objectStringPtr(oid)
 	}
-	obj.SelfUri = "drs://" + string(obj.Id)
+	obj.SelfUri = "drs://" + obj.Id
 
-	methods := make([]AccessMethod, 0, len(*c.AccessMethods))
+	methods := make([]drs.AccessMethod, 0, len(*c.AccessMethods))
 	for _, method := range *c.AccessMethods {
 		if method.AccessId == nil || *method.AccessId == "" {
-			method.AccessId = objectStringPtr(method.Type)
+			method.AccessId = objectStringPtr(string(method.Type))
 		}
 		methods = append(methods, method)
 	}
 	obj.AccessMethods = &methods
 	if len(methods) == 0 {
-		return Record{}, errorapi.ErrAccessMethodsRequired
+		return drs.DrsObject{}, errorapi.ErrAccessMethodsRequired
 	}
 	return obj, nil
 }
 
 // NormalizeRecord applies canonical identity, timestamp, name, checksum, access, and alias values.
-func NormalizeRecord(record Record, fallback time.Time) (Record, error) {
-	id := strings.TrimSpace(string(record.Id))
+func NormalizeRecord(record drs.DrsObject, fallback time.Time) (drs.DrsObject, error) {
+	id := strings.TrimSpace(record.Id)
 	if id == "" {
-		return Record{}, fmt.Errorf("did is required")
+		return drs.DrsObject{}, fmt.Errorf("did is required")
 	}
-	record.Id = RecordID(id)
+	record.Id = id
 	if record.Checksums != nil {
-		record.Checksums = append([]Checksum(nil), record.Checksums...)
+		record.Checksums = append([]drs.Checksum(nil), record.Checksums...)
 	}
 
 	record = materializeRecordTime(record, fallback.UTC())
@@ -428,7 +370,7 @@ func NormalizeRecord(record Record, fallback time.Time) (Record, error) {
 			continue
 		}
 		if normalized, ok := NormalizeSHA256Query(checksum.Checksum); ok {
-			record.Checksums[i] = Checksum{Type: "sha256", Checksum: normalized}
+			record.Checksums[i] = drs.Checksum{Type: "sha256", Checksum: normalized}
 		}
 	}
 	if record.ControlledAccess != nil {
@@ -440,24 +382,24 @@ func NormalizeRecord(record Record, fallback time.Time) (Record, error) {
 		primary = *record.Name
 	}
 	if record.NameAliases != nil {
-		record.NameAliases = NormalizeNameAliases(primary, record.NameAliases)
+		normalized := NormalizeNameAliases(primary, *record.NameAliases)
+		record.NameAliases = &normalized
 	}
 	return record, nil
 }
 
-func enforceCanonicalProjectScope(obj Record, organization, project string) (Record, error) {
-	organization = strings.TrimSpace(organization)
-	project = strings.TrimSpace(project)
-	if project != "" && organization == "" {
-		return Record{}, fmt.Errorf("organization is required when project is set")
+func enforceCanonicalProjectScope(obj drs.DrsObject, organization, project string) (drs.DrsObject, error) {
+	scope, err := NewScope(organization, project)
+	if err != nil {
+		return drs.DrsObject{}, err
 	}
-	if organization == "" || project == "" {
+	if scope.Organization == "" || scope.Project == "" {
 		return obj, nil
 	}
 
-	resource, err := clientaccess.ResourcePath(organization, project)
+	resource, err := clientaccess.ResourcePath(scope.Organization, scope.Project)
 	if err != nil {
-		return Record{}, err
+		return drs.DrsObject{}, err
 	}
 	controlled := append(AccessResources(&obj), resource)
 	controlled = clientaccess.NormalizeAccessResources(controlled)
