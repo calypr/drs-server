@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -55,14 +58,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 			backend = serverBackendForStore(database)
 		}
 	} else if cfg.Database.Postgres != nil {
-		dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-			cfg.Database.Postgres.User,
-			cfg.Database.Postgres.Password,
-			cfg.Database.Postgres.Host,
-			cfg.Database.Postgres.Port,
-			cfg.Database.Postgres.Database,
-			cfg.Database.Postgres.SSLMode,
-		)
+		dsn := postgresDSN(*cfg.Database.Postgres)
 		logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
 		var database *store.Store
 		database, errDb = postgres.NewPostgresDB(dsn, cipher)
@@ -186,6 +182,17 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		authzHandler:     authzHandler,
 		requestIDHandler: requestIDHandler,
 	}, nil
+}
+
+func postgresDSN(cfg config.PostgresConfig) string {
+	query := url.Values{"sslmode": {cfg.SSLMode}}
+	return (&url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.User, cfg.Password),
+		Host:     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Path:     "/" + cfg.Database,
+		RawQuery: query.Encode(),
+	}).String()
 }
 
 var Cmd = &cobra.Command{
