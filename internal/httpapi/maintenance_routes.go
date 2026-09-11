@@ -77,16 +77,9 @@ func (s *internalServer) InternalInspectObject(c fiber.Ctx) error {
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	resp, err := s.projectStorage.ProbeObject(c.Context(), projectstorage.InspectRequest{
-		ID:                strings.TrimSpace(req.Id),
-		Organization:      strings.TrimSpace(req.Organization),
-		Project:           strings.TrimSpace(req.Project),
-		Key:               strings.TrimSpace(req.Key),
-		Scheme:            strings.TrimSpace(req.Scheme),
-		ObjectURL:         strings.TrimSpace(req.ObjectUrl),
-		ExpectedSizeBytes: req.ExpectedSizeBytes,
-		ExpectedSHA256:    strings.TrimSpace(req.ExpectedSha256),
-	})
+	req.ExpectedName = ""
+	req.ExpectedSha256 = strings.TrimSpace(req.ExpectedSha256)
+	resp, err := s.projectStorage.ProbeObject(c.Context(), req)
 	if err != nil {
 		return HandleError(c, err)
 	}
@@ -104,20 +97,11 @@ func (s *internalServer) InternalInspectObjectBulk(c fiber.Ctx) error {
 	if len(req.Items) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
 	}
-	items := make([]projectstorage.InspectRequest, 0, len(req.Items))
-	for _, item := range req.Items {
-		items = append(items, projectstorage.InspectRequest{
-			ID:                strings.TrimSpace(item.Id),
-			Organization:      strings.TrimSpace(item.Organization),
-			Project:           strings.TrimSpace(item.Project),
-			Key:               strings.TrimSpace(item.Key),
-			Scheme:            strings.TrimSpace(item.Scheme),
-			ObjectURL:         strings.TrimSpace(item.ObjectUrl),
-			ExpectedSizeBytes: item.ExpectedSizeBytes,
-			ExpectedSHA256:    strings.TrimSpace(item.ExpectedSha256),
-		})
+	for index := range req.Items {
+		req.Items[index].ExpectedName = ""
+		req.Items[index].ExpectedSha256 = strings.TrimSpace(req.Items[index].ExpectedSha256)
 	}
-	results := s.projectStorage.ProbeObjects(c.Context(), items)
+	results := s.projectStorage.ProbeObjects(c.Context(), req.Items)
 	out := internalapi.InternalInspectObjectBulkResponse{Items: results}
 	return c.JSON(out)
 }
@@ -133,11 +117,11 @@ func (s *internalServer) InternalInspectObjectBulkList(c fiber.Ctx) error {
 	if len(req.Items) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: items are required")
 	}
-	items := make([]projectstorage.InspectRequest, 0, len(req.Items))
+	items := make([]internalapi.InternalInspectObjectRequest, 0, len(req.Items))
 	for _, item := range req.Items {
-		items = append(items, projectstorage.InspectRequest{
-			ID:                strings.TrimSpace(item.Id),
-			ObjectURL:         strings.TrimSpace(item.ObjectUrl),
+		items = append(items, internalapi.InternalInspectObjectRequest{
+			Id:                strings.TrimSpace(item.Id),
+			ObjectUrl:         strings.TrimSpace(item.ObjectUrl),
 			ExpectedSizeBytes: item.ExpectedSizeBytes,
 			ExpectedName:      strings.TrimSpace(item.ExpectedName),
 		})

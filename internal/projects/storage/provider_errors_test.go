@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/requestid"
 	providerstorage "github.com/calypr/syfon/internal/storage"
 )
@@ -103,9 +104,9 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 	cause := errors.New("private provider detail")
 	service, _ := projectService(&fakeInventory{}, nil)
 	service.probe = errorProbe{cause: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "probe", Cause: cause}}
-	probeResults := service.ProbeObjects(context.Background(), []InspectRequest{
-		{ID: "good", ObjectURL: "s3://bucket/good"},
-		{ID: "bad", ObjectURL: "s3://bucket/bad"},
+	probeResults := service.ProbeObjects(context.Background(), []internalapi.InternalInspectObjectRequest{
+		{Id: "good", ObjectUrl: "s3://bucket/good"},
+		{Id: "bad", ObjectUrl: "s3://bucket/bad"},
 	})
 	if probeResults[0].Status != "present" || probeResults[1].Status != "error" {
 		t.Fatalf("probe results = %+v", probeResults)
@@ -115,9 +116,9 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 	}
 
 	service.inventory = errorInventory{cause: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "inventory", Cause: cause}}
-	validationResults := service.ValidateInventoryObjects(context.Background(), []InspectRequest{
-		{ID: "good", ObjectURL: "s3://bucket/prefix/project/good"},
-		{ID: "bad", ObjectURL: "s3://bucket/prefix/project/bad"},
+	validationResults := service.ValidateInventoryObjects(context.Background(), []internalapi.InternalInspectObjectRequest{
+		{Id: "good", ObjectUrl: "s3://bucket/prefix/project/good"},
+		{Id: "bad", ObjectUrl: "s3://bucket/prefix/project/bad"},
 	})
 	if validationResults[0].Status != "present" || validationResults[1].Status != "error" {
 		t.Fatalf("validation results = %+v", validationResults)

@@ -56,7 +56,7 @@ generated_model_symbols() {
 			echo "AccessMethod AccessMethodAccessUrl Checksum DrsObjectCandidate"
 		;;
 		"github.com/calypr/syfon/internal/projects/storage -> github.com/calypr/syfon/apigen/internalapi")
-			echo "InternalDeleteProjectBucketObjectsItem InternalInspectObjectBulkItem InternalInspectObjectResponse InternalInspectProjectBucketItem InternalInspectProjectBucketResponse InternalInspectProjectBucketSummary ProjectCleanupResponse ScopeRepairApplyResult ScopeRepairFinding ScopeRepairObjectReport ScopeRepairOptions ScopeRepairReport"
+			echo "InternalDeleteProjectBucketObjectsItem InternalInspectObjectBulkItem InternalInspectObjectRequest InternalInspectObjectResponse InternalInspectProjectBucketItem InternalInspectProjectBucketResponse InternalInspectProjectBucketSummary ProjectCleanupResponse ScopeRepairApplyResult ScopeRepairFinding ScopeRepairObjectReport ScopeRepairOptions ScopeRepairReport"
 		;;
 		*)
 			return 1

@@ -108,7 +108,7 @@ func projectRecordMatchesPrefix(record drs.DrsObject, prefixes ...string) bool {
 // inventory evidence. Exact targets are deduplicated, dense sibling keys are
 // coalesced at the historical threshold, and output is always restored to
 // input order including duplicate requests.
-func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []InspectRequest) []internalapi.InternalInspectObjectBulkItem {
+func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []internalapi.InternalInspectObjectRequest) []internalapi.InternalInspectObjectBulkItem {
 	ctx = withRequestCache(ctx)
 	if len(requests) == 0 {
 		return []internalapi.InternalInspectObjectBulkItem{}
@@ -154,14 +154,14 @@ func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []Inspe
 			request := requests[index]
 			if item, exists := matched[key]; exists {
 				result := presentValidationResult(request, work.base, item)
-				result.Id = strings.TrimSpace(request.ID)
-				result.ObjectUrl = strings.TrimSpace(request.ObjectURL)
+				result.Id = strings.TrimSpace(request.Id)
+				result.ObjectUrl = strings.TrimSpace(request.ObjectUrl)
 				results[index] = result
 				continue
 			}
 			result := outcome
-			result.Id = strings.TrimSpace(request.ID)
-			result.ObjectUrl = strings.TrimSpace(request.ObjectURL)
+			result.Id = strings.TrimSpace(request.Id)
+			result.ObjectUrl = strings.TrimSpace(request.ObjectUrl)
 			result.ValidationStatus = string(validationStatusForError(request))
 			results[index] = result
 		}
@@ -169,14 +169,14 @@ func (s *Service) ValidateInventoryObjects(ctx context.Context, requests []Inspe
 	return results
 }
 
-func (s *Service) validationTarget(ctx context.Context, request InspectRequest, index int, visible map[string]buckets.VisibleBucket, visibleErr error) (internalapi.InternalInspectObjectBulkItem, *validationWork, bool) {
+func (s *Service) validationTarget(ctx context.Context, request internalapi.InternalInspectObjectRequest, index int, visible map[string]buckets.VisibleBucket, visibleErr error) (internalapi.InternalInspectObjectBulkItem, *validationWork, bool) {
 	base := internalapi.InternalInspectObjectBulkItem{
-		Id:               strings.TrimSpace(request.ID),
-		ObjectUrl:        strings.TrimSpace(request.ObjectURL),
+		Id:               strings.TrimSpace(request.Id),
+		ObjectUrl:        strings.TrimSpace(request.ObjectUrl),
 		Status:           string(probeError),
 		ValidationStatus: string(validationNotRequested),
 	}
-	bucket, key, ok := address.ParseS3URL(request.ObjectURL)
+	bucket, key, ok := address.ParseS3URL(request.ObjectUrl)
 	if !ok {
 		base.Status = string(probeInvalid)
 		base.ErrorKind = string(ErrorInvalidInput)
@@ -344,7 +344,7 @@ func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]
 	wg.Wait()
 }
 
-func presentValidationResult(request InspectRequest, base internalapi.InternalInspectObjectBulkItem, item internalapi.InternalInspectProjectBucketItem) internalapi.InternalInspectObjectBulkItem {
+func presentValidationResult(request internalapi.InternalInspectObjectRequest, base internalapi.InternalInspectObjectBulkItem, item internalapi.InternalInspectProjectBucketItem) internalapi.InternalInspectObjectBulkItem {
 	base.ObjectUrl = item.ObjectUrl
 	base.Key = item.Key
 	base.Path = item.Path

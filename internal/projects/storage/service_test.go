@@ -9,6 +9,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -328,7 +329,7 @@ func TestProbeObjectNormalizesScopedKeyAgainstEffectivePrefix(t *testing.T) {
 			service, _ := projectService(&fakeInventory{}, nil)
 			probe := &recordingProbe{}
 			service.probe = probe
-			metadata, err := service.ProbeObject(context.Background(), InspectRequest{Organization: "org", Project: "project", Key: tt.key})
+			metadata, err := service.ProbeObject(context.Background(), internalapi.InternalInspectObjectRequest{Organization: "org", Project: "project", Key: tt.key})
 			if err != nil {
 				t.Fatalf("ProbeObject() error = %v", err)
 			}
@@ -350,7 +351,7 @@ func TestProbeObjectNormalizesLegacyOrganizationPrefixAgainstComposedScope(t *te
 	probe := &recordingProbe{}
 	service.probe = probe
 
-	metadata, err := service.ProbeObject(context.Background(), InspectRequest{Organization: "org", Project: "project", Key: "prefix/file.bin"})
+	metadata, err := service.ProbeObject(context.Background(), internalapi.InternalInspectObjectRequest{Organization: "org", Project: "project", Key: "prefix/file.bin"})
 	if err != nil {
 		t.Fatalf("ProbeObject() error = %v", err)
 	}
@@ -366,10 +367,10 @@ func TestValidateInventoryDeduplicatesAndRestoresRequestOrder(t *testing.T) {
 	inventory := &fakeInventory{result: storage.InventoryResult{Items: []storage.ObjectMetadata{{Key: "prefix/a.txt", SizeBytes: 10}}, Complete: true}}
 	service, visibility := projectService(inventory, nil)
 	expectedSize := int64(10)
-	requests := []InspectRequest{
-		{ID: "first", ObjectURL: "s3://bucket/prefix/a.txt", ExpectedSizeBytes: &expectedSize},
-		{ID: "duplicate", ObjectURL: "s3://bucket/prefix/a.txt", ExpectedName: "wrong.txt"},
-		{ID: "invalid", ObjectURL: "https://bucket/prefix/a.txt"},
+	requests := []internalapi.InternalInspectObjectRequest{
+		{Id: "first", ObjectUrl: "s3://bucket/prefix/a.txt", ExpectedSizeBytes: &expectedSize},
+		{Id: "duplicate", ObjectUrl: "s3://bucket/prefix/a.txt", ExpectedName: "wrong.txt"},
+		{Id: "invalid", ObjectUrl: "https://bucket/prefix/a.txt"},
 	}
 	results := service.ValidateInventoryObjects(context.Background(), requests)
 	if visibility.called != 1 {
