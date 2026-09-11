@@ -148,7 +148,9 @@ func collapseCanonicalGroup(group []drs.DrsObject, publicRead map[string]bool) d
 	merged.Checksums = mergeChecksums(group)
 	merged.AccessMethods = mergeAccessMethods(group)
 	controlled, public := mergeControlledAccess(group, publicRead)
-	publicRead[merged.Id] = public
+	if publicRead != nil {
+		publicRead[merged.Id] = public
+	}
 	if len(controlled) > 0 {
 		merged.ControlledAccess = &controlled
 	} else {

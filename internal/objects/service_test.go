@@ -3,8 +3,10 @@ package objects_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -75,6 +77,13 @@ func (f *objectTestStore) RegisterObjects(_ context.Context, records []drs.DrsOb
 	for i := range records {
 		copyObj := *cloneObjectTestRecord(&records[i])
 		f.Objects[copyObj.Id] = &copyObj
+	}
+	return nil
+}
+
+func (f *objectTestStore) BulkDeleteObjects(_ context.Context, ids []string) error {
+	for _, id := range ids {
+		delete(f.Objects, id)
 	}
 	return nil
 }
@@ -156,6 +165,17 @@ func (f *objectTestStore) ListScopedObjectIDsByChecksums(_ context.Context, orga
 	return result, nil
 }
 
+func (f *objectTestStore) ListObjectIDsByScope(_ context.Context, organization, project string) ([]string, error) {
+	ids := make([]string, 0, len(f.Objects))
+	for id, obj := range f.Objects {
+		if recordInScope(obj, organization, project) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
 func recordHasChecksum(obj *drs.DrsObject, checksum string) bool {
 	for _, candidate := range obj.Checksums {
 		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), strings.TrimSpace(checksum)) {
@@ -176,4 +196,56 @@ func recordInScope(obj *drs.DrsObject, organization, project string) bool {
 		}
 	}
 	return false
+}
+
+func TestCollapseProjectChecksumDuplicatesReturnsOneCanonicalRecord(t *testing.T) {
+	resource := "/programs/org/projects/project"
+	controlled := []string{resource}
+	sha := strings.Repeat("a", 64)
+	oldName := "old.txt"
+	newName := "new.txt"
+	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	updated := created.Add(time.Hour)
+	store := &objectTestStore{Objects: map[string]*drs.DrsObject{
+		"old-id": {
+			Id:               "old-id",
+			Name:             &oldName,
+			CreatedTime:      created,
+			UpdatedTime:      &created,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
+			ControlledAccess: &controlled,
+		},
+		"new-id": {
+			Id:               "new-id",
+			Name:             &newName,
+			CreatedTime:      updated,
+			UpdatedTime:      &updated,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
+			ControlledAccess: &controlled,
+		},
+	}}
+	service := objects.NewService(store)
+	ctx := buildGen3Context(map[string]map[string]bool{resource: {
+		"create": true,
+		"read":   true,
+		"update": true,
+		"delete": true,
+	}})
+
+	collapsed, err := service.CollapseProjectChecksumDuplicates(ctx, "org", "project")
+	if err != nil {
+		t.Fatalf("CollapseProjectChecksumDuplicates: %v", err)
+	}
+	if collapsed != 1 {
+		t.Fatalf("collapsed=%d, want 1", collapsed)
+	}
+	if len(store.Objects) != 1 || store.Objects["old-id"] == nil {
+		t.Fatalf("objects=%v, want only old-id", store.Objects)
+	}
+	if got := store.Aliases["new-id"]; got != "old-id" {
+		t.Fatalf("new-id alias=%q, want old-id", got)
+	}
+	if got := store.Objects["old-id"].Name; got == nil || *got != newName {
+		t.Fatalf("canonical name=%v, want %q", got, newName)
+	}
 }

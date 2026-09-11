@@ -50,20 +50,20 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 
 ## Dependency order
 
-| ID | Work package | Priority | Depends on |
-|---|---|---:|---|
-| C01 | Stop canonical duplicate-repair panics | P0 | None |
-| C02 | Return durable object identities and assign LFS accounting ownership | P0 | None |
-| C03 | Commit canonical duplicate repair atomically | P0 | C01, with C02 reuse when practical |
-| C04 | Preserve typed failures in bulk access | P1 | None |
-| C05 | Commit credential and scope deletion atomically | P1 | Completed bucket configuration and cleanup fixes |
-| C06 | Honor SQLite parameter limits | P1 | None |
-| C07 | Enforce one multipart input contract | P1 | None |
-| C08 | Reject ambiguous configuration | P1 | None |
-| C09 | Remove the duplicate project-delete route and specification operation | P1 | Audit generated-client use |
-| C10 | Fail startup when configured credentials cannot be used | P2 | Prefer C08 first |
-| C11 | Use the canonical SHA rule for transfer attribution | P2 | Coordinate with C02 |
-| C12 | Bound LFS limiter state and prevent quota-key collisions | P2 | None |
+| ID | Work package | Priority | Status | Depends on |
+|---|---|---:|---|---|
+| C01 | Stop canonical duplicate-repair panics | P0 | Complete | None |
+| C02 | Return durable object identities and assign LFS accounting ownership | P0 | Ready | None |
+| C03 | Commit canonical duplicate repair atomically | P0 | Ready | C01, with C02 reuse when practical |
+| C04 | Preserve typed failures in bulk access | P1 | Ready | None |
+| C05 | Commit credential and scope deletion atomically | P1 | Ready | Completed bucket configuration and cleanup fixes |
+| C06 | Honor SQLite parameter limits | P1 | Ready | None |
+| C07 | Enforce one multipart input contract | P1 | Ready | None |
+| C08 | Reject ambiguous configuration | P1 | Ready | None |
+| C09 | Remove the duplicate project-delete route and specification operation | P1 | Ready | Audit generated-client use |
+| C10 | Fail startup when configured credentials cannot be used | P2 | Ready | Prefer C08 first |
+| C11 | Use the canonical SHA rule for transfer attribution | P2 | Ready | Coordinate with C02 |
+| C12 | Bound LFS limiter state and prevent quota-key collisions | P2 | Ready | None |
 
 ## C01. Stop canonical duplicate-repair panics
 
