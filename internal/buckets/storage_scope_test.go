@@ -3,6 +3,7 @@ package buckets
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -41,5 +42,66 @@ func TestResolveStorageScopeClassifiesMissingScopeAndCredential(t *testing.T) {
 	_, err = service.ResolveStorageScope(context.Background(), "org", "project")
 	if !errors.As(err, &resolutionErr) || resolutionErr.Kind != StorageScopeCredentialMissing || !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
 		t.Fatalf("missing credential error = %v, want classified credential error", err)
+	}
+}
+
+func TestNormalizedStoragePrefixesPreservesEffectiveOrder(t *testing.T) {
+	tests := []struct {
+		name   string
+		scopes []Scope
+		want   []string
+	}{
+		{
+			name: "trims whitespace and slashes",
+			scopes: []Scope{
+				{PathPrefix: " /org/ "},
+				{PathPrefix: " /project/ "},
+			},
+			want: []string{"org", "project"},
+		},
+		{
+			name: "drops empty prefixes and duplicates",
+			scopes: []Scope{
+				{PathPrefix: " / "},
+				{PathPrefix: ""},
+				{PathPrefix: "project"},
+				{PathPrefix: " /project/ "},
+			},
+			want: []string{"project"},
+		},
+		{
+			name: "replaces parent with nested prefix",
+			scopes: []Scope{
+				{PathPrefix: "org"},
+				{PathPrefix: "org/project"},
+			},
+			want: []string{"org/project"},
+		},
+		{
+			name: "keeps disjoint prefixes in order",
+			scopes: []Scope{
+				{PathPrefix: "org"},
+				{PathPrefix: "project"},
+				{PathPrefix: "dataset"},
+			},
+			want: []string{"org", "project", "dataset"},
+		},
+		{
+			name: "keeps the more general later prefix",
+			scopes: []Scope{
+				{PathPrefix: "org/project"},
+				{PathPrefix: "org"},
+			},
+			want: []string{"org/project"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := NormalizedStoragePrefixes(test.scopes)
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("NormalizedStoragePrefixes() = %v, want %v", got, test.want)
+			}
+		})
 	}
 }

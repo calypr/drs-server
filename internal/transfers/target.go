@@ -118,7 +118,7 @@ func (s *Service) ResolveCanonicalStorageTarget(ctx context.Context, req Canonic
 			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage bucket for object %s", obj.Id)
 		}
 		targetKey := canonicalObjectKey(obj, req.Key, existingKey, req.PreferChecksum)
-		if existingOK && strings.EqualFold(strings.TrimSpace(existingBucket), targetBucket) && len(normalizedScopePrefixes(scopes)) == 0 && strings.TrimSpace(existingKey) != "" {
+		if existingOK && strings.EqualFold(strings.TrimSpace(existingBucket), targetBucket) && len(buckets.NormalizedStoragePrefixes(scopes)) == 0 && strings.TrimSpace(existingKey) != "" {
 			targetKey = existingKey
 		}
 		targetKey = normalizeScopedStorageKey(targetKey, scopes)
@@ -301,7 +301,7 @@ func parseS3Location(accessURL string) (bucket, key string, ok bool) {
 
 func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	key = strings.Trim(strings.TrimSpace(key), "/")
-	prefixes := normalizedScopePrefixes(scopes)
+	prefixes := buckets.NormalizedStoragePrefixes(scopes)
 	remainder := key
 	for _, prefix := range prefixes {
 		remainder = trimLeadingStoragePrefix(remainder, prefix)
@@ -315,32 +315,6 @@ func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	default:
 		return path.Join(composedPrefix, remainder)
 	}
-}
-
-func normalizedScopePrefixes(scopes []buckets.Scope) []string {
-	prefixes := make([]string, 0, len(scopes))
-	for _, scope := range scopes {
-		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-		if prefix == "" {
-			continue
-		}
-		if len(prefixes) == 0 {
-			prefixes = append(prefixes, prefix)
-			continue
-		}
-		last := prefixes[len(prefixes)-1]
-		switch {
-		case prefix == last:
-			continue
-		case strings.HasPrefix(prefix, last+"/"):
-			prefixes[len(prefixes)-1] = prefix
-		case strings.HasPrefix(last, prefix+"/"):
-			continue
-		default:
-			prefixes = append(prefixes, prefix)
-		}
-	}
-	return prefixes
 }
 
 func trimLeadingStoragePrefix(key, prefix string) string {

@@ -137,7 +137,7 @@ func (s *Service) ResolveStorageScope(ctx context.Context, organization, project
 		}
 	}
 
-	prefixes := normalizedStoragePrefixes(scopes)
+	prefixes := NormalizedStoragePrefixes(scopes)
 	return StorageScope{
 		Provider:   address.S3Provider,
 		Bucket:     bucket,
@@ -147,7 +147,9 @@ func (s *Service) ResolveStorageScope(ctx context.Context, organization, project
 	}, nil
 }
 
-func normalizedStoragePrefixes(scopes []Scope) []string {
+// NormalizedStoragePrefixes trims scope path prefixes and collapses nested
+// entries while preserving their effective order.
+func NormalizedStoragePrefixes(scopes []Scope) []string {
 	prefixes := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
