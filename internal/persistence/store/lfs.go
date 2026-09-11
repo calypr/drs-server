@@ -13,14 +13,6 @@ import (
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 )
 
-func (db *Store) execTxContext(ctx context.Context, tx *sql.Tx, query string, args ...any) (sql.Result, error) {
-	return tx.ExecContext(ctx, db.dialect.Rebind(query), args...)
-}
-
-func (db *Store) queryRowTxContext(ctx context.Context, tx *sql.Tx, query string, args ...any) *sql.Row {
-	return tx.QueryRowContext(ctx, db.dialect.Rebind(query), args...)
-}
-
 func (db *Store) SavePendingMetadata(ctx context.Context, entries []transferlfs.PendingMetadata) error {
 	if len(entries) == 0 {
 		return nil
@@ -31,7 +23,7 @@ func (db *Store) SavePendingMetadata(ctx context.Context, entries []transferlfs.
 	}
 	defer tx.Rollback()
 
-	if _, err := db.execTxContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
+	if _, err := db.txExecContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
 		return fmt.Errorf("failed to prune expired pending metadata: %w", err)
 	}
 
@@ -40,7 +32,7 @@ func (db *Store) SavePendingMetadata(ctx context.Context, entries []transferlfs.
 		if err != nil {
 			return fmt.Errorf("failed to marshal pending candidate for oid %s: %w", e.OID, err)
 		}
-		if _, err := db.execTxContext(ctx, tx, `
+		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO lfs_pending_metadata (oid, candidate_json, created_time, expires_time)
 			VALUES (?, ?, ?, ?)
 			ON CONFLICT (oid) DO UPDATE SET
@@ -95,7 +87,7 @@ func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferl
 	}
 	defer tx.Rollback()
 
-	if _, err := db.execTxContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
+	if _, err := db.txExecContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
 		return nil, fmt.Errorf("failed to prune expired pending metadata: %w", err)
 	}
 
@@ -104,7 +96,7 @@ func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferl
 		createdAt time.Time
 		expiresAt time.Time
 	)
-	if err := db.queryRowTxContext(ctx, tx, `
+	if err := db.txQueryRowContext(ctx, tx, `
 		SELECT candidate_json, created_time, expires_time
 		FROM lfs_pending_metadata
 		WHERE oid = ? AND expires_time > ?
@@ -115,7 +107,7 @@ func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferl
 		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
 	}
 
-	if _, err := db.execTxContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE oid = ?`, oid); err != nil {
+	if _, err := db.txExecContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE oid = ?`, oid); err != nil {
 		return nil, fmt.Errorf("failed to consume pending metadata for oid %s: %w", oid, err)
 	}
 

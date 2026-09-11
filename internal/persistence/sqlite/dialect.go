@@ -64,16 +64,6 @@ type sqliteSchemaBootstrap struct {
 	db *sql.DB
 }
 
-func (sqliteDialect) IsConflict(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "constraint") ||
-		strings.Contains(message, "unique") ||
-		strings.Contains(message, "already configured")
-}
-
 func (db *sqliteSchemaBootstrap) initSchema() error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS drs_object (

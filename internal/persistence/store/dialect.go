@@ -14,5 +14,4 @@ type Dialect interface {
 	BeginContentWrite(context.Context, *sql.DB) (*sql.Tx, error)
 	LockContentWrite(context.Context, *sql.Tx) error
 	Bootstrap(context.Context, *sql.DB) error
-	IsConflict(error) bool
 }

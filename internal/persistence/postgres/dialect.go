@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -135,20 +134,6 @@ func (postgresDialect) Bootstrap(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	return nil
-}
-
-func (postgresDialect) IsConflict(err error) bool {
-	if err == nil {
-		return false
-	}
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) && strings.HasPrefix(string(pqErr.Code), "23") {
-		return true
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "duplicate key") ||
-		strings.Contains(message, "unique constraint") ||
-		strings.Contains(message, "already configured")
 }
 
 //go:embed object_schema.sql

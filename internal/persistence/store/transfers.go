@@ -17,10 +17,6 @@ func (db *Store) prepareTxContext(ctx context.Context, tx *sql.Tx, query string)
 	return tx.PrepareContext(ctx, db.dialect.Rebind(query))
 }
 
-func (db *Store) queryTxContext(ctx context.Context, tx *sql.Tx, query string, args ...any) (*sql.Rows, error) {
-	return tx.QueryContext(ctx, db.dialect.Rebind(query), args...)
-}
-
 func (db *Store) RecordTransferAttributionEvents(ctx context.Context, events []usage.Event) error {
 	if len(events) == 0 {
 		return nil
@@ -201,7 +197,7 @@ func (db *Store) backfillAccessGrants(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	rows, err := db.queryTxContext(ctx, tx, `
+	rows, err := db.txQueryContext(ctx, tx, `
 		SELECT event_id, access_grant_id, event_type, direction, event_time, request_id, object_id, sha256, object_size,
 			organization, project, access_id, provider, bucket, storage_url, range_start, range_end,
 			bytes_requested, bytes_completed, actor_email, actor_subject, auth_mode, client_name, client_version,
@@ -233,7 +229,7 @@ func (db *Store) backfillAccessGrants(ctx context.Context) error {
 	grants := make(map[string]usage.Grant)
 	for _, ev := range events {
 		ev.AccessGrantID = usage.GrantID(ev)
-		if _, err := db.execTxContext(ctx, tx, `UPDATE transfer_attribution_event SET access_grant_id = ? WHERE event_id = ?`, ev.AccessGrantID, ev.EventID); err != nil {
+		if _, err := db.txExecContext(ctx, tx, `UPDATE transfer_attribution_event SET access_grant_id = ? WHERE event_id = ?`, ev.AccessGrantID, ev.EventID); err != nil {
 			return err
 		}
 		grant := grants[ev.AccessGrantID]
@@ -276,7 +272,7 @@ func (db *Store) backfillAccessGrants(ctx context.Context) error {
 		grants[ev.AccessGrantID] = grant
 	}
 	for _, grant := range grants {
-		if _, err := db.execTxContext(ctx, tx, `
+		if _, err := db.txExecContext(ctx, tx, `
 			INSERT INTO access_grant (
 				access_grant_id, first_issued_at, last_issued_at, issue_count,
 				object_id, sha256, object_size, organization, project, access_id,
@@ -310,7 +306,7 @@ func (db *Store) upsertAccessGrant(ctx context.Context, tx *sql.Tx, ev usage.Eve
 		return nil
 	}
 	when := ev.EventTime.UTC()
-	_, err := db.execTxContext(ctx, tx, `
+	_, err := db.txExecContext(ctx, tx, `
 		INSERT INTO access_grant (
 			access_grant_id, first_issued_at, last_issued_at, issue_count,
 			object_id, sha256, object_size, organization, project, access_id,
@@ -346,7 +342,7 @@ func (db *Store) upsertAccessGrant(ctx context.Context, tx *sql.Tx, ev usage.Eve
 
 func (db *Store) accessGrantByID(ctx context.Context, tx *sql.Tx, grantID string) (usage.Grant, bool, error) {
 	var grant usage.Grant
-	err := db.queryRowTxContext(ctx, tx, `
+	err := db.txQueryRowContext(ctx, tx, `
 		SELECT access_grant_id, first_issued_at, last_issued_at, issue_count,
 			object_id, sha256, object_size, organization, project, access_id,
 			provider, bucket, storage_url, actor_email, actor_subject, auth_mode
@@ -384,7 +380,7 @@ func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev metri
 		args = append(args, providerStorageURL(ev.Provider, ev.Bucket, stringVal(ev.ObjectKey)), "%/"+stringVal(ev.ObjectKey))
 	}
 	query += " ORDER BY last_issued_at DESC LIMIT 2"
-	rows, err := db.queryTxContext(ctx, tx, query, args...)
+	rows, err := db.txQueryContext(ctx, tx, query, args...)
 	if err != nil {
 		return nil, err
 	}
