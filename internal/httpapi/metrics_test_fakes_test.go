@@ -28,7 +28,8 @@ func metricsTestContext(base context.Context, mode string, headerSet bool, heade
 }
 
 func newMetricsTestApp(reporter usage.Reporter, ingest usage.ProviderEventRecorder) *fiber.App {
-	app := fiber.New()
+	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
+	app.Use(RequestIDHandler(nil))
 	app.Use(func(c fiber.Ctx) error {
 		mode := c.Get("X-Test-Auth-Mode")
 		if mode == "" {
@@ -77,13 +78,8 @@ type metricsReporterFake struct {
 	transferSummary      metricsapi.TransferAttributionSummary
 	transferBreakdown    []metricsapi.TransferAttributionBreakdown
 	getFileUsageErr      error
-	listFileUsageErr     error
-	batchErr             error
-	summaryErr           error
-	scopedFileUsageErr   error
 	transferSummaryErr   error
 	transferBreakdownErr error
-	transferSummaryFn    func(usage.TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error)
 	transferBreakdownFn  func(usage.TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error)
 }
 
@@ -99,16 +95,10 @@ func (f *metricsReporterFake) GetFileUsage(_ context.Context, objectID string) (
 }
 
 func (f *metricsReporterFake) ListFileUsageBatch(_ context.Context, query usage.FileUsageBatchQuery) ([]metricsapi.FileUsage, error) {
-	if f.batchErr != nil {
-		return nil, f.batchErr
-	}
 	return append([]metricsapi.FileUsage(nil), f.batch...), nil
 }
 
 func (f *metricsReporterFake) GetScopedFileUsage(_ context.Context, objectID string, _ usage.ScopeQuery) (*metricsapi.FileUsage, error) {
-	if f.scopedFileUsageErr != nil {
-		return nil, f.scopedFileUsageErr
-	}
 	item, ok := f.scopedFileUsage[objectID]
 	if !ok {
 		return nil, fmt.Errorf("%w: scoped file usage not found", errorapi.ErrNotFound)
@@ -117,25 +107,16 @@ func (f *metricsReporterFake) GetScopedFileUsage(_ context.Context, objectID str
 }
 
 func (f *metricsReporterFake) ListFileUsage(_ context.Context, query usage.FileUsageQuery) ([]metricsapi.FileUsage, error) {
-	if f.listFileUsageErr != nil {
-		return nil, f.listFileUsageErr
-	}
 	return append([]metricsapi.FileUsage(nil), f.files...), nil
 }
 
 func (f *metricsReporterFake) GetFileUsageSummary(_ context.Context, query usage.FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error) {
-	if f.summaryErr != nil {
-		return metricsapi.FileUsageSummary{}, f.summaryErr
-	}
 	return f.summary, nil
 }
 
 func (f *metricsReporterFake) GetTransferAttributionSummary(_ context.Context, query usage.TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error) {
 	if f.transferSummaryErr != nil {
 		return metricsapi.TransferAttributionSummary{}, f.transferSummaryErr
-	}
-	if f.transferSummaryFn != nil {
-		return f.transferSummaryFn(query)
 	}
 	return f.transferSummary, nil
 }

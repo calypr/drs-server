@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/metricsapi"
+	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 )
@@ -112,67 +112,117 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	}
 }
 
-func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
-	valid := &metricsapi.RecordProviderTransferEventsJSONRequestBody{Events: []metricsapi.ProviderTransferEvent{{
-		ProviderEventId: "event-1",
-		Direction:       metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
-		Provider:        "s3",
-		Bucket:          "bucket",
-	}}}
-	server := &metricsServer{ingestor: &metricsIngestFake{}}
+func TestMetricsRoutes_ProviderTransferBoundaryErrors(t *testing.T) {
+	const validBody = `{"events":[{"provider_event_id":"event-1","direction":"download","provider":"s3","bucket":"bucket","organization":"org","project":"project"}]}`
 
-	response, err := server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", false, false, nil), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
-	if err != nil {
-		t.Fatalf("missing auth error: %v", err)
+	tests := []struct {
+		name        string
+		body        string
+		mode        string
+		authHeader  string
+		ingestError error
+		requestID   string
+		wantStatus  int
+	}{
+		{name: "empty body", wantStatus: http.StatusBadRequest},
+		{name: "malformed body", body: `{"events":`, wantStatus: http.StatusBadRequest},
+		{name: "missing auth", body: validBody, mode: "gen3", wantStatus: http.StatusUnauthorized},
+		{name: "authorization denied", body: validBody, mode: "gen3", authHeader: "true", wantStatus: http.StatusForbidden},
+		{name: "invalid normalized event", body: `{"events":[{"provider_event_id":"event-1","direction":"copy","provider":"s3","bucket":"bucket"}]}`, wantStatus: http.StatusBadRequest},
+		{name: "ingestor failure", body: validBody, ingestError: errors.New("ingest failed"), requestID: "metrics-ingest", wantStatus: http.StatusInternalServerError},
 	}
-	if _, ok := response.(metricsapi.RecordProviderTransferEvents401JSONResponse); !ok {
-		t.Fatalf("missing auth response = %T", response)
-	}
-	response, err = server.RecordProviderTransferEvents(metricsTestContext(context.Background(), "gen3", true, true, nil), metricsapi.RecordProviderTransferEventsRequestObject{})
-	if err != nil {
-		t.Fatalf("empty body auth error: %v", err)
-	}
-	if _, ok := response.(metricsapi.RecordProviderTransferEvents403JSONResponse); !ok {
-		t.Fatalf("empty body response = %T", response)
-	}
-	response, err = server.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: &metricsapi.RecordProviderTransferEventsJSONRequestBody{Events: []metricsapi.ProviderTransferEvent{{ProviderEventId: "bad", Direction: "copy", Provider: "s3", Bucket: "bucket"}}}})
-	if err != nil {
-		t.Fatalf("invalid event error: %v", err)
-	}
-	if _, ok := response.(metricsapi.RecordProviderTransferEvents400JSONResponse); !ok {
-		t.Fatalf("invalid event response = %T", response)
-	}
-	wantErr := errors.New("ingest failed")
-	failing := &metricsServer{ingestor: &metricsIngestFake{err: wantErr}}
-	_, err = failing.RecordProviderTransferEvents(context.Background(), metricsapi.RecordProviderTransferEventsRequestObject{Body: valid})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("dependency error = %v, want %v", err, wantErr)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			app := newMetricsTestApp(&metricsReporterFake{}, &metricsIngestFake{err: test.ingestError})
+			req := httptest.NewRequest(http.MethodPost, "/index/v1/metrics/provider-transfer-events", strings.NewReader(test.body))
+			req.Header.Set("Content-Type", "application/json")
+			setMetricsAuthHeaders(req, test.mode, test.authHeader == "true", nil)
+			if test.requestID != "" {
+				req.Header.Set("X-Request-Id", test.requestID)
+			}
+
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != test.wantStatus {
+				t.Fatalf("expected status %d, got %d body=%s", test.wantStatus, resp.StatusCode, body)
+			}
+			if test.requestID != "" {
+				decoded := apierror.FromResponse(resp, body)
+				if decoded.Status != test.wantStatus || decoded.RequestID != test.requestID {
+					t.Fatalf("unexpected error envelope: %+v body=%s", decoded, body)
+				}
+				if got := resp.Header.Get("X-Request-Id"); got != test.requestID {
+					t.Fatalf("expected request ID %q, got %q", test.requestID, got)
+				}
+			}
+		})
 	}
 }
 
-func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing.T) {
-	wantErr := errors.New("transfer report unavailable")
-	server := &metricsServer{reporter: &metricsReporterFake{transferSummaryErr: wantErr, transferBreakdownErr: wantErr}}
-	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
-		t.Fatalf("summary dependency error = %v", err)
+func TestMetricsRoutes_TransferReportBoundaryErrors(t *testing.T) {
+	assertServerError := func(t *testing.T, app *fiber.App, req *http.Request, requestID string) {
+		t.Helper()
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("expected 500, got %d body=%s", resp.StatusCode, body)
+		}
+		decoded := apierror.FromResponse(resp, body)
+		if decoded.Status != http.StatusInternalServerError || decoded.RequestID != requestID || decoded.Message != http.StatusText(http.StatusInternalServerError) {
+			t.Fatalf("unexpected error envelope: %+v body=%s", decoded, body)
+		}
+		if got := resp.Header.Get("X-Request-Id"); got != requestID {
+			t.Fatalf("expected request ID %q, got %q", requestID, got)
+		}
 	}
-	groupBy := metricsapi.GetTransferBreakdownParamsGroupBy("invalid")
-	response, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{Params: metricsapi.GetTransferBreakdownParams{GroupBy: &groupBy}})
-	if err != nil {
-		t.Fatalf("invalid breakdown group error = %v", err)
+
+	for _, test := range []struct {
+		name, path, requestID string
+		reporter              *metricsReporterFake
+	}{
+		{name: "summary dependency failure", path: "/index/v1/metrics/transfers/summary", requestID: "metrics-summary", reporter: &metricsReporterFake{transferSummaryErr: errors.New("summary unavailable")}},
+		{name: "breakdown dependency failure", path: "/index/v1/metrics/transfers/breakdown?group_by=scope", requestID: "metrics-breakdown", reporter: &metricsReporterFake{transferBreakdownErr: errors.New("breakdown unavailable")}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			app := newMetricsTestApp(test.reporter, &metricsIngestFake{})
+			req := httptest.NewRequest(http.MethodGet, test.path, nil)
+			req.Header.Set("X-Request-Id", test.requestID)
+			assertServerError(t, app, req, test.requestID)
+		})
 	}
-	if _, ok := response.(metricsapi.GetTransferBreakdown400JSONResponse); !ok {
-		t.Fatalf("invalid breakdown response = %T", response)
-	}
-	groupBy = metricsapi.GetTransferBreakdownParamsGroupBy("scope")
-	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{Params: metricsapi.GetTransferBreakdownParams{GroupBy: &groupBy}}); !errors.Is(err, wantErr) {
-		t.Fatalf("breakdown dependency error = %v", err)
-	}
-	unauthorized := metricsTestContext(context.Background(), "gen3", false, false, nil)
-	server = &metricsServer{reporter: &metricsReporterFake{}}
-	if _, err := server.GetTransferSummary(unauthorized, metricsapi.GetTransferSummaryRequestObject{}); err != nil {
-		t.Fatalf("unauthorized summary error = %v", err)
-	}
+
+	t.Run("invalid breakdown group does not query reporter", func(t *testing.T) {
+		called := false
+		reporter := &metricsReporterFake{transferBreakdownFn: func(usage.TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error) {
+			called = true
+			return nil, errors.New("reporter should not run")
+		}}
+		app := newMetricsTestApp(reporter, &metricsIngestFake{})
+		req := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/transfers/breakdown?group_by=invalid", nil)
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 400, got %d body=%s", resp.StatusCode, body)
+		}
+		if called {
+			t.Fatal("reporter was called for invalid breakdown group")
+		}
+	})
+
 }
 
 func TestMetricsRoutes_TransferAttributionAuthz(t *testing.T) {
