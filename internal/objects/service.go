@@ -30,6 +30,7 @@ type ObjectStore interface {
 	DeleteObject(context.Context, string) error
 	BulkDeleteObjects(context.Context, []string) error
 	RegisterObjects(context.Context, []drs.DrsObject) error
+	RepairCanonicalDuplicates(context.Context, []CanonicalRepair) error
 	ReplaceObjects(context.Context, []drs.DrsObject) error
 	UpdateObjectAccessMethods(context.Context, string, []drs.AccessMethod) error
 	BulkUpdateAccessMethods(context.Context, map[string][]drs.AccessMethod) error

@@ -10,6 +10,14 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
+// CanonicalRepair describes one atomic repair of physical records that share
+// a project-scoped checksum. Canonical remains a physical record; duplicate
+// IDs become aliases after their rows are removed.
+type CanonicalRepair struct {
+	Canonical    drs.DrsObject
+	DuplicateIDs []string
+}
+
 func canonicalizeProjectScopedObjects(objects []drs.DrsObject, organization, project string, publicRead map[string]bool) []drs.DrsObject {
 	if len(objects) <= 1 {
 		return cloneObjects(objects)
@@ -392,9 +400,7 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 		grouped[key] = append(grouped[key], obj)
 	}
 
-	merged := make([]drs.DrsObject, 0, len(grouped))
-	aliasMap := make(map[string]string)
-	toDelete := make([]string, 0)
+	repairs := make([]CanonicalRepair, 0, len(grouped))
 	keys := make([]string, 0, len(grouped))
 	for key, group := range grouped {
 		if len(group) < 2 {
@@ -406,29 +412,25 @@ func (s *Service) CollapseProjectChecksumDuplicates(ctx context.Context, organiz
 	for _, key := range keys {
 		group := grouped[key]
 		canonical := collapseCanonicalGroup(group, nil)
-		merged = append(merged, canonical)
+		repair := CanonicalRepair{Canonical: canonical, DuplicateIDs: make([]string, 0, len(group)-1)}
 		for _, obj := range group {
 			if obj.Id == canonical.Id {
 				continue
 			}
-			aliasMap[obj.Id] = canonical.Id
-			toDelete = append(toDelete, obj.Id)
+			repair.DuplicateIDs = append(repair.DuplicateIDs, obj.Id)
 		}
+		repairs = append(repairs, repair)
 	}
 
-	if len(merged) == 0 {
+	if len(repairs) == 0 {
 		return 0, nil
 	}
-	if err := s.store.RegisterObjects(ctx, merged); err != nil {
+	if err := s.store.RepairCanonicalDuplicates(ctx, repairs); err != nil {
 		return 0, err
 	}
-	for aliasID, canonicalID := range aliasMap {
-		if err := s.store.CreateObjectAlias(ctx, aliasID, canonicalID); err != nil {
-			return 0, err
-		}
+	collapsed := 0
+	for _, repair := range repairs {
+		collapsed += len(repair.DuplicateIDs)
 	}
-	if err := s.store.BulkDeleteObjects(ctx, uniqueOverwriteStrings(toDelete)); err != nil {
-		return 0, err
-	}
-	return len(aliasMap), nil
+	return collapsed, nil
 }

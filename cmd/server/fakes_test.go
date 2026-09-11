@@ -88,6 +88,20 @@ func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []drs.D
 	return nil
 }
 
+func (s *serverObjectStore) RepairCanonicalDuplicates(_ context.Context, repairs []objects.CanonicalRepair) error {
+	for _, repair := range repairs {
+		if _, ok := s.records[repair.Canonical.Id]; !ok {
+			return fmt.Errorf("%w: canonical object not found", errorapi.ErrNotFound)
+		}
+		for _, duplicateID := range repair.DuplicateIDs {
+			delete(s.records, duplicateID)
+			s.aliases[duplicateID] = repair.Canonical.Id
+		}
+		s.records[repair.Canonical.Id] = cloneServerRecord(&repair.Canonical)
+	}
+	return nil
+}
+
 func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []drs.DrsObject) error {
 	s.records = make(map[string]*drs.DrsObject, len(records))
 	return s.RegisterObjects(ctx, records)

@@ -107,6 +107,139 @@ func (db *Store) RegisterObjects(ctx context.Context, objects []drs.DrsObject) e
 		return nil
 	})
 }
+
+// RepairCanonicalDuplicates is the transactional repair boundary for legacy
+// physical rows that share one checksum. Duplicate rows are removed before
+// the merged canonical row is registered, because registration rejects an
+// ambiguous checksum family. The whole operation, including alias creation,
+// commits or rolls back together.
+func (db *Store) RepairCanonicalDuplicates(ctx context.Context, repairs []objects.CanonicalRepair) error {
+	if len(repairs) == 0 {
+		return nil
+	}
+	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
+		canonicalIDs := make([]string, 0, len(repairs))
+		seenCanonicalIDs := make(map[string]struct{}, len(repairs))
+		for i := range repairs {
+			canonicalID, err := db.repairCanonicalDuplicatesTx(ctx, tx, repairs[i])
+			if err != nil {
+				return fmt.Errorf("repair canonical duplicate group[%d]: %w", i, err)
+			}
+			if _, seen := seenCanonicalIDs[canonicalID]; !seen {
+				seenCanonicalIDs[canonicalID] = struct{}{}
+				canonicalIDs = append(canonicalIDs, canonicalID)
+			}
+		}
+		if err := db.flushObjectUsageEventsForIDsTx(ctx, tx, canonicalIDs); err != nil {
+			return fmt.Errorf("apply object usage events: %w", err)
+		}
+		return nil
+	})
+}
+
+func (db *Store) repairCanonicalDuplicatesTx(ctx context.Context, tx *sql.Tx, repair objects.CanonicalRepair) (string, error) {
+	canonicalID := strings.TrimSpace(repair.Canonical.Id)
+	if canonicalID == "" {
+		return "", fmt.Errorf("canonical object id is required")
+	}
+	sha, hasSHA, err := objects.ValidateCanonicalSHA256(repair.Canonical.Checksums)
+	if err != nil {
+		return "", err
+	}
+	if !hasSHA {
+		return "", fmt.Errorf("canonical object %q has no sha256 checksum", canonicalID)
+	}
+	if _, exists, err := db.loadContentRowTx(ctx, tx, canonicalID); err != nil {
+		return "", err
+	} else if !exists {
+		return "", errorapi.ErrObjectNotFound
+	}
+	canonicalSHAs, err := db.objectSHAsTx(ctx, tx, canonicalID)
+	if err != nil {
+		return "", err
+	}
+	if !containsNormalizedSHA(canonicalSHAs, sha) {
+		return "", identityConflict("canonical object %q does not identify SHA %q", canonicalID, sha)
+	}
+	if err := db.requireContentMethodTx(ctx, tx, canonicalID, "update"); err != nil {
+		return "", err
+	}
+
+	duplicateIDs := make([]string, 0, len(repair.DuplicateIDs))
+	seenDuplicateIDs := make(map[string]struct{}, len(repair.DuplicateIDs))
+	for _, rawID := range repair.DuplicateIDs {
+		duplicateID := strings.TrimSpace(rawID)
+		if duplicateID == "" || duplicateID == canonicalID {
+			return "", fmt.Errorf("invalid duplicate object id %q", rawID)
+		}
+		if _, seen := seenDuplicateIDs[duplicateID]; seen {
+			continue
+		}
+		seenDuplicateIDs[duplicateID] = struct{}{}
+		if _, exists, err := db.loadContentRowTx(ctx, tx, duplicateID); err != nil {
+			return "", err
+		} else if !exists {
+			return "", errorapi.ErrObjectNotFound
+		}
+		duplicateSHAs, err := db.objectSHAsTx(ctx, tx, duplicateID)
+		if err != nil {
+			return "", err
+		}
+		if !containsNormalizedSHA(duplicateSHAs, sha) {
+			return "", identityConflict("duplicate object %q does not identify SHA %q", duplicateID, sha)
+		}
+		if err := db.requireContentMethodTx(ctx, tx, duplicateID, "update"); err != nil {
+			return "", err
+		}
+		if err := db.requireContentMethodTx(ctx, tx, duplicateID, "delete"); err != nil {
+			return "", err
+		}
+		duplicateIDs = append(duplicateIDs, duplicateID)
+	}
+	if len(duplicateIDs) == 0 {
+		return "", fmt.Errorf("canonical object %q has no physical duplicates", canonicalID)
+	}
+
+	if err := db.deletePendingUsageEventsTx(ctx, tx, duplicateIDs); err != nil {
+		return "", err
+	}
+	condition, args := db.dialect.ListArgs("id", duplicateIDs)
+	result, err := db.txExecContext(ctx, tx, "DELETE FROM drs_object WHERE "+condition, args...)
+	if err != nil {
+		return "", err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+	if affected != int64(len(duplicateIDs)) {
+		return "", fmt.Errorf("deleted %d duplicate objects, want %d", affected, len(duplicateIDs))
+	}
+
+	registeredID, err := db.registerContentTx(ctx, tx, &repair.Canonical)
+	if err != nil {
+		return "", err
+	}
+	if registeredID != canonicalID {
+		return "", identityConflict("repair canonical object %q resolved to %q", canonicalID, registeredID)
+	}
+	for _, duplicateID := range duplicateIDs {
+		if err := db.insertObjectAliasTx(ctx, tx, duplicateID, canonicalID); err != nil {
+			return "", err
+		}
+	}
+	return canonicalID, nil
+}
+
+func containsNormalizedSHA(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func (db *Store) registerContentTx(ctx context.Context, tx *sql.Tx, obj *drs.DrsObject) (string, error) {
 	id := strings.TrimSpace(obj.Id)
 	if id == "" {

@@ -81,6 +81,24 @@ func (f *objectTestStore) RegisterObjects(_ context.Context, records []drs.DrsOb
 	return nil
 }
 
+func (f *objectTestStore) RepairCanonicalDuplicates(_ context.Context, repairs []objects.CanonicalRepair) error {
+	for _, repair := range repairs {
+		if _, ok := f.Objects[repair.Canonical.Id]; !ok {
+			return fmt.Errorf("%w: canonical object not found", errorapi.ErrNotFound)
+		}
+		canonical := cloneObjectTestRecord(&repair.Canonical)
+		f.Objects[canonical.Id] = canonical
+		for _, duplicateID := range repair.DuplicateIDs {
+			delete(f.Objects, duplicateID)
+			if f.Aliases == nil {
+				f.Aliases = make(map[string]string)
+			}
+			f.Aliases[duplicateID] = canonical.Id
+		}
+	}
+	return nil
+}
+
 func (f *objectTestStore) BulkDeleteObjects(_ context.Context, ids []string) error {
 	for _, id := range ids {
 		delete(f.Objects, id)
