@@ -44,7 +44,7 @@ func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tok
 		AccessToken: tokenString,
 		APIEndpoint: apiEndpoint,
 	}
-	gen3Logger := logs.NewGen3Logger(r.logger)
+	gen3Logger := logs.NewGen3Logger(r.logger, "", "syfon")
 	httpClient := request.NewClient(gen3Logger, cred, nil, "syfon-server", nil, request.AuthModeBearer)
 	privs, err := fetchPrivileges(ctx, httpClient, apiEndpoint)
 	if err != nil {

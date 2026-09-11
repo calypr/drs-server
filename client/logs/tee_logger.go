@@ -55,7 +55,7 @@ type Gen3Logger struct {
 	*slog.Logger
 }
 
-func NewGen3Logger(logger *slog.Logger) *Gen3Logger {
+func NewGen3Logger(logger *slog.Logger, _ ...string) *Gen3Logger {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}

@@ -133,7 +133,7 @@ func TestCopyRecordCopiesBytesAndPublishesMetadata(t *testing.T) {
 	checksum := "sha256-value"
 	sourceDRS := &copyDRSAPI{objects: map[string]drsapi.DrsObject{"did-copy": {Id: "did-copy", Size: size, AccessMethods: &accessMethods}}}
 	targetDRS := &copyDRSAPI{}
-	logger := logs.NewGen3Logger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	logger := logs.NewGen3Logger(slog.New(slog.NewTextHandler(io.Discard, nil)), "", "syfon")
 	sourceData := services.NewDataService(sourceInternal, nil, logger, services.NewDRSService(sourceDRS))
 	targetData := services.NewDataService(targetInternal, nil, logger, services.NewDRSService(targetDRS))
 	sourceClient := &copyRecordClient{data: sourceData, drs: services.NewDRSService(sourceDRS)}
