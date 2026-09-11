@@ -4,52 +4,9 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func TestToJSONReader(t *testing.T) {
-	t.Parallel()
-
-	reader, err := ToJSONReader(map[string]string{"hello": "world"})
-	if err != nil {
-		t.Fatalf("ToJSONReader returned error: %v", err)
-	}
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatalf("ReadAll returned error: %v", err)
-	}
-	if got := strings.TrimSpace(string(body)); got != `{"hello":"world"}` {
-		t.Fatalf("unexpected JSON body: %s", got)
-	}
-}
-
-func TestParseRootPathAndGetAbsolutePath(t *testing.T) {
-	t.Parallel()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("UserHomeDir returned error: %v", err)
-	}
-
-	expanded, err := ParseRootPath("~/syfon-test")
-	if err != nil {
-		t.Fatalf("ParseRootPath returned error: %v", err)
-	}
-	if expanded != filepath.Join(home, "syfon-test") {
-		t.Fatalf("unexpected expanded path: %q", expanded)
-	}
-
-	abs, err := GetAbsolutePath(".")
-	if err != nil {
-		t.Fatalf("GetAbsolutePath returned error: %v", err)
-	}
-	if !filepath.IsAbs(abs) {
-		t.Fatalf("expected absolute path, got %q", abs)
-	}
-}
 
 func TestResponseBodyError(t *testing.T) {
 	t.Parallel()

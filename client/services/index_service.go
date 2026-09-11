@@ -16,6 +16,23 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
+type ListRecordsOptions struct {
+	Hash         string
+	URL          string
+	Organization string
+	ProjectID    string
+	Limit        int
+	Start        string
+	Page         int
+}
+
+type DeleteByQueryOptions struct {
+	Organization string
+	ProjectID    string
+	Hash         string
+	HashType     string
+}
+
 type IndexService struct {
 	gen internalapi.ClientWithResponsesInterface
 }
@@ -66,6 +83,30 @@ func (s *IndexService) Delete(ctx context.Context, did string) error {
 		return apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return nil
+}
+
+func (s *IndexService) DeleteByQuery(ctx context.Context, opts DeleteByQueryOptions) (internalapi.DeleteByQueryResponse, error) {
+	params := &internalapi.InternalDeleteByQueryParams{}
+	if opts.Organization != "" {
+		params.Organization = &opts.Organization
+	}
+	if opts.ProjectID != "" {
+		params.Project = &opts.ProjectID
+	}
+	if opts.Hash != "" {
+		params.Hash = &opts.Hash
+	}
+	if opts.HashType != "" {
+		params.HashType = &opts.HashType
+	}
+	resp, err := s.gen.InternalDeleteByQueryWithResponse(ctx, params)
+	if err != nil {
+		return internalapi.DeleteByQueryResponse{}, err
+	}
+	if resp.JSON200 == nil {
+		return internalapi.DeleteByQueryResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+	}
+	return *resp.JSON200, nil
 }
 
 func (s *IndexService) RemoveControlledAccess(ctx context.Context, did, resource string) (internalapi.InternalRecordResponse, error) {

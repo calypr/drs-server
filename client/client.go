@@ -39,7 +39,6 @@ type BasicAuth struct {
 type Client struct {
 	httpClient *request.Client
 	baseURL    string
-	logger     *logs.Gen3Logger
 
 	health  *syfonclient.HealthService
 	data    *syfonclient.DataService
@@ -58,6 +57,22 @@ type Client struct {
 }
 
 type Option func(*Config)
+
+func WithHTTPClient(client *http.Client) Option {
+	return func(c *Config) {
+		if client != nil {
+			c.HTTPClient = client
+		}
+	}
+}
+
+func WithUserAgent(userAgent string) Option {
+	return func(c *Config) {
+		if userAgent = strings.TrimSpace(userAgent); userAgent != "" {
+			c.UserAgent = userAgent
+		}
+	}
+}
 
 func WithBasicAuth(user, pass string) Option {
 	return func(c *Config) {
@@ -78,23 +93,13 @@ func WithBearerToken(token string) Option {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Address: defaultAddress,
-		// SECURITY FIX INFO-3: Set reasonable timeout for overall client (10 minutes for large transfers)
+		Address:    defaultAddress,
 		HTTPClient: &http.Client{Timeout: 10 * time.Minute},
 		UserAgent:  defaultUA,
 	}
 }
 
 func New(baseURL string, opts ...Option) (*Client, error) {
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:8080"
-	}
-	if !strings.Contains(baseURL, "://") {
-		baseURL = "http://" + baseURL
-	}
-	baseURL = strings.TrimRight(baseURL, "/")
-
 	cfg := DefaultConfig()
 	cfg.Address = baseURL
 	for _, opt := range opts {
@@ -134,7 +139,6 @@ func NewClient(cfg *Config) (*Client, error) {
 	client := &Client{
 		httpClient: httpClient,
 		baseURL:    bu,
-		logger:     httpClient.Logger(),
 	}
 	if err := client.initServices(); err != nil {
 		return nil, err
@@ -223,8 +227,8 @@ func (c *Client) MetricsAPI() *metricsapi.ClientWithResponses   { return c.metri
 func (c *Client) DRSAPI() *drs.ClientWithResponses              { return c.drsGen }
 
 func (c *Client) Logger() *logs.Gen3Logger {
-	if c.logger != nil {
-		return c.logger
+	if c.httpClient != nil {
+		return c.httpClient.Logger()
 	}
-	return logs.NewGen3Logger(nil, "", "")
+	return logs.NewGen3Logger(nil)
 }

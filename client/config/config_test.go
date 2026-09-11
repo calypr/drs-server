@@ -43,6 +43,13 @@ func TestManagerEnsureExistsSaveLoad(t *testing.T) {
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("expected config file to exist: %v", err)
 	}
+	configDir, err := os.Stat(filepath.Dir(configPath))
+	if err != nil {
+		t.Fatalf("stat config directory: %v", err)
+	}
+	if !configDir.IsDir() || configDir.Mode().Perm() != 0o700 {
+		t.Fatalf("config directory has mode=%v", configDir.Mode().Perm())
+	}
 
 	want := &Credential{
 		Profile:            "default",
@@ -198,6 +205,21 @@ func TestManagerLoadErrors(t *testing.T) {
 }
 
 func TestManagerImport(t *testing.T) {
+	t.Run("expands home directory", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		if err := os.WriteFile(filepath.Join(home, "credential.json"), []byte(`{"key_id":"kid","api_key":"api"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cred, err := testManager().Import("~/credential.json", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cred.KeyID != "kid" || cred.APIKey != "api" {
+			t.Fatalf("unexpected imported credential: %+v", cred)
+		}
+	})
+
 	t.Run("imports credential file with normalized keys", func(t *testing.T) {
 		credFile := filepath.Join(t.TempDir(), "cred.json")
 		content := `{"key_id":"kid","api_key":"api","AccessToken":"tok","APIEndpoint":"https://example.org"}`
@@ -328,12 +350,6 @@ func TestManagerTokenAndCredentialValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy IsValid checks api key", func(t *testing.T) {
-		ok, err := man.IsValid(&Credential{APIKey: valid})
-		if !ok || err != nil {
-			t.Fatalf("expected IsValid success, got ok=%v err=%v", ok, err)
-		}
-	})
 }
 
 func TestImportPreservesCredentialValues(t *testing.T) {

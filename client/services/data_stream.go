@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -84,12 +85,14 @@ func (d *DataService) Download(ctx context.Context, signedURL string, rangeStart
 
 func (d *DataService) ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error) {
 	organization, project := uploadScopeFromMetadata(metadata)
-	resp, err := d.UploadURL(ctx, UploadURLRequest{
-		FileID:       guid,
-		Key:          filename,
-		Organization: organization,
-		Project:      project,
-	})
+	params := &internalapi.InternalUploadURLParams{Key: &filename}
+	if organization != "" {
+		params.Organization = &organization
+	}
+	if project != "" {
+		params.Project = &project
+	}
+	resp, err := d.UploadURL(ctx, guid, params)
 	if err != nil {
 		return "", err
 	}
@@ -120,15 +123,11 @@ func uploadScopeFromMetadata(metadata common.FileMetadata) (string, string) {
 }
 
 func (d *DataService) Upload(ctx context.Context, url string, body io.Reader, size int64) error {
-	ctx, cancel := context.WithTimeout(ctx, common.DataTimeout)
-	defer cancel()
 	_, err := transfer.DoUpload(ctx, d.httpClient, url, body, size)
 	return err
 }
 
 func (d *DataService) UploadPart(ctx context.Context, url string, body io.Reader, size int64) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, common.DataTimeout)
-	defer cancel()
 	return transfer.DoUpload(ctx, d.httpClient, url, body, size)
 }
 

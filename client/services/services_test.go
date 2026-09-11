@@ -555,3 +555,26 @@ func TestLFSService(t *testing.T) {
 		}
 	})
 }
+
+func TestHealthService(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet || req.URL.Path != "/healthz" {
+				t.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
+		})}
+		if err := NewHealthService("https://example.test", client).Ping(context.Background()); err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("transport error", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("health check failed")
+		})}
+		if err := NewHealthService("https://example.test", client).Ping(context.Background()); err == nil {
+			t.Error("expected error, got nil")
+		}
+	})
+}

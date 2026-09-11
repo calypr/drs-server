@@ -1,6 +1,7 @@
 package request
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -59,14 +60,13 @@ func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 	}
 
 	refreshClient := &http.Client{Transport: t.Base}
-	payload := map[string]string{"api_key": apiKey}
-	reader, err := common.ToJSONReader(payload)
+	payload, err := json.Marshal(map[string]string{"api_key": apiKey})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode token refresh request: %w", err)
 	}
 
 	refreshUrl := strings.TrimRight(apiEndpoint, "/") + common.DataAccessTokenEndpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refreshUrl, reader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refreshUrl, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}

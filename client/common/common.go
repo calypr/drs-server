@@ -1,42 +1,31 @@
 package common
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
+	"time"
 )
 
-func ToJSONReader(payload any) (io.Reader, error) {
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(payload); err != nil {
-		return nil, fmt.Errorf("failed to encode JSON payload: %w", err)
-	}
-	return &buf, nil
-}
+const (
+	B  int64 = 1
+	KB int64 = 1024 * B
+	MB int64 = 1024 * KB
+	GB int64 = 1024 * MB
+	TB int64 = 1024 * GB
 
-func ParseRootPath(filePath string) (string, error) {
-	if filePath != "" && filePath[0] == '~' {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return homeDir + filePath[1:], nil
-	}
-	return filePath, nil
-}
-
-func GetAbsolutePath(filePath string) (string, error) {
-	fullFilePath, err := ParseRootPath(filePath)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Abs(fullFilePath)
-}
+	DataAccessTokenEndpoint = "/user/credentials/api/access_token"
+	DataTimeout             = 5 * time.Minute
+	HeaderContentType       = "Content-Type"
+	MIMEApplicationJSON     = "application/json"
+	FileSizeLimit           = 5 * GB
+	MaxRetryCount           = 5
+	MaxWaitTime             = 300
+	MaxConcurrentUploads    = 10
+	OnProgressThreshold     = 1 * MB
+	HealthzEndpoint         = "/healthz"
+)
 
 func IsCloudPresignedURL(raw string) bool {
 	return strings.Contains(raw, "X-Amz-Signature") ||

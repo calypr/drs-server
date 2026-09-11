@@ -49,7 +49,7 @@ func (r *recordingRequester) Do(req *http.Request) (*http.Response, error) {
 }
 
 func discardLogger() *logs.Gen3Logger {
-	return logs.NewGen3Logger(slog.New(slog.NewTextHandler(io.Discard, nil)), "", "")
+	return logs.NewGen3Logger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func mustInternalClient(t *testing.T, serverURL string) *internalapi.ClientWithResponses {

@@ -20,6 +20,17 @@ type TransferLogger interface {
 type ObjectMetadata struct {
 	Size         int64
 	AcceptRanges bool
+	Provider     string
+}
+
+// TransferRequest represents a request to move a single file.
+type TransferRequest struct {
+	SourcePath     string
+	ObjectKey      string
+	GUID           string
+	Bucket         string
+	Metadata       common.FileMetadata
+	ForceMultipart bool
 }
 
 // ReadBackend provides metadata, single-stream reads, and ranged reads.
@@ -54,3 +65,9 @@ type Uploader interface {
 	DeleteFile(ctx context.Context, guid string) (string, error)
 	CanonicalObjectURL(signedURL, bucketHint, fallbackDID string) (string, error)
 }
+
+// NoOpLogger satisfies TransferLogger without emitting output.
+type NoOpLogger struct{}
+
+func (NoOpLogger) Error(string, ...any)  {}
+func (NoOpLogger) Printf(string, ...any) {}

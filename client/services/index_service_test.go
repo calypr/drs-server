@@ -22,6 +22,7 @@ func TestIndexServiceOperationsAndUpsert(t *testing.T) {
 
 	var (
 		lastListQuery        url.Values
+		lastDeleteQuery      url.Values
 		lastCreated          internalapi.InternalRecord
 		lastUpdated          internalapi.InternalRecord
 		lastRemoveControlled internalapi.ControlledAccessRemoveRequest
@@ -74,6 +75,10 @@ func TestIndexServiceOperationsAndUpsert(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodDelete && r.URL.Path == "/index/fail-delete":
 			w.WriteHeader(http.StatusTeapot)
+		case r.Method == http.MethodDelete && r.URL.Path == "/index":
+			lastDeleteQuery = r.URL.Query()
+			deleted := 3
+			writeJSON(t, w, http.StatusOK, internalapi.DeleteByQueryResponse{Deleted: &deleted})
 		case r.Method == http.MethodPost && r.URL.Path == "/index/did-ca/controlled-access/remove":
 			if err := json.NewDecoder(r.Body).Decode(&lastRemoveControlled); err != nil {
 				t.Fatalf("Decode remove controlled access body returned error: %v", err)
@@ -117,6 +122,12 @@ func TestIndexServiceOperationsAndUpsert(t *testing.T) {
 
 	if err := service.Delete(ctx, "did-delete"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
+	}
+	if deleted, err := service.DeleteByQuery(ctx, DeleteByQueryOptions{Organization: "org", ProjectID: "project", Hash: "abc", HashType: "sha256"}); err != nil || deleted.Deleted == nil || *deleted.Deleted != 3 {
+		t.Fatalf("DeleteByQuery returned response=%+v err=%v", deleted, err)
+	}
+	if lastDeleteQuery.Get("organization") != "org" || lastDeleteQuery.Get("project") != "project" || lastDeleteQuery.Get("hash") != "abc" || lastDeleteQuery.Get("hash_type") != "sha256" {
+		t.Fatalf("unexpected delete query: %v", lastDeleteQuery)
 	}
 	if err := service.Delete(ctx, "fail-delete"); err == nil {
 		t.Fatal("expected delete error for non-success status")

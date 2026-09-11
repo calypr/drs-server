@@ -3,15 +3,14 @@ package config
 //go:generate mockgen -destination=../internal/testmocks/config_manager_mock.go -package=testmocks github.com/calypr/syfon/client/config ManagerInterface
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/calypr/syfon/client/common"
 	"gopkg.in/ini.v1"
 )
 
@@ -29,20 +28,11 @@ type Credential struct {
 	ProjectID          string
 }
 
-type CredentialReader interface {
-	Current() *Credential
-}
-
-type CredentialManager interface {
-	CredentialReader
-	Export(ctx context.Context, cred *Credential) error
-}
-
 type Manager struct {
 	Logger *slog.Logger
 }
 
-func NewConfigure(logs *slog.Logger) ManagerInterface {
+func NewConfigure(logs *slog.Logger) *Manager {
 	return &Manager{
 		Logger: logs,
 	}
@@ -232,7 +222,15 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 	var cred Credential
 
 	if filePath != "" {
-		fullPath, err := common.GetAbsolutePath(filePath)
+		resolvedPath := filePath
+		if strings.HasPrefix(resolvedPath, "~") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil, err
+			}
+			resolvedPath = homeDir + strings.TrimPrefix(resolvedPath, "~")
+		}
+		fullPath, err := filepath.Abs(resolvedPath)
 		if err != nil {
 			man.Logger.Error("error parsing credential file path: " + err.Error())
 			return nil, err

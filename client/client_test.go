@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	syfonclient "github.com/calypr/syfon/client/services"
@@ -49,12 +50,7 @@ func TestClientBasicAuthAndUserAgent(t *testing.T) {
 		}, nil
 	})}
 
-	c, err := NewClient(&Config{
-		Address:    "http://example.test",
-		BasicAuth:  &BasicAuth{Username: "u", Password: "p"},
-		UserAgent:  "syfon-test-client",
-		HTTPClient: httpClient,
-	})
+	c, err := New("http://example.test", WithBasicAuth("u", "p"), WithUserAgent("syfon-test-client"), WithHTTPClient(httpClient))
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -232,9 +228,6 @@ func TestDataMultipartInitUsesCanonicalUploadId(t *testing.T) {
 			Header:     header,
 		}, nil
 	})
-	// InitMultipartUpload returns (uploadID string, respGuid string, err error)
-	// Wait, I updated the service methods.
-	// c.data.InitMultipartUpload(ctx, guid, filename, bucket) -> (string, string, error)
 	uploadID, respGuid, err := c.data.InitMultipartUpload(context.Background(), "g1", "", "")
 	if err != nil {
 		t.Fatalf("MultipartInit failed: %v", err)
@@ -326,6 +319,9 @@ func TestNewClientNilConfigAndFallbackHelpers(t *testing.T) {
 	}
 	if c.Address() != defaultAddress {
 		t.Fatalf("unexpected default address: %q", c.Address())
+	}
+	if c.HTTPClient().Timeout != 10*time.Minute {
+		t.Fatalf("unexpected default timeout: %v", c.HTTPClient().Timeout)
 	}
 
 	bare := &Client{}

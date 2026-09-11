@@ -125,7 +125,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("unexpected upload blank request: %+v", lastUploadBlank)
 	}
 
-	if _, err := service.UploadURL(ctx, UploadURLRequest{FileID: "file-1", Key: "name.txt", ExpiresIn: 60, Organization: "org-a", Project: "proj-a"}); err != nil {
+	expires := int32(60)
+	if _, err := service.UploadURL(ctx, "file-1", &internalapi.InternalUploadURLParams{Key: ptrString("name.txt"), ExpiresIn: &expires, Organization: ptrString("org-a"), Project: ptrString("proj-a")}); err != nil {
 		t.Fatalf("UploadURL returned error: %v", err)
 	}
 	if uploadURLQuery.Get("organization") != "org-a" || uploadURLQuery.Get("project") != "proj-a" || uploadURLQuery.Get("key") != "name.txt" || uploadURLQuery.Get("expires_in") != "60" {
@@ -136,7 +137,7 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if _, err := service.ResolveUploadURL(ctx, "missing-upload-url", "name.txt", scopedMetadata, "ignored-bucket"); err == nil || !strings.Contains(err.Error(), "response missing URL") {
 		t.Fatalf("expected missing upload URL error, got %v", err)
 	}
-	if _, err := service.UploadURL(ctx, UploadURLRequest{FileID: "upload-error"}); err == nil {
+	if _, err := service.UploadURL(ctx, "upload-error", nil); err == nil {
 		t.Fatal("expected upload URL error on non-200 status")
 	}
 
@@ -301,5 +302,37 @@ func TestDataServiceMultipartInitPreservesServerMessage(t *testing.T) {
 	_, _, err := service.InitMultipartUpload(context.Background(), "", "", "")
 	if err == nil || !strings.Contains(err.Error(), "checksum-only multipart init requires an explicit guid or a project-scoped object id") {
 		t.Fatalf("expected preserved multipart init error message, got %v", err)
+	}
+}
+
+func TestDataServiceCanonicalObjectURL(t *testing.T) {
+	d := &DataService{}
+	tests := []struct {
+		name       string
+		signedURL  string
+		bucketHint string
+		fallback   string
+		want       string
+	}{
+		{name: "gcs https signed url", signedURL: "https://storage.googleapis.com/gcs-bucket/path/to/object.bin?X-Goog-Signature=abc", bucketHint: "gcs-bucket", fallback: "did:1", want: "s3://gcs-bucket/path/to/object.bin"},
+		{name: "azure https signed url", signedURL: "https://acct.blob.core.windows.net/az-container/path/to/object.bin?sig=abc", bucketHint: "az-container", fallback: "did:2", want: "s3://az-container/path/to/object.bin"},
+		{name: "gcs scheme", signedURL: "gs://gcs-bucket/path/to/object.bin", fallback: "did:3", want: "gs://gcs-bucket/path/to/object.bin"},
+		{name: "azure scheme", signedURL: "azblob://az-container/path/to/object.bin", fallback: "did:4", want: "azblob://az-container/path/to/object.bin"},
+		{name: "gcs json upload", signedURL: "http://localhost:4443/upload/storage/v1/b/test-bucket/o?uploadType=media&name=objects%2Fthing.txt", fallback: "did:5", want: "s3://test-bucket/objects/thing.txt"},
+		{name: "gcs json upload overrides hint", signedURL: "http://localhost:4443/upload/storage/v1/b/test-bucket/o?uploadType=media&name=objects%2Fthing.txt", bucketHint: "upload", fallback: "did:6", want: "s3://test-bucket/objects/thing.txt"},
+		{name: "azure signed url", signedURL: "https://acct.blob.core.windows.net/az-container/path/to/object.bin?sig=abc&sr=b&sv=2021-08-06", fallback: "did:7", want: "s3://az-container/path/to/object.bin"},
+		{name: "azurite signed url", signedURL: "http://localhost:10000/devstoreaccount1/az-container/path/to/object.bin?sig=abc&sr=b&sv=2021-08-06", fallback: "did:8", want: "s3://az-container/path/to/object.bin"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.CanonicalObjectURL(tc.signedURL, tc.bucketHint, tc.fallback)
+			if err != nil {
+				t.Fatalf("CanonicalObjectURL returned error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("unexpected canonical URL: got %q want %q", got, tc.want)
+			}
+		})
 	}
 }

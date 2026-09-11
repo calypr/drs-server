@@ -38,7 +38,7 @@ func NewClient(
 	mode AuthMode,
 ) *Client {
 	if logger == nil {
-		logger = logs.NewGen3Logger(nil, "", "")
+		logger = logs.NewGen3Logger(nil)
 	}
 
 	var baseTransport http.RoundTripper

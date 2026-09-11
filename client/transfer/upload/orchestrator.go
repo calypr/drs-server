@@ -22,6 +22,17 @@ type MetadataClient interface {
 	UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []drsapi.AccessMethod) (drsapi.DrsObject, error)
 }
 
+func Upload(ctx context.Context, backend transfer.MultipartBackend, sourcePath, objectKey, guid, bucket string, metadata common.FileMetadata, _ bool, forceMultipart bool) error {
+	return (&engine.GenericUploader{Backend: backend}).Upload(ctx, transfer.TransferRequest{
+		SourcePath:     sourcePath,
+		ObjectKey:      objectKey,
+		GUID:           guid,
+		Bucket:         bucket,
+		Metadata:       metadata,
+		ForceMultipart: forceMultipart,
+	})
+}
+
 // RegisterFile orchestrates the full registration and upload flow:
 // 1. Build a DRS object from the local file (if not provided).
 // 2. Register metadata with the DRS server via the provided drs.Client.

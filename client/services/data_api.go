@@ -36,22 +36,8 @@ func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalU
 	return *resp.JSON201, nil
 }
 
-func (d *DataService) UploadURL(ctx context.Context, req UploadURLRequest) (internalapi.InternalSignedURL, error) {
-	params := &internalapi.InternalUploadURLParams{}
-	if req.Key != "" {
-		params.Key = &req.Key
-	}
-	if req.ExpiresIn > 0 {
-		expires := int32(req.ExpiresIn)
-		params.ExpiresIn = &expires
-	}
-	if req.Organization != "" {
-		params.Organization = &req.Organization
-	}
-	if req.Project != "" {
-		params.Project = &req.Project
-	}
-	resp, err := d.gen.InternalUploadURLWithResponse(ctx, req.FileID, params)
+func (d *DataService) UploadURL(ctx context.Context, fileID string, params *internalapi.InternalUploadURLParams) (internalapi.InternalSignedURL, error) {
+	resp, err := d.gen.InternalUploadURLWithResponse(ctx, fileID, params)
 	if err != nil {
 		return internalapi.InternalSignedURL{}, err
 	}

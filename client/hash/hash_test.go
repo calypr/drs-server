@@ -2,7 +2,10 @@ package hash
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	drsapi "github.com/calypr/syfon/apigen/drs"
 )
 
 func TestHashInfoUnmarshalJSON(t *testing.T) {
@@ -54,11 +57,27 @@ func TestHashInfoUnmarshalJSON(t *testing.T) {
 func TestHashConversions(t *testing.T) {
 	t.Parallel()
 
-	checksums := []Checksum{{Type: "sha256", Checksum: "abc"}, {Type: "md5", Checksum: "def"}}
-	if got := ConvertChecksumsToMap(checksums); got["sha256"] != "abc" || got["md5"] != "def" {
-		t.Fatalf("unexpected checksum map: %+v", got)
+	drsChecksums := []drsapi.Checksum{{Type: "sha256", Checksum: "abc"}}
+	if got := ConvertDrsChecksumsToHashInfo(drsChecksums); got.SHA256 != "abc" {
+		t.Fatalf("unexpected DRS checksum conversion: %+v", got)
 	}
-	if got := ConvertChecksumsToHashInfo(checksums); got != (HashInfo{MD5: "def", SHA256: "abc"}) {
-		t.Fatalf("unexpected checksum hash info: %+v", got)
+	if got := NormalizeChecksumType(" SHA "); got != ChecksumTypeSHA1 || got.String() != "sha1" {
+		t.Fatalf("unexpected checksum type normalization: %q", got)
+	}
+}
+
+func TestNormalizeOid(t *testing.T) {
+	valid := strings.Repeat("a", 64)
+	if got := NormalizeOid("  sha256:" + strings.ToUpper(valid) + "  "); got != valid {
+		t.Fatalf("unexpected normalized oid: %q", got)
+	}
+	if got := NormalizeOid("not-a-valid-oid"); got != "" {
+		t.Fatalf("expected invalid oid to normalize to empty string, got %q", got)
+	}
+}
+
+func TestNormalizeChecksum(t *testing.T) {
+	if got := NormalizeChecksum("  sha256:ABC123  "); got != "ABC123" {
+		t.Fatalf("unexpected normalized checksum: %q", got)
 	}
 }

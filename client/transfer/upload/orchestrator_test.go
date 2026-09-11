@@ -68,6 +68,24 @@ func cloneRegisterRequest(req drsapi.RegisterObjectsJSONRequestBody) drsapi.Regi
 	return out
 }
 
+func TestUploadUsesTransferEngine(t *testing.T) {
+	t.Parallel()
+
+	file := createTempFileWithData(t, "payload")
+	defer file.Close()
+	backend := &uploaderStub{}
+	metadata := common.FileMetadata{Authorizations: map[string][]string{"org": {"project"}}}
+	if err := Upload(context.Background(), backend, file.Name(), "object-key", "did", "bucket", metadata, false, false); err != nil {
+		t.Fatalf("Upload returned error: %v", err)
+	}
+	if backend.lastResolve.guid != "did" || backend.lastResolve.fileName != "object-key" || backend.lastResolve.bucket != "bucket" {
+		t.Fatalf("unexpected upload resolution: %+v", backend.lastResolve)
+	}
+	if backend.lastUpload.body != "payload" {
+		t.Fatalf("uploaded body = %q", backend.lastUpload.body)
+	}
+}
+
 func TestRegisterFileUploadsUsingRegisteredObjectID(t *testing.T) {
 	t.Parallel()
 
@@ -107,7 +125,7 @@ func TestRegisterFilePreservesScopedRoutingMetadata(t *testing.T) {
 	name := "payload.bin"
 	controlledAccess := []string{"/organization/syfon/project/e2e"}
 	accessMethods := []drsapi.AccessMethod{{
-		Type: "s3",
+		Type:      "s3",
 		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-e2e-bucket/project-subpath/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{
@@ -171,7 +189,7 @@ func TestRegisterFilePrefersExplicitControlledAccessOverExistingObject(t *testin
 	targetControlledAccess := []string{"/organization/dst/project/copied"}
 	sourceControlledAccess := []string{"/organization/src/project/original"}
 	accessMethods := []drsapi.AccessMethod{{
-		Type: "s3",
+		Type:      "s3",
 		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-bucket/original/3d71f043937a09db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{

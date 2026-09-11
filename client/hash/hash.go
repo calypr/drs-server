@@ -3,12 +3,17 @@ package hash
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
 )
 
 // ChecksumType represents the digest method used to create the checksum
 type ChecksumType string
+
+func (ct ChecksumType) String() string {
+	return string(ct)
+}
 
 // IANA Named Information Hash Algorithm Registry values and other common types
 const (
@@ -20,18 +25,6 @@ const (
 	ChecksumTypeCRC32C   ChecksumType = "crc32c"
 	ChecksumTypeTrunc512 ChecksumType = "trunc512"
 )
-
-var SupportedChecksums = map[string]bool{
-	string(ChecksumTypeSHA1):     true,
-	string(ChecksumTypeSHA256):   true,
-	string(ChecksumTypeSHA512):   true,
-	string(ChecksumTypeMD5):      true,
-	string(ChecksumTypeETag):     true,
-	string(ChecksumTypeCRC32C):   true,
-	string(ChecksumTypeTrunc512): true,
-}
-
-type Checksum drsapi.Checksum
 
 type HashInfo struct {
 	MD5    string `json:"md5,omitempty"`
@@ -51,26 +44,23 @@ func (h *HashInfo) UnmarshalJSON(data []byte) error {
 
 	var mapPayload map[string]string
 	if err := json.Unmarshal(data, &mapPayload); err == nil {
-		*h = ConvertStringMapToHashInfo(mapPayload)
+		*h = hashInfoFromMap(mapPayload)
 		return nil
 	}
 
-	var checksumPayload []Checksum
+	var checksumPayload []drsapi.Checksum
 	if err := json.Unmarshal(data, &checksumPayload); err == nil {
-		*h = ConvertChecksumsToHashInfo(checksumPayload)
+		*h = ConvertDrsChecksumsToHashInfo(checksumPayload)
 		return nil
 	}
 
 	return fmt.Errorf("unsupported HashInfo payload: %s", string(data))
 }
 
-func ConvertStringMapToHashInfo(inputHashes map[string]string) HashInfo {
+func hashInfoFromMap(inputHashes map[string]string) HashInfo {
 	hashInfo := HashInfo{}
 
 	for key, value := range inputHashes {
-		if !SupportedChecksums[key] {
-			continue // Disregard unsupported types
-		}
 		switch key {
 		case string(ChecksumTypeMD5):
 			hashInfo.MD5 = value
@@ -90,15 +80,54 @@ func ConvertStringMapToHashInfo(inputHashes map[string]string) HashInfo {
 	return hashInfo
 }
 
-func ConvertChecksumsToMap(checksums []Checksum) map[string]string {
+func ConvertDrsChecksumsToHashInfo(checksums []drsapi.Checksum) HashInfo {
 	result := make(map[string]string, len(checksums))
-	for _, c := range checksums {
-		result[c.Type] = c.Checksum
+	for _, checksum := range checksums {
+		result[checksum.Type] = checksum.Checksum
 	}
-	return result
+	return hashInfoFromMap(result)
 }
 
-func ConvertChecksumsToHashInfo(checksums []Checksum) HashInfo {
-	checksumMap := ConvertChecksumsToMap(checksums)
-	return ConvertStringMapToHashInfo(checksumMap)
+func NormalizeChecksumType(raw string) ChecksumType {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "sha256":
+		return ChecksumTypeSHA256
+	case "sha512":
+		return ChecksumTypeSHA512
+	case "sha1", "sha":
+		return ChecksumTypeSHA1
+	case "md5":
+		return ChecksumTypeMD5
+	case "etag":
+		return ChecksumTypeETag
+	case "crc32c":
+		return ChecksumTypeCRC32C
+	case "trunc512":
+		return ChecksumTypeTrunc512
+	default:
+		return ChecksumType(raw)
+	}
+}
+
+// NormalizeOid strips an optional "sha256:" prefix, lowercases, and validates
+// that the result is a 64-character hex string. Returns "" for invalid input.
+func NormalizeOid(oid string) string {
+	v := strings.TrimSpace(strings.ToLower(oid))
+	v = strings.TrimPrefix(v, "sha256:")
+	if len(v) != 64 {
+		return ""
+	}
+	for _, ch := range v {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return ""
+		}
+	}
+	return v
+}
+
+// NormalizeChecksum trims whitespace and an optional sha256: prefix.
+func NormalizeChecksum(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "sha256:")
+	return strings.TrimSpace(raw)
 }
