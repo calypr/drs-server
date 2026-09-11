@@ -12,6 +12,6 @@ Use the guides by task:
 - [Plugin integration](plugins.md) documents the authentication and authorization plugin contracts.
 - [Troubleshooting](troubleshooting.md) maps common startup and request failures to checks.
 
-Developers can also read the [OpenAPI code-generation guide](operator-guide-code-generation.md), [transfer metrics guide](access-grants-transfer-metrics.md), and [multipart download guide](multi-cloud-multipart.md).
+Developers can also read the [OpenAPI code-generation guide](operator-guide-code-generation.md), [transfer metrics guide](access-grants-transfer-metrics.md), [multipart download guide](multi-cloud-multipart.md), and [composition backlog](composition-backlog.md).
 
 Architecture decisions are grouped under the Architecture Decisions section in the site navigation. Generated API contracts are served at `/index/openapi.yaml` when the docs route is enabled.
