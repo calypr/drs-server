@@ -231,7 +231,7 @@ func (s *Service) inspectScoped(ctx context.Context, request InspectRequest) (*o
 	if err != nil {
 		return nil, err
 	}
-	key = normalizeScopedStorageKey(target.Prefix, key, target.prefixes...)
+	key = normalizeScopedStorageKey(target.Prefix, key, target.Prefixes...)
 	metadata, err := s.probeStorage(ctx, target.Bucket, key)
 	if err != nil {
 		return nil, err

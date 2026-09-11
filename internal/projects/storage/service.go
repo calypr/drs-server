@@ -76,7 +76,7 @@ func (s *Service) InspectProjectStorage(ctx context.Context, organization, proje
 	if err != nil {
 		return nil, err
 	}
-	target = target.withPathPrefix(options.PathPrefix)
+	target = withPathPrefix(target, options.PathPrefix)
 	mode := normalizeMode(options.Mode)
 	listOptions := inventoryOptions{IncludeHead: options.IncludeHead}
 	if mode == ModeExists {
@@ -171,15 +171,7 @@ func normalizeMode(mode InspectionMode) InspectionMode {
 	}
 }
 
-type scopeTarget struct {
-	Provider   string
-	Bucket     string
-	Prefix     string
-	prefixes   []string
-	Credential buckets.Credential
-}
-
-func (target scopeTarget) withPathPrefix(requestPrefix string) scopeTarget {
+func withPathPrefix(target buckets.StorageScope, requestPrefix string) buckets.StorageScope {
 	trimmed := strings.Trim(strings.TrimSpace(requestPrefix), "/")
 	if trimmed == "" {
 		return target
@@ -192,33 +184,28 @@ func (target scopeTarget) withPathPrefix(requestPrefix string) scopeTarget {
 	return target
 }
 
-func (s *Service) resolveScope(ctx context.Context, organization, project, method string) (scopeTarget, error) {
+func (s *Service) resolveScope(ctx context.Context, organization, project, method string) (buckets.StorageScope, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: "organization is required"}
+		return buckets.StorageScope{}, &Error{Kind: ErrorInvalidInput, Message: "organization is required"}
 	}
 	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: err.Error()}
+		return buckets.StorageScope{}, &Error{Kind: ErrorInvalidInput, Message: err.Error()}
 	}
 	if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, method, []string{resource}) {
-		return scopeTarget{}, &access.AuthorizationError{Method: method, Resources: []string{resource}}
+		return buckets.StorageScope{}, &access.AuthorizationError{Method: method, Resources: []string{resource}}
 	}
 	if s.resolver == nil {
-		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope resolver is not configured"}
+		return buckets.StorageScope{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope resolver is not configured"}
 	}
 	resolved, err := s.resolver.ResolveStorageScope(ctx, organization, project)
 	if err != nil {
-		return scopeTarget{}, mapScopeResolutionError(err)
+		return buckets.StorageScope{}, mapScopeResolutionError(err)
 	}
-	return scopeTarget{
-		Provider:   resolved.Provider,
-		Bucket:     resolved.Bucket,
-		Prefix:     resolved.Prefix,
-		prefixes:   append([]string(nil), resolved.Prefixes...),
-		Credential: resolved.Credential,
-	}, nil
+	resolved.Prefixes = append([]string(nil), resolved.Prefixes...)
+	return resolved, nil
 }
 
 func mapScopeResolutionError(err error) error {
@@ -249,7 +236,7 @@ func mapScopeResolutionError(err error) error {
 	}
 }
 
-func normalizeObjects(items []internalapi.InternalInspectProjectBucketItem, target scopeTarget) []internalapi.InternalInspectProjectBucketItem {
+func normalizeObjects(items []internalapi.InternalInspectProjectBucketItem, target buckets.StorageScope) []internalapi.InternalInspectProjectBucketItem {
 	out := make([]internalapi.InternalInspectProjectBucketItem, 0, len(items))
 	for _, item := range items {
 		item.Provider = address.S3Provider
@@ -265,7 +252,7 @@ func normalizeObjects(items []internalapi.InternalInspectProjectBucketItem, targ
 	return out
 }
 
-func summarize(items []internalapi.InternalInspectProjectBucketItem, target scopeTarget, mode InspectionMode) internalapi.InternalInspectProjectBucketSummary {
+func summarize(items []internalapi.InternalInspectProjectBucketItem, target buckets.StorageScope, mode InspectionMode) internalapi.InternalInspectProjectBucketSummary {
 	result := internalapi.InternalInspectProjectBucketSummary{
 		Provider:          target.Provider,
 		Bucket:            target.Bucket,

@@ -55,7 +55,7 @@ func (s *Service) InspectProjectRecords(ctx context.Context, organization, proje
 		prefixes = append(prefixes, prefix)
 		if canResolveProjectRecordPrefix(ctx, organization, project) {
 			if target, resolveErr := s.resolveScope(ctx, organization, project, readMethod); resolveErr == nil {
-				resolved := target.withPathPrefix(prefix).Prefix
+				resolved := withPathPrefix(target, prefix).Prefix
 				if resolved != "" && !strings.EqualFold(resolved, prefix) {
 					prefixes = append(prefixes, resolved)
 				}
@@ -271,7 +271,7 @@ func (s *Service) runCoalescedValidation(ctx context.Context, group []*validatio
 		if work == nil {
 			continue
 		}
-		item = normalizeObjects([]internalapi.InternalInspectProjectBucketItem{item}, scopeTarget{Bucket: work.bucket})[0]
+		item = normalizeObjects([]internalapi.InternalInspectProjectBucketItem{item}, buckets.StorageScope{Bucket: work.bucket})[0]
 		matched[key] = item
 		outcome := work.base
 		outcome.Exists = true
@@ -318,7 +318,7 @@ func (s *Service) runExactValidation(ctx context.Context, unresolved map[string]
 						if strings.Trim(strings.TrimSpace(items[index].Key), "/") != work.key {
 							continue
 						}
-						item := normalizeObjects([]internalapi.InternalInspectProjectBucketItem{items[index]}, scopeTarget{Bucket: work.bucket})[0]
+						item := normalizeObjects([]internalapi.InternalInspectProjectBucketItem{items[index]}, buckets.StorageScope{Bucket: work.bucket})[0]
 						present = &item
 						break
 					}

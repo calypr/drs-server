@@ -187,6 +187,20 @@ func projectServiceWithTarget(inventory *fakeInventory, deletePort DeletePort, t
 	return service, visibility
 }
 
+func TestResolveScopeClonesPrefixes(t *testing.T) {
+	prefixes := []string{"organization", "project"}
+	service := NewService(Dependencies{ScopeResolver: fakeScopeResolver{scope: buckets.StorageScope{Prefixes: prefixes}}})
+
+	target, err := service.resolveScope(context.Background(), "org", "project", readMethod)
+	if err != nil {
+		t.Fatalf("resolveScope() error = %v", err)
+	}
+	target.Prefixes[0] = "changed"
+	if prefixes[0] != "organization" {
+		t.Fatalf("resolved prefixes alias resolver state: %v", prefixes)
+	}
+}
+
 func TestInspectProjectRecordsPreservesPhysicalDuplicatesAndSegmentPrefixes(t *testing.T) {
 	first := drs.DrsObject{
 		Id:        "one",

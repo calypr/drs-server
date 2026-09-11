@@ -7,6 +7,7 @@ import (
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -135,7 +136,7 @@ func parseDeleteURL(ctx context.Context, service *Service, raw string) (deleteCa
 	return deleteCandidate{provider: provider, bucket: bucket, key: key}, "valid", nil
 }
 
-func targetAllowed(candidate deleteCandidate, target scopeTarget) bool {
+func targetAllowed(candidate deleteCandidate, target buckets.StorageScope) bool {
 	if address.NormalizeProvider(candidate.provider, address.S3Provider) != address.S3Provider || !strings.EqualFold(candidate.bucket, target.Bucket) {
 		return false
 	}
