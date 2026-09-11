@@ -39,7 +39,7 @@ generated_model_symbols() {
 			echo "AccessMethod AccessMethodType AccessURL Checksum DrsObject"
 		;;
 		"github.com/calypr/syfon/internal/projects/storage -> github.com/calypr/syfon/apigen/drs")
-			echo "AccessMethod AccessURL Checksum DrsObject"
+			echo "AccessMethod AccessMethodTypeS3 AccessURL Checksum DrsObject"
 		;;
 		"github.com/calypr/syfon/internal/transfers -> github.com/calypr/syfon/apigen/drs")
 			echo "AccessMethod DrsObject"
