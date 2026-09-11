@@ -104,7 +104,7 @@ func (s *Service) apply(ctx context.Context, options internalapi.ScopeRepairOpti
 			result.Skipped++
 			continue
 		}
-		if _, err := s.records.UpdateRecord(ctx, object.record.Id, objects.RecordInput{Record: *object.updated}); err != nil {
+		if _, err := s.records.UpdateObjectMetadata(ctx, object.record.Id, *object.updated, objects.Scope{}, nil); err != nil {
 			result.Skipped++
 			continue
 		}
@@ -150,7 +150,7 @@ func (s *Service) audit(ctx context.Context, options internalapi.ScopeRepairOpti
 		if limit <= 0 && options.Limit > 0 {
 			break
 		}
-		page, err := s.records.ListRecords(ctx, objects.RecordListQuery{Scope: objects.Scope{Organization: options.Organization, Project: options.Project}, RequiredMethod: "read", StartAfter: start, Limit: limit})
+		page, err := s.records.ListObjects(ctx, objects.RecordListQuery{Scope: objects.Scope{Organization: options.Organization, Project: options.Project}, RequiredMethod: "read", StartAfter: start, Limit: limit})
 		if err != nil {
 			return internalapi.ScopeRepairReport{}, nil, err
 		}

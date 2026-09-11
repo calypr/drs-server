@@ -10,8 +10,8 @@ import (
 	"github.com/calypr/syfon/internal/access"
 )
 
-// ListRecords returns one authorized page after project checksum-family merging.
-func (s *Service) ListRecords(ctx context.Context, query RecordListQuery) ([]drs.DrsObject, error) {
+// ListObjects returns one authorized page after project checksum-family merging.
+func (s *Service) ListObjects(ctx context.Context, query RecordListQuery) ([]drs.DrsObject, error) {
 	scope, err := NewScope(query.Scope.Organization, query.Scope.Project)
 	if err != nil {
 		return nil, err

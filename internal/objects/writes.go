@@ -24,23 +24,6 @@ func materializeRecordTime(record drs.DrsObject, now time.Time) drs.DrsObject {
 	return record
 }
 
-// CreateRecords returns the submitted records after scope and time preparation.
-func (s *Service) CreateRecords(ctx context.Context, inputs []RecordInput) ([]drs.DrsObject, error) {
-	now := time.Now().UTC()
-	prepared := make([]drs.DrsObject, len(inputs))
-	for i, input := range inputs {
-		record, err := enforceCanonicalProjectScope(input.Record, input.Scope.Organization, input.Scope.Project)
-		if err != nil {
-			return nil, err
-		}
-		prepared[i] = materializeRecordTime(record, now)
-	}
-	if err := s.RegisterObjects(ctx, prepared); err != nil {
-		return nil, err
-	}
-	return prepared, nil
-}
-
 // RegisterCandidates materializes DRS candidates, persists them through the
 // existing registration policy, and rereads each durable record with read
 // authorization in request order.
@@ -217,8 +200,8 @@ func (s *Service) validateExistingContentRead(ctx context.Context, objs []drs.Dr
 	return nil
 }
 
-func (s *Service) UpdateRecord(ctx context.Context, id string, input RecordInput) (drs.DrsObject, error) {
-	update, err := enforceCanonicalProjectScope(input.Record, input.Scope.Organization, input.Scope.Project)
+func (s *Service) UpdateObjectMetadata(ctx context.Context, id string, update drs.DrsObject, scope Scope, explicitSize *int64) (drs.DrsObject, error) {
+	update, err := enforceCanonicalProjectScope(update, scope.Organization, scope.Project)
 	if err != nil {
 		return drs.DrsObject{}, err
 	}
@@ -226,7 +209,7 @@ func (s *Service) UpdateRecord(ctx context.Context, id string, input RecordInput
 	if err != nil {
 		return drs.DrsObject{}, err
 	}
-	if input.ExplicitSize != nil && *input.ExplicitSize != existing.Size {
+	if explicitSize != nil && *explicitSize != existing.Size {
 		return drs.DrsObject{}, errorapi.ErrObjectSizeImmutable
 	}
 	if incomingSHA, ok := CanonicalSHA256(update.Checksums); ok {

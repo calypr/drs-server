@@ -34,7 +34,7 @@ type repairQuery struct {
 	offset       int
 }
 
-func (f *fakeRepairRecords) ListRecords(_ context.Context, query objects.RecordListQuery) ([]drs.DrsObject, error) {
+func (f *fakeRepairRecords) ListObjects(_ context.Context, query objects.RecordListQuery) ([]drs.DrsObject, error) {
 	f.queries = append(f.queries, repairQuery{organization: query.Scope.Organization, project: query.Scope.Project, method: query.RequiredMethod, start: query.StartAfter, limit: query.Limit, offset: query.Page * query.Limit})
 	index := len(f.queries) - 1
 	if index >= len(f.pages) {
@@ -47,14 +47,14 @@ func (f *fakeRepairRecords) ListPhysicalObjectsByScope(context.Context, string, 
 	return nil, nil
 }
 
-func (f *fakeRepairRecords) UpdateRecord(_ context.Context, id string, input objects.RecordInput) (drs.DrsObject, error) {
+func (f *fakeRepairRecords) UpdateObjectMetadata(_ context.Context, id string, record drs.DrsObject, _ objects.Scope, _ *int64) (drs.DrsObject, error) {
 	f.ids = append(f.ids, id)
-	f.updates = append(f.updates, input.Record)
+	f.updates = append(f.updates, record)
 	if f.failNext {
 		f.failNext = false
 		return drs.DrsObject{}, errors.New("write failed")
 	}
-	return input.Record, nil
+	return record, nil
 }
 
 func (f *fakeRepairRecords) CollapseProjectChecksumDuplicates(_ context.Context, organization, project string) (int, error) {

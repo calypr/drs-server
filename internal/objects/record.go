@@ -30,8 +30,7 @@ type ChecksumQuery struct {
 	Value string
 }
 
-// RecordListQuery describes the selection and pagination policy for a record
-// listing. Only domain values cross into the records service.
+// RecordListQuery describes the selection and pagination policy for a record listing.
 type RecordListQuery struct {
 	Scope          Scope
 	Checksum       *ChecksumQuery
@@ -40,14 +39,6 @@ type RecordListQuery struct {
 	Limit          int
 	Page           int
 	RequiredMethod string
-}
-
-// RecordInput carries mutation intent separately from the stored record.
-// ExplicitSize distinguishes an omitted update from an explicit zero.
-type RecordInput struct {
-	Record       drs.DrsObject
-	Scope        Scope
-	ExplicitSize *int64
 }
 
 // NewScope validates and normalizes an organization/project scope. A project

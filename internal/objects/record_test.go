@@ -328,14 +328,14 @@ func TestServiceUpdateRecordMergesRecordState(t *testing.T) {
 		"/organization/org/project/proj": {"update": true},
 	}, true)
 	ctx := access.WithSession(context.Background(), session)
-	got, err := NewService(store).UpdateRecord(ctx, "new-id", RecordInput{Record: drs.DrsObject{
+	got, err := NewService(store).UpdateObjectMetadata(ctx, "new-id", drs.DrsObject{
 		Name:             &name,
 		Description:      &description,
 		ControlledAccess: &controlled,
 		Checksums:        []drs.Checksum{{Type: "md5", Checksum: newChecksum}},
-	}})
+	}, Scope{}, nil)
 	if err != nil {
-		t.Fatalf("Service.UpdateRecord() error = %v", err)
+		t.Fatalf("Service.UpdateObjectMetadata() error = %v", err)
 	}
 	if len(store.replaced) != 1 {
 		t.Fatalf("ReplaceObjects() calls = %d, want 1", len(store.replaced))

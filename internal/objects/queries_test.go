@@ -203,14 +203,14 @@ func TestListRecordsChecksumIdentityAndCursor(t *testing.T) {
 	registerScopedCandidate(t, om, "chk-b", checksum, "org1", "proj2")
 	registerScopedCandidate(t, om, "chk-c", checksum, "org2", "proj1")
 
-	ids, err := om.ListRecords(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", Limit: 2})
+	ids, err := om.ListObjects(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", Limit: 2})
 	if err != nil {
 		t.Fatalf("ListRecords checksum error: %v", err)
 	}
 	if len(ids) != 1 || ids[0].Id != "chk-a" {
 		t.Fatalf("unexpected page ids: %+v", ids)
 	}
-	ids, err = om.ListRecords(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", StartAfter: "chk-a", Limit: 2})
+	ids, err = om.ListObjects(context.Background(), objects.RecordListQuery{Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum}, RequiredMethod: "read", StartAfter: "chk-a", Limit: 2})
 	if err != nil || len(ids) != 0 {
 		t.Fatalf("aliases appeared after the canonical pagination cursor: ids=%v err=%v", ids, err)
 	}
@@ -226,7 +226,7 @@ func TestListRecords_UsesTypedScopeAndPagePolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewScope failed: %v", err)
 	}
-	page, err := service.ListRecords(context.Background(), objects.RecordListQuery{
+	page, err := service.ListObjects(context.Background(), objects.RecordListQuery{
 		Scope:          scope,
 		Limit:          1,
 		Page:           1,
@@ -291,7 +291,7 @@ func TestListRecordsScopeAndCursor(t *testing.T) {
 	registerScopedCandidate(t, om, "scope-b", checksumB, "org1", "proj1")
 	registerScopedCandidate(t, om, "scope-c", "4444444444444444444444444444444444444444444444444444444444444444", "org1", "proj2")
 
-	ids, err := om.ListRecords(context.Background(), objects.RecordListQuery{Scope: objects.Scope{Organization: "org1", Project: "proj1"}, RequiredMethod: "read", StartAfter: "scope-a", Limit: 10})
+	ids, err := om.ListObjects(context.Background(), objects.RecordListQuery{Scope: objects.Scope{Organization: "org1", Project: "proj1"}, RequiredMethod: "read", StartAfter: "scope-a", Limit: 10})
 	if err != nil {
 		t.Fatalf("ListRecords scope error: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestListRecordsFiltersUnauthorizedScopes(t *testing.T) {
 		"/organization/other/project/p2": {"read": true},
 	})
 
-	ids, err := om.ListRecords(restrictedCtx, objects.RecordListQuery{Scope: objects.Scope{Organization: "secure", Project: "p1"}, RequiredMethod: "read", Limit: 10})
+	ids, err := om.ListObjects(restrictedCtx, objects.RecordListQuery{Scope: objects.Scope{Organization: "secure", Project: "p1"}, RequiredMethod: "read", Limit: 10})
 	if err != nil {
 		t.Fatalf("ListRecords scope error: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestListRecordsPreservesLegacySiblingMethods(t *testing.T) {
 	}
 	om := objects.NewService(tracked)
 
-	prepared, err := om.ListRecords(context.Background(), objects.RecordListQuery{
+	prepared, err := om.ListObjects(context.Background(), objects.RecordListQuery{
 		Scope:    objects.Scope{Organization: "org", Project: "proj"},
 		Checksum: &objects.ChecksumQuery{Type: "sha256", Value: checksum},
 		Limit:    1,

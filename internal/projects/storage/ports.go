@@ -38,13 +38,10 @@ type ObjectScopeDeleter interface {
 	DeleteBulkByScope(context.Context, string, string) (int, error)
 }
 
-// RecordRepairer is the record capability used by the repair workflow. It is
-// deliberately narrower than the objects service so tests can exercise repair
-// behavior without constructing a persistence backend.
 type RecordRepairer interface {
-	ListRecords(context.Context, objects.RecordListQuery) ([]drs.DrsObject, error)
+	ListObjects(context.Context, objects.RecordListQuery) ([]drs.DrsObject, error)
 	ListPhysicalObjectsByScope(context.Context, string, string, string) ([]drs.DrsObject, error)
-	UpdateRecord(context.Context, string, objects.RecordInput) (drs.DrsObject, error)
+	UpdateObjectMetadata(context.Context, string, drs.DrsObject, objects.Scope, *int64) (drs.DrsObject, error)
 	CollapseProjectChecksumDuplicates(context.Context, string, string) (int, error)
 }
 
