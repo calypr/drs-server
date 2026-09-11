@@ -32,8 +32,9 @@ type CompletedPart struct {
 }
 
 type multipartSession struct {
-	target   storage.Target
-	complete chan struct{}
+	target    storage.Target
+	complete  chan struct{}
+	completed bool
 }
 
 func newMultipartSession(target storage.Target) *multipartSession {
@@ -116,6 +117,9 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 		return err
 	}
 	defer session.release()
+	if session.completed {
+		return fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
+	}
 	providerParts := make([]storage.CompletedPart, len(parts))
 	for i, part := range parts {
 		providerParts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
@@ -123,8 +127,11 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	if err := s.storage.CompleteMultipart(ctx, storage.CompleteMultipartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), Parts: providerParts}); err != nil {
 		return err
 	}
+	session.completed = true
 	s.multipartMu.Lock()
-	delete(s.multipartSessions, uploadID)
+	if s.multipartSessions[uploadID] == session {
+		delete(s.multipartSessions, uploadID)
+	}
 	s.multipartMu.Unlock()
 	return nil
 }
