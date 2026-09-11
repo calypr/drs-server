@@ -61,6 +61,19 @@ func (f *bucketTestStore) SaveS3Credential(_ context.Context, credential *domain
 	return nil
 }
 
+func (f *bucketTestStore) SaveBucketConfiguration(ctx context.Context, configuration domainbuckets.BucketConfiguration) error {
+	if err := f.SaveS3Credential(ctx, &configuration.Credential); err != nil {
+		return err
+	}
+	return f.CreateBucketScope(ctx, &domainbuckets.Scope{
+		Organization: configuration.Organization,
+		ProjectID:    configuration.ProjectID,
+		CredentialID: configuration.Credential.CredentialID,
+		Bucket:       configuration.Credential.Bucket,
+		PathPrefix:   configuration.PathPrefix,
+	})
+}
+
 func (f *bucketTestStore) DeleteS3Credential(_ context.Context, bucket string) error {
 	delete(f.Credentials, bucket)
 	return nil

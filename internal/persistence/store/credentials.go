@@ -15,7 +15,7 @@ import (
 )
 
 func (db *Store) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return db.db.ExecContext(ctx, db.dialect.Rebind(query), args...)
+	return db.execOn(ctx, db.db, query, args...)
 }
 
 func defaultProvider(provider string) string {
@@ -104,13 +104,23 @@ func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential)
 		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
 		return wrapped
 	}
-	if err := db.ensureUniquePhysicalBucket(ctx, stored.CredentialID, stored.Bucket); err != nil {
+	if err := db.ensureUniquePhysicalBucket(ctx, db.db, stored.CredentialID, stored.Bucket); err != nil {
 		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
 		return err
 	}
 
 	// SQLite UPSERT syntax: INSERT INTO ... ON CONFLICT (...) DO UPDATE SET ...
-	_, err = db.execContext(ctx, `
+	err = db.saveS3CredentialOn(ctx, db.db, stored)
+	if err != nil {
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
+		return err
+	}
+	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, nil)
+	return nil
+}
+
+func (db *Store) saveS3CredentialOn(ctx context.Context, executor sqlExecutor, stored *buckets.Credential) error {
+	_, err := db.execOn(ctx, executor, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (credential_id) DO UPDATE SET
@@ -123,15 +133,121 @@ func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential)
 		stored.CredentialID, stored.Bucket, strings.ToLower(strings.TrimSpace(defaultProvider(stored.Provider))), stored.Region, stored.AccessKey, stored.SecretKey, stored.Endpoint,
 	)
 	if err != nil {
-		wrapped := fmt.Errorf("failed to save credential: %w", err)
-		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, wrapped)
+		return fmt.Errorf("failed to save credential: %w", err)
+	}
+	return nil
+}
+
+// SaveBucketConfiguration atomically persists a credential and its scope. A
+// failure in either write leaves both rows unchanged.
+func (db *Store) SaveBucketConfiguration(ctx context.Context, configuration buckets.BucketConfiguration) error {
+	cred := configuration.Credential
+	bucket := cred.Bucket
+	if strings.TrimSpace(cred.CredentialID) == "" {
+		cred.CredentialID = buckets.DeriveCredentialID(cred.Bucket, cred.Provider, cred.Region, cred.Endpoint, cred.AccessKey)
+	}
+	stored, err := db.cipher.Prepare(ctx, &cred)
+	if err != nil {
+		wrapped := fmt.Errorf("failed to prepare credential for storage: %w", err)
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
 		return wrapped
+	}
+	preparedScope, err := normalizeBucketScope(&buckets.Scope{
+		Organization: configuration.Organization,
+		ProjectID:    configuration.ProjectID,
+		CredentialID: stored.CredentialID,
+		Bucket:       stored.Bucket,
+		PathPrefix:   configuration.PathPrefix,
+	})
+	if err != nil {
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, err)
+		return err
+	}
+
+	err = db.withWrite(ctx, func(tx *sql.Tx) error {
+		if err := db.ensureUniquePhysicalBucket(ctx, tx, stored.CredentialID, stored.Bucket); err != nil {
+			return err
+		}
+		if err := db.saveS3CredentialOn(ctx, tx, stored); err != nil {
+			return err
+		}
+		return db.createBucketScopeOn(ctx, tx, preparedScope)
+	})
+	if err != nil {
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
+		return err
 	}
 	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, nil)
 	return nil
 }
 
-func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, credentialID, bucket string) error {
+func normalizeBucketScope(scope *buckets.Scope) (buckets.Scope, error) {
+	if scope == nil {
+		return buckets.Scope{}, fmt.Errorf("scope is required")
+	}
+	normalized := buckets.Scope{
+		Organization: strings.TrimSpace(scope.Organization),
+		ProjectID:    strings.TrimSpace(scope.ProjectID),
+		CredentialID: strings.TrimSpace(scope.CredentialID),
+		Bucket:       strings.TrimSpace(scope.Bucket),
+		PathPrefix:   strings.Trim(strings.TrimSpace(scope.PathPrefix), "/"),
+	}
+	if normalized.CredentialID == "" {
+		normalized.CredentialID = normalized.Bucket
+	}
+	if normalized.Organization == "" || normalized.Bucket == "" {
+		return buckets.Scope{}, fmt.Errorf("organization and bucket are required")
+	}
+	return normalized, nil
+}
+
+func (db *Store) createBucketScopeOn(ctx context.Context, executor sqlExecutor, scope buckets.Scope) error {
+	existing, err := db.getBucketScopeOn(ctx, executor, scope.Organization, scope.ProjectID)
+	if err != nil && !errors.Is(err, errorapi.ErrBucketScopeNotFound) {
+		return err
+	}
+	if err == nil && existing != nil {
+		if strings.EqualFold(strings.TrimSpace(existing.CredentialID), scope.CredentialID) && strings.EqualFold(strings.TrimSpace(existing.Bucket), scope.Bucket) && strings.Trim(strings.TrimSpace(existing.PathPrefix), "/") == scope.PathPrefix {
+			return nil
+		}
+		if _, err := db.execOn(ctx, executor, `
+			UPDATE bucket_scope
+			SET credential_id = ?, bucket = ?, path_prefix = ?
+			WHERE organization = ? AND project_id = ?
+		`, scope.CredentialID, scope.Bucket, scope.PathPrefix, scope.Organization, scope.ProjectID); err != nil {
+			return fmt.Errorf("failed to update bucket scope: %w", err)
+		}
+		return nil
+	}
+
+	if _, err := db.execOn(ctx, executor, `
+		INSERT INTO bucket_scope (organization, project_id, credential_id, bucket, path_prefix)
+		VALUES (?, ?, ?, ?, ?)
+	`, scope.Organization, scope.ProjectID, scope.CredentialID, scope.Bucket, scope.PathPrefix); err != nil {
+		return fmt.Errorf("failed to create bucket scope: %w", err)
+	}
+	return nil
+}
+
+func (db *Store) getBucketScopeOn(ctx context.Context, executor sqlExecutor, organization, projectID string) (*buckets.Scope, error) {
+	var scope buckets.Scope
+	err := db.queryRowOn(ctx, executor, `
+		SELECT organization, project_id, credential_id, bucket, COALESCE(path_prefix, '')
+		FROM bucket_scope
+		WHERE organization = ? AND project_id = ?
+	`, organization, projectID).Scan(
+		&scope.Organization, &scope.ProjectID, &scope.CredentialID, &scope.Bucket, &scope.PathPrefix,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errorapi.ErrBucketScopeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bucket scope: %w", err)
+	}
+	return &scope, nil
+}
+
+func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, executor sqlExecutor, credentialID, bucket string) error {
 	credentialID = strings.TrimSpace(credentialID)
 	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
@@ -139,7 +255,7 @@ func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, credentialID, b
 	}
 
 	var existingCredentialID string
-	err := db.queryRowContext(ctx, `
+	err := db.queryRowOn(ctx, executor, `
 		SELECT credential_id
 		FROM s3_credential
 		WHERE bucket = ? AND credential_id <> ?
@@ -224,6 +340,10 @@ func (db *Store) ListS3Credentials(ctx context.Context) ([]buckets.Credential, e
 		}
 		creds = append(creds, *parsed)
 	}
+	if err := rows.Err(); err != nil {
+		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", err)
+		return nil, err
+	}
 	auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "list", "", nil)
 	return creds, nil
 }
@@ -241,66 +361,15 @@ func auditCredentialAccess(ctx context.Context, requestID, action, bucket string
 }
 
 func (db *Store) CreateBucketScope(ctx context.Context, scope *buckets.Scope) error {
-	if scope == nil {
-		return fmt.Errorf("scope is required")
-	}
-	org := strings.TrimSpace(scope.Organization)
-	project := strings.TrimSpace(scope.ProjectID)
-	credentialID := strings.TrimSpace(scope.CredentialID)
-	bucket := strings.TrimSpace(scope.Bucket)
-	prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-	if credentialID == "" {
-		credentialID = bucket
-	}
-	if org == "" || bucket == "" {
-		return fmt.Errorf("organization and bucket are required")
-	}
-
-	existing, err := db.GetBucketScope(ctx, org, project)
-	if err != nil && !errors.Is(err, errorapi.ErrNotFound) {
+	normalized, err := normalizeBucketScope(scope)
+	if err != nil {
 		return err
 	}
-	if err == nil && existing != nil {
-		if strings.EqualFold(strings.TrimSpace(existing.CredentialID), credentialID) && strings.EqualFold(strings.TrimSpace(existing.Bucket), bucket) && strings.Trim(strings.TrimSpace(existing.PathPrefix), "/") == prefix {
-			return nil
-		}
-		_, err = db.execContext(ctx, `
-			UPDATE bucket_scope
-			SET credential_id = ?, bucket = ?, path_prefix = ?
-			WHERE organization = ? AND project_id = ?
-		`, credentialID, bucket, prefix, org, project)
-		if err != nil {
-			return fmt.Errorf("failed to update bucket scope: %w", err)
-		}
-		return nil
-	}
-
-	_, err = db.execContext(ctx, `
-		INSERT INTO bucket_scope (organization, project_id, credential_id, bucket, path_prefix)
-		VALUES (?, ?, ?, ?, ?)
-	`, org, project, credentialID, bucket, prefix)
-	if err != nil {
-		return fmt.Errorf("failed to create bucket scope: %w", err)
-	}
-	return nil
+	return db.createBucketScopeOn(ctx, db.db, normalized)
 }
 
 func (db *Store) GetBucketScope(ctx context.Context, organization, projectID string) (*buckets.Scope, error) {
-	var s buckets.Scope
-	err := db.queryRowContext(ctx, `
-		SELECT organization, project_id, credential_id, bucket, COALESCE(path_prefix, '')
-		FROM bucket_scope
-		WHERE organization = ? AND project_id = ?
-	`, strings.TrimSpace(organization), strings.TrimSpace(projectID)).Scan(
-		&s.Organization, &s.ProjectID, &s.CredentialID, &s.Bucket, &s.PathPrefix,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errorapi.ErrBucketScopeNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get bucket scope: %w", err)
-	}
-	return &s, nil
+	return db.getBucketScopeOn(ctx, db.db, strings.TrimSpace(organization), strings.TrimSpace(projectID))
 }
 
 func (db *Store) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
@@ -364,6 +433,9 @@ func (db *Store) ListBucketScopes(ctx context.Context) ([]buckets.Scope, error) 
 			return nil, err
 		}
 		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

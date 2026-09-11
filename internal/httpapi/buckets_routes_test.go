@@ -80,6 +80,11 @@ func (s *recordingBucketCredentialStore) SaveS3Credential(_ context.Context, _ *
 	return nil
 }
 
+func (s *recordingBucketCredentialStore) SaveBucketConfiguration(_ context.Context, _ buckets.BucketConfiguration) error {
+	*s.events = append(*s.events, "save-configuration")
+	return nil
+}
+
 func (s *recordingBucketCredentialStore) DeleteS3Credential(context.Context, string) error {
 	return nil
 }
@@ -105,7 +110,7 @@ func (s *recordingBucketScopeStore) ListBucketScopes(context.Context) ([]buckets
 	return nil, nil
 }
 
-func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T) {
+func TestHandleInternalPutBucket_SavesConfigurationAtomically(t *testing.T) {
 	events := []string{}
 	credentials := &recordingBucketCredentialStore{events: &events}
 	scopes := &recordingBucketScopeStore{events: &events}
@@ -139,17 +144,21 @@ func TestHandleInternalPutBucket_CreatesScopeBeforeSavingCredential(t *testing.T
 		t.Fatalf("expected 201, got %d body=%s", rr.Code, rr.Body.String())
 	}
 
-	var scopeIndex, saveIndex = -1, -1
-	for i, event := range events {
+	aggregateCalls := 0
+	directScopeCalls := 0
+	directCredentialCalls := 0
+	for _, event := range events {
 		switch event {
+		case "save-configuration":
+			aggregateCalls++
 		case "scope":
-			scopeIndex = i
+			directScopeCalls++
 		case "save":
-			saveIndex = i
+			directCredentialCalls++
 		}
 	}
-	if scopeIndex == -1 || saveIndex == -1 || scopeIndex >= saveIndex {
-		t.Fatalf("expected scope creation before credential save, events=%v", events)
+	if aggregateCalls != 1 || directScopeCalls != 0 || directCredentialCalls != 0 {
+		t.Fatalf("expected one aggregate save and no direct writes, events=%v", events)
 	}
 }
 

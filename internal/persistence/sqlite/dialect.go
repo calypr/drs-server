@@ -46,10 +46,6 @@ func (sqliteDialect) MaxParameters() int {
 	return sqliteMaxParams
 }
 
-func (sqliteDialect) BeginContentWrite(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
-	return db.BeginTx(ctx, nil)
-}
-
 func (sqliteDialect) LockContentWrite(context.Context, *sql.Tx) error {
 	// sqliteDSN enables _txlock=immediate, so BeginTx already acquires the
 	// write reservation before the caller performs identity reads.

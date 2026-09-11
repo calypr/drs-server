@@ -60,10 +60,6 @@ func (postgresDialect) MaxParameters() int {
 	return 65535
 }
 
-func (postgresDialect) BeginContentWrite(ctx context.Context, db *sql.DB) (*sql.Tx, error) {
-	return db.BeginTx(ctx, nil)
-}
-
 func (postgresDialect) LockContentWrite(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('syfon-content-write', 0))`)
 	return err

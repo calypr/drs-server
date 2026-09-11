@@ -205,6 +205,26 @@ func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *test
 	}
 }
 
+func TestPutDoesNotLeaveScopeWhenAtomicCredentialWriteFails(t *testing.T) {
+	saveErr := errors.New("credential write failed")
+	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
+	credentials.saveErr = saveErr
+	provider := "file"
+	endpoint := t.TempDir()
+	err := service.Put(context.Background(), PutRequest{
+		Bucket:       "bucket-a",
+		Organization: "org",
+		Provider:     &provider,
+		Endpoint:     &endpoint,
+	})
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("Put error=%v, want %v", err, saveErr)
+	}
+	if len(scopes.scopes) != 0 {
+		t.Fatalf("failed atomic put left scopes=%+v", scopes.scopes)
+	}
+}
+
 func TestDeleteBucketAuthorizesMatchingPhysicalScope(t *testing.T) {
 	service, credentials, _ := newFakeService(
 		[]Credential{{CredentialID: "credential-id", Bucket: "physical-bucket"}},

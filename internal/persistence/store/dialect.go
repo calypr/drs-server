@@ -11,7 +11,6 @@ type Dialect interface {
 	Rebind(string) string
 	ListArgs(string, []string) (string, []any)
 	MaxParameters() int
-	BeginContentWrite(context.Context, *sql.DB) (*sql.Tx, error)
 	LockContentWrite(context.Context, *sql.Tx) error
 	Bootstrap(context.Context, *sql.DB) error
 }

@@ -24,6 +24,19 @@ type Store struct {
 	cipher  CredentialCodec
 }
 
+type sqlExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func (s *Store) execOn(ctx context.Context, executor sqlExecutor, query string, args ...any) (sql.Result, error) {
+	return executor.ExecContext(ctx, s.dialect.Rebind(query), args...)
+}
+
+func (s *Store) queryRowOn(ctx context.Context, executor sqlExecutor, query string, args ...any) *sql.Row {
+	return executor.QueryRowContext(ctx, s.dialect.Rebind(query), args...)
+}
+
 // Open bootstraps db through dialect and returns the shared store. A nil codec
 // is accepted for callers that do not use credential persistence.
 func Open(db *sql.DB, dialect Dialect, cipher CredentialCodec) (*Store, error) {
@@ -67,16 +80,28 @@ func (s *Store) withContentWrite(ctx context.Context, fn func(*sql.Tx) error) er
 	if fn == nil {
 		return fmt.Errorf("content write callback is required")
 	}
+	return s.withWrite(ctx, func(tx *sql.Tx) error {
+		if err := s.dialect.LockContentWrite(ctx, tx); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
 
-	tx, err := s.dialect.BeginContentWrite(ctx, s.db)
+func (s *Store) withWrite(ctx context.Context, fn func(*sql.Tx) error) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database store is required")
+	}
+	if fn == nil {
+		return fmt.Errorf("write callback is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if err := s.dialect.LockContentWrite(ctx, tx); err != nil {
-		return err
-	}
 	if err := fn(tx); err != nil {
 		return err
 	}

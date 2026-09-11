@@ -16,13 +16,14 @@ type fakeCredentialStore struct {
 	saveErr     error
 	deleteErr   error
 
-	getCalls    int
-	listCalls   int
-	saveCalls   int
-	deleteCalls int
-	lastGet     string
-	lastSaved   *Credential
-	lastDeleted string
+	getCalls            int
+	listCalls           int
+	saveCalls           int
+	deleteCalls         int
+	lastGet             string
+	lastSaved           *Credential
+	lastDeleted         string
+	configurationScopes *fakeScopeStore
 }
 
 var _ CredentialReader = (*fakeCredentialStore)(nil)
@@ -65,6 +66,37 @@ func (f *fakeCredentialStore) SaveS3Credential(_ context.Context, credential *Cr
 	if credential != nil {
 		copy := *credential
 		f.lastSaved = &copy
+	}
+	return nil
+}
+
+func (f *fakeCredentialStore) SaveBucketConfiguration(_ context.Context, configuration BucketConfiguration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.saveErr != nil {
+		return f.saveErr
+	}
+	if f.configurationScopes != nil {
+		f.configurationScopes.mu.Lock()
+		defer f.configurationScopes.mu.Unlock()
+		if f.configurationScopes.createErr != nil {
+			return f.configurationScopes.createErr
+		}
+	}
+	f.saveCalls++
+	copyCredential := configuration.Credential
+	f.lastSaved = &copyCredential
+	if f.configurationScopes != nil {
+		f.configurationScopes.createCalls++
+		copyScope := Scope{
+			Organization: configuration.Organization,
+			ProjectID:    configuration.ProjectID,
+			CredentialID: configuration.Credential.CredentialID,
+			Bucket:       configuration.Credential.Bucket,
+			PathPrefix:   configuration.PathPrefix,
+		}
+		f.configurationScopes.lastCreated = &copyScope
+		f.configurationScopes.scopes = append(f.configurationScopes.scopes, copyScope)
 	}
 	return nil
 }
@@ -217,6 +249,7 @@ func (r *recordingInvalidator) snapshot() []string {
 func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
 	credentialStore := &fakeCredentialStore{credentials: append([]Credential(nil), creds...)}
 	scopeStore := &fakeScopeStore{scopes: append([]Scope(nil), scopes...)}
+	credentialStore.configurationScopes = scopeStore
 	service := newService(Dependencies{
 		Credentials:     credentialStore,
 		CredentialAdmin: credentialStore,

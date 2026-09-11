@@ -75,6 +75,9 @@ func TestDeleteBucketScopeCleansLastCredential(t *testing.T) {
 	if credentials.deleteCalls != 1 || credentials.lastDeleted != "credential-id" {
 		t.Fatalf("last-scope credential cleanup: calls=%d bucket=%q", credentials.deleteCalls, credentials.lastDeleted)
 	}
+	if credentials.getCalls != 1 {
+		t.Fatalf("credential lookups=%d, want 1", credentials.getCalls)
+	}
 	if len(invalidator.snapshot()) == 0 {
 		t.Fatal("last-scope credential cleanup did not invalidate signer aliases")
 	}
@@ -108,5 +111,54 @@ func TestDeleteBucketScopeDoesNotCleanupAfterFailedDelete(t *testing.T) {
 	}
 	if credentials.deleteCalls != 0 {
 		t.Fatal("failed scope delete cleaned up credential")
+	}
+}
+
+func TestDeleteBucketScopePropagatesCredentialLookupError(t *testing.T) {
+	lookupErr := errors.New("credential lookup failed")
+	service, credentials, scopes := newFakeService(nil, []Scope{{Organization: "org", ProjectID: "project", CredentialID: "credential-id"}}, &fakeVisibilityQuery{}, nil)
+	credentials.getErr = lookupErr
+
+	if err := service.DeleteBucketScope(context.Background(), "org", "project", "credential-id", ""); !errors.Is(err, lookupErr) {
+		t.Fatalf("DeleteBucketScope error=%v, want %v", err, lookupErr)
+	}
+	if scopes.deleteCalls != 0 {
+		t.Fatalf("credential lookup failure deleted scope %d times", scopes.deleteCalls)
+	}
+}
+
+func TestDeleteBucketScopePropagatesScopeListingError(t *testing.T) {
+	service, _, scopes := newFakeService(nil, []Scope{{Organization: "org", ProjectID: "project", CredentialID: "credential-id"}}, &fakeVisibilityQuery{}, nil)
+	listErr := errors.New("scope listing failed")
+	scopes.listErr = listErr
+
+	if err := service.DeleteBucketScope(context.Background(), "org", "project", "credential-id", ""); !errors.Is(err, listErr) {
+		t.Fatalf("DeleteBucketScope error=%v, want %v", err, listErr)
+	}
+	if scopes.deleteCalls != 0 {
+		t.Fatalf("scope listing failure deleted scope %d times", scopes.deleteCalls)
+	}
+}
+
+func TestDeleteBucketScopePropagatesCredentialDeletionError(t *testing.T) {
+	deleteErr := errors.New("credential deletion failed")
+	service, credentials, _ := newFakeService([]Credential{{CredentialID: "credential-id", Bucket: "bucket"}}, []Scope{{Organization: "org", ProjectID: "project", CredentialID: "credential-id"}}, &fakeVisibilityQuery{}, nil)
+	credentials.deleteErr = deleteErr
+
+	if err := service.DeleteBucketScope(context.Background(), "org", "project", "credential-id", ""); !errors.Is(err, deleteErr) {
+		t.Fatalf("DeleteBucketScope error=%v, want %v", err, deleteErr)
+	}
+}
+
+func TestDeleteBucketScopeTreatsOnlyMissingCredentialAsAlreadyCleaned(t *testing.T) {
+	service, credentials, scopes := newFakeService(nil, []Scope{{Organization: "org", ProjectID: "project", CredentialID: "credential-id"}}, &fakeVisibilityQuery{}, nil)
+	credentials.getErr = errorapi.ErrStorageCredentialMissing
+	credentials.deleteErr = errorapi.ErrStorageCredentialMissing
+
+	if err := service.DeleteBucketScope(context.Background(), "org", "project", "credential-id", ""); err != nil {
+		t.Fatalf("DeleteBucketScope error=%v, want already-cleaned success", err)
+	}
+	if scopes.deleteCalls != 1 {
+		t.Fatalf("already-missing credential should still delete scope once, calls=%d", scopes.deleteCalls)
 	}
 }

@@ -26,8 +26,7 @@ type PutRequest struct {
 	Path         *string
 }
 
-// Put applies bucket credential and optional scope policy in the same order as
-// the legacy endpoint: scope creation completes before credential persistence.
+// Put applies bucket credential and optional scope policy.
 func (s *Service) Put(ctx context.Context, request PutRequest) error {
 	bucket := strings.TrimSpace(request.Bucket)
 	organization := strings.TrimSpace(request.Organization)
@@ -83,23 +82,17 @@ func (s *Service) Put(ctx context.Context, request PutRequest) error {
 		return invalidInput("access_key and secret_key are required for new s3 credentials")
 	}
 
-	if organization != "" {
-		if err := s.CreateBucketScope(ctx, &Scope{
+	scopeOnly := hasExisting && request.Provider == nil && request.Region == nil &&
+		request.AccessKey == nil && request.SecretKey == nil && request.Endpoint == nil &&
+		organization != ""
+	if scopeOnly {
+		return s.CreateBucketScope(ctx, &Scope{
 			Organization: organization,
 			ProjectID:    projectID,
 			CredentialID: credentialID,
 			Bucket:       bucket,
 			PathPrefix:   prefix,
-		}); err != nil {
-			return err
-		}
-	}
-
-	scopeOnly := hasExisting && request.Provider == nil && request.Region == nil &&
-		request.AccessKey == nil && request.SecretKey == nil && request.Endpoint == nil &&
-		organization != ""
-	if scopeOnly {
-		return nil
+		})
 	}
 
 	if hasExisting {
@@ -123,7 +116,7 @@ func (s *Service) Put(ctx context.Context, request PutRequest) error {
 		return invalidInput("access_key and secret_key are required for s3 credentials")
 	}
 
-	return s.SaveS3Credential(ctx, &Credential{
+	credential := &Credential{
 		CredentialID: credentialID,
 		Bucket:       bucket,
 		Provider:     provider,
@@ -131,7 +124,20 @@ func (s *Service) Put(ctx context.Context, request PutRequest) error {
 		AccessKey:    accessKey,
 		SecretKey:    secretKey,
 		Endpoint:     endpoint,
-	})
+	}
+	if organization != "" {
+		if err := s.credentialAdmin.SaveBucketConfiguration(ctx, BucketConfiguration{
+			Credential:   *credential,
+			Organization: organization,
+			ProjectID:    projectID,
+			PathPrefix:   prefix,
+		}); err != nil {
+			return err
+		}
+		s.invalidateCredentialAliases(credential)
+		return nil
+	}
+	return s.SaveS3Credential(ctx, credential)
 }
 
 // DeleteBucket authorizes deletion against the physical bucket name before

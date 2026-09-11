@@ -93,6 +93,23 @@ func TestDeleteS3CredentialDoesNotInvalidateAfterFailedDelete(t *testing.T) {
 	}
 }
 
+func TestDeleteS3CredentialDoesNotMutateAfterFailedLookup(t *testing.T) {
+	invalidator := &recordingInvalidator{}
+	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, invalidator)
+	credentials.getErr = errors.New("lookup failed")
+
+	err := service.DeleteS3Credential(context.Background(), "physical-bucket")
+	if !errors.Is(err, credentials.getErr) {
+		t.Fatalf("DeleteS3Credential error=%v, want %v", err, credentials.getErr)
+	}
+	if credentials.deleteCalls != 0 {
+		t.Fatalf("failed lookup deleted credential %d times", credentials.deleteCalls)
+	}
+	if got := invalidator.snapshot(); len(got) != 0 {
+		t.Fatalf("failed lookup invalidated aliases %v", got)
+	}
+}
+
 func TestSaveS3CredentialWithoutExplicitIDUsesPhysicalAlias(t *testing.T) {
 	invalidator := &recordingInvalidator{}
 	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, invalidator)

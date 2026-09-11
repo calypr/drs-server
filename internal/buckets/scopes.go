@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -18,30 +19,50 @@ func (s *Service) CreateBucketScope(ctx context.Context, scope *Scope) error {
 	return s.scopeStore.CreateBucketScope(ctx, scope)
 }
 
-// DeleteBucketScope deletes the requested scope and preserves the existing
-// last-scope credential cleanup policy.
+// DeleteBucketScope deletes the requested scope and removes its credential
+// after the last scope is gone.
 func (s *Service) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
-	if err := s.scopeStore.DeleteBucketScope(ctx, organization, projectID, credentialID, pathPrefix); err != nil {
-		return err
-	}
-
+	organization = strings.TrimSpace(organization)
+	projectID = strings.TrimSpace(projectID)
+	credentialID = strings.TrimSpace(credentialID)
+	pathPrefix = strings.Trim(strings.TrimSpace(pathPrefix), "/")
 	resolvedID := strings.TrimSpace(credentialID)
 	resolvedBucket := ""
-	if cred, err := s.GetS3Credential(ctx, credentialID); err == nil && cred != nil {
+	cred, lookupErr := s.GetS3Credential(ctx, credentialID)
+	if lookupErr != nil && !errors.Is(lookupErr, errorapi.ErrStorageCredentialMissing) {
+		return lookupErr
+	}
+	if lookupErr == nil && cred != nil {
 		resolvedID = s.credentialIDForCredential(*cred)
 		resolvedBucket = strings.TrimSpace(cred.Bucket)
 	}
 
 	scopes, err := s.ListBucketScopes(ctx)
 	if err != nil {
-		return nil
+		return err
 	}
+	remaining := false
 	for _, scope := range scopes {
+		if strings.TrimSpace(scope.Organization) == organization &&
+			strings.TrimSpace(scope.ProjectID) == projectID &&
+			strings.Trim(strings.TrimSpace(scope.PathPrefix), "/") == pathPrefix &&
+			s.scopeBelongsTo(scope, resolvedID, resolvedBucket) {
+			continue
+		}
 		if s.scopeBelongsTo(scope, resolvedID, resolvedBucket) {
-			return nil
+			remaining = true
+			break
 		}
 	}
-	_ = s.DeleteS3Credential(ctx, resolvedID)
+	if err := s.scopeStore.DeleteBucketScope(ctx, organization, projectID, credentialID, pathPrefix); err != nil {
+		return err
+	}
+	if remaining {
+		return nil
+	}
+	if err := s.deleteS3Credential(ctx, resolvedID, cred); err != nil && !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+		return err
+	}
 	return nil
 }
 

@@ -11,6 +11,7 @@ type CredentialReader interface {
 // CredentialAdmin owns credential creation and deletion.
 type CredentialAdmin interface {
 	SaveS3Credential(ctx context.Context, cred *Credential) error
+	SaveBucketConfiguration(ctx context.Context, configuration BucketConfiguration) error
 	DeleteS3Credential(ctx context.Context, bucket string) error
 }
 
