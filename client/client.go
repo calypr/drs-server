@@ -16,7 +16,6 @@ import (
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 	syfonclient "github.com/calypr/syfon/client/services"
-	"github.com/hashicorp/go-retryablehttp"
 )
 
 const (
@@ -37,10 +36,10 @@ type BasicAuth struct {
 	Password string
 }
 
-// Client implements syfonclient.SyfonClient
 type Client struct {
-	requestor request.Requester
-	baseURL   string
+	httpClient *request.Client
+	baseURL    string
+	logger     *logs.Gen3Logger
 
 	health  *syfonclient.HealthService
 	data    *syfonclient.DataService
@@ -86,7 +85,7 @@ func DefaultConfig() *Config {
 	}
 }
 
-func New(baseURL string, opts ...Option) (syfonclient.SyfonClient, error) {
+func New(baseURL string, opts ...Option) (*Client, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:8080"
@@ -119,7 +118,6 @@ func NewClient(cfg *Config) (*Client, error) {
 		userAgent = defaultUA
 	}
 
-	// Initialize the hardened requestor
 	cred := &conf.Credential{
 		AccessToken: cfg.Token,
 	}
@@ -127,16 +125,16 @@ func NewClient(cfg *Config) (*Client, error) {
 		cred.KeyID = cfg.BasicAuth.Username
 		cred.APIKey = cfg.BasicAuth.Password
 	}
-	var req request.Requester
+	mode := request.AuthModeBasic
 	if cfg.Token != "" {
-		req = request.NewBearerTokenRequestor(nil, cred, nil, bu, userAgent, cfg.HTTPClient)
-	} else {
-		req = request.NewBasicAuthRequestor(nil, cred, nil, bu, userAgent, cfg.HTTPClient)
+		mode = request.AuthModeBearer
 	}
+	httpClient := request.NewClient(nil, cred, nil, userAgent, cfg.HTTPClient, mode)
 
 	client := &Client{
-		requestor: req,
-		baseURL:   bu,
+		httpClient: httpClient,
+		baseURL:    bu,
+		logger:     httpClient.Logger(),
 	}
 	if err := client.initServices(); err != nil {
 		return nil, err
@@ -167,7 +165,7 @@ func (c *Client) initServices() error {
 
 	server := c.baseURL
 	drsServer := strings.TrimRight(server+"/ga4gh/drs/v1", "/")
-	httpDoer := c.generatedHTTPDoer()
+	httpDoer := c.httpClient
 
 	var err error
 	if c.drsGen, err = drs.NewClientWithResponses(drsServer, drs.WithHTTPClient(httpDoer)); err != nil {
@@ -186,60 +184,25 @@ func (c *Client) initServices() error {
 		return fmt.Errorf("initialize metrics client: %w", err)
 	}
 
-	c.health = syfonclient.NewHealthService(c.requestor)
-	c.index = syfonclient.NewIndexService(c.internalGen, c.requestor)
-	c.drs = syfonclient.NewDRSService(c.drsGen, c.index)
+	c.health = syfonclient.NewHealthService(server, c.httpClient)
+	c.index = syfonclient.NewIndexService(c.internalGen)
+	c.drs = syfonclient.NewDRSService(c.drsGen)
 	c.lfs = syfonclient.NewLFSService(c.lfsGen)
-	c.data = syfonclient.NewDataService(c.internalGen, c.requestor, l, c.drs)
+	c.data = syfonclient.NewDataService(c.internalGen, c.httpClient, l, c.drs)
 	c.buckets = syfonclient.NewBucketsService(c.bucketGen)
 	c.metrics = syfonclient.NewMetricsService(c.metricsGen)
 	return nil
 }
 
-func (c *Client) generatedHTTPDoer() interface {
-	Do(*http.Request) (*http.Response, error)
-} {
-	r, ok := c.requestor.(*request.Request)
-	if !ok || r.RetryClient == nil || r.RetryClient.HTTPClient == nil {
-		return c.HTTPClient()
-	}
-	return &generatedHTTPDoer{request: r}
-}
-
-type generatedHTTPDoer struct {
-	request *request.Request
-}
-
-func (t *generatedHTTPDoer) Do(req *http.Request) (*http.Response, error) {
-	clone := req.Clone(req.Context())
-	if userAgent := strings.TrimSpace(t.request.UserAgent); userAgent != "" && clone.Header.Get("User-Agent") == "" {
-		clone.Header.Set("User-Agent", userAgent)
-	}
-
-	if !generatedRequestCanRetry(clone) {
-		return t.request.RetryClient.HTTPClient.Do(clone)
-	}
-	retryReq, err := retryablehttp.FromRequest(clone)
-	if err != nil {
-		return nil, err
-	}
-	return t.request.RetryClient.Do(retryReq)
-}
-
-func generatedRequestCanRetry(req *http.Request) bool {
-	switch req.Method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-	default:
-		return false
-	}
-	return req.Body == nil || req.Body == http.NoBody
-}
-
 func (c *Client) HTTPClient() *http.Client {
-	if r, ok := c.requestor.(*request.Request); ok {
-		return r.RetryClient.HTTPClient
+	if c.httpClient != nil {
+		return c.httpClient.StandardClient()
 	}
 	return http.DefaultClient
+}
+
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }
 
 func (c *Client) Address() string { return c.baseURL }
@@ -259,11 +222,9 @@ func (c *Client) BucketAPI() *bucketapi.ClientWithResponses     { return c.bucke
 func (c *Client) MetricsAPI() *metricsapi.ClientWithResponses   { return c.metricsGen }
 func (c *Client) DRSAPI() *drs.ClientWithResponses              { return c.drsGen }
 
-func (c *Client) Requestor() request.Requester { return c.requestor }
-
 func (c *Client) Logger() *logs.Gen3Logger {
-	if r, ok := c.requestor.(*request.Request); ok {
-		return r.Logs
+	if c.logger != nil {
+		return c.logger
 	}
 	return logs.NewGen3Logger(nil, "", "")
 }

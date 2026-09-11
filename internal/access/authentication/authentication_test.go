@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/rpc"
 	"os"
 	"os/exec"
@@ -14,8 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	conf "github.com/calypr/syfon/client/config"
-	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
@@ -430,12 +431,12 @@ func TestTokenHelpersAndResolver(t *testing.T) {
 	}
 
 	fake := &fakeRequester{response: map[string]any{"authz": map[string]any{"/data": []any{map[string]any{"service": "drs", "method": "read"}}}}}
-	got, err := fetchPrivileges(context.Background(), fake, &conf.Credential{})
+	got, err := fetchPrivileges(context.Background(), fake, "https://example.test")
 	if err != nil || got["/data"] == nil {
 		t.Fatalf("expected fetched privileges: got=%v err=%v", got, err)
 	}
 	fake.err = errors.New("request failed")
-	if _, err := fetchPrivileges(context.Background(), fake, &conf.Credential{}); err == nil {
+	if _, err := fetchPrivileges(context.Background(), fake, "https://example.test"); err == nil {
 		t.Fatalf("expected requester error")
 	}
 }
@@ -445,12 +446,15 @@ type fakeRequester struct {
 	err      error
 }
 
-func (f *fakeRequester) Do(_ context.Context, _ string, _ string, _ any, out any, _ ...request.RequestOption) error {
+func (f *fakeRequester) Do(req *http.Request) (*http.Response, error) {
 	if f.err != nil {
-		return f.err
+		return nil, f.err
 	}
-	*out.(*map[string]any) = f.response
-	return nil
+	body, err := json.Marshal(f.response)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body)), Header: make(http.Header), Request: req}, nil
 }
 
 type rpcTestService struct{}

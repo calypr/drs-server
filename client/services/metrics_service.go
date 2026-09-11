@@ -73,45 +73,34 @@ func (s *MetricsService) File(ctx context.Context, objectID string) (metricsapi.
 	return *resp.JSON200, nil
 }
 
-func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetricsOptions) (TransferAttributionSummary, error) {
+func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetricsOptions) (metricsapi.TransferAttributionSummary, error) {
 	params, err := transferSummaryParams(opts)
 	if err != nil {
-		return TransferAttributionSummary{}, err
+		return metricsapi.TransferAttributionSummary{}, err
 	}
 	resp, err := s.gen.GetTransferSummaryWithResponse(ctx, params)
 	if err != nil {
-		return TransferAttributionSummary{}, err
+		return metricsapi.TransferAttributionSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return TransferAttributionSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.TransferAttributionSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
-	return generatedTransferSummaryToDTO(*resp.JSON200), nil
+	return *resp.JSON200, nil
 }
 
-func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMetricsOptions) (TransferBreakdownResponse, error) {
+func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMetricsOptions) (metricsapi.TransferBreakdownResponse, error) {
 	params, err := transferBreakdownParams(opts)
 	if err != nil {
-		return TransferBreakdownResponse{}, err
+		return metricsapi.TransferBreakdownResponse{}, err
 	}
 	resp, err := s.gen.GetTransferBreakdownWithResponse(ctx, params)
 	if err != nil {
-		return TransferBreakdownResponse{}, err
+		return metricsapi.TransferBreakdownResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return TransferBreakdownResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.TransferBreakdownResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
-	out := TransferBreakdownResponse{}
-	if resp.JSON200.GroupBy != nil {
-		out.GroupBy = string(*resp.JSON200.GroupBy)
-	}
-	if resp.JSON200.Data != nil {
-		out.Data = make([]TransferAttributionBreakdown, 0, len(*resp.JSON200.Data))
-		for _, item := range *resp.JSON200.Data {
-			out.Data = append(out.Data, generatedTransferBreakdownToDTO(item))
-		}
-	}
-	out.Freshness = generatedFreshnessToDTO(resp.JSON200.Freshness)
-	return out, nil
+	return *resp.JSON200, nil
 }
 
 func transferSummaryParams(opts TransferMetricsOptions) (*metricsapi.GetTransferSummaryParams, error) {
@@ -185,69 +174,4 @@ func boolPtr[T ~bool](raw bool) *T {
 	}
 	v := T(raw)
 	return &v
-}
-
-func generatedTransferSummaryToDTO(v metricsapi.TransferAttributionSummary) TransferAttributionSummary {
-	return TransferAttributionSummary{
-		EventCount:         int64Val(v.EventCount),
-		AccessIssuedCount:  int64Val(v.AccessIssuedCount),
-		DownloadEventCount: int64Val(v.DownloadEventCount),
-		UploadEventCount:   int64Val(v.UploadEventCount),
-		BytesRequested:     int64Val(v.BytesRequested),
-		BytesDownloaded:    int64Val(v.BytesDownloaded),
-		BytesUploaded:      int64Val(v.BytesUploaded),
-		Freshness:          generatedFreshnessToDTO(v.Freshness),
-	}
-}
-
-func generatedFreshnessToDTO(v *metricsapi.TransferMetricsFreshness) *TransferMetricsFreshness {
-	if v == nil {
-		return nil
-	}
-	out := &TransferMetricsFreshness{
-		IsStale:             boolVal(v.IsStale),
-		LatestCompletedSync: v.LatestCompletedSync,
-		RequiredFrom:        v.RequiredFrom,
-		RequiredTo:          v.RequiredTo,
-	}
-	if v.MissingBuckets != nil {
-		out.MissingBuckets = append(out.MissingBuckets, (*v.MissingBuckets)...)
-	}
-	return out
-}
-
-func generatedTransferBreakdownToDTO(v metricsapi.TransferAttributionBreakdown) TransferAttributionBreakdown {
-	return TransferAttributionBreakdown{
-		Key:              stringVal(v.Key),
-		Organization:     stringVal(v.Organization),
-		Project:          stringVal(v.Project),
-		Provider:         stringVal(v.Provider),
-		Bucket:           stringVal(v.Bucket),
-		SHA256:           stringVal(v.Sha256),
-		ActorEmail:       stringVal(v.ActorEmail),
-		ActorSubject:     stringVal(v.ActorSubject),
-		EventCount:       int64Val(v.EventCount),
-		BytesRequested:   int64Val(v.BytesRequested),
-		BytesDownloaded:  int64Val(v.BytesDownloaded),
-		BytesUploaded:    int64Val(v.BytesUploaded),
-		LastTransferTime: v.LastTransferTime,
-	}
-}
-
-func stringVal(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
-}
-
-func int64Val(v *int64) int64 {
-	if v == nil {
-		return 0
-	}
-	return *v
-}
-
-func boolVal(v *bool) bool {
-	return v != nil && *v
 }

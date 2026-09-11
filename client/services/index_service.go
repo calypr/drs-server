@@ -12,18 +12,16 @@ import (
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/client/request"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 )
 
 type IndexService struct {
-	gen       internalapi.ClientWithResponsesInterface
-	requestor request.Requester
+	gen internalapi.ClientWithResponsesInterface
 }
 
-func NewIndexService(gen internalapi.ClientWithResponsesInterface, r request.Requester) *IndexService {
-	return &IndexService{gen: gen, requestor: r}
+func NewIndexService(gen internalapi.ClientWithResponsesInterface) *IndexService {
+	return &IndexService{gen: gen}
 }
 
 func (s *IndexService) Get(ctx context.Context, did string) (internalapi.InternalRecordResponse, error) {
@@ -33,20 +31,6 @@ func (s *IndexService) Get(ctx context.Context, did string) (internalapi.Interna
 	}
 	if resp.JSON200 == nil {
 		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON200, nil
-}
-
-func (s *IndexService) GetByHash(ctx context.Context, hash string) (internalapi.ListRecordsResponse, error) {
-	params := &internalapi.InternalListParams{
-		Hash: &hash,
-	}
-	resp, err := s.gen.InternalListWithResponse(ctx, params)
-	if err != nil {
-		return internalapi.ListRecordsResponse{}, err
-	}
-	if resp.JSON200 == nil {
-		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -98,72 +82,28 @@ func (s *IndexService) RemoveControlledAccess(ctx context.Context, did, resource
 }
 
 func (s *IndexService) List(ctx context.Context, opts ListRecordsOptions) (internalapi.ListRecordsResponse, error) {
-	params := url.Values{}
+	params := &internalapi.InternalListParams{}
 	if opts.Hash != "" {
-		params.Set("hash", opts.Hash)
+		params.Hash = &opts.Hash
 	}
 	if opts.URL != "" {
-		params.Set("url", opts.URL)
+		params.Url = &opts.URL
 	}
-	if opts.Organization != "" {
-		params.Set("organization", opts.Organization)
-	}
-	if opts.ProjectID != "" {
-		params.Set("project", opts.ProjectID)
-	}
-	if opts.Limit != 0 {
-		params.Set("limit", fmt.Sprintf("%d", opts.Limit))
-	}
-	if opts.Start != "" {
-		params.Set("start", opts.Start)
-	} else if opts.Page != 0 {
-		params.Set("page", fmt.Sprintf("%d", opts.Page))
-	}
-	var out internalapi.ListRecordsResponse
-	if err := s.requestor.Do(ctx, http.MethodGet, "/index", nil, &out, request.WithQueryValues(params)); err != nil {
-		return internalapi.ListRecordsResponse{}, err
-	}
-	return out, nil
-}
-
-func (s *IndexService) DeleteByQuery(ctx context.Context, opts DeleteByQueryOptions) (internalapi.DeleteByQueryResponse, error) {
-	params := &internalapi.InternalDeleteByQueryParams{}
 	if opts.Organization != "" {
 		params.Organization = &opts.Organization
 	}
 	if opts.ProjectID != "" {
 		params.Project = &opts.ProjectID
 	}
-	if opts.Hash != "" {
-		params.Hash = &opts.Hash
+	if opts.Limit != 0 {
+		params.Limit = &opts.Limit
 	}
-	if opts.HashType != "" {
-		params.HashType = &opts.HashType
+	if opts.Start != "" {
+		params.Start = &opts.Start
+	} else if opts.Page != 0 {
+		params.Page = &opts.Page
 	}
-
-	resp, err := s.gen.InternalDeleteByQueryWithResponse(ctx, params)
-	if err != nil {
-		return internalapi.DeleteByQueryResponse{}, err
-	}
-	if resp.JSON200 == nil {
-		return internalapi.DeleteByQueryResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON200, nil
-}
-
-func (s *IndexService) CreateBulk(ctx context.Context, req internalapi.BulkCreateRequest) (internalapi.ListRecordsResponse, error) {
-	resp, err := s.gen.InternalBulkCreateWithResponse(ctx, internalapi.InternalBulkCreateJSONRequestBody(req))
-	if err != nil {
-		return internalapi.ListRecordsResponse{}, err
-	}
-	if resp.JSON201 == nil {
-		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON201, nil
-}
-
-func (s *IndexService) BulkHashes(ctx context.Context, req internalapi.BulkHashesRequest) (internalapi.ListRecordsResponse, error) {
-	resp, err := s.gen.InternalBulkHashesWithResponse(ctx, internalapi.InternalBulkHashesJSONRequestBody(req))
+	resp, err := s.gen.InternalListWithResponse(ctx, params)
 	if err != nil {
 		return internalapi.ListRecordsResponse{}, err
 	}
@@ -171,64 +111,6 @@ func (s *IndexService) BulkHashes(ctx context.Context, req internalapi.BulkHashe
 		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
-}
-
-func (s *IndexService) DeleteBulk(ctx context.Context, req internalapi.BulkHashesRequest) (int, error) {
-	resp, err := s.gen.InternalBulkDeleteHashesWithResponse(ctx, internalapi.InternalBulkDeleteHashesJSONRequestBody(req))
-	if err != nil {
-		return 0, err
-	}
-	if resp.JSON200 == nil {
-		return 0, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	if resp.JSON200.Deleted == nil {
-		return 0, nil
-	}
-	return int(*resp.JSON200.Deleted), nil
-}
-
-func (s *IndexService) BulkSHA256Validity(ctx context.Context, req internalapi.BulkSHA256ValidityRequest) (map[string]bool, error) {
-	resp, err := s.gen.InternalBulkSHA256ValidityWithResponse(ctx, internalapi.InternalBulkSHA256ValidityJSONRequestBody(req))
-	if err != nil {
-		return nil, err
-	}
-	if resp.JSON200 == nil {
-		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON200, nil
-}
-
-// MissingSHA256 returns the SHA-256 values that are not registered in a
-// project. Syfon performs this as an indexed existence check and does not
-// return complete DRS records.
-func (s *IndexService) MissingSHA256(ctx context.Context, req internalapi.BulkMissingSHA256Request) (internalapi.BulkMissingSHA256Response, error) {
-	resp, err := s.gen.InternalBulkMissingSHA256WithResponse(ctx, internalapi.InternalBulkMissingSHA256JSONRequestBody(req))
-	if err != nil {
-		return internalapi.BulkMissingSHA256Response{}, err
-	}
-	if resp.JSON200 == nil {
-		return internalapi.BulkMissingSHA256Response{}, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON200, nil
-}
-
-func (s *IndexService) BulkDocuments(ctx context.Context, dids []string) ([]internalapi.InternalRecordResponse, error) {
-	var body internalapi.BulkDocumentsRequest
-	if err := body.FromBulkDocumentsRequest0(internalapi.BulkDocumentsRequest0(dids)); err != nil {
-		return nil, err
-	}
-	resp, err := s.gen.InternalBulkDocumentsWithResponse(ctx, internalapi.InternalBulkDocumentsJSONRequestBody(body))
-	if err != nil {
-		return nil, err
-	}
-	if resp.JSON200 == nil {
-		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
-	}
-	return *resp.JSON200, nil
-}
-
-func (s *IndexService) SHA256Validity(ctx context.Context, values []string) (map[string]bool, error) {
-	return s.BulkSHA256Validity(ctx, internalapi.BulkSHA256ValidityRequest{Sha256: &values})
 }
 
 func (s *IndexService) Upsert(ctx context.Context, did, objectURL, recordPath string, size int64, sha256sum string, authorizations map[string][]string) error {

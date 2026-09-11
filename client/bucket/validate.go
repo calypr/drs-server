@@ -10,8 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	bucketapi "github.com/calypr/syfon/apigen/bucketapi"
-	"github.com/calypr/syfon/client/transfer"
-	s3driver "github.com/calypr/syfon/client/transfer/providers/s3"
 )
 
 // ValidateBucket verifies that the bucket exists and is accessible using native provider SDKs.
@@ -49,7 +47,8 @@ func validateS3(ctx context.Context, req bucketapi.PutBucketRequest) error {
 		}
 	})
 
-	// Wrap in our new driver to use its Validate logic
-	driver := s3driver.NewBackend(transfer.NoOpLogger{}, s3Client, req.Bucket)
-	return driver.Validate(ctx, req.Bucket)
+	if _, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(req.Bucket)}); err != nil {
+		return fmt.Errorf("s3 bucket validation failed for %s: %w", req.Bucket, err)
+	}
+	return nil
 }

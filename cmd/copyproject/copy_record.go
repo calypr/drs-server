@@ -10,8 +10,9 @@ import (
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/services"
-	transferdownload "github.com/calypr/syfon/client/transfer/download"
+	"github.com/calypr/syfon/client/transfer/engine"
 	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/transferprogress"
 
@@ -19,7 +20,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetClient services.SyfonClient, rec internalapi.InternalRecord, targetBucket, targetProjectPath string, dstResource string, current, total int, tempDir string) error {
+type recordClient interface {
+	Data() *services.DataService
+	Index() *services.IndexService
+	DRS() *services.DRSService
+}
+
+func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetClient recordClient, rec internalapi.InternalRecord, targetBucket, targetProjectPath string, dstResource string, current, total int, tempDir string) error {
 	did := rec.Did
 	fileName := ""
 	if rec.Name != nil {
@@ -55,14 +62,14 @@ func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetCli
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Downloading %s -> %s", did, tempPath)
 	if size > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), " (%s)", upload.FormatSize(size))
+		fmt.Fprintf(cmd.OutOrStdout(), " (%s)", common.FormatSize(size))
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
 
 	downloadProgress := transferprogress.New(cmd.OutOrStdout(), filepath.Base(progressName), size)
 	downloadProgress.Start()
 	downloadCtx := transferprogress.WithProgress(ctx, did, downloadProgress)
-	if err := transferdownload.DownloadFile(downloadCtx, sourceClient.Data(), did, tempPath); err != nil {
+	if err := engine.Download(downloadCtx, sourceClient.Data(), did, tempPath, engine.DownloadOptions{MultipartThreshold: 5 * common.GB}); err != nil {
 		downloadProgress.Abort()
 		return fmt.Errorf("failed to download file %s: %w", did, err)
 	}
@@ -83,7 +90,7 @@ func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetCli
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Uploading %s -> %s", did, targetObjectURL)
 	if size > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), " (%s)", upload.FormatSize(size))
+		fmt.Fprintf(cmd.OutOrStdout(), " (%s)", common.FormatSize(size))
 	}
 	fmt.Fprintln(cmd.OutOrStdout())
 

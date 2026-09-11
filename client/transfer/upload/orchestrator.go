@@ -11,6 +11,7 @@ import (
 	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
+	"github.com/calypr/syfon/client/transfer/engine"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 )
@@ -91,12 +92,14 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 		if err != nil {
 			return nil, fmt.Errorf("failed to get upload URL: %w", err)
 		}
-		if err := UploadSingle(ctx, resolvedUploadBackend{Uploader: bk, url: uploadURL}, bk.Logger(), filePath, uploadFilename, storageID, bucketName, metadata, false); err != nil {
+		uploader := engine.GenericUploader{Backend: resolvedUploadBackend{UploadBackend: bk, url: uploadURL}}
+		if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata}); err != nil {
 			return nil, fmt.Errorf("upload failed: %w", err)
 		}
 		canonicalInput = uploadURL
 	} else {
-		if err := Upload(ctx, bk, filePath, uploadFilename, storageID, bucketName, metadata, false, true); err != nil {
+		uploader := engine.GenericUploader{Backend: bk}
+		if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata, ForceMultipart: true}); err != nil {
 			return nil, fmt.Errorf("multipart upload failed: %w", err)
 		}
 		canonicalInput = "s3://" + strings.Trim(strings.TrimSpace(bucketName), "/") + "/" + strings.Trim(strings.TrimSpace(uploadFilename), "/")
@@ -199,7 +202,7 @@ type UploadBackend interface {
 }
 
 type resolvedUploadBackend struct {
-	transfer.Uploader
+	UploadBackend
 	url string
 }
 

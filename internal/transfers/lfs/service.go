@@ -12,7 +12,6 @@ import (
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
-	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
@@ -353,7 +352,7 @@ func materializeCandidate(value lfsapi.DrsObjectCandidate, now time.Time) (drs.D
 		}
 		for _, checksum := range sourceChecksums {
 			if strings.EqualFold(strings.TrimSpace(checksum.Type), "sha256") {
-				explicitID = clienthash.NormalizeOid(checksum.Checksum)
+				explicitID = objects.NormalizeOID(checksum.Checksum)
 				break
 			}
 		}

@@ -3,45 +3,29 @@ package services
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
-
-	"github.com/calypr/syfon/client/request"
 )
-
-type mockRequester struct {
-	doFunc func(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error
-}
-
-func (m *mockRequester) Do(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-	if m.doFunc != nil {
-		return m.doFunc(ctx, method, path, body, out, opts...)
-	}
-	return nil
-}
 
 func TestHealthService_Ping(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mr := &mockRequester{
-			doFunc: func(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-				if method != "GET" || path != "/healthz" {
-					t.Errorf("unexpected request: %s %s", method, path)
-				}
-				return nil
-			},
-		}
-		h := NewHealthService(mr)
+		client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet || req.URL.Path != "/healthz" {
+				t.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
+		})}
+		h := NewHealthService("https://example.test", client)
 		if err := h.Ping(context.Background()); err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mr := &mockRequester{
-			doFunc: func(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-				return errors.New("health check failed")
-			},
-		}
-		h := NewHealthService(mr)
+		client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("health check failed")
+		})}
+		h := NewHealthService("https://example.test", client)
 		if err := h.Ping(context.Background()); err == nil {
 			t.Error("expected error, got nil")
 		}

@@ -11,7 +11,6 @@ import (
 	syclient "github.com/calypr/syfon/client"
 	conf "github.com/calypr/syfon/client/config"
 	syrequest "github.com/calypr/syfon/client/request"
-	syfonclient "github.com/calypr/syfon/client/services"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -30,9 +29,7 @@ func RegisterRootFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&password, "password", strings.TrimSpace(os.Getenv("SYFON_PASSWORD")), "Basic auth password for authenticated Syfon servers")
 }
 
-
-
-func NewServerClient(cmd *cobra.Command) (syfonclient.SyfonClient, error) {
+func NewServerClient(cmd *cobra.Command) (*syclient.Client, error) {
 	serverURL, err := ResolveServerURL(cmd)
 	if err != nil {
 		return nil, err

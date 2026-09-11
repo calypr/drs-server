@@ -85,20 +85,6 @@ func (u *uploaderStub) CanonicalObjectURL(signedURL, bucketHint, fallbackDID str
 	return signedURL, nil
 }
 
-type spyLogger struct {
-	transfer.NoOpLogger
-	succeeded []string
-	failed    []string
-}
-
-func (s *spyLogger) Succeeded(filePath, guid string) {
-	s.succeeded = append(s.succeeded, filePath+"|"+guid)
-}
-
-func (s *spyLogger) Failed(filePath, filename string, metadata common.FileMetadata, guid string, retryCount int, multipart bool) {
-	s.failed = append(s.failed, filePath+"|"+filename+"|"+guid)
-}
-
 func createTempFileWithData(t *testing.T, data string) *os.File {
 	t.Helper()
 	file, err := os.CreateTemp(t.TempDir(), "upload-*.txt")

@@ -14,7 +14,6 @@ import (
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/metricsapi"
-	clientservices "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/objects"
@@ -42,6 +41,25 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	RootCmd.SetArgs(args)
 	err := RootCmd.Execute()
 	return strings.TrimSpace(out.String() + errOut.String()), err
+}
+
+type transferSummaryOutput struct {
+	EventCount      int64                    `json:"event_count"`
+	BytesDownloaded int64                    `json:"bytes_downloaded"`
+	BytesUploaded   int64                    `json:"bytes_uploaded"`
+	Freshness       *transferFreshnessOutput `json:"freshness"`
+}
+
+type transferBreakdownOutput struct {
+	Key             string `json:"key"`
+	Provider        string `json:"provider"`
+	Bucket          string `json:"bucket"`
+	BytesDownloaded int64  `json:"bytes_downloaded"`
+	BytesUploaded   int64  `json:"bytes_uploaded"`
+}
+
+type transferFreshnessOutput struct {
+	IsStale bool `json:"is_stale"`
 }
 
 func newSQLiteDatabase(t testing.TB) *store.Store {
@@ -168,7 +186,7 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metrics transfers summary command failed: %v output=%s", err, out)
 	}
-	var summary clientservices.TransferAttributionSummary
+	var summary transferSummaryOutput
 	if err := json.Unmarshal([]byte(out), &summary); err != nil {
 		t.Fatalf("decode summary output %q: %v", out, err)
 	}
@@ -184,9 +202,9 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers breakdown command failed: %v output=%s", err, out)
 	}
 	var breakdown struct {
-		GroupBy   string                                        `json:"group_by"`
-		Data      []clientservices.TransferAttributionBreakdown `json:"data"`
-		Freshness *clientservices.TransferMetricsFreshness      `json:"freshness"`
+		GroupBy   string                    `json:"group_by"`
+		Data      []transferBreakdownOutput `json:"data"`
+		Freshness *transferFreshnessOutput  `json:"freshness"`
 	}
 	if err := json.Unmarshal([]byte(out), &breakdown); err != nil {
 		t.Fatalf("decode breakdown output %q: %v", out, err)
@@ -203,15 +221,15 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers users command failed: %v output=%s", err, out)
 	}
 	var users struct {
-		Summary clientservices.TransferAttributionSummary `json:"summary"`
+		Summary transferSummaryOutput `json:"summary"`
 		Users   []struct {
 			User            string `json:"user"`
 			BytesDownloaded int64  `json:"bytes_downloaded"`
 			BytesUploaded   int64  `json:"bytes_uploaded"`
 		} `json:"users"`
-		SortBy    string                                   `json:"sort_by"`
-		SortOrder string                                   `json:"sort_order"`
-		Freshness *clientservices.TransferMetricsFreshness `json:"freshness"`
+		SortBy    string                   `json:"sort_by"`
+		SortOrder string                   `json:"sort_order"`
+		Freshness *transferFreshnessOutput `json:"freshness"`
 	}
 	if err := json.Unmarshal([]byte(out), &users); err != nil {
 		t.Fatalf("decode users output %q: %v", out, err)
@@ -234,9 +252,9 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers billing command failed: %v output=%s", err, out)
 	}
 	var billing struct {
-		Summary          clientservices.TransferAttributionSummary     `json:"summary"`
-		StorageLocations []clientservices.TransferAttributionBreakdown `json:"storage_locations"`
-		Files            []clientservices.TransferAttributionBreakdown `json:"files"`
+		Summary          transferSummaryOutput     `json:"summary"`
+		StorageLocations []transferBreakdownOutput `json:"storage_locations"`
+		Files            []transferBreakdownOutput `json:"files"`
 	}
 	if err := json.Unmarshal([]byte(out), &billing); err != nil {
 		t.Fatalf("decode billing output %q: %v", out, err)

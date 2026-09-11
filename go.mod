@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/kms v1.54.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.1
 	github.com/aws/smithy-go v1.27.3
-	github.com/calypr/syfon/apigen v0.3.2
+	github.com/calypr/syfon/apigen v0.3.3
 	github.com/calypr/syfon/client v0.3.5
 	github.com/getkin/kin-openapi v0.144.0
 	github.com/gofiber/fiber/v3 v3.4.0
@@ -152,5 +152,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 )
-
-replace github.com/calypr/syfon/apigen v0.3.2 => github.com/calypr/syfon/apigen v0.3.1-0.20260909185846-d8a6e7d46e82

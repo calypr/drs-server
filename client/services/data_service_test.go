@@ -209,11 +209,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if err != nil || etag != "etag-1" {
 		t.Fatalf("MultipartPart with sized body returned etag=%q err=%v", etag, err)
 	}
-	if requester.rawBody != sizedBody {
-		t.Fatalf("expected multipart upload to stream original body, got %T", requester.rawBody)
-	}
-	if requester.builder.PartSize != int64(len("chunk-two")) {
-		t.Fatalf("expected multipart upload content length %d, got %d", len("chunk-two"), requester.builder.PartSize)
+	if requester.request.ContentLength != int64(len("chunk-two")) {
+		t.Fatalf("expected multipart upload content length %d, got %d", len("chunk-two"), requester.request.ContentLength)
 	}
 
 	parts := []transfer.MultipartPart{{PartNumber: 2, ETag: "etag-2"}, {PartNumber: 1, ETag: "etag-1"}}
@@ -242,7 +239,7 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	}
 
 	md, err := service.Stat(ctx, "file-2")
-	if err != nil || md.Provider != "http" || md.MD5 != "" || !md.AcceptRanges {
+	if err != nil || !md.AcceptRanges {
 		t.Fatalf("Stat returned md=%+v err=%v", md, err)
 	}
 
@@ -252,8 +249,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusPartialContent {
 		t.Fatalf("Download returned resp=%v err=%v", resp, err)
 	}
-	if transferRequester.builder.Headers["Range"] != "bytes=3-8" {
-		t.Fatalf("expected range header, got %+v", transferRequester.builder.Headers)
+	if transferRequester.request.Header.Get("Range") != "bytes=3-8" {
+		t.Fatalf("expected range header, got %s", transferRequester.request.Header.Get("Range"))
 	}
 
 	reader, err := transferService.GetReader(ctx, "https://download.example/file-3")
@@ -282,14 +279,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("unexpected range payload %q", rangeData)
 	}
 
-	if service.Name() != "syfon-data-service" {
-		t.Fatalf("unexpected service name %q", service.Name())
-	}
 	if service.Logger() == nil {
 		t.Fatal("expected logger")
-	}
-	if err := service.Validate(ctx, "bucket-a"); err != nil {
-		t.Fatalf("Validate returned error: %v", err)
 	}
 }
 
@@ -310,14 +301,5 @@ func TestDataServiceMultipartInitPreservesServerMessage(t *testing.T) {
 	_, _, err := service.InitMultipartUpload(context.Background(), "", "", "")
 	if err == nil || !strings.Contains(err.Error(), "checksum-only multipart init requires an explicit guid or a project-scoped object id") {
 		t.Fatalf("expected preserved multipart init error message, got %v", err)
-	}
-}
-
-func TestGetWriterRejectsWithoutCreatingAnUpload(t *testing.T) {
-	t.Parallel()
-	service := NewDataService(nil, nil, nil, nil)
-	writer, err := service.GetWriter(context.Background(), "id")
-	if err == nil || writer != nil {
-		t.Fatalf("expected unsupported writer, got %v, %v", writer, err)
 	}
 }

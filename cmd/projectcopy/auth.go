@@ -7,7 +7,6 @@ import (
 
 	syclient "github.com/calypr/syfon/client"
 	conf "github.com/calypr/syfon/client/config"
-	"github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -45,7 +44,7 @@ func (f *AuthFlags) RegisterTargetFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&f.TargetBasicPassword, "target-basic-password", "", "Basic auth password for target Syfon writes")
 }
 
-func (f *AuthFlags) NewSourceClient(ctx context.Context, cmd *cobra.Command) (services.SyfonClient, string, error) {
+func (f *AuthFlags) NewSourceClient(ctx context.Context, cmd *cobra.Command) (*syclient.Client, string, error) {
 	serverURL, err := f.resolveSourceServerURL(ctx, cmd)
 	if err != nil {
 		return nil, "", err
@@ -61,7 +60,7 @@ func (f *AuthFlags) NewSourceClient(ctx context.Context, cmd *cobra.Command) (se
 	return client, serverURL, nil
 }
 
-func (f *AuthFlags) NewTargetClient(ctx context.Context, cmd *cobra.Command, allowRootServer, allowRootAuth bool) (services.SyfonClient, string, error) {
+func (f *AuthFlags) NewTargetClient(ctx context.Context, cmd *cobra.Command, allowRootServer, allowRootAuth bool) (*syclient.Client, string, error) {
 	serverURL, err := f.resolveTargetServerURL(ctx, cmd, allowRootServer)
 	if err != nil {
 		return nil, "", err

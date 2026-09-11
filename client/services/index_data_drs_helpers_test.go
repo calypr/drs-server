@@ -1,7 +1,7 @@
 package services
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -10,10 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	drsapi "github.com/calypr/syfon/apigen/drs"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/logs"
-	"github.com/calypr/syfon/client/request"
 )
 
 type recordingRequester struct {
@@ -21,34 +19,33 @@ type recordingRequester struct {
 	method   string
 	path     string
 	body     []byte
-	rawBody  any
-	builder  request.RequestBuilder
+	request  *http.Request
 	response *http.Response
 	err      error
 }
 
-func (r *recordingRequester) Do(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func (r *recordingRequester) Do(req *http.Request) (*http.Response, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.method = method
-	r.path = path
-	r.rawBody = body
-	r.builder = request.RequestBuilder{Method: method, Url: path, Headers: map[string]string{}}
-	for _, opt := range opts {
-		opt(&r.builder)
-	}
-	if reader, ok := body.(io.Reader); ok && reader != nil {
-		data, _ := io.ReadAll(reader)
+	r.request = req
+	r.method = req.Method
+	r.path = req.URL.RequestURI()
+	if req.Body != nil {
+		data, _ := io.ReadAll(req.Body)
 		r.body = data
+		req.Body = io.NopCloser(bytes.NewReader(data))
 	}
-	if outResp, ok := out.(**http.Response); ok {
-		resp := r.response
-		if resp == nil {
-			resp = &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}
-		}
-		*outResp = resp
+	resp := r.response
+	if resp == nil {
+		resp = &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: req}
 	}
-	return r.err
+	return resp, r.err
 }
 
 func discardLogger() *logs.Gen3Logger {
@@ -61,15 +58,6 @@ func mustInternalClient(t *testing.T, serverURL string) *internalapi.ClientWithR
 	httpClient := &http.Client{Transport: transport}
 	t.Cleanup(transport.CloseIdleConnections)
 	client, err := internalapi.NewClientWithResponses(serverURL, internalapi.WithHTTPClient(httpClient))
-	if err != nil {
-		t.Fatalf("NewClientWithResponses returned error: %v", err)
-	}
-	return client
-}
-
-func mustDRSClient(t *testing.T, serverURL string) *drsapi.ClientWithResponses {
-	t.Helper()
-	client, err := drsapi.NewClientWithResponses(serverURL)
 	if err != nil {
 		t.Fatalf("NewClientWithResponses returned error: %v", err)
 	}

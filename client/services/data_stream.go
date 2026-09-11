@@ -11,18 +11,12 @@ import (
 	"github.com/calypr/syfon/client/transfer"
 )
 
-// GetWriter returns an unsupported-operation error without creating an upload.
-func (d *DataService) GetWriter(ctx context.Context, guid string) (io.WriteCloser, error) {
-	return nil, fmt.Errorf("GetWriter not yet fully implemented for DataService")
-}
-
 func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMetadata, error) {
 	if d.drs != nil {
 		obj, err := d.drs.GetObject(ctx, guid)
 		if err == nil {
 			md := &transfer.ObjectMetadata{
-				Size:     obj.Size,
-				Provider: "drs",
+				Size: obj.Size,
 			}
 			if obj.AccessMethods != nil && len(*obj.AccessMethods) > 0 {
 				md.AcceptRanges = true
@@ -35,10 +29,8 @@ func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMe
 		return nil, err
 	}
 	return &transfer.ObjectMetadata{
-		Provider:     "http",
 		AcceptRanges: true,
 		Size:         0,
-		Checksums:    nil,
 	}, nil
 }
 
@@ -87,7 +79,7 @@ func (d *DataService) ResolveDownloadURL(ctx context.Context, guid string, acces
 }
 
 func (d *DataService) Download(ctx context.Context, signedURL string, rangeStart, rangeEnd *int64) (*http.Response, error) {
-	return transfer.GenericDownload(ctx, d.requestor, signedURL, rangeStart, rangeEnd)
+	return transfer.GenericDownload(ctx, d.httpClient, signedURL, rangeStart, rangeEnd)
 }
 
 func (d *DataService) ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error) {
@@ -130,22 +122,16 @@ func uploadScopeFromMetadata(metadata common.FileMetadata) (string, string) {
 func (d *DataService) Upload(ctx context.Context, url string, body io.Reader, size int64) error {
 	ctx, cancel := context.WithTimeout(ctx, common.DataTimeout)
 	defer cancel()
-	_, err := transfer.DoUpload(ctx, d.requestor, url, body, size)
+	_, err := transfer.DoUpload(ctx, d.httpClient, url, body, size)
 	return err
 }
 
 func (d *DataService) UploadPart(ctx context.Context, url string, body io.Reader, size int64) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, common.DataTimeout)
 	defer cancel()
-	return transfer.DoUpload(ctx, d.requestor, url, body, size)
+	return transfer.DoUpload(ctx, d.httpClient, url, body, size)
 }
-
-func (d *DataService) Name() string { return "syfon-data-service" }
 
 func (d *DataService) Logger() transfer.TransferLogger {
 	return d.logger
-}
-
-func (d *DataService) Validate(ctx context.Context, bucket string) error {
-	return nil
 }

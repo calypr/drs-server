@@ -15,7 +15,6 @@ import (
 	drs "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/google/uuid"
 )
 
@@ -77,6 +76,14 @@ func AccessResources(obj *drs.DrsObject) []string {
 var sha256Like = regexp.MustCompile(`^[A-Fa-f0-9]{64}$`)
 
 func LooksLikeSHA256(v string) bool { return sha256Like.MatchString(strings.TrimSpace(v)) }
+
+func NormalizeOID(oid string) string {
+	value := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(oid)), "sha256:")
+	if !sha256Like.MatchString(value) {
+		return ""
+	}
+	return value
+}
 
 func normalizeChecksum(cs string) string {
 	if parts := strings.SplitN(cs, ":", 2); len(parts) == 2 {
@@ -157,7 +164,7 @@ func sha256Values(checksums []drs.Checksum) []string {
 		if NormalizeChecksumType(cs.Type) != "sha256" {
 			continue
 		}
-		normalized := clienthash.NormalizeOid(cs.Checksum)
+		normalized := NormalizeOID(cs.Checksum)
 		if normalized == "" {
 			continue
 		}
@@ -182,7 +189,7 @@ func ValidateCanonicalSHA256(checksums []drs.Checksum) (string, bool, error) {
 }
 
 func NormalizeSHA256Query(value string) (string, bool) {
-	normalized := clienthash.NormalizeOid(value)
+	normalized := NormalizeOID(value)
 	if normalized == "" {
 		return "", false
 	}

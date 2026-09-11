@@ -2,17 +2,18 @@ package authentication
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/client/apierror"
 	conf "github.com/calypr/syfon/client/config"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 )
-
-var newBearerTokenRequestor = request.NewBearerTokenRequestor
 
 type tokenAuthResult struct {
 	Resources  []string
@@ -44,8 +45,8 @@ func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tok
 		APIEndpoint: apiEndpoint,
 	}
 	gen3Logger := logs.NewGen3Logger(r.logger, "", "syfon")
-	reqClient := newBearerTokenRequestor(gen3Logger, cred, nil, apiEndpoint, "syfon-server", nil)
-	privs, err := fetchPrivileges(ctx, reqClient, cred)
+	httpClient := request.NewClient(gen3Logger, cred, nil, "syfon-server", nil, request.AuthModeBearer)
+	privs, err := fetchPrivileges(ctx, httpClient, apiEndpoint)
 	if err != nil {
 		r.logger.Debug("failed to check privileges with internal auth", "error", err)
 		return tokenAuthResult{Negative: true}
@@ -54,10 +55,30 @@ func (r *tokenAuthResolver) Resolve(ctx context.Context, tokenString string) tok
 	return tokenAuthResult{Resources: resources, Privileges: privileges}
 }
 
-func fetchPrivileges(ctx context.Context, reqClient request.Requester, _ *conf.Credential) (map[string]any, error) {
-	var data map[string]any
-	if err := reqClient.Do(ctx, http.MethodGet, "/user/user", nil, &data); err != nil {
+func fetchPrivileges(ctx context.Context, httpClient request.HTTPDoer, apiEndpoint string) (map[string]any, error) {
+	endpoint := strings.TrimRight(strings.TrimSpace(apiEndpoint), "/") + "/user/user"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create user info request: %w", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
 		return nil, fmt.Errorf("request user info: %w", err)
+	}
+	if resp == nil || resp.Body == nil {
+		return nil, fmt.Errorf("request user info: empty response")
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("request user info: read response: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("request user info: %w", apierror.FromResponse(resp, body))
+	}
+	var data map[string]any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("request user info: decode response: %w", err)
 	}
 
 	resourceAccess, ok := data["authz"].(map[string]any)

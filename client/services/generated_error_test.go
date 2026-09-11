@@ -99,7 +99,7 @@ func TestGeneratedServicesPreserveMalformedErrorResponses(t *testing.T) {
 					return err
 				}},
 				{name: "index", call: func() error {
-					_, err := NewIndexService(internal, nil).Get(ctx, "missing")
+					_, err := NewIndexService(internal).Get(ctx, "missing")
 					return err
 				}},
 				{name: "buckets", call: func() error {
@@ -107,7 +107,7 @@ func TestGeneratedServicesPreserveMalformedErrorResponses(t *testing.T) {
 					return err
 				}},
 				{name: "drs", call: func() error {
-					_, err := NewDRSService(drsClient, nil).GetObject(ctx, "missing")
+					_, err := NewDRSService(drsClient).GetObject(ctx, "missing")
 					return err
 				}},
 				{name: "metrics", call: func() error {

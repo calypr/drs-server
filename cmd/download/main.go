@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	transferdownload "github.com/calypr/syfon/client/transfer/download"
-	syupload "github.com/calypr/syfon/client/transfer/upload"
+	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/transfer/engine"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/calypr/syfon/cmd/transferprogress"
 	"github.com/spf13/cobra"
@@ -58,7 +58,7 @@ var Cmd = &cobra.Command{
 
 		fmt.Fprintf(cmd.OutOrStdout(), "Downloading %s -> %s", did, outPath)
 		if expectedSize > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", syupload.FormatSize(expectedSize))
+			fmt.Fprintf(cmd.OutOrStdout(), " (%s)", common.FormatSize(expectedSize))
 		}
 		fmt.Fprintln(cmd.OutOrStdout())
 
@@ -66,7 +66,7 @@ var Cmd = &cobra.Command{
 		progress.Start()
 		downloadCtx := transferprogress.WithProgress(ctx, did, progress)
 
-		if err := transferdownload.DownloadFile(downloadCtx, c.Data(), did, outPath); err != nil {
+		if err := engine.Download(downloadCtx, c.Data(), did, outPath, engine.DownloadOptions{MultipartThreshold: 5 * common.GB}); err != nil {
 			progress.Abort()
 			return err
 		}
@@ -75,8 +75,6 @@ var Cmd = &cobra.Command{
 		return nil
 	},
 }
-
-
 
 func init() {
 	Cmd.Flags().StringVar(&downloadDID, "did", "", "DRS object DID")

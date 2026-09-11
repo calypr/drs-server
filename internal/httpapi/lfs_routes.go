@@ -12,7 +12,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/lfsapi"
-	clienthash "github.com/calypr/syfon/client/hash"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/gofiber/fiber/v3"
@@ -241,7 +241,7 @@ func (s *lfsServer) LfsBatch(ctx context.Context, request lfsapi.LfsBatchRequest
 			responseObjects[index].Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "size must be non-negative"}
 			continue
 		}
-		oid := clienthash.NormalizeOid(input.Oid)
+		oid := objects.NormalizeOID(input.Oid)
 		if oid == "" {
 			responseObjects[index].Error = &lfsapi.ObjectError{Code: http.StatusBadRequest, Message: "invalid oid"}
 			continue
@@ -277,7 +277,7 @@ func (s *lfsServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 	if request.Body == nil {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "missing request body"}, nil
 	}
-	oid := clienthash.NormalizeOid(request.Body.Oid)
+	oid := objects.NormalizeOID(request.Body.Oid)
 	if oid == "" {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "invalid oid"}, nil
 	}
@@ -326,7 +326,7 @@ func (s *lfsServer) LfsStageMetadata(ctx context.Context, request lfsapi.LfsStag
 }
 
 func (s *lfsServer) LfsUploadProxy(ctx context.Context, request lfsapi.LfsUploadProxyRequestObject) (lfsapi.LfsUploadProxyResponseObject, error) {
-	oid := clienthash.NormalizeOid(request.Oid)
+	oid := objects.NormalizeOID(request.Oid)
 	if oid == "" {
 		return lfsapi.LfsUploadProxy400TextResponse("invalid oid"), nil
 	}

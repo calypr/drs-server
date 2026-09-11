@@ -108,37 +108,3 @@ func TestRetryAction(t *testing.T) {
 		}
 	})
 }
-
-func TestNoOpLogger(t *testing.T) {
-	t.Parallel()
-
-	logger := NoOpLogger{}
-	ctx := context.Background()
-	metadata := common.FileMetadata{Authorizations: map[string][]string{"test": {}}}
-
-	if logger.Slog() == nil {
-		t.Fatal("expected slog logger")
-	}
-	logger.Info("info")
-	logger.InfoContext(ctx, "info")
-	logger.Error("error")
-	logger.ErrorContext(ctx, "error")
-	logger.Warn("warn")
-	logger.WarnContext(ctx, "warn")
-	logger.Debug("debug")
-	logger.DebugContext(ctx, "debug")
-	logger.Printf("formatted %s", "message")
-	logger.Println("line")
-	logger.Failed("file", "name", metadata, "guid", 1, true)
-	logger.FailedContext(ctx, "file", "name", metadata, "guid", 1, false)
-	logger.Succeeded("file", "guid")
-	logger.SucceededContext(ctx, "file", "guid")
-	logger.DeleteFromFailedLog("file")
-
-	if got := logger.GetSucceededLogMap(); len(got) != 0 {
-		t.Fatalf("expected empty succeeded log map, got %+v", got)
-	}
-	if got := logger.GetFailedLogMap(); len(got) != 0 {
-		t.Fatalf("expected empty failed log map, got %+v", got)
-	}
-}

@@ -3,25 +3,15 @@ package logs
 import (
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"runtime"
-	"sync"
 	"time"
 
 	"log/slog"
-
-	"github.com/calypr/syfon/client/common"
 )
 
 type Gen3Logger struct {
 	*slog.Logger
-
-	failedMu  sync.Mutex
-	FailedMap map[string]common.RetryObject // Maps filePath to FileMetadata
-
-	succeededMu  sync.Mutex
-	succeededMap map[string]string // Maps filePath to GUID
 }
 
 // NewGen3Logger creates a new Gen3Logger wrapping the provided slog.Logger.
@@ -30,11 +20,7 @@ func NewGen3Logger(logger *slog.Logger, logDir, profile string) *Gen3Logger {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
-	return &Gen3Logger{
-		Logger:       logger,
-		FailedMap:    make(map[string]common.RetryObject),
-		succeededMap: make(map[string]string),
-	}
+	return &Gen3Logger{Logger: logger}
 }
 
 // logWithSkip logs a message at the given level, skipping `skip` stack frames for source attribution.
@@ -102,56 +88,4 @@ func (t *Gen3Logger) Fatal(v ...any) {
 // Slog exposes the underlying slog.Logger for code that needs direct slog access.
 func (t *Gen3Logger) Slog() *slog.Logger {
 	return t.Logger
-}
-
-func (t *Gen3Logger) GetSucceededLogMap() map[string]string {
-	t.succeededMu.Lock()
-	defer t.succeededMu.Unlock()
-	copiedMap := make(map[string]string, len(t.succeededMap))
-	maps.Copy(copiedMap, t.succeededMap)
-	return copiedMap
-}
-
-func (t *Gen3Logger) GetFailedLogMap() map[string]common.RetryObject {
-	t.failedMu.Lock()
-	defer t.failedMu.Unlock()
-	copiedMap := make(map[string]common.RetryObject, len(t.FailedMap))
-	maps.Copy(copiedMap, t.FailedMap)
-	return copiedMap
-}
-
-func (t *Gen3Logger) DeleteFromFailedLog(path string) {
-	t.failedMu.Lock()
-	defer t.failedMu.Unlock()
-	delete(t.FailedMap, path)
-}
-
-func (t *Gen3Logger) GetSucceededCount() int {
-	return len(t.succeededMap)
-}
-
-func (t *Gen3Logger) Failed(filePath, filename string, metadata common.FileMetadata, guid string, retryCount int, multipart bool) {
-	t.failedHelper(context.Background(), filePath, guid, retryCount, 4)
-}
-
-func (t *Gen3Logger) FailedContext(ctx context.Context, filePath, filename string, metadata common.FileMetadata, guid string, retryCount int, multipart bool) {
-	t.failedHelper(ctx, filePath, guid, retryCount, 4)
-}
-
-func (t *Gen3Logger) failedHelper(ctx context.Context, filePath, guid string, retryCount, skip int) {
-	msg := fmt.Sprintf("Failed: %s (GUID: %s, Retry: %d)", filePath, guid, retryCount)
-	t.logWithSkip(ctx, slog.LevelError, skip, msg)
-}
-
-func (t *Gen3Logger) Succeeded(filePath, guid string) {
-	t.succeededHelper(context.Background(), filePath, guid, 4)
-}
-
-func (t *Gen3Logger) SucceededContext(ctx context.Context, filePath, guid string) {
-	t.succeededHelper(ctx, filePath, guid, 4)
-}
-
-func (t *Gen3Logger) succeededHelper(ctx context.Context, filePath, guid string, skip int) {
-	msg := fmt.Sprintf("Succeeded: %s (GUID: %s)", filePath, guid)
-	t.logWithSkip(ctx, slog.LevelDebug, skip, msg)
 }

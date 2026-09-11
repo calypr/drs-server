@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/calypr/syfon/client/request"
 )
 
 // Test INFO-3 fix: Client has reasonable timeout
@@ -34,12 +32,8 @@ func TestNew_ClientHasTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	client, ok := syClient.(*Client)
-	if !ok {
-		t.Fatalf("New() returned %T, want *Client", syClient)
-	}
-	if client.requestor == nil {
-		t.Fatal("requestor is nil")
+	if syClient.httpClient == nil {
+		t.Fatal("HTTP client is nil")
 	}
 }
 
@@ -56,17 +50,11 @@ func TestNewClient_WithCustomConfig(t *testing.T) {
 		t.Fatalf("NewClient() error = %v", err)
 	}
 
-	// Timeout is configured on the request-backed HTTP client returned by
-	// Client.HTTPClient().
-	req, ok := client.Requestor().(*request.Request)
-	if !ok {
-		t.Fatalf("Requestor() returned %T, want *request.Request", client.Requestor())
+	if client.HTTPClient() == nil {
+		t.Fatal("HTTP client is nil")
 	}
-	if req.RetryClient == nil || req.RetryClient.HTTPClient == nil {
-		t.Fatal("retry HTTP client is nil")
-	}
-	if req.RetryClient.HTTPClient.Timeout != 30*time.Second {
-		t.Errorf("RetryClient.HTTPClient.Timeout = %v, want 30s", req.RetryClient.HTTPClient.Timeout)
+	if client.HTTPClient().Timeout != 30*time.Second {
+		t.Errorf("HTTPClient().Timeout = %v, want 30s", client.HTTPClient().Timeout)
 	}
 }
 
@@ -77,15 +65,10 @@ func TestNewClient_WithNilConfig(t *testing.T) {
 		t.Fatalf("NewClient(nil) error = %v", err)
 	}
 
-	// Assert against the underlying request-backed HTTP client.
-	req, ok := client.Requestor().(*request.Request)
-	if !ok {
-		t.Fatalf("Requestor() returned %T, want *request.Request", client.Requestor())
+	if client.HTTPClient() == nil {
+		t.Fatal("HTTP client is nil")
 	}
-	if req.RetryClient == nil || req.RetryClient.HTTPClient == nil {
-		t.Fatal("retry HTTP client is nil")
-	}
-	if req.RetryClient.HTTPClient.Timeout == 0 {
-		t.Errorf("RetryClient.HTTPClient.Timeout = 0, should have a reasonable timeout")
+	if client.HTTPClient().Timeout == 0 {
+		t.Errorf("HTTPClient().Timeout = 0, should have a reasonable timeout")
 	}
 }

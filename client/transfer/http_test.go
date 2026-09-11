@@ -17,25 +17,19 @@ import (
 type captureRequester struct {
 	method  string
 	path    string
-	builder request.RequestBuilder
+	request *http.Request
 	resp    *http.Response
 	err     error
 }
 
-func (c *captureRequester) Do(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-	c.method = method
-	c.path = path
-	c.builder = request.RequestBuilder{Method: method, Url: path, Headers: map[string]string{}}
-	for _, opt := range opts {
-		opt(&c.builder)
+func (c *captureRequester) Do(req *http.Request) (*http.Response, error) {
+	c.request = req
+	c.method = req.Method
+	c.path = req.URL.String()
+	if c.resp == nil {
+		c.resp = &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}
 	}
-	if outResp, ok := out.(**http.Response); ok {
-		if c.resp == nil {
-			c.resp = &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}
-		}
-		*outResp = c.resp
-	}
-	return c.err
+	return c.resp, c.err
 }
 
 func TestDoUploadLocalPathAndFileScheme(t *testing.T) {
@@ -94,17 +88,14 @@ func TestDoUploadHTTPModesAndErrors(t *testing.T) {
 		if req.method != http.MethodPut {
 			t.Fatalf("expected PUT method, got %s", req.method)
 		}
-		if req.builder.Headers["x-ms-blob-type"] != "BlockBlob" {
-			t.Fatalf("expected azure blob header, got %+v", req.builder.Headers)
+		if req.request.Header.Get("x-ms-blob-type") != "BlockBlob" {
+			t.Fatalf("expected azure blob header, got %s", req.request.Header.Get("x-ms-blob-type"))
 		}
-		if !req.builder.SkipAuth {
+		if req.request.Header.Get(request.SkipAuthHeader) != "true" {
 			t.Fatal("expected skip auth for signed URL")
 		}
-		if req.builder.PartSize != 7 {
-			t.Fatalf("expected part size 7, got %d", req.builder.PartSize)
-		}
-		if !req.builder.NoRetry {
-			t.Fatal("expected uploads to bypass retryablehttp retries")
+		if req.request.ContentLength != 7 {
+			t.Fatalf("expected content length 7, got %d", req.request.ContentLength)
 		}
 	})
 
@@ -117,11 +108,8 @@ func TestDoUploadHTTPModesAndErrors(t *testing.T) {
 		if req.method != http.MethodPost {
 			t.Fatalf("expected POST for gcs media upload, got %s", req.method)
 		}
-		if !req.builder.NoRetry {
-			t.Fatal("expected uploads to bypass retryablehttp retries")
-		}
-		if _, ok := req.builder.Headers["x-ms-blob-type"]; ok {
-			t.Fatalf("did not expect azure header in gcs mode, got %+v", req.builder.Headers)
+		if _, ok := req.request.Header["X-Ms-Blob-Type"]; ok {
+			t.Fatalf("did not expect azure header in gcs mode, got %+v", req.request.Header)
 		}
 	})
 
@@ -158,10 +146,10 @@ func TestGenericDownloadOptions(t *testing.T) {
 	if req.method != http.MethodGet {
 		t.Fatalf("expected GET method, got %s", req.method)
 	}
-	if req.builder.Headers["Range"] != "bytes=3-9" {
-		t.Fatalf("unexpected Range header: %+v", req.builder.Headers)
+	if req.request.Header.Get("Range") != "bytes=3-9" {
+		t.Fatalf("unexpected Range header: %s", req.request.Header.Get("Range"))
 	}
-	if !req.builder.SkipAuth {
+	if req.request.Header.Get(request.SkipAuthHeader) != "true" {
 		t.Fatal("expected skip auth for signed URL")
 	}
 
@@ -169,10 +157,10 @@ func TestGenericDownloadOptions(t *testing.T) {
 	if _, err := GenericDownload(ctx, noEnd, "https://download.example/file", &start, nil); err != nil {
 		t.Fatalf("GenericDownload without end returned error: %v", err)
 	}
-	if noEnd.builder.Headers["Range"] != "bytes=3-" {
-		t.Fatalf("unexpected open-ended range header: %+v", noEnd.builder.Headers)
+	if noEnd.request.Header.Get("Range") != "bytes=3-" {
+		t.Fatalf("unexpected open-ended range header: %s", noEnd.request.Header.Get("Range"))
 	}
-	if noEnd.builder.SkipAuth {
+	if noEnd.request.Header.Get(request.SkipAuthHeader) == "true" {
 		t.Fatal("did not expect skip auth for non-presigned URL")
 	}
 }

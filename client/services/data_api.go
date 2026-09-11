@@ -10,18 +10,18 @@ import (
 )
 
 type DataService struct {
-	gen       internalapi.ClientWithResponsesInterface
-	requestor request.Requester
-	logger    *logs.Gen3Logger
-	drs       *DRSService
+	gen        internalapi.ClientWithResponsesInterface
+	httpClient request.HTTPDoer
+	logger     *logs.Gen3Logger
+	drs        *DRSService
 }
 
-func NewDataService(gen internalapi.ClientWithResponsesInterface, r request.Requester, l *logs.Gen3Logger, drs *DRSService) *DataService {
+func NewDataService(gen internalapi.ClientWithResponsesInterface, client request.HTTPDoer, l *logs.Gen3Logger, drs *DRSService) *DataService {
 	return &DataService{
-		gen:       gen,
-		requestor: r,
-		logger:    l,
-		drs:       drs,
+		gen:        gen,
+		httpClient: client,
+		logger:     l,
+		drs:        drs,
 	}
 }
 

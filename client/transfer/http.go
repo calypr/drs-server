@@ -16,7 +16,7 @@ import (
 )
 
 // DoUpload performs a presigned PUT request and returns ETag when available.
-func DoUpload(ctx context.Context, req request.Requester, urlStr string, body io.Reader, size int64) (string, error) {
+func DoUpload(ctx context.Context, client request.HTTPDoer, urlStr string, body io.Reader, size int64) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(urlStr))
 	if err == nil && (parsed.Scheme == "" || strings.ToLower(parsed.Scheme) == "file") {
 		dstPath := parsed.Path
@@ -44,22 +44,24 @@ func DoUpload(ctx context.Context, req request.Requester, urlStr string, body io
 	}
 
 	skipAuth := common.IsCloudPresignedURL(urlStr)
-	opts := []request.RequestOption{
-		request.WithTimeout(common.DataTimeout),
+	ctx, cancel := context.WithTimeout(ctx, common.DataTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, method, urlStr, body)
+	if err != nil {
+		return "", fmt.Errorf("create upload request: %w", err)
 	}
 	if skipAuth {
-		opts = append(opts, request.WithSkipAuth(true))
+		request.SkipAuth(req)
 	}
 	if method == http.MethodPut && parsed != nil && needsAzureBlobTypeHeader(parsed) {
-		opts = append(opts, request.WithHeader("x-ms-blob-type", "BlockBlob"))
+		req.Header.Set("x-ms-blob-type", "BlockBlob")
 	}
 	if size > 0 {
-		opts = append(opts, request.WithPartSize(size))
+		req.ContentLength = size
 	}
-	opts = append(opts, request.WithNoRetry(true))
 
-	var resp *http.Response
-	err = req.Do(ctx, method, urlStr, body, &resp, opts...)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("upload to %s failed: %w", urlStr, err)
 	}
@@ -73,7 +75,7 @@ func DoUpload(ctx context.Context, req request.Requester, urlStr string, body io
 }
 
 // GenericDownload performs GET (optionally ranged) against a signed URL.
-func GenericDownload(ctx context.Context, req request.Requester, signedURL string, rangeStart, rangeEnd *int64) (*http.Response, error) {
+func GenericDownload(ctx context.Context, client request.HTTPDoer, signedURL string, rangeStart, rangeEnd *int64) (*http.Response, error) {
 	parsed, parseErr := url.Parse(strings.TrimSpace(signedURL))
 	if parseErr == nil && (parsed.Scheme == "" || strings.ToLower(parsed.Scheme) == "file") {
 		srcPath := parsed.Path
@@ -127,24 +129,23 @@ func GenericDownload(ctx context.Context, req request.Requester, signedURL strin
 		}, nil
 	}
 
-	skipAuth := common.IsCloudPresignedURL(signedURL)
-
-	opts := []request.RequestOption{}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
+	if err != nil {
+		return nil, err
+	}
 	if rangeStart != nil {
 		rangeHeader := "bytes=" + strconv.FormatInt(*rangeStart, 10) + "-"
 		if rangeEnd != nil {
 			rangeHeader += strconv.FormatInt(*rangeEnd, 10)
 		}
-		opts = append(opts, request.WithHeader("Range", rangeHeader))
+		req.Header.Set("Range", rangeHeader)
 	}
 
-	if skipAuth {
-		opts = append(opts, request.WithSkipAuth(true))
+	if common.IsCloudPresignedURL(signedURL) {
+		request.SkipAuth(req)
 	}
 
-	var resp *http.Response
-	err := req.Do(ctx, http.MethodGet, signedURL, nil, &resp, opts...)
-	return resp, err
+	return client.Do(req)
 }
 
 func needsAzureBlobTypeHeader(parsed *url.URL) bool {

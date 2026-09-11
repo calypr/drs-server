@@ -8,7 +8,6 @@ import (
 
 	"github.com/calypr/syfon/apigen/drs"
 	clientaccess "github.com/calypr/syfon/client/access"
-	clienthash "github.com/calypr/syfon/client/hash"
 )
 
 func canonicalizeProjectScopedObjects(objects []drs.DrsObject, organization, project string, publicRead map[string]bool) []drs.DrsObject {
@@ -108,7 +107,7 @@ func canonicalizeContentObjects(objects []drs.DrsObject, publicRead map[string]b
 }
 
 func objectsWithSHA256(objects []drs.DrsObject, checksum string) []drs.DrsObject {
-	target := clienthash.NormalizeOid(checksum)
+	target := NormalizeOID(checksum)
 	if target == "" {
 		return objects
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/metricsapi"
+	syclient "github.com/calypr/syfon/client"
 	syfonclient "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
@@ -74,24 +76,27 @@ var transfersBreakdownCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		resp.GroupBy = groupBy
+		generatedGroupBy := metricsapi.TransferBreakdownResponseGroupBy(groupBy)
+		resp.GroupBy = &generatedGroupBy
 		sortBy, order, err := normalizedBreakdownSort(metricsSortBy, metricsSortOrder, groupBy, opts.Direction)
 		if err != nil {
 			return err
 		}
-		sortTransferBreakdowns(resp.Data, sortBy, order)
-		resp.Data = limitedTransferBreakdowns(resp.Data, metricsLimit)
+		rows := transferBreakdownRows(resp)
+		sortTransferBreakdowns(rows, sortBy, order)
+		rows = limitedTransferBreakdowns(rows, metricsLimit)
+		resp.Data = &rows
 		return writeJSON(cmd, resp)
 	},
 }
 
 type transferUsersReport struct {
-	Summary    syfonclient.TransferAttributionSummary `json:"summary"`
-	Users      []transferUserMetrics                  `json:"users"`
-	Freshness  *syfonclient.TransferMetricsFreshness  `json:"freshness,omitempty"`
-	SortBy     string                                 `json:"sort_by"`
-	SortOrder  string                                 `json:"sort_order"`
-	TotalUsers int                                    `json:"total_users"`
+	Summary    metricsapi.TransferAttributionSummary `json:"summary"`
+	Users      []transferUserMetrics                 `json:"users"`
+	Freshness  *metricsapi.TransferMetricsFreshness  `json:"freshness,omitempty"`
+	SortBy     string                                `json:"sort_by"`
+	SortOrder  string                                `json:"sort_order"`
+	TotalUsers int                                   `json:"total_users"`
 }
 
 type transferUserMetrics struct {
@@ -127,18 +132,19 @@ var transfersUsersCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		sortTransferBreakdowns(breakdown.Data, sortBy, order)
-		breakdown.Data = limitedTransferBreakdowns(breakdown.Data, metricsLimit)
-		users := make([]transferUserMetrics, 0, len(breakdown.Data))
-		for _, item := range breakdown.Data {
+		rows := transferBreakdownRows(breakdown)
+		sortTransferBreakdowns(rows, sortBy, order)
+		rows = limitedTransferBreakdowns(rows, metricsLimit)
+		users := make([]transferUserMetrics, 0, len(rows))
+		for _, item := range rows {
 			users = append(users, transferUserMetrics{
 				User:             transferUserLabel(item),
-				ActorEmail:       item.ActorEmail,
-				ActorSubject:     item.ActorSubject,
-				EventCount:       item.EventCount,
-				BytesRequested:   item.BytesRequested,
-				BytesDownloaded:  item.BytesDownloaded,
-				BytesUploaded:    item.BytesUploaded,
+				ActorEmail:       stringValue(item.ActorEmail),
+				ActorSubject:     stringValue(item.ActorSubject),
+				EventCount:       int64Value(item.EventCount),
+				BytesRequested:   int64Value(item.BytesRequested),
+				BytesDownloaded:  int64Value(item.BytesDownloaded),
+				BytesUploaded:    int64Value(item.BytesUploaded),
 				LastTransferTime: item.LastTransferTime,
 			})
 		}
@@ -154,9 +160,9 @@ var transfersUsersCmd = &cobra.Command{
 }
 
 type transferBillingReport struct {
-	Summary          syfonclient.TransferAttributionSummary     `json:"summary"`
-	StorageLocations []syfonclient.TransferAttributionBreakdown `json:"storage_locations"`
-	Files            []syfonclient.TransferAttributionBreakdown `json:"files"`
+	Summary          metricsapi.TransferAttributionSummary     `json:"summary"`
+	StorageLocations []metricsapi.TransferAttributionBreakdown `json:"storage_locations"`
+	Files            []metricsapi.TransferAttributionBreakdown `json:"files"`
 }
 
 var transfersBillingCmd = &cobra.Command{
@@ -186,8 +192,8 @@ var transfersBillingCmd = &cobra.Command{
 		}
 		return writeJSON(cmd, transferBillingReport{
 			Summary:          summary,
-			StorageLocations: storageLocations.Data,
-			Files:            files.Data,
+			StorageLocations: transferBreakdownRows(storageLocations),
+			Files:            transferBreakdownRows(files),
 		})
 	},
 }
@@ -222,7 +228,7 @@ func init() {
 	transfersBreakdownCmd.Flags().StringVar(&metricsGroupBy, "group-by", "user", "Breakdown grouping: user, scope, provider, or object")
 }
 
-func newMetricsClient(cmd *cobra.Command) (syfonclient.SyfonClient, error) {
+func newMetricsClient(cmd *cobra.Command) (*syclient.Client, error) {
 	return cliauth.NewServerClient(cmd)
 }
 
@@ -302,7 +308,14 @@ func normalizedBreakdownSort(rawSortBy, rawOrder, groupBy, direction string) (st
 	return sortBy, order, nil
 }
 
-func sortTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, sortBy, order string) {
+func transferBreakdownRows(response metricsapi.TransferBreakdownResponse) []metricsapi.TransferAttributionBreakdown {
+	if response.Data == nil {
+		return nil
+	}
+	return *response.Data
+}
+
+func sortTransferBreakdowns(items []metricsapi.TransferAttributionBreakdown, sortBy, order string) {
 	desc := order != "asc"
 	sort.SliceStable(items, func(i, j int) bool {
 		left := items[i]
@@ -312,7 +325,7 @@ func sortTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, so
 			cmp = compareTransferBreakdown(left, right, "last-transfer")
 		}
 		if cmp == 0 {
-			cmp = strings.Compare(left.Key, right.Key)
+			cmp = strings.Compare(stringValue(left.Key), stringValue(right.Key))
 		}
 		if desc {
 			return cmp > 0
@@ -321,18 +334,18 @@ func sortTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, so
 	})
 }
 
-func compareTransferBreakdown(left, right syfonclient.TransferAttributionBreakdown, sortBy string) int {
+func compareTransferBreakdown(left, right metricsapi.TransferAttributionBreakdown, sortBy string) int {
 	switch sortBy {
 	case "downloaded":
-		return compareInt64(left.BytesDownloaded, right.BytesDownloaded)
+		return compareInt64(int64Value(left.BytesDownloaded), int64Value(right.BytesDownloaded))
 	case "uploaded":
-		return compareInt64(left.BytesUploaded, right.BytesUploaded)
+		return compareInt64(int64Value(left.BytesUploaded), int64Value(right.BytesUploaded))
 	case "requested":
-		return compareInt64(left.BytesRequested, right.BytesRequested)
+		return compareInt64(int64Value(left.BytesRequested), int64Value(right.BytesRequested))
 	case "events":
-		return compareInt64(left.EventCount, right.EventCount)
+		return compareInt64(int64Value(left.EventCount), int64Value(right.EventCount))
 	case "key":
-		return strings.Compare(left.Key, right.Key)
+		return strings.Compare(stringValue(left.Key), stringValue(right.Key))
 	default:
 		return compareTimePtr(left.LastTransferTime, right.LastTransferTime)
 	}
@@ -366,22 +379,36 @@ func compareTimePtr(left, right *time.Time) int {
 	}
 }
 
-func limitedTransferBreakdowns(items []syfonclient.TransferAttributionBreakdown, limit int) []syfonclient.TransferAttributionBreakdown {
+func limitedTransferBreakdowns(items []metricsapi.TransferAttributionBreakdown, limit int) []metricsapi.TransferAttributionBreakdown {
 	if limit <= 0 || len(items) <= limit {
 		return items
 	}
 	return items[:limit]
 }
 
-func transferUserLabel(item syfonclient.TransferAttributionBreakdown) string {
-	if key := strings.TrimSpace(item.Key); key != "" {
+func transferUserLabel(item metricsapi.TransferAttributionBreakdown) string {
+	if key := strings.TrimSpace(stringValue(item.Key)); key != "" {
 		return key
 	}
-	if email := strings.TrimSpace(item.ActorEmail); email != "" {
+	if email := strings.TrimSpace(stringValue(item.ActorEmail)); email != "" {
 		return email
 	}
-	if subject := strings.TrimSpace(item.ActorSubject); subject != "" {
+	if subject := strings.TrimSpace(stringValue(item.ActorSubject)); subject != "" {
 		return subject
 	}
 	return "(unattributed)"
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func int64Value(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

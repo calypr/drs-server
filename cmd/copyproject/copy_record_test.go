@@ -134,10 +134,10 @@ func TestCopyRecordCopiesBytesAndPublishesMetadata(t *testing.T) {
 	sourceDRS := &copyDRSAPI{objects: map[string]drsapi.DrsObject{"did-copy": {Id: "did-copy", Size: size, AccessMethods: &accessMethods}}}
 	targetDRS := &copyDRSAPI{}
 	logger := logs.NewGen3Logger(slog.New(slog.NewTextHandler(io.Discard, nil)), "", "")
-	sourceData := services.NewDataService(sourceInternal, nil, logger, services.NewDRSService(sourceDRS, nil))
-	targetData := services.NewDataService(targetInternal, nil, logger, services.NewDRSService(targetDRS, nil))
-	sourceClient := &copyRecordClient{data: sourceData, drs: services.NewDRSService(sourceDRS, nil)}
-	targetClient := &copyRecordClient{data: targetData, index: services.NewIndexService(targetInternal, nil), drs: services.NewDRSService(targetDRS, nil)}
+	sourceData := services.NewDataService(sourceInternal, nil, logger, services.NewDRSService(sourceDRS))
+	targetData := services.NewDataService(targetInternal, nil, logger, services.NewDRSService(targetDRS))
+	sourceClient := &copyRecordClient{data: sourceData, drs: services.NewDRSService(sourceDRS)}
+	targetClient := &copyRecordClient{data: targetData, index: services.NewIndexService(targetInternal), drs: services.NewDRSService(targetDRS)}
 
 	rec := internalapi.InternalRecord{
 		Did:           "did-copy",

@@ -11,7 +11,6 @@ import (
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
-	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/internal/access"
 
 	"github.com/calypr/syfon/internal/objects"
@@ -361,7 +360,7 @@ func (db *Store) mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha
 	}
 	for _, checksum := range obj.Checksums {
 		typ, value := strings.TrimSpace(checksum.Type), strings.TrimSpace(checksum.Checksum)
-		if typ == "" || value == "" || (objects.NormalizeChecksumType(typ) == "sha256" && clienthash.NormalizeOid(value) != "") {
+		if typ == "" || value == "" || (objects.NormalizeChecksumType(typ) == "sha256" && objects.NormalizeOID(value) != "") {
 			continue
 		}
 		if _, err := db.txExecContext(ctx, tx, `
@@ -465,7 +464,7 @@ func (db *Store) objectSHAsTx(ctx context.Context, tx *sql.Tx, id string) ([]str
 		if err := rows.Scan(&value); err != nil {
 			return nil, err
 		}
-		if normalized := clienthash.NormalizeOid(value); normalized != "" {
+		if normalized := objects.NormalizeOID(value); normalized != "" {
 			values = append(values, normalized)
 		}
 	}

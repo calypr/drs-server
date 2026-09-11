@@ -46,7 +46,7 @@ func effectiveObjectKey(req transfer.TransferRequest) string {
 	return strings.TrimSpace(req.GUID)
 }
 
-func (u *GenericUploader) Upload(ctx context.Context, req transfer.TransferRequest, showProgress bool) error {
+func (u *GenericUploader) Upload(ctx context.Context, req transfer.TransferRequest) error {
 	file, err := os.Open(req.SourcePath)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
@@ -59,12 +59,12 @@ func (u *GenericUploader) Upload(ctx context.Context, req transfer.TransferReque
 	}
 
 	if req.ForceMultipart || stat.Size() >= common.FileSizeLimit {
-		return u.uploadMultipart(ctx, req, file, stat.Size(), showProgress)
+		return u.uploadMultipart(ctx, req, file, stat.Size())
 	}
-	return u.uploadSingle(ctx, req, file, stat.Size(), showProgress)
+	return u.uploadSingle(ctx, req, file, stat.Size())
 }
 
-func (u *GenericUploader) uploadSingle(ctx context.Context, req transfer.TransferRequest, file *os.File, size int64, showProgress bool) error {
+func (u *GenericUploader) uploadSingle(ctx context.Context, req transfer.TransferRequest, file *os.File, size int64) error {
 	objectKey := effectiveObjectKey(req)
 	uploadTarget := objectKey
 	if uploader, ok := u.Backend.(uploadURLResolver); ok {
@@ -111,7 +111,7 @@ func (u *GenericUploader) uploadSingle(ctx context.Context, req transfer.Transfe
 	return nil
 }
 
-func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.TransferRequest, file *os.File, fileSize int64, showProgress bool) error {
+func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.TransferRequest, file *os.File, fileSize int64) error {
 	logger := u.Backend.Logger()
 	chunkSize := OptimalChunkSize(fileSize)
 	checkpointPath, err := CheckpointPath(req.SourcePath, req.GUID)

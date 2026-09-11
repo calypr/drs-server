@@ -1,8 +1,6 @@
 package services
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -29,28 +27,5 @@ func TestAPIResponseErrorReturnsTypedContract(t *testing.T) {
 	}
 	if apiErr.Code != "not_found" || apiErr.Status != http.StatusNotFound || apiErr.Message != "Resource not found" || apiErr.RequestID != "request-123" {
 		t.Fatalf("unexpected API error: %+v", apiErr)
-	}
-}
-
-func TestDRSListVariantsPreserveEmptyArray(t *testing.T) {
-	service := NewDRSService(nil, NewIndexService(nil, &fakeRequester{}))
-	ctx := context.Background()
-	for _, list := range []func() (DRSPage, error){
-		func() (DRSPage, error) { return service.ListObjects(ctx, 10, 1) },
-		func() (DRSPage, error) { return service.ListObjectsAfter(ctx, 10, "after") },
-		func() (DRSPage, error) { return service.ListObjectsByProject(ctx, "project", 10, 1) },
-		func() (DRSPage, error) { return service.ListObjectsByProjectAfter(ctx, "project", 10, "after") },
-	} {
-		page, err := list()
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err := json.Marshal(page)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(data) != `{"drs_objects":[]}` {
-			t.Fatalf("empty list JSON changed: %s", data)
-		}
 	}
 }

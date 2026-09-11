@@ -15,12 +15,24 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type GenericDownloader struct {
+type DownloadOptions struct {
+	MultipartThreshold int64
+	ChunkSize          int64
+	Concurrency        int
+	RetryStrategy      transfer.RetryStrategy
+}
+
+type downloader struct {
 	Source        transfer.ReadBackend
 	RetryStrategy transfer.RetryStrategy
 }
 
-func (d *GenericDownloader) Download(ctx context.Context, guid string, dstPath string, concurrency int, chunkSize, multipartThreshold int64) error {
+func Download(ctx context.Context, source transfer.ReadBackend, guid, dstPath string, opts DownloadOptions) error {
+	d := &downloader{Source: source, RetryStrategy: opts.RetryStrategy}
+	return d.download(ctx, guid, dstPath, opts.Concurrency, opts.ChunkSize, opts.MultipartThreshold)
+}
+
+func (d *downloader) download(ctx context.Context, guid string, dstPath string, concurrency int, chunkSize, multipartThreshold int64) error {
 	meta, err := d.Source.Stat(ctx, guid)
 	if err != nil {
 		return fmt.Errorf("stat failed: %w", err)
@@ -42,7 +54,7 @@ func (d *GenericDownloader) Download(ctx context.Context, guid string, dstPath s
 	return d.downloadParallel(ctx, guid, dstPath, totalSize, concurrency, chunkSize)
 }
 
-func (d *GenericDownloader) downloadSingle(ctx context.Context, guid string, dstPath string, expectedSize int64) error {
+func (d *downloader) downloadSingle(ctx context.Context, guid string, dstPath string, expectedSize int64) error {
 	var startOffset int64
 	if stat, err := os.Stat(dstPath); err == nil {
 		if expectedSize > 0 && stat.Size() == expectedSize {
@@ -183,7 +195,7 @@ func (r *downloadProgressReader) emit() error {
 	return nil
 }
 
-func (d *GenericDownloader) downloadParallel(ctx context.Context, guid string, dstPath string, totalSize int64, concurrency int, chunkSize int64) error {
+func (d *downloader) downloadParallel(ctx context.Context, guid string, dstPath string, totalSize int64, concurrency int, chunkSize int64) error {
 	if dir := filepath.Dir(dstPath); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err

@@ -111,7 +111,9 @@ func TestRequestDoRefreshesRejectedBearerOnceForConcurrent401s(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}, nil
 	})
 	cred := &conf.Credential{APIKey: "api-key", APIEndpoint: "https://example.test", AccessToken: "old-token"}
-	req := NewBearerTokenRequestor(nil, cred, &trackingManager{}, "https://example.test", "ua", &http.Client{Transport: base})
+	client := NewClient(nil, cred, &trackingManager{}, "ua", &http.Client{Transport: base}, AuthModeBearer)
+	client.retry.RetryWaitMin = 0
+	client.retry.RetryWaitMax = 0
 
 	const workers = 8
 	errs := make(chan error, workers)
@@ -120,7 +122,15 @@ func TestRequestDoRefreshesRejectedBearerOnceForConcurrent401s(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- req.Do(context.Background(), http.MethodGet, "/data", nil, nil)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.test/data", nil)
+			if err == nil {
+				var resp *http.Response
+				resp, err = client.Do(req)
+				if resp != nil && resp.Body != nil {
+					_ = resp.Body.Close()
+				}
+			}
+			errs <- err
 		}()
 	}
 	wg.Wait()
@@ -155,11 +165,20 @@ func TestRequestDoPreservesExplicitBearerOn401(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", Body: io.NopCloser(strings.NewReader("denied")), Header: make(http.Header), Request: req}, nil
 	})
 	cred := &conf.Credential{APIKey: "api-key", APIEndpoint: "https://example.test", AccessToken: "managed-token"}
-	req := NewBearerTokenRequestor(nil, cred, &trackingManager{}, "https://example.test", "ua", &http.Client{Transport: base})
-	err := req.Do(context.Background(), http.MethodGet, "/data", nil, nil, WithHeader("Authorization", "Bearer caller-token"))
-	if err == nil || !strings.Contains(err.Error(), "status 401") {
-		t.Fatalf("expected caller authorization error, got %v", err)
+	client := NewClient(nil, cred, &trackingManager{}, "ua", &http.Client{Transport: base}, AuthModeBearer)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.test/data", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	req.Header.Set("Authorization", "Bearer caller-token")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("expected caller authorization response, got %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected caller authorization status 401, got %d", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
 	if calls != 1 || refreshCalls != 0 {
 		t.Fatalf("expected one request and no refresh, got requests=%d refreshes=%d", calls, refreshCalls)
 	}
@@ -178,10 +197,18 @@ func TestRequestDoRefreshesEmptyBearerAfter401(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}, nil
 	})
 	cred := &conf.Credential{APIKey: "api-key", APIEndpoint: "https://example.test"}
-	req := NewBearerTokenRequestor(nil, cred, &trackingManager{}, "https://example.test", "ua", &http.Client{Transport: base})
-	if err := req.Do(context.Background(), http.MethodGet, "/data", nil, nil); err != nil {
+	client := NewClient(nil, cred, &trackingManager{}, "ua", &http.Client{Transport: base}, AuthModeBearer)
+	client.retry.RetryWaitMin = 0
+	client.retry.RetryWaitMax = 0
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.test/data", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
 		t.Fatalf("empty-token request returned error: %v", err)
 	}
+	_ = resp.Body.Close()
 	if refreshCalls != 1 || cred.AccessToken != "bootstrapped" {
 		t.Fatalf("expected one bootstrap refresh, got calls=%d token=%q", refreshCalls, cred.AccessToken)
 	}
