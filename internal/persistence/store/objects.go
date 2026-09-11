@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -23,10 +22,6 @@ func (db *Store) queryContext(ctx context.Context, query string, args ...any) (*
 
 func (db *Store) queryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.db.QueryRowContext(ctx, db.dialect.Rebind(query), args...)
-}
-
-type bulkObjectDialect interface {
-	BulkObjectCondition([]string, []string, []string, []string, int) (string, []any)
 }
 
 func ptr[T any](value T) *T {
@@ -55,31 +50,6 @@ func uniqueObjectsByID(objs []drs.DrsObject) []drs.DrsObject {
 		out = append(out, obj)
 	}
 	return out
-}
-
-func safeSliceCapacity(parts ...int) (int, error) {
-	total := int64(0)
-	for _, part := range parts {
-		if part < 0 {
-			return 0, fmt.Errorf("negative capacity component: %d", part)
-		}
-		total += int64(part)
-		if total > int64(math.MaxInt) {
-			return 0, fmt.Errorf("capacity too large: %d", total)
-		}
-	}
-	return int(total), nil
-}
-
-func makePlaceholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
 }
 
 func (db *Store) GetObject(ctx context.Context, id string) (*drs.DrsObject, error) {
@@ -120,55 +90,43 @@ func (db *Store) fetchObjectsByIDsOrChecksums(ctx context.Context, ids []string,
 
 	shaQueries := make([]string, 0, len(checksums))
 	genericQueries := make([]string, 0, len(checksums))
+	trimmedChecksums := make([]string, 0, len(checksums))
 	for _, checksum := range checksums {
-		if normalized, ok := objects.NormalizeSHA256Query(checksum); ok {
+		trimmedChecksums = append(trimmedChecksums, strings.TrimSpace(checksum))
+		if normalized := objects.NormalizeOID(checksum); normalized != "" {
 			shaQueries = append(shaQueries, normalized)
 		} else {
 			genericQueries = append(genericQueries, strings.TrimSpace(checksum))
 		}
 	}
-	var condition string
 	var args []any
-	if d, ok := db.dialect.(bulkObjectDialect); ok {
-		condition, args = d.BulkObjectCondition(ids, checksums, shaQueries, genericQueries, 1)
-	} else {
-		capArgs, capErr := safeSliceCapacity(len(ids), len(checksums), len(shaQueries)+len(genericQueries))
-		if capErr != nil {
-			return nil, capErr
-		}
-		args = make([]any, 0, capArgs)
-		conditions := make([]string, 0, 2)
-		if len(ids) > 0 {
-			conditions = append(conditions, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(ids))))
-			for _, id := range ids {
-				args = append(args, id)
-			}
-		}
-		if len(checksums) > 0 {
-			parts := make([]string, 0, 3)
-			parts = append(parts, fmt.Sprintf("o.id IN (%s)", makePlaceholders(len(checksums))))
-			for _, cs := range checksums {
-				args = append(args, strings.TrimSpace(cs))
-			}
-			if len(shaQueries) > 0 {
-				parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
-					WHERE c2.object_id = o.id AND replace(lower(trim(c2.type)), '-', '') = 'sha256'
-					AND replace(lower(trim(c2.checksum)), 'sha256:', '') IN (%s))`, makePlaceholders(len(shaQueries))))
-				for _, checksum := range shaQueries {
-					args = append(args, checksum)
-				}
-			}
-			if len(genericQueries) > 0 {
-				parts = append(parts, fmt.Sprintf(`EXISTS (SELECT 1 FROM drs_object_checksum c2
-					WHERE c2.object_id = o.id AND c2.checksum IN (%s))`, makePlaceholders(len(genericQueries))))
-				for _, checksum := range genericQueries {
-					args = append(args, checksum)
-				}
-			}
-			conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
-		}
-		condition = strings.Join(conditions, " OR ")
+	conditions := make([]string, 0, 2)
+	if len(ids) > 0 {
+		idCondition, idArgs := db.dialect.ListArgs("o.id", ids)
+		conditions = append(conditions, idCondition)
+		args = append(args, idArgs...)
 	}
+	if len(checksums) > 0 {
+		parts := make([]string, 0, 3)
+		checksumIDCondition, checksumIDArgs := db.dialect.ListArgs("o.id", trimmedChecksums)
+		parts = append(parts, checksumIDCondition)
+		args = append(args, checksumIDArgs...)
+		if len(shaQueries) > 0 {
+			shaCondition, shaArgs := db.dialect.ListArgs("replace(lower(trim(c2.checksum)), 'sha256:', '')", shaQueries)
+			parts = append(parts, `EXISTS (SELECT 1 FROM drs_object_checksum c2
+				WHERE c2.object_id = o.id AND replace(lower(trim(c2.type)), '-', '') = 'sha256'
+				AND `+shaCondition+")")
+			args = append(args, shaArgs...)
+		}
+		if len(genericQueries) > 0 {
+			genericCondition, genericArgs := db.dialect.ListArgs("c2.checksum", genericQueries)
+			parts = append(parts, `EXISTS (SELECT 1 FROM drs_object_checksum c2
+				WHERE c2.object_id = o.id AND `+genericCondition+")")
+			args = append(args, genericArgs...)
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	condition := strings.Join(conditions, " OR ")
 
 	query := fmt.Sprintf(`
 		SELECT

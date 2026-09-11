@@ -65,8 +65,8 @@ func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		value, ok := objects.NormalizeSHA256Query(raw)
-		if !ok {
+		value := objects.NormalizeOID(raw)
+		if value == "" {
 			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("invalid sha256 checksum %q", raw))
 		}
 		if _, ok := seen[value]; ok {

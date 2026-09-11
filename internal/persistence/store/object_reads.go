@@ -14,10 +14,6 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 )
 
-type resourceFilterDialect interface {
-	ResourceFilter(string, []string, bool, int) (string, []any)
-}
-
 func (db *Store) ResolveObjectAlias(ctx context.Context, aliasID string) (string, error) {
 	aliasID = strings.TrimSpace(aliasID)
 	if aliasID == "" {
@@ -91,7 +87,7 @@ func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) 
 			}
 			index[value] = append(index[value], *obj)
 			if objects.NormalizeChecksumType(cs.Type) == "sha256" {
-				if normalized, ok := objects.NormalizeSHA256Query(value); ok {
+				if normalized := objects.NormalizeOID(value); normalized != "" {
 					index[normalized] = append(index[normalized], *obj)
 				}
 			}
@@ -104,7 +100,7 @@ func (db *Store) GetObjectsByChecksums(ctx context.Context, checksums []string) 
 			continue
 		}
 		lookup := requested
-		if normalized, ok := objects.NormalizeSHA256Query(requested); ok {
+		if normalized := objects.NormalizeOID(requested); normalized != "" {
 			lookup = normalized
 		}
 		if objs := index[lookup]; len(objs) > 0 {
@@ -373,30 +369,24 @@ func (db *Store) ListObjectIDsPageByURL(ctx context.Context, objectURL, organiza
 		if len(resources) == 0 && !includeUnscoped {
 			return []string{}, nil
 		}
-		if filter, ok := db.dialect.(resourceFilterDialect); ok {
-			filterSQL, filterArgs := filter.ResourceFilter("ca_auth.resource", resources, includeUnscoped, len(args)+1)
-			conditions = append(conditions, filterSQL)
-			args = append(args, filterArgs...)
-		} else {
-			parts := make([]string, 0, 2)
-			if len(resources) > 0 {
-				resourceCondition, resourceArgs := db.dialect.ListArgs("ca_auth.resource", resources)
-				parts = append(parts, `EXISTS (
-					SELECT 1
-					FROM drs_object_controlled_access ca_auth
-					WHERE ca_auth.object_id = o.id AND `+resourceCondition+`
-				)`)
-				args = append(args, resourceArgs...)
-			}
-			if includeUnscoped {
-				parts = append(parts, `NOT EXISTS (
-					SELECT 1
-					FROM drs_object_controlled_access ca_auth
-					WHERE ca_auth.object_id = o.id
-				)`)
-			}
-			conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+		parts := make([]string, 0, 2)
+		if len(resources) > 0 {
+			resourceCondition, resourceArgs := db.dialect.ListArgs("ca_auth.resource", resources)
+			parts = append(parts, `EXISTS (
+				SELECT 1
+				FROM drs_object_controlled_access ca_auth
+				WHERE ca_auth.object_id = o.id AND `+resourceCondition+`
+			)`)
+			args = append(args, resourceArgs...)
 		}
+		if includeUnscoped {
+			parts = append(parts, `NOT EXISTS (
+				SELECT 1
+				FROM drs_object_controlled_access ca_auth
+				WHERE ca_auth.object_id = o.id
+			)`)
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
 	}
 	if startAfter != "" {
 		args = append(args, startAfter)

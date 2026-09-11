@@ -157,6 +157,11 @@ jobs:
           SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
         run: CGO_ENABLED=1 go test ./internal/persistence/postgres -run '^TestPostgres' -count=1 -v
 
+      - name: Run shared persistence query characterization
+        env:
+          SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
+        run: CGO_ENABLED=1 go test ./internal/persistence/store -run '^TestQueryConstructionCharacterization' -count=1 -v
+
   coverage:
     name: Root and client coverage
     runs-on: ubuntu-latest

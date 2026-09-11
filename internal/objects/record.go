@@ -179,14 +179,6 @@ func ValidateCanonicalSHA256(checksums []drs.Checksum) (string, bool, error) {
 	return values[0], true, nil
 }
 
-func NormalizeSHA256Query(value string) (string, bool) {
-	normalized := NormalizeOID(value)
-	if normalized == "" {
-		return "", false
-	}
-	return normalized, true
-}
-
 // CleanToBasename extracts a portable basename from either Windows or Unix
 // path syntax.
 func CleanToBasename(name string) string {
@@ -367,7 +359,7 @@ func NormalizeRecord(record drs.DrsObject, fallback time.Time) (drs.DrsObject, e
 		if NormalizeChecksumType(checksum.Type) != "sha256" {
 			continue
 		}
-		if normalized, ok := NormalizeSHA256Query(checksum.Checksum); ok {
+		if normalized := NormalizeOID(checksum.Checksum); normalized != "" {
 			record.Checksums[i] = drs.Checksum{Type: "sha256", Checksum: normalized}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	postgresdb "github.com/calypr/syfon/internal/persistence/postgres"
 	"github.com/calypr/syfon/internal/persistence/store"
 	"github.com/calypr/syfon/internal/usage"
@@ -25,6 +27,7 @@ func openPostgresTestStore(t *testing.T) *store.Store {
 	if dsn == "" {
 		t.Skip("SYFON_TEST_POSTGRES_DSN is not configured")
 	}
+	t.Setenv(credentialcipher.CredentialLocalKeyFileEnv, filepath.Join(t.TempDir(), "credential.key"))
 	db, err := postgresdb.NewPostgresDB(dsn, nil)
 	if err != nil {
 		t.Fatalf("open postgres test database: %v", err)

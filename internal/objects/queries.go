@@ -286,7 +286,8 @@ func (s *Service) GetObject(ctx context.Context, ident string, method string) (*
 	if strings.TrimSpace(ident) == "" {
 		return nil, errorapi.ErrObjectNotFound
 	}
-	checksum, isSHA := NormalizeSHA256Query(ident)
+	checksum := NormalizeOID(ident)
+	isSHA := checksum != ""
 	if isSHA {
 		family, err := s.getObjectsByChecksum(ctx, checksum, "")
 		if err != nil {
