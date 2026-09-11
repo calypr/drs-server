@@ -14,6 +14,7 @@ type Runtime struct {
 	logger               *slog.Logger
 	authentication       plugin.AuthenticationPlugin
 	authorization        plugin.AuthorizationPlugin
+	pluginClients        []*pluginClient
 	tokenResolver        *tokenAuthResolver
 	mock                 config.MockAuthConfig
 	localAuthzError      error
@@ -52,11 +53,13 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 	if pluginPath := auth.PluginPaths.Authz; pluginPath != "" {
 		if authorizer, err := newAuthorizationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
 			runtime.authorization = authorizer
+			runtime.pluginClients = append(runtime.pluginClients, authorizer.client)
 		}
 	}
 	if pluginPath := auth.PluginPaths.Authn; pluginPath != "" {
 		if authenticator, err := newAuthenticationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
 			runtime.authentication = authenticator
+			runtime.pluginClients = append(runtime.pluginClients, authenticator.client)
 		}
 	}
 
@@ -76,6 +79,21 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 	}
 
 	return runtime
+}
+
+// Close terminates plugin processes owned by this runtime in reverse startup
+// order. Built-in authentication mechanisms do not own external resources.
+func (r *Runtime) Close() {
+	if r == nil {
+		return
+	}
+	for i := len(r.pluginClients) - 1; i >= 0; i-- {
+		if client := r.pluginClients[i]; client != nil && client.client != nil {
+			client.mu.Lock()
+			client.client.Kill()
+			client.mu.Unlock()
+		}
+	}
 }
 
 func normalizeMockAuth(mock config.MockAuthConfig) config.MockAuthConfig {

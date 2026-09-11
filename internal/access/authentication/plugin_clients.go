@@ -34,11 +34,13 @@ func newAuthenticationPluginManager(pluginPath string, childEnv []string) (*auth
 
 	rpcClient, err := client.Client()
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
 	raw, err := rpcClient.Dispense("authn")
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
@@ -101,11 +103,13 @@ func newAuthorizationPluginManager(pluginPath string, childEnv []string) (*autho
 
 	rpcClient, err := client.Client()
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
 	raw, err := rpcClient.Dispense("authz")
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 

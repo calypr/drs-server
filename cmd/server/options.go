@@ -1,11 +1,18 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"net"
+	"sync"
+
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/httpapi"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -16,6 +23,11 @@ import (
 type serverRuntime struct {
 	app              *fiber.App
 	cfg              *config.Config
+	database         *store.Store
+	authRuntime      *authentication.Runtime
+	listener         net.Listener
+	closeOnce        sync.Once
+	closeErr         error
 	serviceInfo      drs.Service
 	objectService    *objects.Service
 	transferService  *transfers.Service
@@ -26,6 +38,53 @@ type serverRuntime struct {
 	bucketService    *buckets.Service
 	authzHandler     fiber.Handler
 	requestIDHandler fiber.Handler
+}
+
+// firstAcceptListener reports that the Fiber server has reached its serving
+// loop. Accept is intentionally notified before delegating to the owned
+// listener so startup cannot race an immediate shutdown.
+type firstAcceptListener struct {
+	net.Listener
+	ready chan<- struct{}
+	once  sync.Once
+}
+
+func (l *firstAcceptListener) Accept() (net.Conn, error) {
+	l.once.Do(func() { close(l.ready) })
+	return l.Listener.Accept()
+}
+
+func (rt *serverRuntime) Close(ctx context.Context) error {
+	if rt == nil {
+		return nil
+	}
+	rt.closeOnce.Do(func() {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+
+		var cleanupErrors []error
+		if rt.app != nil {
+			if err := rt.app.ShutdownWithContext(ctx); err != nil && !errors.Is(err, fiber.ErrNotRunning) {
+				cleanupErrors = append(cleanupErrors, err)
+			}
+		}
+		if rt.listener != nil {
+			if err := rt.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+				cleanupErrors = append(cleanupErrors, err)
+			}
+		}
+		if rt.authRuntime != nil {
+			rt.authRuntime.Close()
+		}
+		if rt.database != nil {
+			if err := rt.database.Close(); err != nil {
+				cleanupErrors = append(cleanupErrors, err)
+			}
+		}
+		rt.closeErr = errors.Join(cleanupErrors...)
+	})
+	return rt.closeErr
 }
 
 func registerServerRoutes(rt *serverRuntime) {

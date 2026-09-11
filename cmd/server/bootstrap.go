@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -34,7 +35,14 @@ import (
 
 var configFile string
 
-func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*serverRuntime, error) {
+func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *serverRuntime, err error) {
+	var runtime *serverRuntime
+	defer func() {
+		if err != nil && runtime != nil {
+			err = errors.Join(err, runtime.Close(context.Background()))
+		}
+	}()
+
 	applyCredentialEncryptionConfig(cfg)
 	cipher, cipherErr := credentialcipher.NewFromEnv()
 	if cipherErr != nil {
@@ -43,6 +51,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 
 	// Init DB
 	var backend serverBackend
+	var database *store.Store
 	var errDb error
 
 	if cfg.Database.Sqlite != nil {
@@ -52,7 +61,6 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 			cfg.Database.Sqlite.File = dbPath
 		}
 		logger.Info("initializing sqlite database", "file", dbPath)
-		var database *store.Store
 		database, errDb = sqlite.NewSqliteDB(dbPath, cipher)
 		if errDb == nil {
 			backend = serverBackendForStore(database)
@@ -60,7 +68,6 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	} else if cfg.Database.Postgres != nil {
 		dsn := postgresDSN(*cfg.Database.Postgres)
 		logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
-		var database *store.Store
 		database, errDb = postgres.NewPostgresDB(dsn, cipher)
 		if errDb == nil {
 			backend = serverBackendForStore(database)
@@ -72,6 +79,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	if errDb != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", errDb)
 	}
+	runtime = &serverRuntime{database: database}
 
 	needsStorage := cfg.Routes.Ga4gh || cfg.Routes.Internal || cfg.Routes.LFS
 	var invalidator *storageInvalidator
@@ -162,26 +170,26 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	// We use a standard slog.Logger for data-client compatibility
 	slogLogger := logger
 	authRuntime := authentication.NewRuntime(slogLogger, cfg.Auth)
+	runtime.authRuntime = authRuntime
 	authzHandler := httpapi.AuthorizationHandler(httpapi.AuthzOptions{
 		Mode:      cfg.Auth.Mode,
 		Evaluator: authRuntime,
 	})
 	requestIDHandler := httpapi.RequestIDHandler(slogLogger)
 
-	return &serverRuntime{
-		app:              app,
-		cfg:              cfg,
-		serviceInfo:      serviceInfoForBackend(cfg.Database.Sqlite != nil),
-		objectService:    objectService,
-		transferService:  transferService,
-		lfsService:       lfsService,
-		usageService:     usageService,
-		usageIngest:      backend.usageIngest,
-		projectStorage:   projectStorageService,
-		bucketService:    bucketService,
-		authzHandler:     authzHandler,
-		requestIDHandler: requestIDHandler,
-	}, nil
+	runtime.app = app
+	runtime.cfg = cfg
+	runtime.serviceInfo = serviceInfoForBackend(cfg.Database.Sqlite != nil)
+	runtime.objectService = objectService
+	runtime.transferService = transferService
+	runtime.lfsService = lfsService
+	runtime.usageService = usageService
+	runtime.usageIngest = backend.usageIngest
+	runtime.projectStorage = projectStorageService
+	runtime.bucketService = bucketService
+	runtime.authzHandler = authzHandler
+	runtime.requestIDHandler = requestIDHandler
+	return runtime, nil
 }
 
 func postgresDSN(cfg config.PostgresConfig) string {
@@ -199,7 +207,7 @@ var Cmd = &cobra.Command{
 	Use:     "serve",
 	Aliases: []string{"run"},
 	Short:   "Starts the DRS Object API server",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		slog.SetDefault(logger)
 
@@ -216,14 +224,34 @@ var Cmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		shutdownRequested := false
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			cleanupErr := rt.Close(shutdownCtx)
+			if cleanupErr != nil {
+				cleanupErr = fmt.Errorf("server shutdown failed: %w", cleanupErr)
+			}
+			runErr = errors.Join(runErr, cleanupErr)
+			if shutdownRequested && cleanupErr == nil {
+				logger.Info("server shutdown complete")
+			}
+		}()
 		registerServerRoutes(rt)
 
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		logger.Info("server starting", "addr", addr)
 
+		listener, err := net.Listen("tcp4", addr)
+		if err != nil {
+			return fmt.Errorf("server listen failed: %w", err)
+		}
+		readyCh := make(chan struct{})
+		rt.listener = &firstAcceptListener{Listener: listener, ready: readyCh}
+
 		errCh := make(chan error, 1)
 		go func() {
-			if err := rt.app.Listen(addr); err != nil {
+			if err := rt.app.Listener(rt.listener); err != nil {
 				errCh <- err
 			}
 		}()
@@ -233,20 +261,23 @@ var Cmd = &cobra.Command{
 		defer signal.Stop(sigCh)
 
 		select {
+		case <-readyCh:
+			// Fiber has entered its serving loop; shutdown can now be selected.
+		case err := <-errCh:
+			return fmt.Errorf("server listen failed: %w", err)
+		}
+
+		select {
 		case err := <-errCh:
 			return fmt.Errorf("server listen failed: %w", err)
 		case sig := <-sigCh:
 			logger.Info("shutdown signal received", "signal", sig.String())
+			shutdownRequested = true
 		case <-cmd.Context().Done():
 			logger.Info("shutdown requested by context cancellation")
+			shutdownRequested = true
 		}
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		if err := rt.app.ShutdownWithContext(shutdownCtx); err != nil {
-			return fmt.Errorf("server shutdown failed: %w", err)
-		}
-		logger.Info("server shutdown complete")
 		return nil
 	},
 }
