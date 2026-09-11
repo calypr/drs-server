@@ -221,7 +221,6 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	// 1. Test CreateObject with Unix and Windows paths
 	now := time.Now().UTC()
 	objUnix := &drs.DrsObject{
 		Id:          "unix-1",
@@ -259,7 +258,6 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 		t.Fatalf("expected name to be normalized to win_file.txt, got %q", got)
 	}
 
-	// 2. Test RegisterObjects with paths
 	bulkObjs := []drs.DrsObject{
 		{
 			Id:          "bulk-unix",
@@ -1341,44 +1339,6 @@ func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 	if !slices.Equal(ids, []string{"obj-b"}) {
 		t.Fatalf("unexpected paged URL IDs: %v", ids)
 	}
-}
-
-func TestSqliteDB_AuthorizedObjectLookupQueries(t *testing.T) {
-	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:", nil)
-	if err != nil {
-		t.Fatalf("failed to create db: %v", err)
-	}
-	now := time.Now().UTC()
-	for _, obj := range []drs.DrsObject{
-		{
-			ControlledAccess: &[]string{"/organization/org/project/p1"},
-			Id:               "obj-a",
-			CreatedTime:      now,
-			UpdatedTime:      &now,
-			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-
-		{
-			ControlledAccess: &[]string{"/organization/org/project/p2"},
-			Id:               "obj-b",
-			CreatedTime:      now,
-			UpdatedTime:      &now,
-			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-
-		{
-			Id:          "obj-public",
-			CreatedTime: now,
-			UpdatedTime: &now,
-			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-	} {
-		if err := db.RegisterObjects(ctx, []drs.DrsObject{obj}); err != nil {
-			t.Fatalf("RegisterObjects failed: %v", err)
-		}
-	}
-
 }
 
 func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {

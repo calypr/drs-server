@@ -152,10 +152,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run PostgreSQL-backed metadata overwrite test
+      - name: Run PostgreSQL integration tests
         env:
           SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
-        run: CGO_ENABLED=1 go test ./internal/persistence/postgres -run '^TestPostgresBulkOverwriteObjects$' -count=1 -v
+        run: CGO_ENABLED=1 go test ./internal/persistence/postgres -run '^TestPostgres' -count=1 -v
 
   coverage:
     name: Root and client coverage
