@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -212,6 +213,35 @@ func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
 	}
 	if len(records.queries) != 2 || records.queries[1].start != "did-1" || records.queries[0].limit != 1 {
 		t.Fatalf("prepared queries = %+v", records.queries)
+	}
+}
+
+func TestRepairPreservesMethodsOutsideS3URLRepair(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	httpsHeaders := []string{"Authorization: preserved"}
+	accessID := "resolver"
+	methods := []drs.AccessMethod{
+		{Type: drs.AccessMethodTypeS3, AccessUrl: &drs.AccessURL{Url: "s3://repair-bucket/legacy"}},
+		{Type: drs.AccessMethodTypeHttps, AccessUrl: &drs.AccessURL{Url: "https://example.test/object", Headers: &httpsHeaders}},
+		{Type: drs.AccessMethodTypeGs, AccessUrl: &drs.AccessURL{Url: "gs://other-bucket/object"}},
+		{Type: drs.AccessMethodTypeHttps, AccessId: &accessID},
+	}
+	record := repairRecord("did-1", sha, "s3://repair-bucket/legacy")
+	record.AccessMethods = &methods
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	_, audited, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audited) != 1 || audited[0].updated == nil || audited[0].updated.AccessMethods == nil {
+		t.Fatalf("updated records = %+v, want one repaired record", audited)
+	}
+	got := *audited[0].updated.AccessMethods
+	want := cloneAccessMethods(methods)
+	want[0].AccessUrl.Url = "s3://repair-bucket/prefix/did-1/" + sha
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("repaired access methods = %#v, want %#v", got, want)
 	}
 }
 

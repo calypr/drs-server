@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/drs"
@@ -32,21 +33,22 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		}
 	}
 	hasTarget := false
-	for _, raw := range object.currentURLs {
-		if raw == targetURL {
+	for _, method := range methods {
+		if raw, ok := repairableS3URL(method); ok && raw == targetURL {
 			hasTarget = true
 			break
 		}
 	}
 	changed := false
+	remove := make(map[int]struct{})
 	for index := range methods {
-		raw := accessMethodURL(methods[index])
-		if raw == "" || raw == targetURL {
+		raw, ok := repairableS3URL(methods[index])
+		if !ok || raw == targetURL {
 			continue
 		}
 		if hasTarget {
 			object.findings = append(object.findings, newFinding(FindingLegacyAccessURLRemovable, SeverityWarn, object.record, object.sha256, object.currentURLs, targetURL, true, fmt.Sprintf("redundant URL %q has target sibling %q", raw, targetURL)))
-			methods[index].AccessUrl = nil
+			remove[index] = struct{}{}
 			changed = true
 			continue
 		}
@@ -62,8 +64,8 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		return
 	}
 	filtered := make([]drs.AccessMethod, 0, len(methods))
-	for _, method := range methods {
-		if accessMethodURL(method) != "" {
+	for index, method := range methods {
+		if _, removed := remove[index]; !removed {
 			filtered = append(filtered, method)
 		}
 	}
@@ -74,6 +76,15 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		updated.ControlledAccess = &controlled
 	}
 	object.updated = &updated
+}
+
+func repairableS3URL(method drs.AccessMethod) (string, bool) {
+	raw := accessMethodURL(method)
+	if method.Type != drs.AccessMethodTypeS3 || raw == "" {
+		return "", false
+	}
+	parsed, err := url.Parse(raw)
+	return raw, err == nil && strings.EqualFold(parsed.Scheme, "s3")
 }
 
 func (s *Service) addStorageFindings(ctx context.Context, object *auditedObject) {
