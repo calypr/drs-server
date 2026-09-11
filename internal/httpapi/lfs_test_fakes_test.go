@@ -91,17 +91,17 @@ func (p *lfsTestServicePorts) GetPendingMetadata(_ context.Context, oid string) 
 	return &entry, nil
 }
 
-func (p *lfsTestServicePorts) ConsumePendingMetadata(_ context.Context, expected transferlfs.PendingMetadata) error {
+func (p *lfsTestServicePorts) ConsumePendingMetadata(_ context.Context, expected transferlfs.PendingMetadata) (bool, error) {
 	oid := expected.OID
 	entry, ok := p.pending[oid]
 	if !ok {
-		return nil
+		return false, nil
 	}
 	if !entry.CreatedAt.Equal(expected.CreatedAt) || !entry.ExpiresAt.Equal(expected.ExpiresAt) || !reflect.DeepEqual(entry.Candidate, expected.Candidate) {
-		return nil
+		return false, nil
 	}
 	delete(p.pending, oid)
-	return nil
+	return true, nil
 }
 
 func (p *lfsTestServicePorts) RecordTransferAttributionEvents(_ context.Context, events []usage.Event) error {

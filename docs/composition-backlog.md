@@ -53,7 +53,7 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 | ID | Work package | Priority | Status | Depends on |
 |---|---|---:|---|---|
 | C01 | Stop canonical duplicate-repair panics | P0 | Complete | None |
-| C02 | Return durable object identities and assign LFS accounting ownership | P0 | Ready | None |
+| C02 | Return durable object identities and assign LFS accounting ownership | P0 | Complete | None |
 | C03 | Commit canonical duplicate repair atomically | P0 | Ready | C01, with C02 reuse when practical |
 | C04 | Preserve typed failures in bulk access | P1 | Ready | None |
 | C05 | Commit credential and scope deletion atomically | P1 | Ready | Completed bucket configuration and cleanup fixes |

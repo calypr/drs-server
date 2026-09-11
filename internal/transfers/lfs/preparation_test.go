@@ -23,8 +23,8 @@ func (s *lfsPreparationObjectSpy) GetObject(_ context.Context, _, method string)
 	return s.object, s.getErr
 }
 
-func (s *lfsPreparationObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) error {
-	return nil
+func (s *lfsPreparationObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) ([]drs.DrsObject, error) {
+	return nil, nil
 }
 
 type lfsPreparationCredentialsSpy struct {

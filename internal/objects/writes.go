@@ -25,8 +25,8 @@ func materializeRecordTime(record drs.DrsObject, now time.Time) drs.DrsObject {
 }
 
 // RegisterCandidates materializes DRS candidates, persists them through the
-// existing registration policy, and rereads each durable record with read
-// authorization in request order.
+// existing registration policy, and returns each durable record after applying
+// the DRS read policy in request order.
 func (s *Service) RegisterCandidates(ctx context.Context, candidates []drs.DrsObjectCandidate) ([]drs.DrsObject, error) {
 	prepared := make([]drs.DrsObject, 0, len(candidates))
 	for _, candidate := range candidates {
@@ -36,7 +36,7 @@ func (s *Service) RegisterCandidates(ctx context.Context, candidates []drs.DrsOb
 		}
 		prepared = append(prepared, record)
 	}
-	if err := s.RegisterObjects(ctx, prepared); err != nil {
+	if _, err := s.RegisterObjects(ctx, prepared); err != nil {
 		return nil, err
 	}
 
@@ -171,20 +171,31 @@ func (s *Service) RegisterScopedObjects(ctx context.Context, candidates []Scoped
 		}
 		prepared[i] = materializeRecordTime(object, now)
 	}
-	if err := s.RegisterObjects(ctx, prepared); err != nil {
-		return nil, err
-	}
-	return prepared, nil
+	return s.RegisterObjects(ctx, prepared)
 }
 
-func (s *Service) RegisterObjects(ctx context.Context, objs []drs.DrsObject) error {
+// RegisterObjects persists objects and returns their durable records in the
+// same order as the submitted objects.
+func (s *Service) RegisterObjects(ctx context.Context, objs []drs.DrsObject) ([]drs.DrsObject, error) {
 	if err := s.validateExistingContentRead(ctx, objs); err != nil {
-		return err
+		return nil, err
 	}
 	if err := bulkObjectMethodError(ctx, objs, objectMethodCreate, nil); err != nil {
-		return err
+		return nil, err
 	}
-	return s.store.RegisterObjects(ctx, objs)
+	if err := s.store.RegisterObjects(ctx, objs); err != nil {
+		return nil, err
+	}
+
+	registered := make([]drs.DrsObject, 0, len(objs))
+	for _, obj := range objs {
+		read, err := s.store.GetObject(ctx, obj.Id)
+		if err != nil {
+			return nil, err
+		}
+		registered = append(registered, *read)
+	}
+	return registered, nil
 }
 
 func (s *Service) validateExistingContentRead(ctx context.Context, objs []drs.DrsObject) error {

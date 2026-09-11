@@ -44,8 +44,10 @@ func TestSqlitePendingLFSConsumptionPreservesRestageWithEqualTimestamps(t *testi
 	if err := db.SavePendingMetadata(ctx, []transferlfs.PendingMetadata{replacement}); err != nil {
 		t.Fatalf("save replacement pending metadata: %v", err)
 	}
-	if err := db.ConsumePendingMetadata(ctx, *loaded); err != nil {
+	if owned, err := db.ConsumePendingMetadata(ctx, *loaded); err != nil {
 		t.Fatalf("consume old pending metadata: %v", err)
+	} else if owned {
+		t.Fatal("replaced pending metadata was reported as consumed")
 	}
 
 	got, err := db.GetPendingMetadata(ctx, oid)
@@ -76,8 +78,10 @@ func TestSqlitePendingLFSConsumptionAcceptsLegacyJSONFormatting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load legacy pending metadata: %v", err)
 	}
-	if err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
+	if owned, err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
 		t.Fatalf("consume legacy pending metadata: %v", err)
+	} else if !owned {
+		t.Fatal("unchanged pending metadata was not reported as consumed")
 	}
 	if _, err := db.GetPendingMetadata(ctx, oid); !errors.Is(err, errorapi.ErrNotFound) {
 		t.Fatalf("legacy pending metadata still exists, error = %v", err)
@@ -96,7 +100,9 @@ func TestSqlitePendingLFSConsumptionMissingEntryIsNoOp(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}
-	if err := db.ConsumePendingMetadata(context.Background(), entry); err != nil {
+	if owned, err := db.ConsumePendingMetadata(context.Background(), entry); err != nil {
 		t.Fatalf("missing entry consumption = %v, want nil", err)
+	} else if owned {
+		t.Fatal("missing pending metadata was reported as consumed")
 	}
 }

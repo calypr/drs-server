@@ -27,8 +27,10 @@ func TestPostgresPendingLFSConsumption(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
+		if owned, err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
 			t.Fatal(err)
+		} else if !owned {
+			t.Fatal("unchanged pending metadata was not reported as consumed")
 		}
 		if _, err := database.GetPendingMetadata(ctx, oid); !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("GetPendingMetadata() error = %v, want not found", err)
@@ -49,8 +51,10 @@ func TestPostgresPendingLFSConsumption(t *testing.T) {
 		if err := database.SavePendingMetadata(ctx, []transferlfs.PendingMetadata{replacement}); err != nil {
 			t.Fatal(err)
 		}
-		if err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
+		if owned, err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
 			t.Fatal(err)
+		} else if owned {
+			t.Fatal("replaced pending metadata was reported as consumed")
 		}
 		remaining, err := database.GetPendingMetadata(ctx, oid)
 		if err != nil {
@@ -76,8 +80,10 @@ func TestPostgresPendingLFSConsumption(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
+		if owned, err := database.ConsumePendingMetadata(ctx, *loaded); err != nil {
 			t.Fatal(err)
+		} else if !owned {
+			t.Fatal("unchanged pending metadata was not reported as consumed")
 		}
 		if _, err := database.GetPendingMetadata(ctx, oid); !errors.Is(err, errorapi.ErrNotFound) {
 			t.Fatalf("GetPendingMetadata() error = %v, want not found", err)

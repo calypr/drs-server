@@ -33,12 +33,11 @@ type ByteRange struct {
 }
 
 type DownloadRequest struct {
-	ObjectID           string
-	AccessID           string
-	ExpiresIn          time.Duration
-	Range              *ByteRange
-	Accounting         AccountingMode
-	AccountingObjectID string
+	ObjectID   string
+	AccessID   string
+	ExpiresIn  time.Duration
+	Range      *ByteRange
+	Accounting AccountingMode
 }
 
 type DownloadResult struct {
@@ -131,11 +130,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 	result := DownloadResult{URL: signed.Location, SourceURL: sourceURL, Target: target, Object: obj}
 	if req.Accounting == AccountingDownloadBeforeEvent {
 		if s.fileCounters != nil {
-			counterID := strings.TrimSpace(req.AccountingObjectID)
-			if counterID == "" {
-				counterID = obj.Id
-			}
-			if err := s.fileCounters.RecordFileDownload(ctx, counterID); err != nil {
+			if err := s.fileCounters.RecordFileDownload(ctx, obj.Id); err != nil {
 				return DownloadResult{}, err
 			}
 		}

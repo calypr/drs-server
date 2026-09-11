@@ -69,10 +69,10 @@ func TestRegisterObjects_CanonicalizesProjectChecksumDuplicates(t *testing.T) {
 		}},
 	}
 
-	if err := om.RegisterObjects(context.Background(), []drs.DrsObject{first}); err != nil {
+	if _, err := om.RegisterObjects(context.Background(), []drs.DrsObject{first}); err != nil {
 		t.Fatalf("RegisterObjects(first) error: %v", err)
 	}
-	if err := om.RegisterObjects(context.Background(), []drs.DrsObject{second}); err != nil {
+	if _, err := om.RegisterObjects(context.Background(), []drs.DrsObject{second}); err != nil {
 		t.Fatalf("RegisterObjects(second) error: %v", err)
 	}
 
@@ -148,10 +148,10 @@ func TestRegisterObjects_ReusesContentAcrossProjects(t *testing.T) {
 		}},
 	}
 
-	if err := om.RegisterObjects(context.Background(), []drs.DrsObject{first}); err != nil {
+	if _, err := om.RegisterObjects(context.Background(), []drs.DrsObject{first}); err != nil {
 		t.Fatalf("RegisterObjects(first) error: %v", err)
 	}
-	if err := om.RegisterObjects(context.Background(), []drs.DrsObject{second}); err != nil {
+	if _, err := om.RegisterObjects(context.Background(), []drs.DrsObject{second}); err != nil {
 		t.Fatalf("RegisterObjects(second) error: %v", err)
 	}
 
@@ -215,6 +215,29 @@ func TestRegisterCandidatesReturnsMaterializedRecordsInRequestOrder(t *testing.T
 		if record.CreatedTime.IsZero() || record.UpdatedTime == nil {
 			t.Fatalf("record %d was not materialized: %#v", i, record)
 		}
+	}
+}
+
+func TestRegisterObjectsReturnsDurableCanonicalRecords(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := objects.NewService(database)
+	checksum := "1111111111111111111111111111111111111111111111111111111111111111"
+	methods := []drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/object"}}}
+
+	if err := database.RegisterObjects(context.Background(), []drs.DrsObject{
+		{Id: "canonical", Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}, AccessMethods: &methods},
+	}); err != nil {
+		t.Fatalf("seed RegisterObjects() error = %v", err)
+	}
+
+	registered, err := service.RegisterObjects(context.Background(), []drs.DrsObject{
+		{Id: "submitted", Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}, AccessMethods: &methods},
+	})
+	if err != nil {
+		t.Fatalf("RegisterObjects() error = %v", err)
+	}
+	if len(registered) != 1 || registered[0].Id != "canonical" {
+		t.Fatalf("durable registration = %#v, want canonical record", registered)
 	}
 }
 

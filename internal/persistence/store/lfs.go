@@ -84,11 +84,11 @@ func (db *Store) GetPendingMetadata(ctx context.Context, oid string) (*transferl
 
 // ConsumePendingMetadata removes the expected pending entry if it is still
 // the entry that was read by the caller. A missing or replaced entry is an
-// expected no-op: another stage operation owns that newer metadata.
-func (db *Store) ConsumePendingMetadata(ctx context.Context, expected transferlfs.PendingMetadata) error {
+// expected no-op: another stage or verification operation owns that metadata.
+func (db *Store) ConsumePendingMetadata(ctx context.Context, expected transferlfs.PendingMetadata) (bool, error) {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
 
@@ -103,25 +103,25 @@ func (db *Store) ConsumePendingMetadata(ctx context.Context, expected transferlf
 		WHERE oid = ?
 	`, expected.OID).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("failed to load current pending metadata for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to load current pending metadata for oid %s: %w", expected.OID, err)
 	}
 
 	var current lfsapi.DrsObjectCandidate
 	if err := json.Unmarshal([]byte(raw), &current); err != nil {
-		return fmt.Errorf("failed to parse current pending metadata candidate for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to parse current pending metadata candidate for oid %s: %w", expected.OID, err)
 	}
 	currentCanonical, err := json.Marshal(current)
 	if err != nil {
-		return fmt.Errorf("failed to marshal current pending metadata candidate for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to marshal current pending metadata candidate for oid %s: %w", expected.OID, err)
 	}
 	expectedCanonical, err := json.Marshal(expected.Candidate)
 	if err != nil {
-		return fmt.Errorf("failed to marshal expected pending metadata candidate for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to marshal expected pending metadata candidate for oid %s: %w", expected.OID, err)
 	}
 	if !createdAt.Equal(expected.CreatedAt) || !expiresAt.Equal(expected.ExpiresAt) || !bytes.Equal(currentCanonical, expectedCanonical) {
-		return nil
+		return false, nil
 	}
 
 	candidateCondition := "candidate_json = ?"
@@ -133,16 +133,16 @@ func (db *Store) ConsumePendingMetadata(ctx context.Context, expected transferlf
 		WHERE oid = ? AND %s AND created_time = ? AND expires_time = ?
 	`, candidateCondition), expected.OID, raw, createdAt, expiresAt)
 	if err != nil {
-		return fmt.Errorf("failed to consume pending metadata for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to consume pending metadata for oid %s: %w", expected.OID, err)
 	}
 	if affected, err := result.RowsAffected(); err != nil {
-		return fmt.Errorf("failed to inspect pending metadata consumption for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to inspect pending metadata consumption for oid %s: %w", expected.OID, err)
 	} else if affected == 0 {
-		return nil
+		return false, nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit pending metadata consumption for oid %s: %w", expected.OID, err)
+		return false, fmt.Errorf("failed to commit pending metadata consumption for oid %s: %w", expected.OID, err)
 	}
-	return nil
+	return true, nil
 }

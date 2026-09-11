@@ -114,15 +114,17 @@ func (downloadObjectFake) GetObjectsByChecksums(context.Context, []string, strin
 }
 
 type downloadAccountingFake struct {
-	calls []string
+	calls     []string
+	objectIDs []string
 }
 
 func (f *downloadAccountingFake) RecordFileUpload(context.Context, string) error {
 	return nil
 }
 
-func (f *downloadAccountingFake) RecordFileDownload(context.Context, string) error {
+func (f *downloadAccountingFake) RecordFileDownload(_ context.Context, objectID string) error {
 	f.calls = append(f.calls, "counter")
+	f.objectIDs = append(f.objectIDs, objectID)
 	return nil
 }
 
@@ -242,6 +244,26 @@ func TestDownloadAccountingPreservesConfiguredRecorderOrder(t *testing.T) {
 	}
 	if got, want := accounting.calls, []string{"counter", "event"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("accounting call order = %v, want %v", got, want)
+	}
+	if got, want := accounting.objectIDs, []string{"record-1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting object IDs = %v, want resolved IDs %v", got, want)
+	}
+}
+
+func TestDownloadAccountingUsesResolvedObjectIDForAlias(t *testing.T) {
+	accounting := &downloadAccountingFake{}
+	service := NewService(Dependencies{
+		Objects:      downloadObjectFake{object: testRecord()},
+		Storage:      &accessFake{result: storage.SignedAccess{Location: "signed-download"}},
+		FileCounters: accounting,
+		Events:       accounting,
+	})
+
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "submitted-alias", Accounting: AccountingDownloadBeforeEvent}); err != nil {
+		t.Fatalf("Download() failed: %v", err)
+	}
+	if got, want := accounting.objectIDs, []string{"record-1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting object IDs = %v, want resolved IDs %v", got, want)
 	}
 }
 

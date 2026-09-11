@@ -33,7 +33,7 @@ type PendingMetadata struct {
 type PendingStore interface {
 	SavePendingMetadata(context.Context, []PendingMetadata) error
 	GetPendingMetadata(context.Context, string) (*PendingMetadata, error)
-	ConsumePendingMetadata(context.Context, PendingMetadata) error
+	ConsumePendingMetadata(context.Context, PendingMetadata) (bool, error)
 }
 
 type UploadAccounting interface {
@@ -69,7 +69,7 @@ func uploadSignedMultipartPart(ctx context.Context, signedURL string, content []
 
 type ObjectPort interface {
 	GetObject(context.Context, string, string) (*drs.DrsObject, error)
-	RegisterObjects(context.Context, []drs.DrsObject) error
+	RegisterObjects(context.Context, []drs.DrsObject) ([]drs.DrsObject, error)
 }
 
 type DownloadPreparation struct{ SignedURL string }
@@ -158,7 +158,7 @@ func (s *Service) PrepareDownload(ctx context.Context, oid string) (DownloadPrep
 	if s == nil || s.transfer == nil {
 		return DownloadPreparation{}, fmt.Errorf("LFS transfer service is not configured")
 	}
-	result, err := s.transfer.Download(ctx, transfers.DownloadRequest{ObjectID: oid, Accounting: transfers.AccountingDownloadBeforeEvent, AccountingObjectID: oid})
+	result, err := s.transfer.Download(ctx, transfers.DownloadRequest{ObjectID: oid, Accounting: transfers.AccountingDownloadBeforeEvent})
 	if err != nil {
 		return DownloadPreparation{}, &DownloadLookupError{Err: err}
 	}
@@ -312,13 +312,13 @@ func (s *Service) Stage(ctx context.Context, candidates []lfsapi.DrsObjectCandid
 }
 
 func (s *Service) Verify(ctx context.Context, oid string) error {
-	object, objectErr := s.objects.GetObject(ctx, oid, "read")
+	_, objectErr := s.objects.GetObject(ctx, oid, "read")
 	if objectErr != nil && !errorapi.IsNotFoundError(objectErr) {
 		return objectErr
 	}
 	if s.pending == nil {
 		if objectErr == nil {
-			return s.recordUpload(ctx, object.Id)
+			return nil
 		}
 		return fmt.Errorf("pending LFS metadata store is not configured")
 	}
@@ -328,16 +328,24 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 		if err != nil {
 			return &MetadataCandidateError{Err: err}
 		}
-		if err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject}); err != nil {
+		registered, err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject})
+		if err != nil {
 			return err
 		}
-		if err := s.pending.ConsumePendingMetadata(ctx, *pending); err != nil {
+		if len(registered) != 1 {
+			return fmt.Errorf("registration returned %d records, want 1", len(registered))
+		}
+		owned, err := s.pending.ConsumePendingMetadata(ctx, *pending)
+		if err != nil {
 			return err
 		}
-		return s.recordUpload(ctx, internalObject.Id)
+		if !owned {
+			return nil
+		}
+		return s.recordUpload(ctx, registered[0].Id)
 	}
 	if objectErr == nil && errorapi.IsNotFoundError(err) {
-		return s.recordUpload(ctx, object.Id)
+		return nil
 	}
 	return err
 }

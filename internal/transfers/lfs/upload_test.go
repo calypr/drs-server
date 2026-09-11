@@ -62,7 +62,9 @@ func (lfsUploadObjectSpy) GetObject(context.Context, string, string) (*drs.DrsOb
 func (lfsUploadObjectSpy) GetObjectsByChecksums(context.Context, []string, string) (map[string][]drs.DrsObject, error) {
 	return nil, nil
 }
-func (lfsUploadObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) error { return nil }
+func (lfsUploadObjectSpy) RegisterObjects(context.Context, []drs.DrsObject) ([]drs.DrsObject, error) {
+	return nil, nil
+}
 
 func (s *lfsUploadAccountingSpy) RecordFileUpload(_ context.Context, objectID string) error {
 	*s.events = append(*s.events, "account")
@@ -119,14 +121,17 @@ func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*drs.D
 	return s.object, s.getErr
 }
 
-func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []drs.DrsObject) error {
+func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []drs.DrsObject) ([]drs.DrsObject, error) {
 	*s.events = append(*s.events, "register")
 	s.registered = append([]drs.DrsObject(nil), records...)
 	if s.objectAfterRegister && len(records) > 0 {
 		s.object = &records[0]
 		s.getErr = nil
 	}
-	return s.registerErr
+	if s.registerErr != nil {
+		return nil, s.registerErr
+	}
+	return records, nil
 }
 
 type metadataPendingSpy struct {
@@ -151,18 +156,18 @@ func (s *metadataPendingSpy) GetPendingMetadata(context.Context, string) (*Pendi
 	return s.entry, nil
 }
 
-func (s *metadataPendingSpy) ConsumePendingMetadata(_ context.Context, _ PendingMetadata) error {
+func (s *metadataPendingSpy) ConsumePendingMetadata(_ context.Context, _ PendingMetadata) (bool, error) {
 	*s.events = append(*s.events, "consume")
 	if s.consumeErr != nil {
-		return s.consumeErr
+		return false, s.consumeErr
 	}
 	if s.replacement != nil {
 		s.entry = s.replacement
 		s.replacement = nil
-		return nil
+		return false, nil
 	}
 	s.entry = nil
-	return nil
+	return true, nil
 }
 
 func TestLFSMetadataWorkflowReportsPendingLookupFailureForExistingObject(t *testing.T) {
@@ -313,7 +318,7 @@ func TestLFSMetadataWorkflowProcessesPendingReplacementAfterObjectExists(t *test
 	if pending.entry != nil {
 		t.Fatal("replacement pending metadata was not consumed")
 	}
-	if strings.Join(events, ",") != "get,register,consume,account,get,register,consume,account" {
+	if strings.Join(events, ",") != "get,register,consume,get,register,consume,account" {
 		t.Fatalf("events = %v, want replacement registration before accounting", events)
 	}
 }
@@ -352,7 +357,7 @@ func TestLFSMetadataWorkflowReturnsConsumptionFailureAfterRegistration(t *testin
 	}
 }
 
-func TestLFSMetadataWorkflowExistingObjectOnlyAccounts(t *testing.T) {
+func TestLFSMetadataWorkflowExistingObjectWithoutPendingMetadataIsAlreadyVerified(t *testing.T) {
 	events := make([]string, 0, 2)
 	object := &drs.DrsObject{Id: "existing"}
 	objectsPort := &lfsMetadataObjectSpy{events: &events, object: object}
@@ -363,11 +368,11 @@ func TestLFSMetadataWorkflowExistingObjectOnlyAccounts(t *testing.T) {
 		t.Fatalf("Verify() error = %v", err)
 	}
 
-	wantEvents := []string{"get", "account"}
+	wantEvents := []string{"get"}
 	if strings.Join(events, ",") != strings.Join(wantEvents, ",") {
 		t.Fatalf("events = %v, want %v", events, wantEvents)
 	}
-	if accounting.object != "existing" {
-		t.Fatalf("accounted object = %q", accounting.object)
+	if accounting.object != "" {
+		t.Fatalf("unexpected accounting for already verified object %q", accounting.object)
 	}
 }

@@ -1147,7 +1147,7 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		t.Fatalf("unexpected candidate payload: %+v", entry.Candidate)
 	}
 
-	if err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
+	if _, err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
 		t.Fatalf("ConsumePendingMetadata failed: %v", err)
 	}
 	if _, err := db.GetPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
