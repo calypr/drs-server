@@ -168,9 +168,9 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("expected org/project upload routing and no bucket query, got %v", uploadURLQuery)
 	}
 
-	uploadID, guid, err := service.InitMultipartUpload(ctx, "guid-a", "name.txt", "bucket-a")
+	uploadID, guid, err := service.InitMultipartUploadWithMetadata(ctx, "guid-a", "name.txt", "bucket-a", common.FileMetadata{})
 	if err != nil || uploadID != "upload-id" || guid != "multipart-guid" {
-		t.Fatalf("InitMultipartUpload returned uploadID=%q guid=%q err=%v", uploadID, guid, err)
+		t.Fatalf("InitMultipartUploadWithMetadata returned uploadID=%q guid=%q err=%v", uploadID, guid, err)
 	}
 	if lastMultipartInit.Guid == nil || *lastMultipartInit.Guid != "guid-a" || lastMultipartInit.Key == nil || *lastMultipartInit.Key != "name.txt" {
 		t.Fatalf("unexpected multipart init request: %+v", lastMultipartInit)
@@ -189,17 +189,12 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("expected scoped multipart init request, got %+v", lastMultipartInit)
 	}
 
-	partURL, err := service.GetMultipartUploadURL(ctx, "guid-a", "upload-id", 3, "bucket-a")
-	if err != nil || partURL != "https://parts.example/upload" {
-		t.Fatalf("GetMultipartUploadURL returned url=%q err=%v", partURL, err)
-	}
-	if lastMultipartUpload.Key != "guid-a" || lastMultipartUpload.UploadId != "upload-id" || lastMultipartUpload.PartNumber != 3 {
-		t.Fatalf("unexpected multipart upload request: %+v", lastMultipartUpload)
-	}
-
 	etag, err := service.MultipartPart(ctx, "guid-a", "upload-id", 3, bytes.NewReader([]byte("chunk-data")))
 	if err != nil || etag != "etag-1" {
 		t.Fatalf("MultipartPart returned etag=%q err=%v", etag, err)
+	}
+	if lastMultipartUpload.Key != "guid-a" || lastMultipartUpload.UploadId != "upload-id" || lastMultipartUpload.PartNumber != 3 {
+		t.Fatalf("unexpected multipart upload request: %+v", lastMultipartUpload)
 	}
 	if requester.method != http.MethodPut || string(requester.body) != "chunk-data" {
 		t.Fatalf("unexpected upload request captured: method=%s body=%q", requester.method, requester.body)
@@ -221,10 +216,6 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if len(lastMultipartDone.Parts) != 2 || lastMultipartDone.Parts[0].PartNumber != 2 || lastMultipartDone.Parts[1].ETag != "etag-1" {
 		t.Fatalf("unexpected multipart completion payload: %+v", lastMultipartDone)
 	}
-	if err := service.CompleteMultipartUpload(ctx, "guid-a", "upload-id", []internalapi.InternalMultipartPart{{PartNumber: 1, ETag: "etag-1"}}, "bucket-a"); err != nil {
-		t.Fatalf("CompleteMultipartUpload returned error: %v", err)
-	}
-
 	if _, err := service.MultipartInit(ctx, "guid-a"); err != nil {
 		t.Fatalf("MultipartInit returned error: %v", err)
 	}
@@ -299,7 +290,7 @@ func TestDataServiceMultipartInitPreservesServerMessage(t *testing.T) {
 	defer server.Close()
 
 	service := NewDataService(mustInternalClient(t, server.URL), &recordingRequester{}, discardLogger(), nil)
-	_, _, err := service.InitMultipartUpload(context.Background(), "", "", "")
+	_, _, err := service.InitMultipartUploadWithMetadata(context.Background(), "", "", "", common.FileMetadata{})
 	if err == nil || !strings.Contains(err.Error(), "checksum-only multipart init requires an explicit guid or a project-scoped object id") {
 		t.Fatalf("expected preserved multipart init error message, got %v", err)
 	}

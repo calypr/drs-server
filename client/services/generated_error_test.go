@@ -152,7 +152,7 @@ func TestAPIResponseErrorReturnsTypedContract(t *testing.T) {
 		Header:     http.Header{"X-Request-Id": []string{"request-123"}},
 		Request:    req,
 	}
-	err := apiResponseError(resp, []byte(`{"code":"not_found","status":404,"message":"Resource not found","request_id":"request-123"}`))
+	err := apierror.FromResponse(resp, []byte(`{"code":"not_found","status":404,"message":"Resource not found","request_id":"request-123"}`))
 	var apiErr *apierror.APIError
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("expected *apierror.APIError, got %T", err)

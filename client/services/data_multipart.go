@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -18,7 +19,7 @@ func (s *DataService) multipartInitRequest(ctx context.Context, req internalapi.
 		return internalapi.InternalMultipartInitOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartInitOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalMultipartInitOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -29,7 +30,7 @@ func (d *DataService) multipartUploadRequest(ctx context.Context, req internalap
 		return internalapi.InternalMultipartUploadOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalMultipartUploadOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalMultipartUploadOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -40,13 +41,9 @@ func (d *DataService) multipartCompleteRequest(ctx context.Context, req internal
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
-}
-
-func (d *DataService) InitMultipartUpload(ctx context.Context, guid, filename, bucket string) (string, string, error) {
-	return d.InitMultipartUploadWithMetadata(ctx, guid, filename, bucket, common.FileMetadata{})
 }
 
 func (d *DataService) InitMultipartUploadWithMetadata(ctx context.Context, guid, filename, bucket string, metadata common.FileMetadata) (string, string, error) {
@@ -78,42 +75,26 @@ func (d *DataService) InitMultipartUploadWithMetadata(ctx context.Context, guid,
 	return uploadID, respGuid, nil
 }
 
-func (d *DataService) GetMultipartUploadURL(ctx context.Context, key, uploadID string, partNum int32, bucket string) (string, error) {
-	req := internalapi.InternalMultipartUploadRequest{
-		Key:        key,
+func (d *DataService) MultipartInit(ctx context.Context, guid string) (string, error) {
+	uploadID, _, err := d.InitMultipartUploadWithMetadata(ctx, guid, "", "", common.FileMetadata{})
+	return uploadID, err
+}
+
+func (d *DataService) MultipartPart(ctx context.Context, guid string, uploadID string, partNum int, body io.Reader) (string, error) {
+	bucket := ""
+	resp, err := d.multipartUploadRequest(ctx, internalapi.InternalMultipartUploadRequest{
+		Key:        guid,
 		UploadId:   uploadID,
-		PartNumber: partNum,
+		PartNumber: int32(partNum),
 		Bucket:     &bucket,
-	}
-	resp, err := d.multipartUploadRequest(ctx, req)
+	})
 	if err != nil {
 		return "", err
 	}
 	if resp.PresignedUrl == nil {
 		return "", fmt.Errorf("response missing presigned URL")
 	}
-	return *resp.PresignedUrl, nil
-}
-
-func (d *DataService) CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []internalapi.InternalMultipartPart, bucket string) error {
-	return d.multipartCompleteRequest(ctx, internalapi.InternalMultipartCompleteRequest{
-		Key:      key,
-		UploadId: uploadID,
-		Bucket:   &bucket,
-		Parts:    parts,
-	})
-}
-
-func (d *DataService) MultipartInit(ctx context.Context, guid string) (string, error) {
-	uploadID, _, err := d.InitMultipartUpload(ctx, guid, "", "")
-	return uploadID, err
-}
-
-func (d *DataService) MultipartPart(ctx context.Context, guid string, uploadID string, partNum int, body io.Reader) (string, error) {
-	url, err := d.GetMultipartUploadURL(ctx, guid, uploadID, int32(partNum), "")
-	if err != nil {
-		return "", err
-	}
+	url := *resp.PresignedUrl
 	if sized, ok := body.(interface{ Size() int64 }); ok {
 		return d.UploadPart(ctx, url, body, sized.Size())
 	}

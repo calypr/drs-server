@@ -14,6 +14,7 @@ import (
 	"github.com/calypr/syfon/apigen/internalapi"
 
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 type ListRecordsOptions struct {
@@ -47,7 +48,7 @@ func (s *IndexService) Get(ctx context.Context, did string) (internalapi.Interna
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalRecordResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -58,7 +59,7 @@ func (s *IndexService) Create(ctx context.Context, rec internalapi.InternalRecor
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalRecordResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -69,7 +70,7 @@ func (s *IndexService) Update(ctx context.Context, did string, rec internalapi.I
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalRecordResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -80,7 +81,7 @@ func (s *IndexService) Delete(ctx context.Context, did string) error {
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -104,7 +105,7 @@ func (s *IndexService) DeleteByQuery(ctx context.Context, opts DeleteByQueryOpti
 		return internalapi.DeleteByQueryResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.DeleteByQueryResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.DeleteByQueryResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -117,7 +118,7 @@ func (s *IndexService) RemoveControlledAccess(ctx context.Context, did, resource
 		return internalapi.InternalRecordResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalRecordResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalRecordResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -149,7 +150,7 @@ func (s *IndexService) List(ctx context.Context, opts ListRecordsOptions) (inter
 		return internalapi.ListRecordsResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.ListRecordsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.ListRecordsResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }

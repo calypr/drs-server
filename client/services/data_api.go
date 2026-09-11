@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 )
@@ -31,7 +32,7 @@ func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalU
 		return internalapi.InternalUploadBlankOutput{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.InternalUploadBlankOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalUploadBlankOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -42,7 +43,7 @@ func (d *DataService) UploadURL(ctx context.Context, fileID string, params *inte
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalSignedURL{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -53,7 +54,7 @@ func (d *DataService) UploadBulk(ctx context.Context, req internalapi.InternalUp
 		return internalapi.InternalUploadBulkOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalUploadBulkOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalUploadBulkOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -71,7 +72,7 @@ func (d *DataService) DownloadURL(ctx context.Context, did string, expiresIn int
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalSignedURL{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -82,7 +83,7 @@ func (d *DataService) DeleteFile(ctx context.Context, guid string) (string, erro
 		return "", err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return "", apiResponseError(resp.HTTPResponse, resp.Body)
+		return "", apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return guid, nil
 }

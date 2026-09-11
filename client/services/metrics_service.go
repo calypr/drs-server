@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/metricsapi"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 type MetricsFilesOptions struct {
@@ -58,7 +59,7 @@ func (s *MetricsService) Summary(ctx context.Context, opts MetricsSummaryOptions
 		return metricsapi.FileUsageSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.FileUsageSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.FileUsageSummary{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -83,7 +84,7 @@ func (s *MetricsService) Files(ctx context.Context, opts MetricsFilesOptions) ([
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
+		return nil, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	if resp.JSON200.Data == nil {
 		return []metricsapi.FileUsage{}, nil
@@ -97,7 +98,7 @@ func (s *MetricsService) File(ctx context.Context, objectID string) (metricsapi.
 		return metricsapi.FileUsage{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.FileUsage{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.FileUsage{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -112,7 +113,7 @@ func (s *MetricsService) TransferSummary(ctx context.Context, opts TransferMetri
 		return metricsapi.TransferAttributionSummary{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.TransferAttributionSummary{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.TransferAttributionSummary{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -127,7 +128,7 @@ func (s *MetricsService) TransferBreakdown(ctx context.Context, opts TransferMet
 		return metricsapi.TransferBreakdownResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return metricsapi.TransferBreakdownResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return metricsapi.TransferBreakdownResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }

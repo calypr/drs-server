@@ -208,8 +208,9 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 }
 
 type UploadBackend interface {
-	transfer.Uploader
 	transfer.MultipartBackend
+	ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error)
+	CanonicalObjectURL(signedURL, bucketHint, fallbackDID string) (string, error)
 }
 
 type resolvedUploadBackend struct {

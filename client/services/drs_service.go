@@ -5,6 +5,7 @@ import (
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 // Deprecated: use errorapi.ErrNotFound.
@@ -24,7 +25,7 @@ func (s *DRSService) GetObject(ctx context.Context, objectID string) (drsapi.Drs
 		return drsapi.DrsObject{}, err
 	}
 	if resp.JSON200 == nil {
-		return drsapi.DrsObject{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return drsapi.DrsObject{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -39,7 +40,7 @@ func (s *DRSService) DeleteObject(ctx context.Context, objectID string, deleteSt
 		return err
 	}
 	if resp.StatusCode() != 200 && resp.StatusCode() != 204 {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -50,7 +51,7 @@ func (s *DRSService) GetAccessURL(ctx context.Context, objectID, accessID string
 		return drsapi.AccessURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return drsapi.AccessURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return drsapi.AccessURL{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -61,7 +62,7 @@ func (s *DRSService) RegisterObjects(ctx context.Context, req drsapi.RegisterObj
 		return drsapi.N201ObjectsCreated{}, err
 	}
 	if resp.JSON201 == nil {
-		return drsapi.N201ObjectsCreated{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return drsapi.N201ObjectsCreated{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
@@ -74,7 +75,7 @@ func (s *DRSService) UpdateObjectAccessMethods(ctx context.Context, objectID str
 		return drsapi.DrsObject{}, err
 	}
 	if resp.JSON200 == nil {
-		return drsapi.DrsObject{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return drsapi.DrsObject{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }

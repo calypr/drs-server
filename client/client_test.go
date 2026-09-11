@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/common"
 	syfonclient "github.com/calypr/syfon/client/services"
 )
 
@@ -228,7 +229,7 @@ func TestDataMultipartInitUsesCanonicalUploadId(t *testing.T) {
 			Header:     header,
 		}, nil
 	})
-	uploadID, respGuid, err := c.data.InitMultipartUpload(context.Background(), "g1", "", "")
+	uploadID, respGuid, err := c.data.InitMultipartUploadWithMetadata(context.Background(), "g1", "", "", common.FileMetadata{})
 	if err != nil {
 		t.Fatalf("MultipartInit failed: %v", err)
 	}
