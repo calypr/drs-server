@@ -108,6 +108,7 @@ func TestCompleteMultipartUploadLeavesPartsOnMissingPartFailure(t *testing.T) {
 	uploadID := storage.UploadID("upload-missing")
 	part1 := storage.MultipartPartObjectKey(key, uploadID, 1)
 	part2 := storage.MultipartPartObjectKey(key, uploadID, 2)
+	writeBlob(t, b, key, "original")
 	writeBlob(t, b, part1, "hello ")
 
 	err = b.CompleteMultipart(ctx, storage.ProviderBinding{}, storage.CompleteMultipartRequest{
@@ -121,11 +122,34 @@ func TestCompleteMultipartUploadLeavesPartsOnMissingPartFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing-part completion failure")
 	}
-	if _, err := b.rootBucket.NewReader(ctx, part1, nil); err != nil {
-		t.Fatalf("successful part was cleaned up after failed completion: %v", err)
+	if got := readBlob(t, b, key); got != "original" {
+		t.Fatalf("destination after failed completion = %q, want original", got)
 	}
-	if _, err := b.rootBucket.NewReader(ctx, part2, nil); err == nil {
-		t.Fatal("missing part unexpectedly exists")
+	if exists, err := b.rootBucket.Exists(ctx, part1); err != nil || !exists {
+		t.Fatalf("successful part exists = %v, error = %v; want true", exists, err)
+	}
+	if exists, err := b.rootBucket.Exists(ctx, part2); err != nil || exists {
+		t.Fatalf("missing part exists = %v, error = %v; want false", exists, err)
+	}
+
+	writeBlob(t, b, part2, "world")
+	if err := b.CompleteMultipart(ctx, storage.ProviderBinding{}, storage.CompleteMultipartRequest{
+		Target:   storage.Target{PhysicalBucket: "ignored", Key: key},
+		UploadID: uploadID,
+		Parts: []storage.CompletedPart{
+			{PartNumber: 1},
+			{PartNumber: 2},
+		},
+	}); err != nil {
+		t.Fatalf("retry completion failed: %v", err)
+	}
+	if got := readBlob(t, b, key); got != "hello world" {
+		t.Fatalf("destination after retry = %q, want hello world", got)
+	}
+	for _, partKey := range []string{part1, part2} {
+		if exists, err := b.rootBucket.Exists(ctx, partKey); err != nil || exists {
+			t.Fatalf("part %q after retry exists=%v error=%v", partKey, exists, err)
+		}
 	}
 }
 

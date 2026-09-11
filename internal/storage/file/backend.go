@@ -67,27 +67,33 @@ func (b *backend) CompleteMultipart(ctx context.Context, _ storage.ProviderBindi
 	sort.Slice(partList, func(i, j int) bool { return partList[i].PartNumber < partList[j].PartNumber })
 
 	destinationKey := strings.Trim(strings.TrimSpace(request.Target.Key), "/")
-	writer, err := b.rootBucket.NewWriter(ctx, destinationKey, nil)
+	writerContext, cancelWriter := context.WithCancel(ctx)
+	defer cancelWriter()
+	writer, err := b.rootBucket.NewWriter(writerContext, destinationKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to open destination writer: %w", err)
 	}
-	defer writer.Close()
+	abort := func(err error) error {
+		cancelWriter()
+		_ = writer.Close()
+		return err
+	}
 
 	cleanupKeys := make([]string, 0, len(partList))
 	for _, part := range partList {
 		partKey := storage.MultipartPartObjectKey(request.Target.Key, request.UploadID, part.PartNumber)
 		reader, err := b.rootBucket.NewReader(ctx, partKey, nil)
 		if err != nil {
-			return fmt.Errorf("failed to open multipart part %d: %w", part.PartNumber, err)
+			return abort(fmt.Errorf("failed to open multipart part %d: %w", part.PartNumber, err))
 		}
 		if _, err := io.Copy(writer, reader); err != nil {
 			if closeErr := reader.Close(); closeErr != nil {
-				return fmt.Errorf("failed to copy multipart part %d: %w (close error: %v)", part.PartNumber, err, closeErr)
+				return abort(fmt.Errorf("failed to copy multipart part %d: %w (close error: %v)", part.PartNumber, err, closeErr))
 			}
-			return fmt.Errorf("failed to copy multipart part %d: %w", part.PartNumber, err)
+			return abort(fmt.Errorf("failed to copy multipart part %d: %w", part.PartNumber, err))
 		}
 		if err := reader.Close(); err != nil {
-			return fmt.Errorf("failed to close multipart part %d reader: %w", part.PartNumber, err)
+			return abort(fmt.Errorf("failed to close multipart part %d reader: %w", part.PartNumber, err))
 		}
 		cleanupKeys = append(cleanupKeys, partKey)
 	}
