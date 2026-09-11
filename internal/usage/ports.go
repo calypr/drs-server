@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/metricsapi"
 )
 
@@ -36,7 +35,6 @@ type FileUsageReader interface {
 // requiredMethod is supplied by callers so the object service can enforce the
 // same access method as the existing metrics paths.
 type ObjectReader interface {
-	GetObject(ctx context.Context, ident, requiredMethod string) (*drs.DrsObject, error)
 	ListObjectIDsByScope(ctx context.Context, organization, project, requiredMethod string) ([]string, error)
 }
 

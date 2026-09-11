@@ -91,15 +91,12 @@ type TransferBreakdownQuery struct {
 
 type Reporter interface {
 	GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error)
-	ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]metricsapi.FileUsage, error)
-	ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error)
 	ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error)
 	GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error)
 	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]metricsapi.FileUsage, error)
 	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error)
 	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error)
 	GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error)
-	GetTransferFreshness(ctx context.Context, filter Filter) (metricsapi.TransferMetricsFreshness, error)
 }
 
 type Dependencies struct {
@@ -116,8 +113,6 @@ func NewService(deps Dependencies) *Service {
 	return &Service{reports: deps.Reports, objects: deps.Objects}
 }
 
-func (s *Service) Reports() Reporter { return s }
-
 func (s *Service) requireReports() error {
 	if s == nil || s.reports == nil {
 		return ErrReportsUnavailable
@@ -132,17 +127,7 @@ func (s *Service) GetFileUsage(ctx context.Context, objectID string) (*metricsap
 	return s.reports.GetFileUsage(ctx, objectID)
 }
 
-func (s *Service) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]metricsapi.FileUsage, error) {
-	if err := s.requireReports(); err != nil {
-		return nil, err
-	}
-	return s.reports.ListFileUsageByObjectIDs(ctx, ids)
-}
-
-// ListReadableObjectIDs resolves scope membership from the object reader and
-// returns only requested IDs in their original order. Unscoped callers retain
-// the existing behavior of passing requests through unchanged.
-func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error) {
+func (s *Service) listReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error) {
 	if !scope.isSingle() && !scope.isAggregate() {
 		return append([]string(nil), requested...), nil
 	}
@@ -190,11 +175,14 @@ func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, r
 // without changing persistence order.
 func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error) {
 	requested := uniqueNonEmptyStrings(query.ObjectIDs)
-	readable, err := s.ListReadableObjectIDs(ctx, query.Scope, requested)
+	readable, err := s.listReadableObjectIDs(ctx, query.Scope, requested)
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.ListFileUsageByObjectIDs(ctx, readable)
+	if err := s.requireReports(); err != nil {
+		return nil, err
+	}
+	items, err := s.reports.ListFileUsageByObjectIDs(ctx, readable)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +202,7 @@ func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQu
 // report. Inaccessible objects intentionally look absent at the HTTP boundary.
 func (s *Service) GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error) {
 	if scope.isSingle() || scope.isAggregate() {
-		readable, err := s.ListReadableObjectIDs(ctx, scope, []string{objectID})
+		readable, err := s.listReadableObjectIDs(ctx, scope, []string{objectID})
 		if err != nil {
 			if errorsIsNotFoundOrDenied(err) {
 				return nil, errorapi.ErrNotFound
@@ -317,18 +305,6 @@ func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query Tra
 		resources = query.Scope.resources()
 	}
 	return s.reports.QueryTransferBreakdown(ctx, query.Filter, query.GroupBy, resources)
-}
-
-func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (metricsapi.TransferMetricsFreshness, error) {
-	isStale := false
-	missingBuckets := []string{}
-	return metricsapi.TransferMetricsFreshness{
-		IsStale:             &isStale,
-		MissingBuckets:      &missingBuckets,
-		RequiredFrom:        filter.From,
-		RequiredTo:          filter.To,
-		LatestCompletedSync: nil,
-	}, nil
 }
 
 func validBreakdownGroup(groupBy string) bool {

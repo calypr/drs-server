@@ -290,10 +290,7 @@ func (s *metricsServer) GetTransferSummary(ctx context.Context, request metricsa
 		return getTransferSummaryAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferSummaryParamsToFilter(request.Params)
-	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
+	freshness := transferMetricsFreshness(filter)
 	summary, err := s.reporter.GetTransferAttributionSummary(ctx, usage.TransferSummaryQuery{
 		Filter: filter,
 		Scope:  scope,
@@ -312,10 +309,7 @@ func (s *metricsServer) GetTransferBreakdown(ctx context.Context, request metric
 		return getTransferBreakdownAuthResponse(ctx, statusCode), nil
 	}
 	filter := transferBreakdownParamsToFilter(request.Params)
-	freshness, err := s.reporter.GetTransferFreshness(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
+	freshness := transferMetricsFreshness(filter)
 	groupBy := "scope"
 	if request.Params.GroupBy != nil {
 		groupBy = string(*request.Params.GroupBy)
@@ -390,6 +384,18 @@ func transferBreakdownParamsToFilter(params metricsapi.GetTransferBreakdownParam
 		Bucket:               generatedString(params.Bucket),
 		SHA256:               generatedString(params.Sha256),
 		User:                 generatedString(params.User),
+	}
+}
+
+func transferMetricsFreshness(filter usage.Filter) metricsapi.TransferMetricsFreshness {
+	isStale := false
+	missingBuckets := []string{}
+	return metricsapi.TransferMetricsFreshness{
+		IsStale:             &isStale,
+		MissingBuckets:      &missingBuckets,
+		RequiredFrom:        filter.From,
+		RequiredTo:          filter.To,
+		LatestCompletedSync: nil,
 	}
 }
 

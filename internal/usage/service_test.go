@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/metricsapi"
 )
@@ -153,16 +152,7 @@ func (s *optimizedReportStore) QueryTransferBreakdown(_ context.Context, _ Filte
 }
 
 type objectReaderSpy struct {
-	ids     map[string][]string
-	objects map[string]*drs.DrsObject
-}
-
-func (s *objectReaderSpy) GetObject(_ context.Context, ident, _ string) (*drs.DrsObject, error) {
-	obj, ok := s.objects[ident]
-	if !ok {
-		return nil, errors.New("missing object")
-	}
-	return obj, nil
+	ids map[string][]string
 }
 
 func (s *objectReaderSpy) ListObjectIDsByScope(_ context.Context, organization, project, _ string) ([]string, error) {
@@ -202,7 +192,7 @@ func TestServiceListsReadableObjectIDsByScopeInRequestOrder(t *testing.T) {
 	}}
 	service := NewService(Dependencies{Objects: objects})
 	requested := []string{"c", "missing", "a", "b"}
-	got, err := service.ListReadableObjectIDs(context.Background(), ScopeQuery{
+	got, err := service.listReadableObjectIDs(context.Background(), ScopeQuery{
 		Scopes: []Scope{{Organization: "org-1", Project: "p-1"}, {Organization: "org-2", Project: "p-2"}},
 	}, requested)
 	if err != nil {
@@ -212,7 +202,7 @@ func TestServiceListsReadableObjectIDsByScopeInRequestOrder(t *testing.T) {
 		t.Fatalf("readable IDs = %v, want %v", got, want)
 	}
 
-	unscoped, err := service.ListReadableObjectIDs(context.Background(), ScopeQuery{}, requested)
+	unscoped, err := service.listReadableObjectIDs(context.Background(), ScopeQuery{}, requested)
 	if err != nil {
 		t.Fatalf("unscoped ListReadableObjectIDs error: %v", err)
 	}
@@ -296,11 +286,7 @@ func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	if err != nil || got == nil || got.Size == nil || *got.Size != 17 {
 		t.Fatalf("GetFileUsage() = %+v, %v", got, err)
 	}
-	items, err := service.ListFileUsageByObjectIDs(ctx, []string{"object-1"})
-	if err != nil || len(items) != 1 || items[0].ObjectId == nil || *items[0].ObjectId != "object-1" {
-		t.Fatalf("ListFileUsageByObjectIDs() = %+v, %v", items, err)
-	}
-	items, err = service.ListFileUsage(ctx, FileUsageQuery{Limit: 1})
+	items, err := service.ListFileUsage(ctx, FileUsageQuery{Limit: 1})
 	if err != nil || len(items) != 1 || store.listCalls != 1 {
 		t.Fatalf("ListFileUsage() = %+v, %v (calls=%d)", items, err, store.listCalls)
 	}
@@ -319,9 +305,6 @@ func TestServiceDelegatesUnscopedQueriesAndAvailabilityErrors(t *testing.T) {
 	var unavailable *Service
 	if _, err := unavailable.GetFileUsage(ctx, "object-1"); !errors.Is(err, ErrReportsUnavailable) {
 		t.Fatalf("nil GetFileUsage() error = %v", err)
-	}
-	if _, err := unavailable.ListFileUsageByObjectIDs(ctx, nil); !errors.Is(err, ErrReportsUnavailable) {
-		t.Fatalf("nil ListFileUsageByObjectIDs() error = %v", err)
 	}
 	if _, err := NewService(Dependencies{}).GetFileUsageSummary(ctx, FileUsageSummaryQuery{}); !errors.Is(err, ErrReportsUnavailable) {
 		t.Fatalf("missing reports summary error = %v", err)

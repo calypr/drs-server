@@ -76,22 +76,15 @@ type metricsReporterFake struct {
 	summary              metricsapi.FileUsageSummary
 	transferSummary      metricsapi.TransferAttributionSummary
 	transferBreakdown    []metricsapi.TransferAttributionBreakdown
-	freshness            metricsapi.TransferMetricsFreshness
 	getFileUsageErr      error
 	listFileUsageErr     error
 	batchErr             error
 	summaryErr           error
 	scopedFileUsageErr   error
-	freshnessErr         error
 	transferSummaryErr   error
 	transferBreakdownErr error
 	transferSummaryFn    func(usage.TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error)
 	transferBreakdownFn  func(usage.TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error)
-	lastFileQuery        usage.FileUsageQuery
-	lastBatchQuery       usage.FileUsageBatchQuery
-	lastSummaryQuery     usage.FileUsageSummaryQuery
-	lastTransferQuery    usage.TransferSummaryQuery
-	lastBreakdownQuery   usage.TransferBreakdownQuery
 }
 
 func (f *metricsReporterFake) GetFileUsage(_ context.Context, objectID string) (*metricsapi.FileUsage, error) {
@@ -105,22 +98,7 @@ func (f *metricsReporterFake) GetFileUsage(_ context.Context, objectID string) (
 	return &item, nil
 }
 
-func (f *metricsReporterFake) ListFileUsageByObjectIDs(_ context.Context, ids []string) ([]metricsapi.FileUsage, error) {
-	items := make([]metricsapi.FileUsage, 0, len(ids))
-	for _, id := range ids {
-		if item, ok := f.fileUsage[id]; ok {
-			items = append(items, item)
-		}
-	}
-	return items, nil
-}
-
-func (f *metricsReporterFake) ListReadableObjectIDs(context.Context, usage.ScopeQuery, []string) ([]string, error) {
-	return nil, nil
-}
-
 func (f *metricsReporterFake) ListFileUsageBatch(_ context.Context, query usage.FileUsageBatchQuery) ([]metricsapi.FileUsage, error) {
-	f.lastBatchQuery = query
 	if f.batchErr != nil {
 		return nil, f.batchErr
 	}
@@ -139,7 +117,6 @@ func (f *metricsReporterFake) GetScopedFileUsage(_ context.Context, objectID str
 }
 
 func (f *metricsReporterFake) ListFileUsage(_ context.Context, query usage.FileUsageQuery) ([]metricsapi.FileUsage, error) {
-	f.lastFileQuery = query
 	if f.listFileUsageErr != nil {
 		return nil, f.listFileUsageErr
 	}
@@ -147,7 +124,6 @@ func (f *metricsReporterFake) ListFileUsage(_ context.Context, query usage.FileU
 }
 
 func (f *metricsReporterFake) GetFileUsageSummary(_ context.Context, query usage.FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error) {
-	f.lastSummaryQuery = query
 	if f.summaryErr != nil {
 		return metricsapi.FileUsageSummary{}, f.summaryErr
 	}
@@ -155,7 +131,6 @@ func (f *metricsReporterFake) GetFileUsageSummary(_ context.Context, query usage
 }
 
 func (f *metricsReporterFake) GetTransferAttributionSummary(_ context.Context, query usage.TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error) {
-	f.lastTransferQuery = query
 	if f.transferSummaryErr != nil {
 		return metricsapi.TransferAttributionSummary{}, f.transferSummaryErr
 	}
@@ -166,7 +141,6 @@ func (f *metricsReporterFake) GetTransferAttributionSummary(_ context.Context, q
 }
 
 func (f *metricsReporterFake) GetTransferAttributionBreakdown(_ context.Context, query usage.TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error) {
-	f.lastBreakdownQuery = query
 	if f.transferBreakdownErr != nil {
 		return nil, f.transferBreakdownErr
 	}
@@ -174,13 +148,6 @@ func (f *metricsReporterFake) GetTransferAttributionBreakdown(_ context.Context,
 		return f.transferBreakdownFn(query)
 	}
 	return append([]metricsapi.TransferAttributionBreakdown(nil), f.transferBreakdown...), nil
-}
-
-func (f *metricsReporterFake) GetTransferFreshness(_ context.Context, _ usage.Filter) (metricsapi.TransferMetricsFreshness, error) {
-	if f.freshnessErr != nil {
-		return metricsapi.TransferMetricsFreshness{}, f.freshnessErr
-	}
-	return f.freshness, nil
 }
 
 var _ usage.Reporter = (*metricsReporterFake)(nil)

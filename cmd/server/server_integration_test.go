@@ -161,7 +161,7 @@ s3_credentials:
 		Objects:        objectService,
 		Transfers:      transferService,
 		UsageIngest:    backend.usageIngest,
-		UsageReports:   usageService.Reports(),
+		UsageReports:   usageService,
 		Buckets:        bucketService,
 		ProjectStorage: projectStorageService,
 	}, httpapi.Options{Internal: true})

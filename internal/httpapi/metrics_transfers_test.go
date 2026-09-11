@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/usage"
@@ -65,7 +66,7 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 		t.Fatalf("unexpected provider transfer event: %+v", event)
 	}
 
-	summaryReq := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/transfers/summary?organization=calypr&project=proj-a&direction=download&allow_stale=true", nil)
+	summaryReq := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/transfers/summary?organization=calypr&project=proj-a&direction=download&from=2026-04-01T00:00:00Z&to=2026-04-30T00:00:00Z&allow_stale=true", nil)
 	summaryResp, err := app.Test(summaryReq)
 	if err != nil {
 		t.Fatalf("summary request failed: %v", err)
@@ -80,6 +81,14 @@ func TestMetricsRoutes_TransferAttribution(t *testing.T) {
 	}
 	if summary.EventCount == nil || *summary.EventCount != 1 || summary.DownloadEventCount == nil || *summary.DownloadEventCount != 1 || summary.BytesDownloaded == nil || *summary.BytesDownloaded != 42 {
 		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if summary.Freshness == nil || summary.Freshness.IsStale == nil || *summary.Freshness.IsStale || summary.Freshness.MissingBuckets == nil || len(*summary.Freshness.MissingBuckets) != 0 || summary.Freshness.LatestCompletedSync != nil {
+		t.Fatalf("unexpected transfer freshness: %+v", summary.Freshness)
+	}
+	wantFrom, _ := time.Parse(time.RFC3339, "2026-04-01T00:00:00Z")
+	wantTo, _ := time.Parse(time.RFC3339, "2026-04-30T00:00:00Z")
+	if summary.Freshness.RequiredFrom == nil || !summary.Freshness.RequiredFrom.Equal(wantFrom) || summary.Freshness.RequiredTo == nil || !summary.Freshness.RequiredTo.Equal(wantTo) {
+		t.Fatalf("unexpected transfer freshness bounds: %+v", summary.Freshness)
 	}
 
 	breakdownReq := httptest.NewRequest(http.MethodGet, "/index/v1/metrics/transfers/breakdown?group_by=user&user=user@example.com&allow_stale=true", nil)
@@ -143,14 +152,7 @@ func TestProviderTransferHandlerCoversAuthAndDependencyErrors(t *testing.T) {
 
 func TestTransferReportHandlersPropagateValidationAndDependencyErrors(t *testing.T) {
 	wantErr := errors.New("transfer report unavailable")
-	server := &metricsServer{reporter: &metricsReporterFake{freshnessErr: wantErr}}
-	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
-		t.Fatalf("summary freshness error = %v", err)
-	}
-	if _, err := server.GetTransferBreakdown(context.Background(), metricsapi.GetTransferBreakdownRequestObject{}); !errors.Is(err, wantErr) {
-		t.Fatalf("breakdown freshness error = %v", err)
-	}
-	server = &metricsServer{reporter: &metricsReporterFake{transferSummaryErr: wantErr, transferBreakdownErr: wantErr}}
+	server := &metricsServer{reporter: &metricsReporterFake{transferSummaryErr: wantErr, transferBreakdownErr: wantErr}}
 	if _, err := server.GetTransferSummary(context.Background(), metricsapi.GetTransferSummaryRequestObject{}); !errors.Is(err, wantErr) {
 		t.Fatalf("summary dependency error = %v", err)
 	}

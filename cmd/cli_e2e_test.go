@@ -429,7 +429,7 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 		Objects:        objectService,
 		Transfers:      transferService,
 		UsageIngest:    database,
-		UsageReports:   usageService.Reports(),
+		UsageReports:   usageService,
 		Buckets:        bucketService,
 		ProjectStorage: projectStorageService,
 	}, httpapi.Options{Docs: true, GA4GH: true, Metrics: true, Internal: true})

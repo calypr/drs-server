@@ -35,7 +35,7 @@ func registerServerRoutes(rt *serverRuntime) {
 		Transfers:      rt.transferService,
 		LFS:            rt.lfsService,
 		UsageIngest:    rt.usageIngest,
-		UsageReports:   rt.usageService.Reports(),
+		UsageReports:   rt.usageService,
 		Buckets:        rt.bucketService,
 		ProjectStorage: rt.projectStorage,
 		Authorization:  rt.authzHandler,
