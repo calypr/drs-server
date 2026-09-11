@@ -271,6 +271,9 @@ func (db *Store) DeleteObject(ctx context.Context, id string) error {
 		if err := db.requireContentMethodTx(ctx, tx, canonicalID, "delete"); err != nil {
 			return err
 		}
+		if err := db.deletePendingUsageEventsTx(ctx, tx, []string{canonicalID}); err != nil {
+			return err
+		}
 
 		result, err := db.txExecContext(ctx, tx, "DELETE FROM drs_object WHERE id = ?", canonicalID)
 		if err != nil {
@@ -373,6 +376,9 @@ func (db *Store) BulkDeleteObjects(ctx context.Context, ids []string) error {
 		if len(canonicalIDs) == 0 {
 			return nil
 		}
+		if err := db.deletePendingUsageEventsTx(ctx, tx, canonicalIDs); err != nil {
+			return err
+		}
 
 		condition, args := db.dialect.ListArgs("id", canonicalIDs)
 		query := "DELETE FROM drs_object WHERE " + condition
@@ -381,6 +387,12 @@ func (db *Store) BulkDeleteObjects(ctx context.Context, ids []string) error {
 		}
 		return nil
 	})
+}
+
+func (db *Store) deletePendingUsageEventsTx(ctx context.Context, tx *sql.Tx, objectIDs []string) error {
+	condition, args := db.dialect.ListArgs("object_id", objectIDs)
+	_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event WHERE "+condition, args...)
+	return err
 }
 
 func (db *Store) UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []drs.AccessMethod) error {
