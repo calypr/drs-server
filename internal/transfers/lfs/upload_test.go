@@ -106,11 +106,12 @@ func TestLFSUploadWorkflowPreservesPartSizeOrderAndAccountingOrder(t *testing.T)
 }
 
 type lfsMetadataObjectSpy struct {
-	events      *[]string
-	getErr      error
-	object      *drs.DrsObject
-	registered  []drs.DrsObject
-	registerErr error
+	events              *[]string
+	getErr              error
+	object              *drs.DrsObject
+	registered          []drs.DrsObject
+	registerErr         error
+	objectAfterRegister bool
 }
 
 func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*drs.DrsObject, error) {
@@ -121,13 +122,19 @@ func (s *lfsMetadataObjectSpy) GetObject(_ context.Context, _, _ string) (*drs.D
 func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []drs.DrsObject) error {
 	*s.events = append(*s.events, "register")
 	s.registered = append([]drs.DrsObject(nil), records...)
+	if s.objectAfterRegister && len(records) > 0 {
+		s.object = &records[0]
+		s.getErr = nil
+	}
 	return s.registerErr
 }
 
 type metadataPendingSpy struct {
-	events     *[]string
-	entry      *PendingMetadata
-	consumeErr error
+	events      *[]string
+	entry       *PendingMetadata
+	replacement *PendingMetadata
+	getErr      error
+	consumeErr  error
 }
 
 func (s *metadataPendingSpy) SavePendingMetadata(context.Context, []PendingMetadata) error {
@@ -135,6 +142,9 @@ func (s *metadataPendingSpy) SavePendingMetadata(context.Context, []PendingMetad
 }
 
 func (s *metadataPendingSpy) GetPendingMetadata(context.Context, string) (*PendingMetadata, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
 	if s.entry == nil {
 		return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 	}
@@ -146,8 +156,32 @@ func (s *metadataPendingSpy) ConsumePendingMetadata(_ context.Context, _ Pending
 	if s.consumeErr != nil {
 		return s.consumeErr
 	}
+	if s.replacement != nil {
+		s.entry = s.replacement
+		s.replacement = nil
+		return nil
+	}
 	s.entry = nil
 	return nil
+}
+
+func TestLFSMetadataWorkflowReportsPendingLookupFailureForExistingObject(t *testing.T) {
+	events := make([]string, 0, 1)
+	pendingErr := fmt.Errorf("pending database unavailable")
+	service := NewService(nil,
+		&lfsMetadataObjectSpy{events: &events, object: &drs.DrsObject{Id: "record"}},
+		nil,
+		&metadataPendingSpy{events: &events, getErr: pendingErr},
+		&lfsUploadAccountingSpy{events: &events},
+		nil,
+	)
+
+	if err := service.Verify(context.Background(), "record"); err != pendingErr {
+		t.Fatalf("Verify() error = %v, want %v", err, pendingErr)
+	}
+	if strings.Join(events, ",") != "get" {
+		t.Fatalf("events = %v, want pending failure before accounting", events)
+	}
 }
 
 func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
@@ -229,6 +263,58 @@ func TestLFSMetadataWorkflowRetainsPendingMetadataWhenRegistrationFails(t *testi
 	}
 	if accounting.object == "" {
 		t.Fatal("retry did not record upload")
+	}
+}
+
+func TestLFSMetadataWorkflowProcessesPendingReplacementAfterObjectExists(t *testing.T) {
+	events := make([]string, 0, 8)
+	sha := strings.Repeat("d", 64)
+	typeName := "s3"
+	candidate := func(url string) lfsapi.DrsObjectCandidate {
+		return lfsapi.DrsObjectCandidate{
+			Checksums:     &[]lfsapi.Checksum{{Type: "sha256", Checksum: sha}},
+			AccessMethods: &[]lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}},
+		}
+	}
+	oldURL := "s3://bucket/old/" + sha
+	replacementURL := "s3://bucket/replacement/" + sha
+	pending := &metadataPendingSpy{
+		events: &events,
+		entry: &PendingMetadata{
+			OID:       sha,
+			Candidate: candidate(oldURL),
+		},
+		replacement: &PendingMetadata{
+			OID:       sha,
+			Candidate: candidate(replacementURL),
+		},
+	}
+	objectsPort := &lfsMetadataObjectSpy{
+		events:              &events,
+		getErr:              errorapi.ErrNotFound,
+		objectAfterRegister: true,
+	}
+	accounting := &lfsUploadAccountingSpy{events: &events}
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
+
+	if err := service.Verify(context.Background(), sha); err != nil {
+		t.Fatalf("first Verify() error = %v", err)
+	}
+	if err := service.Verify(context.Background(), sha); err != nil {
+		t.Fatalf("replacement Verify() error = %v", err)
+	}
+
+	if len(objectsPort.registered) != 1 {
+		t.Fatalf("registered records = %d, want 1 final record", len(objectsPort.registered))
+	}
+	if methods := objectsPort.registered[0].AccessMethods; methods == nil || len(*methods) != 1 || (*methods)[0].AccessUrl == nil || (*methods)[0].AccessUrl.Url != replacementURL {
+		t.Fatalf("registered record did not use replacement metadata: %+v", objectsPort.registered[0])
+	}
+	if pending.entry != nil {
+		t.Fatal("replacement pending metadata was not consumed")
+	}
+	if strings.Join(events, ",") != "get,register,consume,account,get,register,consume,account" {
+		t.Fatalf("events = %v, want replacement registration before accounting", events)
 	}
 }
 

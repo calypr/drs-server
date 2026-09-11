@@ -312,31 +312,34 @@ func (s *Service) Stage(ctx context.Context, candidates []lfsapi.DrsObjectCandid
 }
 
 func (s *Service) Verify(ctx context.Context, oid string) error {
-	object, err := s.objects.GetObject(ctx, oid, "read")
-	if err == nil {
-		return s.recordUpload(ctx, object.Id)
-	}
-	if !errorapi.IsNotFoundError(err) {
-		return err
+	object, objectErr := s.objects.GetObject(ctx, oid, "read")
+	if objectErr != nil && !errorapi.IsNotFoundError(objectErr) {
+		return objectErr
 	}
 	if s.pending == nil {
+		if objectErr == nil {
+			return s.recordUpload(ctx, object.Id)
+		}
 		return fmt.Errorf("pending LFS metadata store is not configured")
 	}
 	pending, err := s.pending.GetPendingMetadata(ctx, oid)
-	if err != nil {
-		return err
+	if err == nil {
+		internalObject, err := materializeCandidate(pending.Candidate, s.currentTime())
+		if err != nil {
+			return &MetadataCandidateError{Err: err}
+		}
+		if err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject}); err != nil {
+			return err
+		}
+		if err := s.pending.ConsumePendingMetadata(ctx, *pending); err != nil {
+			return err
+		}
+		return s.recordUpload(ctx, internalObject.Id)
 	}
-	internalObject, err := materializeCandidate(pending.Candidate, s.currentTime())
-	if err != nil {
-		return &MetadataCandidateError{Err: err}
+	if objectErr == nil && errorapi.IsNotFoundError(err) {
+		return s.recordUpload(ctx, object.Id)
 	}
-	if err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject}); err != nil {
-		return err
-	}
-	if err := s.pending.ConsumePendingMetadata(ctx, *pending); err != nil {
-		return err
-	}
-	return s.recordUpload(ctx, internalObject.Id)
+	return err
 }
 
 func materializeCandidate(value lfsapi.DrsObjectCandidate, now time.Time) (drs.DrsObject, error) {
