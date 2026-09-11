@@ -33,7 +33,7 @@ type PendingMetadata struct {
 type PendingStore interface {
 	SavePendingMetadata(context.Context, []PendingMetadata) error
 	GetPendingMetadata(context.Context, string) (*PendingMetadata, error)
-	PopPendingMetadata(context.Context, string) (*PendingMetadata, error)
+	ConsumePendingMetadata(context.Context, PendingMetadata) error
 }
 
 type UploadAccounting interface {
@@ -322,7 +322,7 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 	if s.pending == nil {
 		return fmt.Errorf("pending LFS metadata store is not configured")
 	}
-	pending, err := s.pending.PopPendingMetadata(ctx, oid)
+	pending, err := s.pending.GetPendingMetadata(ctx, oid)
 	if err != nil {
 		return err
 	}
@@ -331,6 +331,9 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 		return &MetadataCandidateError{Err: err}
 	}
 	if err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject}); err != nil {
+		return err
+	}
+	if err := s.pending.ConsumePendingMetadata(ctx, *pending); err != nil {
 		return err
 	}
 	return s.recordUpload(ctx, internalObject.Id)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -90,13 +91,17 @@ func (p *lfsTestServicePorts) GetPendingMetadata(_ context.Context, oid string) 
 	return &entry, nil
 }
 
-func (p *lfsTestServicePorts) PopPendingMetadata(_ context.Context, oid string) (*transferlfs.PendingMetadata, error) {
+func (p *lfsTestServicePorts) ConsumePendingMetadata(_ context.Context, expected transferlfs.PendingMetadata) error {
+	oid := expected.OID
 	entry, ok := p.pending[oid]
 	if !ok {
-		return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
+		return nil
+	}
+	if !entry.CreatedAt.Equal(expected.CreatedAt) || !entry.ExpiresAt.Equal(expected.ExpiresAt) || !reflect.DeepEqual(entry.Candidate, expected.Candidate) {
+		return nil
 	}
 	delete(p.pending, oid)
-	return &entry, nil
+	return nil
 }
 
 func (p *lfsTestServicePorts) RecordTransferAttributionEvents(_ context.Context, events []usage.Event) error {

@@ -1139,16 +1139,19 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	entry, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	entry, err := db.GetPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
-		t.Fatalf("PopPendingLFSMeta failed: %v", err)
+		t.Fatalf("GetPendingLFSMeta failed: %v", err)
 	}
 	if sqliteTestStringVal(entry.Candidate.Name) != "candidate" {
 		t.Fatalf("unexpected candidate payload: %+v", entry.Candidate)
 	}
 
-	if _, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
-		t.Fatalf("expected not found after pop")
+	if err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
+		t.Fatalf("ConsumePendingMetadata failed: %v", err)
+	}
+	if _, err := db.GetPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+		t.Fatalf("expected not found after consume")
 	}
 }
 
@@ -1178,7 +1181,7 @@ func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	if _, err := db.PopPendingMetadata(ctx, oid); err == nil {
+	if _, err := db.GetPendingMetadata(ctx, oid); err == nil {
 		t.Fatalf("expected not found for expired metadata")
 	}
 }

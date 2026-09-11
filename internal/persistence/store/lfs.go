@@ -1,11 +1,13 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -80,16 +82,15 @@ func (db *Store) GetPendingMetadata(ctx context.Context, oid string) (*transferl
 	}, nil
 }
 
-func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferlfs.PendingMetadata, error) {
+// ConsumePendingMetadata removes the expected pending entry if it is still
+// the entry that was read by the caller. A missing or replaced entry is an
+// expected no-op: another stage operation owns that newer metadata.
+func (db *Store) ConsumePendingMetadata(ctx context.Context, expected transferlfs.PendingMetadata) error {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer tx.Rollback()
-
-	if _, err := db.txExecContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE expires_time <= ?`, time.Now().UTC()); err != nil {
-		return nil, fmt.Errorf("failed to prune expired pending metadata: %w", err)
-	}
 
 	var (
 		raw       string
@@ -99,30 +100,49 @@ func (db *Store) PopPendingMetadata(ctx context.Context, oid string) (*transferl
 	if err := db.txQueryRowContext(ctx, tx, `
 		SELECT candidate_json, created_time, expires_time
 		FROM lfs_pending_metadata
-		WHERE oid = ? AND expires_time > ?
-	`, oid, time.Now().UTC()).Scan(&raw, &createdAt, &expiresAt); err != nil {
+		WHERE oid = ?
+	`, expected.OID).Scan(&raw, &createdAt, &expiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
+			return nil
 		}
-		return nil, fmt.Errorf("failed to load pending metadata for oid %s: %w", oid, err)
+		return fmt.Errorf("failed to load current pending metadata for oid %s: %w", expected.OID, err)
 	}
 
-	if _, err := db.txExecContext(ctx, tx, `DELETE FROM lfs_pending_metadata WHERE oid = ?`, oid); err != nil {
-		return nil, fmt.Errorf("failed to consume pending metadata for oid %s: %w", oid, err)
+	var current lfsapi.DrsObjectCandidate
+	if err := json.Unmarshal([]byte(raw), &current); err != nil {
+		return fmt.Errorf("failed to parse current pending metadata candidate for oid %s: %w", expected.OID, err)
+	}
+	currentCanonical, err := json.Marshal(current)
+	if err != nil {
+		return fmt.Errorf("failed to marshal current pending metadata candidate for oid %s: %w", expected.OID, err)
+	}
+	expectedCanonical, err := json.Marshal(expected.Candidate)
+	if err != nil {
+		return fmt.Errorf("failed to marshal expected pending metadata candidate for oid %s: %w", expected.OID, err)
+	}
+	if !createdAt.Equal(expected.CreatedAt) || !expiresAt.Equal(expected.ExpiresAt) || !bytes.Equal(currentCanonical, expectedCanonical) {
+		return nil
 	}
 
-	var c lfsapi.DrsObjectCandidate
-	if err := json.Unmarshal([]byte(raw), &c); err != nil {
-		return nil, fmt.Errorf("failed to parse pending metadata candidate for oid %s: %w", oid, err)
+	candidateCondition := "candidate_json = ?"
+	if strings.HasPrefix(db.dialect.Rebind("?"), "$") {
+		candidateCondition = "candidate_json = CAST(? AS JSONB)"
+	}
+	result, err := db.txExecContext(ctx, tx, fmt.Sprintf(`
+		DELETE FROM lfs_pending_metadata
+		WHERE oid = ? AND %s AND created_time = ? AND expires_time = ?
+	`, candidateCondition), expected.OID, raw, createdAt, expiresAt)
+	if err != nil {
+		return fmt.Errorf("failed to consume pending metadata for oid %s: %w", expected.OID, err)
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("failed to inspect pending metadata consumption for oid %s: %w", expected.OID, err)
+	} else if affected == 0 {
+		return nil
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return fmt.Errorf("failed to commit pending metadata consumption for oid %s: %w", expected.OID, err)
 	}
-	return &transferlfs.PendingMetadata{
-		OID:       oid,
-		Candidate: c,
-		CreatedAt: createdAt,
-		ExpiresAt: expiresAt,
-	}, nil
+	return nil
 }

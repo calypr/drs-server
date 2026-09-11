@@ -125,8 +125,9 @@ func (s *lfsMetadataObjectSpy) RegisterObjects(_ context.Context, records []drs.
 }
 
 type metadataPendingSpy struct {
-	events *[]string
-	entry  *PendingMetadata
+	events     *[]string
+	entry      *PendingMetadata
+	consumeErr error
 }
 
 func (s *metadataPendingSpy) SavePendingMetadata(context.Context, []PendingMetadata) error {
@@ -134,12 +135,19 @@ func (s *metadataPendingSpy) SavePendingMetadata(context.Context, []PendingMetad
 }
 
 func (s *metadataPendingSpy) GetPendingMetadata(context.Context, string) (*PendingMetadata, error) {
+	if s.entry == nil {
+		return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
+	}
 	return s.entry, nil
 }
 
-func (s *metadataPendingSpy) PopPendingMetadata(context.Context, string) (*PendingMetadata, error) {
-	*s.events = append(*s.events, "pop")
-	return s.entry, nil
+func (s *metadataPendingSpy) ConsumePendingMetadata(_ context.Context, _ PendingMetadata) error {
+	*s.events = append(*s.events, "consume")
+	if s.consumeErr != nil {
+		return s.consumeErr
+	}
+	s.entry = nil
+	return nil
 }
 
 func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
@@ -165,7 +173,7 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 		t.Fatalf("Verify() error = %v", err)
 	}
 
-	wantEvents := []string{"get", "pop", "register", "account"}
+	wantEvents := []string{"get", "register", "consume", "account"}
 	if strings.Join(events, ",") != strings.Join(wantEvents, ",") {
 		t.Fatalf("events = %v, want %v", events, wantEvents)
 	}
@@ -174,6 +182,87 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	}
 	if accounting.object != objectsPort.registered[0].Id {
 		t.Fatalf("accounted object = %q, registered object = %q", accounting.object, objectsPort.registered[0].Id)
+	}
+	if pending.entry != nil {
+		t.Fatal("pending metadata was not consumed")
+	}
+}
+
+func TestLFSMetadataWorkflowRetainsPendingMetadataWhenRegistrationFails(t *testing.T) {
+	events := make([]string, 0, 8)
+	sha := strings.Repeat("b", 64)
+	typeName := "s3"
+	url := "s3://bucket/" + sha
+	methods := []lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}}
+	candidate := lfsapi.DrsObjectCandidate{
+		Checksums:     &[]lfsapi.Checksum{{Type: "sha256", Checksum: sha}},
+		AccessMethods: &methods,
+	}
+	pending := &metadataPendingSpy{
+		events: &events,
+		entry:  &PendingMetadata{OID: sha, Candidate: candidate},
+	}
+	registerErr := fmt.Errorf("registration unavailable")
+	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound, registerErr: registerErr}
+	accounting := &lfsUploadAccountingSpy{events: &events}
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
+
+	if err := service.Verify(context.Background(), sha); err != registerErr {
+		t.Fatalf("first Verify() error = %v, want %v", err, registerErr)
+	}
+	if pending.entry == nil {
+		t.Fatal("pending metadata was consumed after registration failure")
+	}
+	if strings.Join(events, ",") != "get,register" {
+		t.Fatalf("first Verify() events = %v, want [get register]", events)
+	}
+
+	objectsPort.registerErr = nil
+	if err := service.Verify(context.Background(), sha); err != nil {
+		t.Fatalf("retry Verify() error = %v", err)
+	}
+	if pending.entry != nil {
+		t.Fatal("pending metadata was not consumed after successful retry")
+	}
+	if strings.Join(events, ",") != "get,register,get,register,consume,account" {
+		t.Fatalf("retry Verify() events = %v", events)
+	}
+	if accounting.object == "" {
+		t.Fatal("retry did not record upload")
+	}
+}
+
+func TestLFSMetadataWorkflowReturnsConsumptionFailureAfterRegistration(t *testing.T) {
+	events := make([]string, 0, 5)
+	sha := strings.Repeat("c", 64)
+	typeName := "s3"
+	url := "s3://bucket/" + sha
+	methods := []lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}}
+	candidate := lfsapi.DrsObjectCandidate{
+		Checksums:     &[]lfsapi.Checksum{{Type: "sha256", Checksum: sha}},
+		AccessMethods: &methods,
+	}
+	consumeErr := fmt.Errorf("pending database unavailable")
+	pending := &metadataPendingSpy{
+		events:     &events,
+		entry:      &PendingMetadata{OID: sha, Candidate: candidate},
+		consumeErr: consumeErr,
+	}
+	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound}
+	accounting := &lfsUploadAccountingSpy{events: &events}
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
+
+	if err := service.Verify(context.Background(), sha); err != consumeErr {
+		t.Fatalf("Verify() error = %v, want %v", err, consumeErr)
+	}
+	if len(objectsPort.registered) != 1 {
+		t.Fatalf("registered records = %d, want 1", len(objectsPort.registered))
+	}
+	if accounting.object != "" {
+		t.Fatalf("accounting ran after consumption failure for %q", accounting.object)
+	}
+	if strings.Join(events, ",") != "get,register,consume" {
+		t.Fatalf("events = %v, want [get register consume]", events)
 	}
 }
 

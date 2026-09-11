@@ -523,8 +523,8 @@ func (serverPendingStore) SavePendingMetadata(context.Context, []transferlfs.Pen
 func (serverPendingStore) GetPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
 	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 }
-func (serverPendingStore) PopPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
-	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
+func (serverPendingStore) ConsumePendingMetadata(context.Context, transferlfs.PendingMetadata) error {
+	return nil
 }
 
 var _ transferlfs.PendingStore = serverPendingStore{}
