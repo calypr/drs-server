@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
@@ -31,9 +32,14 @@ type ResolvedAccess struct {
 }
 
 type BulkAccessLookupResult struct {
-	Requested           int
-	Resolved            []ResolvedAccess
-	UnresolvedObjectIDs []string
+	Requested int
+	Resolved  []ResolvedAccess
+	Failures  []AccessFailure
+}
+
+type AccessFailure struct {
+	ObjectID string
+	Err      error
 }
 
 func (s *Service) IssueAccess(ctx context.Context, request AccessLookupRequest) (AccessLookupResult, error) {
@@ -68,23 +74,18 @@ func (s *Service) IssueAccess(ctx context.Context, request AccessLookupRequest) 
 
 func (s *Service) IssueAccessBulk(ctx context.Context, requests []AccessLookupRequest) BulkAccessLookupResult {
 	result := BulkAccessLookupResult{Resolved: make([]ResolvedAccess, 0)}
-	unresolved := make(map[string]struct{})
-	unresolvedOrder := make([]string, 0)
 	for _, request := range requests {
 		result.Requested++
 		resolved, err := s.IssueAccess(ctx, request)
-		if err != nil || !resolved.Found {
-			if objectID := strings.TrimSpace(request.ObjectID); objectID != "" {
-				if _, seen := unresolved[objectID]; !seen {
-					unresolved[objectID] = struct{}{}
-					unresolvedOrder = append(unresolvedOrder, objectID)
-				}
-			}
+		if err == nil && !resolved.Found {
+			err = errorapi.ErrObjectLocationUnavailable
+		}
+		if err != nil {
+			result.Failures = append(result.Failures, AccessFailure{ObjectID: strings.TrimSpace(request.ObjectID), Err: err})
 			continue
 		}
 		result.Resolved = append(result.Resolved, ResolvedAccess{ObjectID: strings.TrimSpace(request.ObjectID), AccessID: strings.TrimSpace(request.AccessID), URL: resolved.URL})
 	}
-	result.UnresolvedObjectIDs = append(result.UnresolvedObjectIDs, unresolvedOrder...)
 	return result
 }
 

@@ -68,10 +68,37 @@ func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 		ResolvedDrsObjectAccessUrls: &resolved,
 		Summary:                     &summary,
 	}
-	if len(result.UnresolvedObjectIDs) > 0 {
-		unresolved := make(generated.Unresolved, 1)
-		unresolved[0].ErrorCode = valuePointer(fiber.StatusNotFound)
-		unresolved[0].ObjectIds = &result.UnresolvedObjectIDs
+	if len(result.Failures) > 0 {
+		type failureGroup struct {
+			status    int
+			objectIDs []string
+			seen      map[string]struct{}
+		}
+		groups := make([]failureGroup, 0)
+		groupByStatus := make(map[int]int)
+		for _, failure := range result.Failures {
+			objectID := strings.TrimSpace(failure.ObjectID)
+			if objectID == "" {
+				continue
+			}
+			status := ClassifyError(c.Context(), failure.Err).Status
+			groupIndex, ok := groupByStatus[status]
+			if !ok {
+				groupIndex = len(groups)
+				groupByStatus[status] = groupIndex
+				groups = append(groups, failureGroup{status: status, seen: make(map[string]struct{})})
+			}
+			if _, seen := groups[groupIndex].seen[objectID]; seen {
+				continue
+			}
+			groups[groupIndex].seen[objectID] = struct{}{}
+			groups[groupIndex].objectIDs = append(groups[groupIndex].objectIDs, objectID)
+		}
+		unresolved := make(generated.Unresolved, len(groups))
+		for i := range groups {
+			unresolved[i].ErrorCode = valuePointer(groups[i].status)
+			unresolved[i].ObjectIds = &groups[i].objectIDs
+		}
 		resp.UnresolvedDrsObjects = &unresolved
 	}
 	return c.JSON(resp)
