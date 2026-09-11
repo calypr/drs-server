@@ -1,11 +1,11 @@
 package httpapi
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
@@ -28,15 +28,26 @@ func (s *internalServer) InternalBulkOverwrite(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, err.Error())
 	}
 
-	result, err := s.objects.BulkOverwriteRecords(c.Context(), scope.Organization, scope.Project, req.Records)
-	if err != nil {
-		var invalid *objects.RecordValidationError
-		if errors.As(err, &invalid) {
-			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", invalid.Index, invalid))
+	candidates := make([]drs.DrsObject, len(req.Records))
+	for i, record := range req.Records {
+		candidate, err := fromInternalRecord(record)
+		if err != nil {
+			return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", i, err))
 		}
+		candidates[i] = candidate
+	}
+
+	result, err := s.objects.BulkOverwriteObjects(c.Context(), scope.Organization, scope.Project, candidates)
+	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(result)
+	return c.JSON(internalapi.BulkOverwriteResponse{
+		Processed:       len(candidates),
+		Created:         result.Created,
+		Replaced:        result.Replaced,
+		DidMatched:      result.DIDMatched,
+		ChecksumMatched: result.ChecksumMatched,
+	})
 }
 
 func (s *internalServer) InternalBulkMissingSHA256(c fiber.Ctx) error {
@@ -84,13 +95,29 @@ func (s *internalServer) InternalBulkHashes(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	matches, err := s.objects.LookupRecordsByChecksums(c.Context(), req.Hashes, "read")
+	queries := make([]objects.ChecksumQuery, len(req.Hashes))
+	for i, raw := range req.Hashes {
+		queries[i] = objects.ChecksumQuery{Value: raw}
+	}
+	matches, err := s.objects.LookupChecksumQueries(c.Context(), queries, "read")
 	if err != nil {
 		return HandleError(c, err)
 	}
+	result := make(map[string][]internalapi.InternalRecord, len(req.Hashes))
+	for i, hash := range req.Hashes {
+		var records []drs.DrsObject
+		if i < len(matches) {
+			records = matches[i]
+		}
+		converted := make([]internalapi.InternalRecord, len(records))
+		for j, record := range records {
+			converted[j] = toInternalRecord(record)
+		}
+		result[hash] = converted
+	}
 	return c.JSON(struct {
 		Results map[string][]internalapi.InternalRecord
-	}{Results: matches})
+	}{Results: result})
 }
 
 func (s *internalServer) InternalBulkSHA256Validity(c fiber.Ctx) error {
@@ -195,11 +222,11 @@ const (
 func (s *internalServer) InternalGet(c fiber.Ctx, _ string) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	id := c.Params("id")
-	record, err := s.objects.GetRecord(c.Context(), id, "read")
+	record, err := s.objects.GetObject(c.Context(), id, "read")
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(record)
+	return c.JSON(toInternalRecordResponse(*record))
 }
 
 func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListParams) error {
@@ -242,11 +269,15 @@ func (s *internalServer) InternalList(c fiber.Ctx, _ internalapi.InternalListPar
 		hashType, hashValue := objects.ParseHashQuery(hash, c.Query("hash_type"))
 		query.Checksum = &objects.ChecksumQuery{Type: hashType, Value: hashValue}
 	}
-	records, err := s.objects.ListRecords(c.Context(), query)
+	objects, err := s.objects.ListObjects(c.Context(), query)
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(records)
+	records := make([]internalapi.InternalRecord, len(objects))
+	for i, object := range objects {
+		records[i] = toInternalRecord(object)
+	}
+	return c.JSON(internalapi.ListRecordsResponse{Records: &records})
 }
 
 func scopeFromQuery(organization, program, project string) (objects.Scope, error) {
@@ -276,9 +307,13 @@ func (s *internalServer) InternalBulkDocuments(c fiber.Ctx) error {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: ids are required")
 	}
 
-	records, err := s.objects.GetRecords(c.Context(), ids, "read")
+	objects, err := s.objects.GetBulkObjects(c.Context(), ids, "read")
 	if err != nil {
 		return HandleError(c, err)
+	}
+	records := make([]internalapi.InternalRecord, len(objects))
+	for i, object := range objects {
+		records[i] = toInternalRecord(object)
 	}
 	return c.JSON(records)
 }
@@ -319,43 +354,58 @@ func parseInternalListPageFiber(c fiber.Ctx) (int, string, int, error) {
 }
 
 func (s *internalServer) InternalCreate(c fiber.Ctx) error {
-	candidates, bulkInput, err := decodeInternalCreateRecords(c)
+	candidates, err := decodeInternalCreateObjects(c)
 	if err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	created, err := s.objects.CreateRecords(c.Context(), candidates)
+	created, err := s.objects.RegisterScopedObjects(c.Context(), candidates)
 	if err != nil {
-		var invalid *objects.RecordValidationError
-		if errors.As(err, &invalid) {
-			if bulkInput {
-				return Reject(c, fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: record[%d] invalid: %v", invalid.Index, invalid))
-			}
-			return Reject(c, fiber.StatusBadRequest, "Invalid request body: record invalid: "+invalid.Error())
-		}
 		return HandleError(c, err)
+	}
+	converted := make([]internalapi.InternalRecord, len(created))
+	for i, record := range created {
+		converted[i] = toInternalRecord(record)
+		converted[i].Name = nil
 	}
 
 	if strings.HasSuffix(c.Path(), "/bulk") {
-		return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &created})
+		return c.Status(fiber.StatusCreated).JSON(internalapi.ListRecordsResponse{Records: &converted})
 	}
-	return c.Status(fiber.StatusCreated).JSON(created[0])
+	return c.Status(fiber.StatusCreated).JSON(converted[0])
 }
 
 func (s *internalServer) InternalBulkCreate(c fiber.Ctx) error {
 	return s.InternalCreate(c)
 }
 
-func decodeInternalCreateRecords(c fiber.Ctx) ([]internalapi.InternalRecord, bool, error) {
+func decodeInternalCreateObjects(c fiber.Ctx) ([]objects.ScopedObject, error) {
 	var request internalapi.BulkCreateRequest
 	bulk := c.Bind().JSON(&request) == nil && len(request.Records) > 0
 	if !bulk {
 		var single internalapi.InternalRecord
 		if err := c.Bind().JSON(&single); err != nil || single.Did == "" {
-			return nil, false, fmt.Errorf("no records found")
+			return nil, fmt.Errorf("no records found")
 		}
 		request.Records = []internalapi.InternalRecord{single}
 	}
-	return request.Records, bulk, nil
+	candidates := make([]objects.ScopedObject, len(request.Records))
+	for i, value := range request.Records {
+		record, err := fromInternalRecord(value)
+		if err == nil {
+			var scope objects.Scope
+			scope, err = scopeFromInternalRecord(value)
+			if err == nil {
+				candidates[i] = objects.ScopedObject{Object: record, Scope: scope}
+			}
+		}
+		if err != nil {
+			if bulk {
+				return nil, fmt.Errorf("record[%d] invalid: %w", i, err)
+			}
+			return nil, fmt.Errorf("record invalid: %w", err)
+		}
+	}
+	return candidates, nil
 }
 
 func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) error {
@@ -364,11 +414,11 @@ func (s *internalServer) InternalRemoveControlledAccess(c fiber.Ctx, _ string) e
 	if err := c.Bind().JSON(&req); err != nil || strings.TrimSpace(req.Resource) == "" {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	record, err := s.objects.RemoveRecordControlledAccess(c.Context(), id, req.Resource)
+	record, err := s.objects.RemoveObjectControlledAccess(c.Context(), id, req.Resource)
 	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(record)
+	return c.JSON(toInternalRecord(*record))
 }
 
 func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
@@ -377,13 +427,20 @@ func (s *internalServer) InternalUpdate(c fiber.Ctx, _ string) error {
 	if err := decodeStrictJSON(c.Body(), &req); err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
 	}
-	merged, err := s.objects.UpdateRecord(c.Context(), id, req)
+	if strings.TrimSpace(req.Did) == "" {
+		req.Did = id
+	}
+	scope, err := scopeFromInternalRecord(req)
 	if err != nil {
-		var invalid *objects.RecordValidationError
-		if errors.As(err, &invalid) {
-			return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+invalid.Error())
-		}
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+	}
+	update, err := fromInternalRecord(req)
+	if err != nil {
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body: "+err.Error())
+	}
+	merged, err := s.objects.UpdateObjectMetadata(c.Context(), id, update, scope, req.Size)
+	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.JSON(merged)
+	return c.JSON(toInternalRecord(merged))
 }

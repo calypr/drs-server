@@ -152,6 +152,31 @@ func (s *Service) RemoveObjectControlledAccess(ctx context.Context, objectID, re
 	return updated, nil
 }
 
+// ScopedObject is a registration candidate together with the project scope
+// whose access claim must be materialized before registration.
+type ScopedObject struct {
+	Object drs.DrsObject
+	Scope  Scope
+}
+
+// RegisterScopedObjects canonicalizes project access, materializes timestamps,
+// authorizes, and registers a batch of scoped objects in input order.
+func (s *Service) RegisterScopedObjects(ctx context.Context, candidates []ScopedObject) ([]drs.DrsObject, error) {
+	now := time.Now().UTC()
+	prepared := make([]drs.DrsObject, len(candidates))
+	for i, candidate := range candidates {
+		object, err := enforceCanonicalProjectScope(candidate.Object, candidate.Scope.Organization, candidate.Scope.Project)
+		if err != nil {
+			return nil, err
+		}
+		prepared[i] = materializeRecordTime(object, now)
+	}
+	if err := s.RegisterObjects(ctx, prepared); err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
 func (s *Service) RegisterObjects(ctx context.Context, objs []drs.DrsObject) error {
 	if err := s.validateExistingContentRead(ctx, objs); err != nil {
 		return err
