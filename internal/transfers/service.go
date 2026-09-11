@@ -71,16 +71,23 @@ type Service struct {
 	credentials       CredentialReader
 	events            EventRecorder
 	now               func() time.Time
+	signingExpiry     time.Duration
 	multipartMu       sync.Mutex
 	multipartSessions map[string]*multipartSession
 }
+
+const defaultSigningExpiry = 15 * time.Minute
 
 func NewService(deps Dependencies) *Service {
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{objects: deps.Objects, storage: deps.Storage, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now}
+	expires := deps.DefaultSigningExpiry
+	if expires <= 0 {
+		expires = defaultSigningExpiry
+	}
+	return &Service{objects: deps.Objects, storage: deps.Storage, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now, signingExpiry: expires}
 }
 
 func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadResult, error) {
@@ -104,7 +111,7 @@ func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadRe
 	}
 	expires := req.ExpiresIn
 	if expires <= 0 {
-		expires = defaultSigningExpiry()
+		expires = s.signingExpiry
 	}
 	filename := ""
 	if obj.Name != nil {
@@ -194,7 +201,7 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 	}
 	expires := req.ExpiresIn
 	if expires <= 0 {
-		expires = defaultSigningExpiry()
+		expires = s.signingExpiry
 	}
 	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodPut, ExpiresIn: expires})
 	if err != nil {
@@ -245,5 +252,3 @@ func (s *Service) sign(ctx context.Context, request storage.SignRequest) (storag
 func isNotFound(err error) bool {
 	return errors.Is(err, errorapi.ErrNotFound) || errors.Is(err, errorapi.ErrObjectNotFound)
 }
-
-func defaultSigningExpiry() time.Duration { return 15 * time.Minute }

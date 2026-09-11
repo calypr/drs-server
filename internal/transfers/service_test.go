@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
@@ -14,9 +15,10 @@ import (
 )
 
 type accessFake struct {
-	requests []storage.SignRequest
-	result   storage.SignedAccess
-	err      error
+	requests    []storage.SignRequest
+	partRequest storage.MultipartPartRequest
+	result      storage.SignedAccess
+	err         error
 }
 
 func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
@@ -27,8 +29,9 @@ func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (stora
 func (f *accessFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
 	return "", nil
 }
-func (f *accessFake) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
-	return storage.SignedAccess{}, nil
+func (f *accessFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	f.partRequest = request
+	return f.result, f.err
 }
 func (f *accessFake) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
 	return nil
@@ -144,6 +147,84 @@ func TestDownloadWithoutOptionalAccountingStillSigns(t *testing.T) {
 	}
 	if result.URL != "signed-download" {
 		t.Fatalf("Download() URL = %q, want signed-download", result.URL)
+	}
+}
+
+func TestSigningExpiryUsesConfiguredDefaultAcrossOperations(t *testing.T) {
+	const configured = 37 * time.Second
+	for _, test := range []struct {
+		name string
+		call func(*Service, *accessFake) error
+		get  func(*accessFake) time.Duration
+	}{
+		{
+			name: "download",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "upload",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.UploadURL(context.Background(), UploadRequest{ObjectID: "record-1"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "drs access",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.IssueAccess(context.Background(), AccessLookupRequest{ObjectID: "record-1", AccessID: "s3"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "multipart part",
+			call: func(service *Service, fake *accessFake) error {
+				if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}}); err != nil {
+					return err
+				}
+				_, err := service.SignMultipartPart(context.Background(), "", 1)
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.partRequest.ExpiresIn },
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			storage := &accessFake{result: storage.SignedAccess{Location: "signed"}}
+			service := NewService(Dependencies{
+				Objects:              downloadObjectFake{object: testRecord()},
+				Storage:              storage,
+				Events:               &eventFake{},
+				DefaultSigningExpiry: configured,
+			})
+			if err := test.call(service, storage); err != nil {
+				t.Fatalf("operation failed: %v", err)
+			}
+			if got := test.get(storage); got != configured {
+				t.Fatalf("expiry = %s, want configured %s", got, configured)
+			}
+		})
+	}
+}
+
+func TestSigningExpiryDefaultsAndExplicitRequestOverride(t *testing.T) {
+	storage := &accessFake{result: storage.SignedAccess{Location: "signed"}}
+	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: storage})
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1"}); err != nil {
+		t.Fatalf("default download failed: %v", err)
+	}
+	if got, want := storage.requests[0].ExpiresIn, 15*time.Minute; got != want {
+		t.Fatalf("default expiry = %s, want %s", got, want)
+	}
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1", ExpiresIn: 41 * time.Second}); err != nil {
+		t.Fatalf("explicit download failed: %v", err)
+	}
+	if got, want := storage.requests[1].ExpiresIn, 41*time.Second; got != want {
+		t.Fatalf("explicit expiry = %s, want %s", got, want)
 	}
 }
 

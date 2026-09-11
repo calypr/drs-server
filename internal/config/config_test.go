@@ -72,6 +72,36 @@ func TestLoadConfig_EnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_SigningExpiryFromFileAndEnvironment(t *testing.T) {
+	content := `
+auth:
+  mode: local
+  allow_unauthenticated: true
+database:
+  sqlite:
+    file: ":memory:"
+signing:
+  default_expiry_seconds: 60
+`
+	t.Setenv("DRS_SIGNING_DEFAULT_EXPIRY_SECONDS", "")
+	cfg, err := LoadConfig(writeConfigTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig file signing expiry failed: %v", err)
+	}
+	if cfg.Signing.DefaultExpirySeconds != 60 {
+		t.Fatalf("file signing expiry = %d, want 60", cfg.Signing.DefaultExpirySeconds)
+	}
+
+	t.Setenv("DRS_SIGNING_DEFAULT_EXPIRY_SECONDS", "31")
+	cfg, err = LoadConfig(writeConfigTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig environment signing expiry failed: %v", err)
+	}
+	if cfg.Signing.DefaultExpirySeconds != 31 {
+		t.Fatalf("environment signing expiry = %d, want 31", cfg.Signing.DefaultExpirySeconds)
+	}
+}
+
 func TestLoadConfig_CredentialEncryptionConfig(t *testing.T) {
 	content := `
 auth:

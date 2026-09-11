@@ -48,7 +48,11 @@ func (b *backend) SignMultipartPart(_ context.Context, binding storageports.Prov
 	}
 
 	partKey := storageports.MultipartPartObjectKey(request.Target.Key, request.UploadID, request.PartNumber)
-	location, err := b.signedURL(binding.PhysicalBucket, partKey, http.MethodPut, 15*time.Minute, "", "", cred)
+	expires := request.ExpiresIn
+	if expires <= 0 {
+		expires = 15 * time.Minute
+	}
+	location, err := b.signedURL(binding.PhysicalBucket, partKey, http.MethodPut, expires, "", "", cred)
 	if err != nil {
 		return storageports.SignedAccess{}, err
 	}

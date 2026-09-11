@@ -60,6 +60,7 @@ type MultipartPartRequest struct {
 	Target     Target
 	UploadID   UploadID
 	PartNumber int32
+	ExpiresIn  time.Duration
 }
 
 type CompleteMultipartRequest struct {

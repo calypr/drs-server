@@ -42,6 +42,10 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 			err = errors.Join(err, runtime.Close(context.Background()))
 		}
 	}()
+	signingExpiry, err := resolveSigningExpiry(cfg.Signing.DefaultExpirySeconds)
+	if err != nil {
+		return nil, err
+	}
 
 	applyCredentialEncryptionConfig(cfg)
 	cipher, cipherErr := credentialcipher.NewFromEnv()
@@ -137,12 +141,13 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		Objects: objectService,
 	})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Objects:      objectService,
-		Storage:      storageManager,
-		FileCounters: backend.usageIngest,
-		Scopes:       bucketService,
-		Credentials:  bucketService,
-		Events:       backend.usageIngest,
+		Objects:              objectService,
+		Storage:              storageManager,
+		FileCounters:         backend.usageIngest,
+		Scopes:               bucketService,
+		Credentials:          bucketService,
+		Events:               backend.usageIngest,
+		DefaultSigningExpiry: signingExpiry,
 	})
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
@@ -190,6 +195,18 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	runtime.authzHandler = authzHandler
 	runtime.requestIDHandler = requestIDHandler
 	return runtime, nil
+}
+
+const maxSigningExpirySeconds = int64((1<<63 - 1) / int64(time.Second))
+
+func resolveSigningExpiry(seconds int) (time.Duration, error) {
+	if seconds <= 0 {
+		return time.Duration(config.DefaultSigningExpirySeconds) * time.Second, nil
+	}
+	if uint64(seconds) > uint64(maxSigningExpirySeconds) {
+		return 0, fmt.Errorf("signing default expiry seconds exceed the maximum duration")
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 func postgresDSN(cfg config.PostgresConfig) string {

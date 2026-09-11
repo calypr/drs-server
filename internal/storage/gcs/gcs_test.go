@@ -10,8 +10,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
@@ -138,6 +140,33 @@ func TestNativeRangedAccessUsesV4RangeSignature(t *testing.T) {
 	}
 	if got := parsed.Query().Get("X-Goog-SignedHeaders"); !strings.Contains(got, "range") {
 		t.Fatalf("signed headers = %q, want range", got)
+	}
+}
+
+func TestNativeMultipartAccessUsesRequestedExpiry(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	privateKey := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: marshalPKCS8PrivateKeyMust(key)})
+	b := &backend{}
+	binding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{
+		AccessKey: "service-account@example.test", SecretKey: string(privateKey),
+	}}
+
+	access, err := b.SignMultipartPart(context.Background(), binding, storageports.MultipartPartRequest{
+		Target: storageports.Target{PhysicalBucket: "bucket", Key: "object"}, UploadID: "upload", PartNumber: 1, ExpiresIn: 7 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("SignMultipartPart returned error: %v", err)
+	}
+	parsed, err := url.Parse(access.Location)
+	if err != nil {
+		t.Fatalf("parse signed URL: %v", err)
+	}
+	got, err := strconv.Atoi(parsed.Query().Get("X-Goog-Expires"))
+	if err != nil || got < 419 || got > 420 {
+		t.Fatalf("multipart expiry = %d, want 419 or 420", got)
 	}
 }
 

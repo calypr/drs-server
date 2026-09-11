@@ -56,8 +56,7 @@ func (s *Service) IssueAccess(ctx context.Context, request AccessLookupRequest) 
 	if obj.Name != nil {
 		filename = objects.CleanToBasename(strings.TrimSpace(*obj.Name))
 	}
-	expires := defaultSigningExpiry()
-	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: expires, DownloadFilename: filename})
+	signed, err := s.sign(ctx, storage.SignRequest{Target: target, Method: http.MethodGet, ExpiresIn: s.signingExpiry, DownloadFilename: filename})
 	if err != nil {
 		return AccessLookupResult{}, err
 	}

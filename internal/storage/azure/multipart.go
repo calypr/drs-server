@@ -17,7 +17,11 @@ func (b *backend) SignMultipartPart(_ context.Context, binding storage.ProviderB
 		return storage.SignedAccess{}, err
 	}
 
-	signed, err := b.azureSignedURL(creds.ServiceURL, binding.PhysicalBucket, request.Target.Key, "PUT", 15*time.Minute, "", "", creds.SharedKey)
+	expires := request.ExpiresIn
+	if expires <= 0 {
+		expires = 15 * time.Minute
+	}
+	signed, err := b.azureSignedURL(creds.ServiceURL, binding.PhysicalBucket, request.Target.Key, "PUT", expires, "", "", creds.SharedKey)
 	if err != nil {
 		return storage.SignedAccess{}, err
 	}

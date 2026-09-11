@@ -169,6 +169,15 @@ func TestMultipartPreservesOpaqueIDETagsAndCallerOrder(t *testing.T) {
 	if _, err := provider.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4}); err != nil {
 		t.Fatal(err)
 	}
+	if presigner.partExpires != defaultExpiry {
+		t.Fatalf("multipart default expiry = %s, want %s", presigner.partExpires, defaultExpiry)
+	}
+	if _, err := provider.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4, ExpiresIn: 7 * time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+	if presigner.partExpires != 7*time.Minute {
+		t.Fatalf("multipart configured expiry = %s, want %s", presigner.partExpires, 7*time.Minute)
+	}
 	if aws.ToInt32(presigner.partInput.PartNumber) != 4 || aws.ToString(presigner.partInput.UploadId) != "opaque" {
 		t.Fatalf("part input = %#v", presigner.partInput)
 	}

@@ -101,7 +101,7 @@ func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNu
 	if err != nil {
 		return "", err
 	}
-	signed, err := s.storage.SignMultipartPart(ctx, storage.MultipartPartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), PartNumber: partNumber})
+	signed, err := s.storage.SignMultipartPart(ctx, storage.MultipartPartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), PartNumber: partNumber, ExpiresIn: s.signingExpiry})
 	if err != nil {
 		return "", err
 	}

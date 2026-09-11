@@ -52,7 +52,11 @@ func (b *backend) BeginMultipart(context.Context, storage.ProviderBinding, stora
 
 func (b *backend) SignMultipartPart(ctx context.Context, _ storage.ProviderBinding, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	partKey := storage.MultipartPartObjectKey(request.Target.Key, request.UploadID, request.PartNumber)
-	signed, err := b.rootBucket.SignedURL(ctx, partKey, &blob.SignedURLOptions{Expiry: 15 * time.Minute, Method: http.MethodPut})
+	expires := request.ExpiresIn
+	if expires <= 0 {
+		expires = 15 * time.Minute
+	}
+	signed, err := b.rootBucket.SignedURL(ctx, partKey, &blob.SignedURLOptions{Expiry: expires, Method: http.MethodPut})
 	if err != nil {
 		return storage.SignedAccess{Location: b.pathForKey(partKey)}, nil
 	}

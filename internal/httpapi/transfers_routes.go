@@ -11,20 +11,21 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/config"
 	domaintransfers "github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
+
+const maxSigningExpirySeconds = int64((1<<63 - 1) / int64(time.Second))
 
 func (s *internalServer) InternalDownload(c fiber.Ctx, _ string, _ internalapi.InternalDownloadParams) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return HandleError(c, errorapi.ErrAuthenticationRequired)
 	}
-	expires := time.Duration(config.DefaultSigningExpirySeconds) * time.Second
+	var expires time.Duration
 	if raw := c.Query("expires_in"); raw != "" {
-		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+		if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds > 0 && seconds <= maxSigningExpirySeconds {
 			expires = time.Duration(seconds) * time.Second
 		}
 	}
@@ -55,7 +56,7 @@ func (s *internalServer) InternalDownloadPart(c fiber.Ctx, _ string, _ internala
 	if err != nil || end < start {
 		return Reject(c, fiber.StatusBadRequest, "Invalid 'end' parameter")
 	}
-	result, err := s.transfers.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), ExpiresIn: time.Duration(config.DefaultSigningExpirySeconds) * time.Second, Range: &domaintransfers.ByteRange{Start: start, End: end}, Accounting: domaintransfers.AccountingEventOnly})
+	result, err := s.transfers.Download(c.Context(), domaintransfers.DownloadRequest{ObjectID: c.Params("file_id"), Range: &domaintransfers.ByteRange{Start: start, End: end}, Accounting: domaintransfers.AccountingEventOnly})
 	if err != nil {
 		return mapDownloadError(c, err)
 	}

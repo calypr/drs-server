@@ -41,7 +41,7 @@ func (s *backend) SignMultipartPart(ctx context.Context, binding storage.Provide
 		UploadId:   aws.String(string(request.UploadID)),
 		PartNumber: aws.Int32(request.PartNumber),
 	}, func(options *awss3.PresignOptions) {
-		options.Expires = defaultExpiry
+		options.Expires = expiry(request.ExpiresIn)
 	})
 	if err != nil {
 		return storage.SignedAccess{}, fmt.Errorf("failed to sign s3 multipart part: %w", err)

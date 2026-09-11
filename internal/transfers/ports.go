@@ -39,11 +39,12 @@ type EventRecorder interface {
 }
 
 type Dependencies struct {
-	Objects      ObjectPort
-	Storage      StoragePort
-	FileCounters usage.FileCounterRecorder
-	Scopes       ScopeReader
-	Credentials  CredentialReader
-	Events       EventRecorder
-	Now          func() time.Time
+	Objects              ObjectPort
+	Storage              StoragePort
+	FileCounters         usage.FileCounterRecorder
+	Scopes               ScopeReader
+	Credentials          CredentialReader
+	Events               EventRecorder
+	Now                  func() time.Time
+	DefaultSigningExpiry time.Duration
 }

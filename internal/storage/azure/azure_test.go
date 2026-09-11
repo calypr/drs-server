@@ -202,10 +202,12 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	b := &backend{transport: transport}
 	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
 	uploadID := storage.UploadID("upload-abc")
+	before := time.Now().UTC()
 	part, err := b.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{
 		Target:     storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
 		UploadID:   uploadID,
 		PartNumber: 2,
+		ExpiresIn:  7 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("SignMultipartPart returned error: %v", err)
@@ -217,6 +219,7 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	if got := partURL.Query().Get("comp"); got != "block" {
 		t.Fatalf("block comp query = %q, want block", got)
 	}
+	assertSASWindow(t, partURL.Query(), before, 7*time.Minute)
 	decodedBlockID, err := base64.StdEncoding.DecodeString(partURL.Query().Get("blockid"))
 	if err != nil {
 		t.Fatalf("decode block ID: %v", err)
