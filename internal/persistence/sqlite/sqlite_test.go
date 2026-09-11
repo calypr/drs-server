@@ -542,7 +542,11 @@ func TestSqliteDB_SaveS3CredentialRejectsDuplicatePhysicalBucket(t *testing.T) {
 func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:", nil)
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential codec: %v", err)
+	}
+	db, err := NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -557,7 +561,7 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 		{CredentialID: "org-a/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-a", SecretKey: "secret-a"},
 		{CredentialID: "org-b/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-b", SecretKey: "secret-b"},
 	} {
-		stored, err := db.CredentialCodec().Prepare(context.Background(), &cred)
+		stored, err := cipher.Prepare(context.Background(), &cred)
 		if err != nil {
 			t.Fatalf("Prepare(%s) failed: %v", cred.CredentialID, err)
 		}
@@ -577,12 +581,16 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:", nil)
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential codec: %v", err)
+	}
+	db, err := NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	first, err := db.CredentialCodec().Prepare(context.Background(), &buckets.Credential{
+	first, err := cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-a/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -600,7 +608,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		t.Fatalf("raw first insert failed: %v", err)
 	}
 
-	second, err := db.CredentialCodec().Prepare(context.Background(), &buckets.Credential{
+	second, err := cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-b/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",

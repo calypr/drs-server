@@ -251,7 +251,7 @@ func normalizeScopedStorageKey(prefix, key string, scopePrefixes ...string) stri
 	key = strings.Trim(strings.TrimSpace(key), "/")
 	if len(scopePrefixes) > 0 {
 		for _, scopePrefix := range scopePrefixes {
-			key = trimLeadingStoragePrefix(key, scopePrefix)
+			key = address.TrimLeadingStoragePrefix(key, scopePrefix)
 		}
 		if prefix == "" {
 			return key
@@ -265,15 +265,6 @@ func normalizeScopedStorageKey(prefix, key string, scopePrefixes ...string) stri
 		return key
 	}
 	return path.Join(prefix, key)
-}
-
-func trimLeadingStoragePrefix(key, prefix string) string {
-	key = strings.Trim(strings.TrimSpace(key), "/")
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	if key == prefix {
-		return ""
-	}
-	return strings.TrimPrefix(key, prefix+"/")
 }
 
 func (s *Service) probeStorage(ctx context.Context, bucket, key string) (*objectMetadata, error) {

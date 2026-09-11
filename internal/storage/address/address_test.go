@@ -118,3 +118,24 @@ func TestStorageAddressParsing(t *testing.T) {
 		t.Fatal("malformed URL escape should fail")
 	}
 }
+
+func TestTrimLeadingStoragePrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, prefix, want string
+	}{
+		{name: "empty", key: "", prefix: "prefix", want: ""},
+		{name: "empty prefix", key: "/object/", prefix: "", want: "object"},
+		{name: "both empty", key: "", prefix: "", want: ""},
+		{name: "equal", key: "/prefix/", prefix: " /prefix ", want: ""},
+		{name: "segment prefix", key: "prefix/object", prefix: "prefix", want: "object"},
+		{name: "partial prefix", key: "prefixes/object", prefix: "prefix", want: "prefixes/object"},
+		{name: "outer trim", key: " /prefix/object/ ", prefix: " /prefix/ ", want: "object"},
+		{name: "repeated slashes and dots", key: "prefix//./object", prefix: "prefix", want: "/./object"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := TrimLeadingStoragePrefix(tc.key, tc.prefix); got != tc.want {
+				t.Fatalf("TrimLeadingStoragePrefix(%q, %q) = %q, want %q", tc.key, tc.prefix, got, tc.want)
+			}
+		})
+	}
+}

@@ -93,3 +93,13 @@ func ParseS3URL(raw string) (bucket string, key string, ok bool) {
 	}
 	return bucket, key, true
 }
+
+// TrimLeadingStoragePrefix removes a complete storage prefix from a key.
+func TrimLeadingStoragePrefix(key, prefix string) string {
+	key = strings.Trim(strings.TrimSpace(key), "/")
+	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
+	if key == prefix {
+		return ""
+	}
+	return strings.TrimPrefix(key, prefix+"/")
+}

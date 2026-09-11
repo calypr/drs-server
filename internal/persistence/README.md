@@ -4,13 +4,14 @@
 
 ## Package layout
 
+- `store/` implements shared queries, mutations, and transactions through the backend's SQL dialect.
 - `sqlite/` implements the contracts with SQLite. `sqlite.NewSqliteDB` initializes and upgrades the runtime schema before it returns.
 - `postgres/` implements the contracts with PostgreSQL. `postgres.NewPostgresDB` initializes and upgrades the runtime schema before it returns.
 - `postgres/object_schema.sql` contains the object tables and indexes embedded by the PostgreSQL implementation.
 - `sqlite/scripts/` contains the manual SQLite bootstrap helper.
 - `postgres/scripts/` contains PostgreSQL maintenance SQL.
 
-Consumer packages own their narrow ports in `objects`, `buckets`, `transfers`, and `usage`. Both adapters implement those ports, and `cmd/server` explicitly composes the selected concrete backend. There is no shared database aggregate interface.
+Consumer packages own their ports in `objects`, `buckets`, `transfers`, and `usage`. Both backend constructors return `*store.Store`, which implements those ports. `cmd/server` selects the backend. There is no shared database aggregate interface.
 
 ## Object and access tables
 
@@ -23,7 +24,7 @@ One row stores the metadata for a canonical object record.
 - `id` is the text primary key.
 - `size`, `created_time`, `updated_time`, `name`, `version`, and `description` store object metadata.
 
-Core uses the canonical SHA-256 checksum to group and resolve content. The record ID remains the persisted primary key. `drs_object_alias` maps an alias ID, such as an older UUID, to that canonical record.
+The `objects` package uses the canonical SHA-256 checksum to group and resolve content. The record ID remains the persisted primary key. `drs_object_alias` maps an alias ID, such as an older UUID, to that canonical record.
 
 ### `drs_object_checksum`
 
@@ -47,7 +48,7 @@ Organization and project columns do not belong to this table. Scoped authorizati
 
 ### `drs_object_controlled_access`
 
-Each row associates an object with an Arborist-compatible resource path in `resource`. Core builds a path from an organization and project with `common.ResourcePath`. API and authz code use the stored resource values when they evaluate access.
+Each row associates an object with an Arborist-compatible resource path in `resource`. The shared persistence store builds a path from an organization and project with `access.ResourcePath` in `client/access`. The `objects` and authorization packages use the stored resource values when they evaluate access.
 
 ### `drs_object_read_policy`
 

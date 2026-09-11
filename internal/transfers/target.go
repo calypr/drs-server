@@ -304,7 +304,7 @@ func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	prefixes := buckets.NormalizedStoragePrefixes(scopes)
 	remainder := key
 	for _, prefix := range prefixes {
-		remainder = trimLeadingStoragePrefix(remainder, prefix)
+		remainder = address.TrimLeadingStoragePrefix(remainder, prefix)
 	}
 	composedPrefix := strings.Join(prefixes, "/")
 	switch {
@@ -315,21 +315,6 @@ func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	default:
 		return path.Join(composedPrefix, remainder)
 	}
-}
-
-func trimLeadingStoragePrefix(key, prefix string) string {
-	key = strings.Trim(strings.TrimSpace(key), "/")
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	if key == "" || prefix == "" {
-		return key
-	}
-	if key == prefix {
-		return ""
-	}
-	if strings.HasPrefix(key, prefix+"/") {
-		return strings.TrimPrefix(key, prefix+"/")
-	}
-	return key
 }
 
 func parseResourceScope(resource string) (organization, project string, ok bool) {

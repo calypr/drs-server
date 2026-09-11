@@ -57,14 +57,6 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
-// CredentialCodec returns the injected codec for credential persistence tests.
-func (s *Store) CredentialCodec() CredentialCodec {
-	if s == nil {
-		return nil
-	}
-	return s.cipher
-}
-
 func (s *Store) withContentWrite(ctx context.Context, fn func(*sql.Tx) error) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("database store is required")
