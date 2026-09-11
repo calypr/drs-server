@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"strings"
 
+	hplugin "github.com/hashicorp/go-plugin"
+
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
@@ -14,7 +16,7 @@ type Runtime struct {
 	logger               *slog.Logger
 	authentication       plugin.AuthenticationPlugin
 	authorization        plugin.AuthorizationPlugin
-	pluginClients        []*pluginClient
+	pluginProcesses      []*hplugin.Client
 	tokenResolver        *tokenAuthResolver
 	mock                 config.MockAuthConfig
 	localAuthzError      error
@@ -53,13 +55,13 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 	if pluginPath := auth.PluginPaths.Authz; pluginPath != "" {
 		if authorizer, err := newAuthorizationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
 			runtime.authorization = authorizer
-			runtime.pluginClients = append(runtime.pluginClients, authorizer.client)
+			runtime.pluginProcesses = append(runtime.pluginProcesses, authorizer.client.client)
 		}
 	}
 	if pluginPath := auth.PluginPaths.Authn; pluginPath != "" {
 		if authenticator, err := newAuthenticationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
 			runtime.authentication = authenticator
-			runtime.pluginClients = append(runtime.pluginClients, authenticator.client)
+			runtime.pluginProcesses = append(runtime.pluginProcesses, authenticator.client.client)
 		}
 	}
 
@@ -87,11 +89,9 @@ func (r *Runtime) Close() {
 	if r == nil {
 		return
 	}
-	for i := len(r.pluginClients) - 1; i >= 0; i-- {
-		if client := r.pluginClients[i]; client != nil && client.client != nil {
-			client.mu.Lock()
-			client.client.Kill()
-			client.mu.Unlock()
+	for i := len(r.pluginProcesses) - 1; i >= 0; i-- {
+		if process := r.pluginProcesses[i]; process != nil {
+			process.Kill()
 		}
 	}
 }
