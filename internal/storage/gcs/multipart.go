@@ -152,22 +152,13 @@ func (b *backend) clientForLocked(ctx context.Context, binding storageports.Prov
 	if b.allClients == nil {
 		b.allClients = make(map[*clientEntry]struct{})
 	}
-	if b.generation == nil {
-		b.generation = make(map[string]uint64)
-	}
-	if b.invalidated == nil {
-		b.invalidated = make(map[string]map[string]struct{})
-	}
 	key := canonicalCacheKey(binding.LookupKey)
 	if key == "" {
 		key = canonicalCacheKey(binding.PhysicalBucket)
 	}
-	fingerprint := credentialFingerprint(binding.Credential)
+	credential := credentialIdentityOf(binding.Credential)
 	if current := b.clients[key]; current != nil {
-		if current.fingerprint == "" || current.fingerprint == fingerprint {
-			return current.client, current, nil
-		}
-		if _, stale := b.invalidated[key][fingerprint]; stale {
+		if current.credential == credential {
 			return current.client, current, nil
 		}
 		current.retired = true
@@ -178,12 +169,8 @@ func (b *backend) clientForLocked(ctx context.Context, binding storageports.Prov
 	}
 	if value, ok := b.cache.Load(key); ok {
 		if client, ok := value.(*storage.Client); ok {
-			entry := &clientEntry{client: client, fingerprint: fingerprint, generation: b.generation[key]}
-			if _, stale := b.invalidated[key][fingerprint]; stale {
-				entry.retired = true
-			} else {
-				b.clients[key] = entry
-			}
+			entry := &clientEntry{client: client, credential: credential}
+			b.clients[key] = entry
 			b.allClients[entry] = struct{}{}
 			return client, entry, nil
 		}
@@ -192,7 +179,6 @@ func (b *backend) clientForLocked(ctx context.Context, binding storageports.Prov
 	if err != nil {
 		return nil, nil, err
 	}
-	generation := b.generation[key]
 	client, err := newClient(ctx, cred)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create GCS client: %w", err)
@@ -201,17 +187,10 @@ func (b *backend) clientForLocked(ctx context.Context, binding storageports.Prov
 		_ = client.Close()
 		return nil, nil, errors.New("gcs storage backend is closed")
 	}
-	entry := &clientEntry{client: client, fingerprint: fingerprint, generation: generation}
-	_, stale := b.invalidated[key][fingerprint]
-	if stale {
-		entry.retired = true
-	} else {
-		b.clients[key] = entry
-	}
+	entry := &clientEntry{client: client, credential: credential}
+	b.clients[key] = entry
 	b.allClients[entry] = struct{}{}
-	if !stale {
-		b.cache.Store(key, client)
-	}
+	b.cache.Store(key, client)
 	return client, entry, nil
 }
 
@@ -223,6 +202,7 @@ func (b *backend) closeEntryLocked(entry *clientEntry) {
 	if err := entry.client.Close(); err != nil {
 		b.closeErrors = append(b.closeErrors, err)
 	}
+	entry.credential = credentialIdentity{}
 }
 
 func (b *backend) Close() error {
@@ -270,6 +250,7 @@ func (b *backend) Close() error {
 			if err := entry.client.Close(); err != nil {
 				closeErrs = append(closeErrs, err)
 			}
+			entry.credential = credentialIdentity{}
 		}
 		b.clients = make(map[string]*clientEntry)
 		b.cache.Range(func(key, _ any) bool { b.cache.Delete(key); return true })

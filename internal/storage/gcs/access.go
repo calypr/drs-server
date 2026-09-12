@@ -2,8 +2,6 @@ package gcs
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,8 +25,6 @@ type backend struct {
 	cacheMu     sync.Mutex
 	clients     map[string]*clientEntry
 	allClients  map[*clientEntry]struct{}
-	generation  map[string]uint64
-	invalidated map[string]map[string]struct{}
 	closed      bool
 	closeOnce   sync.Once
 	closeErr    error
@@ -37,12 +33,36 @@ type backend struct {
 }
 
 type clientEntry struct {
-	client      *storage.Client
-	fingerprint string
-	generation  uint64
-	users       int
-	retired     bool
-	closed      bool
+	client     *storage.Client
+	credential credentialIdentity
+	users      int
+	retired    bool
+	closed     bool
+}
+
+type credentialIdentity struct {
+	present  bool
+	provider string
+	bucket   string
+	region   string
+	access   string
+	secret   string
+	endpoint string
+}
+
+func credentialIdentityOf(cred *buckets.Credential) credentialIdentity {
+	if cred == nil {
+		return credentialIdentity{}
+	}
+	return credentialIdentity{
+		present:  true,
+		provider: cred.Provider,
+		bucket:   cred.Bucket,
+		region:   cred.Region,
+		access:   cred.AccessKey,
+		secret:   cred.SecretKey,
+		endpoint: cred.Endpoint,
+	}
 }
 
 // New constructs the GCS provider registration.
@@ -56,26 +76,13 @@ func (b *backend) InvalidateBucket(bucket string) {
 		return
 	}
 	b.cacheMu.Lock()
-	if b.generation == nil {
-		b.generation = make(map[string]uint64)
-	}
 	if b.clients == nil {
 		b.clients = make(map[string]*clientEntry)
 	}
 	if b.allClients == nil {
 		b.allClients = make(map[*clientEntry]struct{})
 	}
-	if b.invalidated == nil {
-		b.invalidated = make(map[string]map[string]struct{})
-	}
-	b.generation[bucket]++
 	if current := b.clients[bucket]; current != nil {
-		if current.fingerprint != "" {
-			if b.invalidated[bucket] == nil {
-				b.invalidated[bucket] = make(map[string]struct{})
-			}
-			b.invalidated[bucket][current.fingerprint] = struct{}{}
-		}
 		current.retired = true
 		delete(b.clients, bucket)
 		if current.users == 0 {
@@ -93,15 +100,6 @@ func (b *backend) InvalidateBucket(bucket string) {
 
 func canonicalCacheKey(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func credentialFingerprint(cred *buckets.Credential) string {
-	if cred == nil {
-		return ""
-	}
-	material := strings.Join([]string{cred.Provider, cred.Bucket, cred.Region, cred.AccessKey, cred.SecretKey, cred.Endpoint}, "\x00")
-	hash := sha256.Sum256([]byte(material))
-	return hex.EncodeToString(hash[:])
 }
 
 func (b *backend) Sign(ctx context.Context, binding storageports.ProviderBinding, request storageports.SignRequest) (storageports.SignedAccess, error) {
