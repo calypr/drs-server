@@ -328,7 +328,12 @@ database:
 
 func writeConfigTestFile(t *testing.T, content string) string {
 	t.Helper()
-	file, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
+	return writeConfigTestFileWithExtension(t, content, ".yaml")
+}
+
+func writeConfigTestFileWithExtension(t *testing.T, content, extension string) string {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "config-*"+extension)
 	if err != nil {
 		t.Fatal(err)
 	}

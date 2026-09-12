@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -67,12 +69,30 @@ func loadConfigFile(configFile string, cfg *Config) error {
 
 	switch filepath.Ext(configFile) {
 	case ".yaml", ".yml":
-		if err := yaml.NewDecoder(f).Decode(cfg); err != nil {
+		decoder := yaml.NewDecoder(f)
+		decoder.KnownFields(true)
+		if err := decoder.Decode(cfg); err != nil {
 			return fmt.Errorf("failed to decode yaml config: %w", err)
 		}
+		var trailing any
+		if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+			if err == nil {
+				return fmt.Errorf("failed to decode yaml config: multiple documents are not allowed")
+			}
+			return fmt.Errorf("failed to decode trailing yaml config: %w", err)
+		}
 	case ".json":
-		if err := json.NewDecoder(f).Decode(cfg); err != nil {
+		decoder := json.NewDecoder(f)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(cfg); err != nil {
 			return fmt.Errorf("failed to decode json config: %w", err)
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+			if err == nil {
+				return fmt.Errorf("failed to decode json config: trailing values are not allowed")
+			}
+			return fmt.Errorf("failed to decode trailing json config: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported config file extension: %s", filepath.Ext(configFile))

@@ -6,22 +6,33 @@ import (
 	"strings"
 )
 
+type bucketScopeDefinition struct {
+	scope  BucketScopeConfig
+	source string
+}
+
 func cleanBucketScopeSubPath(raw string) string {
 	return strings.Trim(path.Clean("/"+strings.TrimSpace(raw)), "/")
 }
 
-func deriveBucketScopesFromBuckets(buckets []BucketConfig) ([]BucketScopeConfig, error) {
-	scopes := make([]BucketScopeConfig, 0)
+func deriveBucketScopesFromBuckets(buckets []BucketConfig) ([]bucketScopeDefinition, error) {
+	definitions := make([]bucketScopeDefinition, 0)
 	for i, bucket := range buckets {
 		for j, resource := range bucket.Resources {
 			resourceScopes, err := bucketResourceScopes(bucket.CredentialID, bucket.Bucket, resource)
 			if err != nil {
 				return nil, fmt.Errorf("buckets[%d].resources[%d]: %w", i, j, err)
 			}
-			scopes = append(scopes, resourceScopes...)
+			for k, scope := range resourceScopes {
+				source := fmt.Sprintf("buckets[%d].resources[%d]", i, j)
+				if len(resource.Projects) > 0 {
+					source += fmt.Sprintf(".projects[%d]", k)
+				}
+				definitions = append(definitions, bucketScopeDefinition{scope: scope, source: source})
+			}
 		}
 	}
-	return scopes, nil
+	return definitions, nil
 }
 
 func credentialIDsByPhysicalBucket(buckets []BucketConfig) map[string][]string {
@@ -80,8 +91,12 @@ func bucketResourceScopes(credentialID, bucketName string, resource BucketResour
 	scopes := make([]BucketScopeConfig, 0, len(resource.Projects))
 	for idx, project := range resource.Projects {
 		projectID := strings.TrimSpace(project.ProjectID)
+		legacyProjectID := strings.TrimSpace(project.Project)
+		if projectID != "" && legacyProjectID != "" && projectID != legacyProjectID {
+			return nil, fmt.Errorf("projects[%d]: project_id %q conflicts with project %q", idx, projectID, legacyProjectID)
+		}
 		if projectID == "" {
-			projectID = strings.TrimSpace(project.Project)
+			projectID = legacyProjectID
 		}
 		if projectID == "" {
 			return nil, fmt.Errorf("projects[%d]: project_id is required", idx)
