@@ -10,6 +10,7 @@ import (
 
 	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -40,6 +41,7 @@ func (db *Store) RecordTransferAttributionEvents(ctx context.Context, events []u
 	}
 	defer stmt.Close()
 	for _, ev := range events {
+		ev.SHA256 = canonicalTransferSHA256(ev.SHA256)
 		if ev.EventID == "" || ev.EventType == "" {
 			continue
 		}
@@ -131,6 +133,10 @@ func (db *Store) reconcileProviderTransferEvent(ctx context.Context, tx *sql.Tx,
 	if ev.StorageUrl != nil {
 		value := strings.TrimSpace(*ev.StorageUrl)
 		ev.StorageUrl = &value
+	}
+	if ev.Sha256 != nil {
+		value := canonicalTransferSHA256(*ev.Sha256)
+		ev.Sha256 = &value
 	}
 	status := metricsapi.ProviderTransferReconciliationStatus(usage.ProviderTransferUnmatched)
 	ev.ReconciliationStatus = &status
@@ -553,7 +559,7 @@ func (db *Store) transferAttributionWhere(filter usage.Filter, resources []strin
 		add("bucket = ?", strings.TrimSpace(filter.Bucket))
 	}
 	if strings.TrimSpace(filter.SHA256) != "" {
-		add("sha256 = ?", strings.TrimSpace(filter.SHA256))
+		add("sha256 = ?", canonicalTransferSHA256(filter.SHA256))
 	}
 	if strings.TrimSpace(filter.User) != "" {
 		user := strings.TrimSpace(filter.User)
@@ -573,6 +579,13 @@ func (db *Store) transferAttributionWhere(filter usage.Filter, resources []strin
 		return "", args
 	}
 	return " WHERE " + strings.Join(parts, " AND "), args
+}
+
+func canonicalTransferSHA256(raw string) string {
+	if canonical := objects.NormalizeOID(raw); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(raw)
 }
 
 func (db *Store) transferResourceClause(resources []string) (string, []any) {

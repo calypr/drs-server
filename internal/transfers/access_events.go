@@ -96,7 +96,7 @@ func eventFromObject(ctx context.Context, request AccessRequest) usage.Event {
 		direction = usage.ProviderTransferDirectionDownload
 	}
 	organization, project := scopeForAccess(ctx, obj, request.Scope, direction)
-	sha := sha256ForObject(obj)
+	sha, _ := objects.CanonicalSHA256(obj.Checksums)
 	bytesRequested := request.BytesRequested
 	if bytesRequested <= 0 && request.RangeStart != nil && request.RangeEnd != nil && *request.RangeEnd >= *request.RangeStart {
 		bytesRequested = *request.RangeEnd - *request.RangeStart + 1
@@ -221,13 +221,4 @@ func providerBucket(raw string) (string, string) {
 		return "", ""
 	}
 	return address.ProviderFromScheme(parsed.Scheme), strings.TrimSpace(parsed.Host)
-}
-
-func sha256ForObject(obj *drs.DrsObject) string {
-	for _, checksum := range obj.Checksums {
-		if strings.EqualFold(checksum.Type, "sha256") {
-			return strings.TrimSpace(checksum.Checksum)
-		}
-	}
-	return ""
 }

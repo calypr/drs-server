@@ -2,6 +2,7 @@ package transfers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/drs"
@@ -142,6 +143,32 @@ func TestEventFromObjectFixedRequestIdentityHasStableScopedIDs(t *testing.T) {
 	}
 	if first.EventID != usage.EventID(first) || first.AccessGrantID != usage.GrantID(first) {
 		t.Fatalf("event IDs were not computed from the attributed event: %+v", first)
+	}
+}
+
+func TestEventFromObjectUsesCanonicalSHA256ForAttributionIdentity(t *testing.T) {
+	const canonical = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	ctx := requestid.WithRequestID(context.Background(), "canonical-sha-request")
+	request := AccessRequest{
+		Object: &drs.DrsObject{
+			Id:        "object-1",
+			Checksums: []drs.Checksum{{Type: "SHA-256", Checksum: " SHA256:" + strings.ToUpper(canonical) + " "}},
+		},
+		AccessID:   "s3",
+		StorageURL: "s3://bucket/object-1",
+	}
+
+	event := eventFromObject(ctx, request)
+	if event.SHA256 != canonical {
+		t.Fatalf("event SHA256 = %q, want %q", event.SHA256, canonical)
+	}
+	canonicalRequest := request
+	canonicalObject := *request.Object
+	canonicalObject.Checksums = []drs.Checksum{{Type: "sha256", Checksum: canonical}}
+	canonicalRequest.Object = &canonicalObject
+	want := eventFromObject(ctx, canonicalRequest)
+	if event.EventID != want.EventID || event.AccessGrantID != want.AccessGrantID {
+		t.Fatalf("equivalent SHA forms produced different IDs: got=%+v want=%+v", event, want)
 	}
 }
 
