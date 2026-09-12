@@ -107,6 +107,27 @@ func TestLFSUploadWorkflowPreservesPartSizeOrderAndAccountingOrder(t *testing.T)
 	}
 }
 
+func TestLFSUploadEmptyBodyUsesOneZeroBytePart(t *testing.T) {
+	multipart := &lfsUploadMultipartSpy{}
+	accounting := &lfsUploadAccountingSpy{events: &multipart.events}
+	var uploaded []byte
+	transfer := transfers.NewService(transfers.Dependencies{Storage: multipart, Objects: lfsUploadObjectSpy{}})
+	service := NewService(transfer, lfsUploadObjectSpy{}, nil, nil, accounting, func(_ context.Context, _ string, content []byte) (string, error) {
+		uploaded = append([]byte(nil), content...)
+		return "empty-etag", nil
+	})
+
+	if err := service.UploadProxy(context.Background(), "record", bytes.NewReader(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if len(uploaded) != 0 || len(multipart.partNumber) != 1 || multipart.partNumber[0] != 1 {
+		t.Fatalf("empty upload parts = %v bytes=%d", multipart.partNumber, len(uploaded))
+	}
+	if len(multipart.completed.Parts) != 1 || multipart.completed.Parts[0].ETag != "empty-etag" {
+		t.Fatalf("empty completion = %+v", multipart.completed.Parts)
+	}
+}
+
 type lfsMetadataObjectSpy struct {
 	events              *[]string
 	getErr              error

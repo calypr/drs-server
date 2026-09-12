@@ -227,6 +227,17 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 			break
 		}
 	}
+	if len(parts) == 0 {
+		partURL, err := s.transfer.SignMultipartPart(ctx, init.UploadID, 1)
+		if err != nil {
+			return fmt.Errorf("failed to sign multipart part: %w", err)
+		}
+		etag, err := s.uploader(ctx, partURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed uploading multipart part: %w", err)
+		}
+		parts = append(parts, transfers.CompletedPart{PartNumber: 1, ETag: etag})
+	}
 	if err := s.transfer.CompleteMultipart(ctx, init.UploadID, parts); err != nil {
 		return fmt.Errorf("failed to complete multipart upload: %w", err)
 	}

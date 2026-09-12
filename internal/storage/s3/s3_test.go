@@ -190,6 +190,17 @@ func TestMultipartPreservesOpaqueIDETagsAndCallerOrder(t *testing.T) {
 	}
 }
 
+func TestBeginMultipartRejectsMissingUploadID(t *testing.T) {
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	for _, output := range []*awss3.CreateMultipartUploadOutput{nil, {}} {
+		provider := cachedBackend(&fakeClient{createOutput: output}, &fakePresigner{})
+		if _, err := provider.BeginMultipart(context.Background(), binding, target); err == nil {
+			t.Fatalf("BeginMultipart accepted output %#v", output)
+		}
+	}
+}
+
 func TestProbeInventoryAndDeleteUseSDKFakes(t *testing.T) {
 	lastModified := time.Unix(100, 0).UTC()
 	client := &fakeClient{

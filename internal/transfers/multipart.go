@@ -3,6 +3,7 @@ package transfers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -87,6 +88,9 @@ func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) 
 	if err != nil {
 		return MultipartInitResult{}, err
 	}
+	if strings.TrimSpace(string(uploadID)) == "" {
+		return MultipartInitResult{}, fmt.Errorf("storage provider returned an empty multipart upload ID")
+	}
 	s.multipartMu.Lock()
 	if s.multipartSessions == nil {
 		s.multipartSessions = make(map[string]*multipartSession)
@@ -97,6 +101,9 @@ func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) 
 }
 
 func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNumber int32) (string, error) {
+	if partNumber <= 0 {
+		return "", fmt.Errorf("%w: multipart part number must be positive", errorapi.ErrInvalidInput)
+	}
 	session, err := s.multipartSession(uploadID)
 	if err != nil {
 		return "", err
@@ -109,6 +116,10 @@ func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNu
 }
 
 func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts []CompletedPart) error {
+	providerParts, err := normalizeCompletedParts(parts)
+	if err != nil {
+		return err
+	}
 	session, err := s.multipartSession(uploadID)
 	if err != nil {
 		return err
@@ -120,10 +131,6 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	if session.completed {
 		return fmt.Errorf("%w: %s", errorapi.ErrMultipartUploadNotFound, uploadID)
 	}
-	providerParts := make([]storage.CompletedPart, len(parts))
-	for i, part := range parts {
-		providerParts[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
-	}
 	if err := s.storage.CompleteMultipart(ctx, storage.CompleteMultipartRequest{Target: session.target, UploadID: storage.UploadID(uploadID), Parts: providerParts}); err != nil {
 		return err
 	}
@@ -134,6 +141,26 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	}
 	s.multipartMu.Unlock()
 	return nil
+}
+
+func normalizeCompletedParts(parts []CompletedPart) ([]storage.CompletedPart, error) {
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("%w: multipart complete requires at least one part", errorapi.ErrInvalidInput)
+	}
+	seen := make(map[int32]struct{}, len(parts))
+	normalized := make([]storage.CompletedPart, len(parts))
+	for i, part := range parts {
+		if part.PartNumber <= 0 {
+			return nil, fmt.Errorf("%w: multipart part number must be positive", errorapi.ErrInvalidInput)
+		}
+		if _, exists := seen[part.PartNumber]; exists {
+			return nil, fmt.Errorf("%w: multipart part number %d is duplicated", errorapi.ErrInvalidInput, part.PartNumber)
+		}
+		seen[part.PartNumber] = struct{}{}
+		normalized[i] = storage.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
+	}
+	sort.Slice(normalized, func(i, j int) bool { return normalized[i].PartNumber < normalized[j].PartNumber })
+	return normalized, nil
 }
 
 func (s *Service) multipartSession(uploadID string) (*multipartSession, error) {

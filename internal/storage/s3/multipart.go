@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -24,8 +25,9 @@ func (s *backend) BeginMultipart(ctx context.Context, binding storage.ProviderBi
 	if err != nil {
 		return "", fmt.Errorf("failed to init s3 multipart upload: %w", err)
 	}
-	// aws.ToString intentionally converts a nil UploadId to an empty success,
-	// preserving the old signer contract.
+	if output == nil || strings.TrimSpace(aws.ToString(output.UploadId)) == "" {
+		return "", fmt.Errorf("failed to init s3 multipart upload: provider returned an empty upload ID")
+	}
 	return storage.UploadID(aws.ToString(output.UploadId)), nil
 }
 

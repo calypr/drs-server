@@ -19,6 +19,7 @@ type multipartTerminalStorage struct {
 	completeErrs []error
 	completeFn   func(int, storage.CompleteMultipartRequest) error
 	complete     []storage.CompleteMultipartRequest
+	parts        []storage.MultipartPartRequest
 	started      chan storage.CompleteMultipartRequest
 }
 
@@ -37,7 +38,10 @@ func (s *multipartTerminalStorage) BeginMultipart(_ context.Context, _ storage.T
 	return s.beginIDs[index], nil
 }
 
-func (s *multipartTerminalStorage) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+func (s *multipartTerminalStorage) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	s.mu.Lock()
+	s.parts = append(s.parts, request)
+	s.mu.Unlock()
 	return storage.SignedAccess{}, nil
 }
 
@@ -85,6 +89,8 @@ func newMultipartTerminalService(storagePort StoragePort, uploadID string) (*Ser
 	return service, session
 }
 
+var oneCompletedPart = []CompletedPart{{PartNumber: 1, ETag: "etag"}}
+
 func TestCompleteMultipartQueuedSuccessInvokesProviderOnce(t *testing.T) {
 	const uploadID = "queued-upload"
 	provider := &multipartTerminalStorage{}
@@ -97,7 +103,7 @@ func TestCompleteMultipartQueuedSuccessInvokesProviderOnce(t *testing.T) {
 	results := make(chan error, 2)
 	for range 2 {
 		go func() {
-			results <- service.CompleteMultipart(&multipartObservedContext{Context: context.Background(), entered: entered}, uploadID, nil)
+			results <- service.CompleteMultipart(&multipartObservedContext{Context: context.Background(), entered: entered}, uploadID, oneCompletedPart)
 		}()
 	}
 	for range 2 {
@@ -121,7 +127,7 @@ func TestCompleteMultipartQueuedSuccessInvokesProviderOnce(t *testing.T) {
 	if notFound == nil || !errors.Is(notFound, errorapi.ErrMultipartUploadNotFound) || notFound.Error() != want.Error() {
 		t.Fatalf("queued completion error = %v, want %v", notFound, want)
 	}
-	if err := service.CompleteMultipart(context.Background(), uploadID, nil); err == nil || err.Error() != want.Error() {
+	if err := service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart); err == nil || err.Error() != want.Error() {
 		t.Fatalf("sequential completion error = %v, want %v", err, want)
 	}
 }
@@ -132,16 +138,16 @@ func TestCompleteMultipartProviderFailureLeavesSessionAvailable(t *testing.T) {
 	provider := &multipartTerminalStorage{completeErrs: []error{providerErr, nil}}
 	service, _ := newMultipartTerminalService(provider, uploadID)
 
-	if err := service.CompleteMultipart(context.Background(), uploadID, nil); !errors.Is(err, providerErr) {
+	if err := service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart); !errors.Is(err, providerErr) {
 		t.Fatalf("first completion error = %v, want %v", err, providerErr)
 	}
-	if err := service.CompleteMultipart(context.Background(), uploadID, nil); err != nil {
+	if err := service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart); err != nil {
 		t.Fatalf("retry completion error = %v", err)
 	}
 	if got := len(provider.completeCalls()); got != 2 {
 		t.Fatalf("provider completion calls = %d, want 2", got)
 	}
-	if err := service.CompleteMultipart(context.Background(), uploadID, nil); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+	if err := service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
 		t.Fatalf("completion after retry error = %v, want multipart not found", err)
 	}
 }
@@ -167,7 +173,7 @@ func TestCompleteMultipartWaitingCancellationDoesNotInvokeProvider(t *testing.T)
 	firstResult := make(chan error, 1)
 	firstEntered := make(chan struct{}, 1)
 	firstContext := &multipartObservedContext{Context: context.Background(), entered: firstEntered}
-	go func() { firstResult <- service.CompleteMultipart(firstContext, uploadID, nil) }()
+	go func() { firstResult <- service.CompleteMultipart(firstContext, uploadID, oneCompletedPart) }()
 	<-firstEntered
 	session.release()
 	<-firstStarted
@@ -176,7 +182,7 @@ func TestCompleteMultipartWaitingCancellationDoesNotInvokeProvider(t *testing.T)
 	entered := make(chan struct{}, 1)
 	secondResult := make(chan error, 1)
 	go func() {
-		secondResult <- service.CompleteMultipart(&multipartObservedContext{Context: ctx, entered: entered}, uploadID, nil)
+		secondResult <- service.CompleteMultipart(&multipartObservedContext{Context: ctx, entered: entered}, uploadID, oneCompletedPart)
 	}()
 	<-entered
 	cancel()
@@ -208,8 +214,8 @@ func TestCompleteMultipartDifferentSessionsCanRunConcurrently(t *testing.T) {
 		"upload-two": newMultipartSession(storage.Target{Key: "two"}),
 	}
 	results := make(chan error, 2)
-	go func() { results <- service.CompleteMultipart(context.Background(), "upload-one", nil) }()
-	go func() { results <- service.CompleteMultipart(context.Background(), "upload-two", nil) }()
+	go func() { results <- service.CompleteMultipart(context.Background(), "upload-one", oneCompletedPart) }()
+	go func() { results <- service.CompleteMultipart(context.Background(), "upload-two", oneCompletedPart) }()
 	<-started
 	<-started
 	if got := len(provider.completeCalls()); got != 2 {
@@ -244,7 +250,7 @@ func TestCompleteMultipartOpaqueIDReusePreservesReplacementSession(t *testing.T)
 		t.Fatalf("begin old multipart: %v", err)
 	}
 	oldResult := make(chan error, 1)
-	go func() { oldResult <- service.CompleteMultipart(context.Background(), uploadID, nil) }()
+	go func() { oldResult <- service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart) }()
 	<-firstStarted
 	if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &newTarget}); err != nil {
 		t.Fatalf("begin replacement multipart: %v", err)
@@ -253,7 +259,7 @@ func TestCompleteMultipartOpaqueIDReusePreservesReplacementSession(t *testing.T)
 	if err := <-oldResult; err != nil {
 		t.Fatalf("old completion error = %v", err)
 	}
-	if err := service.CompleteMultipart(context.Background(), uploadID, nil); err != nil {
+	if err := service.CompleteMultipart(context.Background(), uploadID, oneCompletedPart); err != nil {
 		t.Fatalf("replacement completion error = %v", err)
 	}
 
@@ -263,5 +269,65 @@ func TestCompleteMultipartOpaqueIDReusePreservesReplacementSession(t *testing.T)
 	}
 	if calls[0].Target.Key != oldTarget.Key || calls[1].Target.Key != newTarget.Key {
 		t.Fatalf("completion targets = %q, %q; want %q, %q", calls[0].Target.Key, calls[1].Target.Key, oldTarget.Key, newTarget.Key)
+	}
+}
+
+func TestMultipartRejectsInvalidInputsBeforeProviderDispatch(t *testing.T) {
+	provider := &multipartTerminalStorage{}
+	service, _ := newMultipartTerminalService(provider, "upload")
+
+	if _, err := service.SignMultipartPart(context.Background(), "upload", 0); !errors.Is(err, errorapi.ErrInvalidInput) {
+		t.Fatalf("zero part signing error = %v, want invalid input", err)
+	}
+	if len(provider.parts) != 0 {
+		t.Fatalf("invalid part signing reached provider: %+v", provider.parts)
+	}
+
+	tests := []struct {
+		name  string
+		parts []CompletedPart
+	}{
+		{name: "empty"},
+		{name: "zero", parts: []CompletedPart{{PartNumber: 0}}},
+		{name: "negative", parts: []CompletedPart{{PartNumber: -1}}},
+		{name: "duplicate", parts: []CompletedPart{{PartNumber: 2}, {PartNumber: 2}}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			if err := service.CompleteMultipart(context.Background(), "upload", testCase.parts); !errors.Is(err, errorapi.ErrInvalidInput) {
+				t.Fatalf("completion error = %v, want invalid input", err)
+			}
+		})
+	}
+	if len(provider.completeCalls()) != 0 {
+		t.Fatalf("invalid completion reached provider: %+v", provider.completeCalls())
+	}
+}
+
+func TestCompleteMultipartSortsPartsAndPreservesETags(t *testing.T) {
+	provider := &multipartTerminalStorage{}
+	service, _ := newMultipartTerminalService(provider, "upload")
+	parts := []CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
+	if err := service.CompleteMultipart(context.Background(), "upload", parts); err != nil {
+		t.Fatal(err)
+	}
+	got := provider.completeCalls()[0].Parts
+	if len(got) != 2 || got[0].PartNumber != 2 || got[0].ETag != "two" || got[1].PartNumber != 7 || got[1].ETag != "seven" {
+		t.Fatalf("provider parts = %+v", got)
+	}
+	if parts[0].PartNumber != 7 {
+		t.Fatalf("caller parts mutated: %+v", parts)
+	}
+}
+
+func TestBeginMultipartRejectsEmptyProviderUploadID(t *testing.T) {
+	provider := &multipartTerminalStorage{beginIDs: []storage.UploadID{""}}
+	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: provider})
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &target}); err == nil {
+		t.Fatal("BeginMultipart accepted an empty provider upload ID")
+	}
+	if len(service.multipartSessions) != 0 {
+		t.Fatalf("empty upload ID created session: %+v", service.multipartSessions)
 	}
 }

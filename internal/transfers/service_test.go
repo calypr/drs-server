@@ -27,7 +27,7 @@ func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (stora
 }
 
 func (f *accessFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
-	return "", nil
+	return "upload", nil
 }
 func (f *accessFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	f.partRequest = request
@@ -186,10 +186,11 @@ func TestSigningExpiryUsesConfiguredDefaultAcrossOperations(t *testing.T) {
 		{
 			name: "multipart part",
 			call: func(service *Service, fake *accessFake) error {
-				if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}}); err != nil {
+				result, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}})
+				if err != nil {
 					return err
 				}
-				_, err := service.SignMultipartPart(context.Background(), "", 1)
+				_, err = service.SignMultipartPart(context.Background(), result.UploadID, 1)
 				return err
 			},
 			get: func(fake *accessFake) time.Duration { return fake.partRequest.ExpiresIn },
@@ -296,7 +297,7 @@ func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 		t.Fatalf("SignMultipartPart()=(%q,%v)", part, err)
 	}
 	parts := []CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
-	providerParts := []storage.CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
+	providerParts := []storage.CompletedPart{{PartNumber: 2, ETag: "two"}, {PartNumber: 7, ETag: "seven"}}
 	if err := service.CompleteMultipart(ctx, result.UploadID, parts); err != nil {
 		t.Fatalf("CompleteMultipartUpload() error = %v", err)
 	}
@@ -304,7 +305,7 @@ func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 		t.Fatalf("unexpected part request: %+v", port.partRequest)
 	}
 	if !reflect.DeepEqual(port.complete.Parts, providerParts) {
-		t.Fatalf("multipart parts reordered: got=%+v want=%+v", port.complete.Parts, providerParts)
+		t.Fatalf("multipart parts = %+v, want canonical order %+v", port.complete.Parts, providerParts)
 	}
 }
 
