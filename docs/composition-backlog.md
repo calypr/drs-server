@@ -63,7 +63,7 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 | C09 | Remove the duplicate project-delete route and specification operation | P1 | Complete | Public bucket client selects bucket operation |
 | C10 | Fail startup when configured credentials cannot be used | P2 | Complete | C08 |
 | C11 | Use the canonical SHA rule for transfer attribution | P2 | Complete | C02 durable identity reused |
-| C12 | Bound LFS limiter state and prevent quota-key collisions | P2 | Ready | None |
+| C12 | Bound LFS limiter state and prevent quota-key collisions | P2 | Complete | None |
 
 ## C01. Stop canonical duplicate-repair panics
 

@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"container/list"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -23,30 +27,86 @@ import (
 // the object domain.
 type baseURLKey struct{}
 
-type windowCounter struct {
-	Minute int64
-	Count  int
+type lfsClientWindow struct {
+	minute   int64
+	requests int
+	bytes    int64
+	element  *list.Element
 }
 
-type windowBytes struct {
-	Minute int64
-	Bytes  int64
+const maxLFSRateLimitClients = 10_000
+
+type lfsLimiter struct {
+	mu       sync.Mutex
+	capacity int
+	clients  map[string]*lfsClientWindow
+	recent   list.List
 }
 
-var (
-	limitMu            sync.Mutex
-	requestWindowMap   = map[string]windowCounter{}
-	bandwidthWindowMap = map[string]windowBytes{}
-)
+func newLFSLimiter(capacity int) *lfsLimiter {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &lfsLimiter{capacity: capacity, clients: make(map[string]*lfsClientWindow)}
+}
+
+func (l *lfsLimiter) windowLocked(key string, now time.Time) *lfsClientWindow {
+	minute := now.UTC().Unix() / 60
+	window, exists := l.clients[key]
+	if exists {
+		l.recent.MoveToFront(window.element)
+		if window.minute != minute {
+			window.minute = minute
+			window.requests = 0
+			window.bytes = 0
+		}
+		return window
+	}
+	if len(l.clients) == l.capacity {
+		oldest := l.recent.Back()
+		delete(l.clients, oldest.Value.(string))
+		l.recent.Remove(oldest)
+	}
+	element := l.recent.PushFront(key)
+	window = &lfsClientWindow{minute: minute, element: element}
+	l.clients[key] = window
+	return window
+}
+
+func (l *lfsLimiter) allowRequest(key string, now time.Time, limit int) bool {
+	if limit <= 0 {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	window := l.windowLocked(key, now)
+	window.requests++
+	return window.requests <= limit
+}
+
+func (l *lfsLimiter) allowBandwidth(key string, now time.Time, bytes, limit int64) bool {
+	if limit <= 0 || bytes <= 0 {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	window := l.windowLocked(key, now)
+	if bytes > limit || window.bytes > limit-bytes {
+		return false
+	}
+	window.bytes += bytes
+	return true
+}
 
 // lfsRequestMiddleware applies the legacy per-operation media and limiter
 // checks before generated strict decoding invokes the handler.
 func lfsRequestMiddleware(opts LFSOptions) lfsapi.StrictMiddlewareFunc {
+	limiter := newLFSLimiter(maxLFSRateLimitClients)
 	return func(next lfsapi.StrictHandlerFunc, operationID string) lfsapi.StrictHandlerFunc {
 		return func(ctx fiber.Ctx, args interface{}) (interface{}, error) {
 			switch operationID {
 			case "LfsBatch":
-				if !validateLFSRequestHeaders(ctx, true, true) || !enforceRequestLimit(ctx, opts) {
+				if !validateLFSRequestHeaders(ctx, true, true) || !enforceRequestLimit(ctx, opts, limiter) {
 					return nil, nil
 				}
 				if opts.MaxBatchBodyBytes > 0 && int64(len(ctx.Request().Body())) > opts.MaxBatchBodyBytes {
@@ -55,25 +115,34 @@ func lfsRequestMiddleware(opts LFSOptions) lfsapi.StrictMiddlewareFunc {
 				}
 				if request, ok := args.(lfsapi.LfsBatchRequestObject); ok && request.Body != nil {
 					var totalBytes int64
+					overflow := false
 					for _, object := range request.Body.Objects {
 						if object.Size > 0 {
+							if object.Size > math.MaxInt64-totalBytes {
+								overflow = true
+								break
+							}
 							totalBytes += object.Size
 						}
 					}
-					if !enforceBandwidthLimit(ctx, opts, totalBytes) {
+					if overflow {
+						_ = writeLFSError(ctx, 509, "bandwidth limit exceeded", false)
+						return nil, nil
+					}
+					if !enforceBandwidthLimit(ctx, opts, limiter, totalBytes) {
 						return nil, nil
 					}
 				}
 			case "LfsStageMetadata":
-				if !validateLFSMetadataHeaders(ctx) || !enforceRequestLimit(ctx, opts) {
+				if !validateLFSMetadataHeaders(ctx) || !enforceRequestLimit(ctx, opts, limiter) {
 					return nil, nil
 				}
 			case "LfsVerify":
-				if !validateLFSRequestHeaders(ctx, true, true) || !enforceRequestLimit(ctx, opts) {
+				if !validateLFSRequestHeaders(ctx, true, true) || !enforceRequestLimit(ctx, opts, limiter) {
 					return nil, nil
 				}
 			case "LfsUploadProxy":
-				if !enforceRequestLimit(ctx, opts) {
+				if !enforceRequestLimit(ctx, opts, limiter) {
 					return nil, nil
 				}
 			}
@@ -95,55 +164,33 @@ func validateLFSMetadataHeaders(c fiber.Ctx) bool {
 	return true
 }
 
-func enforceRequestLimit(c fiber.Ctx, opts LFSOptions) bool {
+func enforceRequestLimit(c fiber.Ctx, opts LFSOptions, limiter *lfsLimiter) bool {
 	if opts.RequestLimitPerMinute <= 0 {
 		return true
 	}
-	nowMinute := time.Now().UTC().Unix() / 60
-	key := requestClientKey(c)
-	limitMu.Lock()
-	defer limitMu.Unlock()
-	window := requestWindowMap[key]
-	if window.Minute != nowMinute {
-		window = windowCounter{Minute: nowMinute}
-	}
-	window.Count++
-	requestWindowMap[key] = window
-	if window.Count > opts.RequestLimitPerMinute {
+	if !limiter.allowRequest(requestClientKey(c), time.Now(), opts.RequestLimitPerMinute) {
 		_ = writeLFSError(c, http.StatusTooManyRequests, "rate limit exceeded", false)
 		return false
 	}
 	return true
 }
 
-func enforceBandwidthLimit(c fiber.Ctx, opts LFSOptions, bytes int64) bool {
+func enforceBandwidthLimit(c fiber.Ctx, opts LFSOptions, limiter *lfsLimiter, bytes int64) bool {
 	if opts.BandwidthLimitBytesPerMinute <= 0 || bytes <= 0 {
 		return true
 	}
-	nowMinute := time.Now().UTC().Unix() / 60
-	key := requestClientKey(c)
-	limitMu.Lock()
-	defer limitMu.Unlock()
-	window := bandwidthWindowMap[key]
-	if window.Minute != nowMinute {
-		window = windowBytes{Minute: nowMinute}
-	}
-	if window.Bytes+bytes > opts.BandwidthLimitBytesPerMinute {
+	if !limiter.allowBandwidth(requestClientKey(c), time.Now(), bytes, opts.BandwidthLimitBytesPerMinute) {
 		_ = writeLFSError(c, 509, "bandwidth limit exceeded", false)
 		return false
 	}
-	window.Bytes += bytes
-	bandwidthWindowMap[key] = window
 	return true
 }
 
 func requestClientKey(c fiber.Ctx) string {
 	authorization := strings.TrimSpace(c.Get("Authorization"))
 	if authorization != "" {
-		if len(authorization) > 64 {
-			authorization = authorization[:64]
-		}
-		return "auth:" + authorization
+		digest := sha256.Sum256([]byte(authorization))
+		return "auth:" + hex.EncodeToString(digest[:])
 	}
 	return "addr:" + c.IP()
 }

@@ -5,11 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -39,6 +43,126 @@ func TestWriteLFSErrorPreservesLFSContentType(t *testing.T) {
 	}
 	if got := response.Header.Get("Content-Type"); got != "application/vnd.git-lfs+json" {
 		t.Fatalf("Content-Type = %q, want application/vnd.git-lfs+json", got)
+	}
+}
+
+func TestLFSClientKeyUsesCompleteAuthorizationWithoutRetainingIt(t *testing.T) {
+	prefix := strings.Repeat("shared-authorization-prefix-", 4)
+	first := prefix + "first-secret-suffix"
+	second := prefix + "second-secret-suffix"
+	keys := make([]string, 0, 2)
+	app := fiber.New()
+	app.Post("/key", func(c fiber.Ctx) error {
+		keys = append(keys, requestClientKey(c))
+		return c.SendStatus(http.StatusNoContent)
+	})
+	for _, authorization := range []string{first, second} {
+		request := httptest.NewRequest(http.MethodPost, "/key", nil)
+		request.Header.Set("Authorization", authorization)
+		response, err := app.Test(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+	}
+	if len(keys) != 2 || keys[0] == keys[1] {
+		t.Fatalf("authorization keys = %v, want distinct keys", keys)
+	}
+	for _, key := range keys {
+		if strings.Contains(key, prefix) || strings.Contains(key, "secret-suffix") {
+			t.Fatalf("limiter key retained raw authorization material: %q", key)
+		}
+	}
+}
+
+func TestLFSRequestLimitStateIsOwnedByMiddlewareInstance(t *testing.T) {
+	status := func(middleware lfsapi.StrictMiddlewareFunc, authorization string) int {
+		t.Helper()
+		app := fiber.New()
+		handler := middleware(func(fiber.Ctx, interface{}) (interface{}, error) {
+			return struct{}{}, nil
+		}, "LfsUploadProxy")
+		app.Post("/upload", func(c fiber.Ctx) error {
+			result, err := handler(c, nil)
+			if err != nil {
+				return err
+			}
+			if result != nil {
+				return c.SendStatus(http.StatusNoContent)
+			}
+			return nil
+		})
+		request := httptest.NewRequest(http.MethodPost, "/upload", nil)
+		request.Header.Set("Authorization", authorization)
+		response, err := app.Test(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		return response.StatusCode
+	}
+
+	options := LFSOptions{RequestLimitPerMinute: 1}
+	authorization := "Bearer middleware-owner-regression"
+	firstRuntime := lfsRequestMiddleware(options)
+	secondRuntime := lfsRequestMiddleware(options)
+	if got := status(firstRuntime, authorization); got != http.StatusNoContent {
+		t.Fatalf("first runtime status = %d, want 204", got)
+	}
+	if got := status(secondRuntime, authorization); got != http.StatusNoContent {
+		t.Fatalf("second runtime inherited limiter state: status = %d, want 204", got)
+	}
+	if got := status(firstRuntime, authorization); got != http.StatusTooManyRequests {
+		t.Fatalf("first runtime second request status = %d, want 429", got)
+	}
+}
+
+func TestLFSLimiterBoundsHighCardinalityAndResetsWindows(t *testing.T) {
+	limiter := newLFSLimiter(3)
+	now := time.Unix(1_700_000_000, 0)
+	for i := 0; i < 100; i++ {
+		if !limiter.allowRequest(fmt.Sprintf("client-%d", i), now, 1) {
+			t.Fatalf("new client %d was unexpectedly limited", i)
+		}
+	}
+	if len(limiter.clients) != 3 {
+		t.Fatalf("tracked clients = %d, want capacity 3", len(limiter.clients))
+	}
+	if !limiter.allowRequest("client-99", now.Add(time.Minute), 1) {
+		t.Fatal("new minute did not reset the request window")
+	}
+	if limiter.allowRequest("client-99", now.Add(time.Minute), 1) {
+		t.Fatal("second request in the reset window exceeded its quota")
+	}
+}
+
+func TestLFSBandwidthLimitCannotOverflow(t *testing.T) {
+	limiter := newLFSLimiter(1)
+	now := time.Unix(1_700_000_000, 0)
+	if !limiter.allowBandwidth("client", now, 1, math.MaxInt64) {
+		t.Fatal("first byte was unexpectedly limited")
+	}
+	if limiter.allowBandwidth("client", now, math.MaxInt64, math.MaxInt64) {
+		t.Fatal("bandwidth counter overflow bypassed the limit")
+	}
+}
+
+func TestLFSLimiterBoundsConcurrentClients(t *testing.T) {
+	limiter := newLFSLimiter(8)
+	now := time.Unix(1_700_000_000, 0)
+	var wait sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wait.Add(1)
+		go func(i int) {
+			defer wait.Done()
+			key := fmt.Sprintf("client-%d", i)
+			limiter.allowRequest(key, now, 10)
+			limiter.allowBandwidth(key, now, 1, 10)
+		}(i)
+	}
+	wait.Wait()
+	if len(limiter.clients) > 8 {
+		t.Fatalf("tracked clients = %d, exceeds capacity 8", len(limiter.clients))
 	}
 }
 
