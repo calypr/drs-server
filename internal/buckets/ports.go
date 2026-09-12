@@ -12,13 +12,13 @@ type CredentialReader interface {
 type CredentialAdmin interface {
 	SaveS3Credential(ctx context.Context, cred *Credential) error
 	SaveBucketConfiguration(ctx context.Context, configuration BucketConfiguration) error
+	DeleteBucketScopeConfiguration(ctx context.Context, scope Scope) ([]string, error)
 	DeleteS3Credential(ctx context.Context, bucket string) error
 }
 
 // ScopeStore owns bucket-scope lifecycle and lookup.
 type ScopeStore interface {
 	CreateBucketScope(ctx context.Context, scope *Scope) error
-	DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error
 	GetBucketScope(ctx context.Context, organization, projectID string) (*Scope, error)
 	ListBucketScopes(ctx context.Context) ([]Scope, error)
 }

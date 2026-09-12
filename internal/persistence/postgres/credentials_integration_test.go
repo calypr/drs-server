@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -59,5 +60,78 @@ func TestPostgresSaveBucketConfigurationRollsBackCredentialWhenScopeWriteFails(t
 	}
 	if credentialCount != 0 || scopeCount != 0 {
 		t.Fatalf("failed aggregate write left credential_count=%d scope_count=%d", credentialCount, scopeCount)
+	}
+}
+
+func TestPostgresConcurrentLastScopeDeletionRemovesCredential(t *testing.T) {
+	db := openPostgresTestStore(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	credentialID := "delete-credential-" + suffix
+	bucket := "delete-bucket-" + suffix
+	organization := "delete-org-" + suffix
+	triggerName := "syfon_test_slow_bucket_delete_" + strings.ReplaceAll(suffix, "-", "")
+	functionName := triggerName + "_fn"
+
+	for _, projectID := range []string{"one", "two"} {
+		if err := db.SaveBucketConfiguration(ctx, buckets.BucketConfiguration{
+			Credential: buckets.Credential{
+				CredentialID: credentialID,
+				Bucket:       bucket,
+				Provider:     "s3",
+				AccessKey:    "access-key",
+				SecretKey:    "secret-key",
+			},
+			Organization: organization,
+			ProjectID:    projectID,
+		}); err != nil {
+			t.Fatalf("seed project %s: %v", projectID, err)
+		}
+	}
+
+	if _, err := db.DB().ExecContext(ctx, `CREATE FUNCTION `+functionName+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.1); RETURN OLD; END; $$`); err != nil {
+		t.Fatalf("create slow-delete function: %v", err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `CREATE TRIGGER `+triggerName+` BEFORE DELETE ON bucket_scope FOR EACH ROW EXECUTE FUNCTION `+functionName+`() `); err != nil {
+		t.Fatalf("create slow-delete trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.DB().ExecContext(ctx, `DROP TRIGGER IF EXISTS `+triggerName+` ON bucket_scope`)
+		_, _ = db.DB().ExecContext(ctx, `DROP FUNCTION IF EXISTS `+functionName+`() `)
+	})
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	for _, projectID := range []string{"one", "two"} {
+		go func(projectID string) {
+			ready.Done()
+			<-start
+			_, err := db.DeleteBucketScopeConfiguration(ctx, buckets.Scope{
+				Organization: organization,
+				ProjectID:    projectID,
+				CredentialID: credentialID,
+			})
+			errs <- err
+		}(projectID)
+	}
+	ready.Wait()
+	close(start)
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatalf("delete scope: %v", err)
+		}
+	}
+
+	var scopeCount, credentialCount int
+	if err := db.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM bucket_scope WHERE organization = $1", organization).Scan(&scopeCount); err != nil {
+		t.Fatalf("count scopes: %v", err)
+	}
+	if err := db.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM s3_credential WHERE credential_id = $1", credentialID).Scan(&credentialCount); err != nil {
+		t.Fatalf("count credentials: %v", err)
+	}
+	if scopeCount != 0 || credentialCount != 0 {
+		t.Fatalf("concurrent deletion left scope_count=%d credential_count=%d", scopeCount, credentialCount)
 	}
 }

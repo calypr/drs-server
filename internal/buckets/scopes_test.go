@@ -3,6 +3,7 @@ package buckets
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -75,11 +76,11 @@ func TestDeleteBucketScopeCleansLastCredential(t *testing.T) {
 	if credentials.deleteCalls != 1 || credentials.lastDeleted != "credential-id" {
 		t.Fatalf("last-scope credential cleanup: calls=%d bucket=%q", credentials.deleteCalls, credentials.lastDeleted)
 	}
-	if credentials.getCalls != 1 {
-		t.Fatalf("credential lookups=%d, want 1", credentials.getCalls)
+	if credentials.getCalls != 0 || scopes.listCalls != 0 {
+		t.Fatalf("service performed non-transactional preflight: credential lookups=%d scope lists=%d", credentials.getCalls, scopes.listCalls)
 	}
-	if len(invalidator.snapshot()) == 0 {
-		t.Fatal("last-scope credential cleanup did not invalidate signer aliases")
+	if got, want := invalidator.snapshot(), []string{"credential-id", "physical-bucket"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("invalidated aliases = %v, want %v", got, want)
 	}
 }
 

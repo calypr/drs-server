@@ -74,6 +74,13 @@ func (f *bucketTestStore) SaveBucketConfiguration(ctx context.Context, configura
 	})
 }
 
+func (f *bucketTestStore) DeleteBucketScopeConfiguration(ctx context.Context, scope domainbuckets.Scope) ([]string, error) {
+	if err := f.DeleteBucketScope(ctx, scope.Organization, scope.ProjectID, scope.CredentialID, scope.PathPrefix); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
 func (f *bucketTestStore) DeleteS3Credential(_ context.Context, bucket string) error {
 	delete(f.Credentials, bucket)
 	return nil

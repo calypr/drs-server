@@ -85,6 +85,10 @@ func (s *recordingBucketCredentialStore) SaveBucketConfiguration(_ context.Conte
 	return nil
 }
 
+func (s *recordingBucketCredentialStore) DeleteBucketScopeConfiguration(context.Context, buckets.Scope) ([]string, error) {
+	return nil, nil
+}
+
 func (s *recordingBucketCredentialStore) DeleteS3Credential(context.Context, string) error {
 	return nil
 }

@@ -101,6 +101,70 @@ func (f *fakeCredentialStore) SaveBucketConfiguration(_ context.Context, configu
 	return nil
 }
 
+func (f *fakeCredentialStore) DeleteBucketScopeConfiguration(_ context.Context, target Scope) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.getErr != nil && f.getErr != errorapi.ErrStorageCredentialMissing {
+		return nil, f.getErr
+	}
+	if f.configurationScopes == nil {
+		return nil, errorapi.ErrBucketScopeNotFound
+	}
+	f.configurationScopes.mu.Lock()
+	defer f.configurationScopes.mu.Unlock()
+	if f.configurationScopes.listErr != nil {
+		return nil, f.configurationScopes.listErr
+	}
+	if f.configurationScopes.deleteErr != nil {
+		return nil, f.configurationScopes.deleteErr
+	}
+
+	requestedID := target.CredentialID
+	canonicalID, physicalBucket := requestedID, requestedID
+	foundCredential := false
+	for _, credential := range f.credentials {
+		if credential.CredentialID == requestedID || credential.Bucket == requestedID {
+			canonicalID, physicalBucket = credential.CredentialID, credential.Bucket
+			foundCredential = true
+			break
+		}
+	}
+	filtered := make([]Scope, 0, len(f.configurationScopes.scopes))
+	deleted := false
+	for _, scope := range f.configurationScopes.scopes {
+		matchesCredential := scope.CredentialID == requestedID || scope.CredentialID == canonicalID || scope.Bucket == requestedID || scope.Bucket == physicalBucket
+		matches := scope.Organization == target.Organization && scope.ProjectID == target.ProjectID && scope.PathPrefix == target.PathPrefix && matchesCredential
+		if matches && !deleted {
+			deleted = true
+			continue
+		}
+		filtered = append(filtered, scope)
+	}
+	if !deleted {
+		return nil, errorapi.ErrBucketScopeNotFound
+	}
+	deleteCredential := foundCredential
+	for _, scope := range filtered {
+		if scope.CredentialID == canonicalID || scope.Bucket == physicalBucket {
+			deleteCredential = false
+			break
+		}
+	}
+	if deleteCredential {
+		f.deleteCalls++
+		f.lastDeleted = canonicalID
+		if f.deleteErr != nil {
+			return nil, f.deleteErr
+		}
+	}
+	f.configurationScopes.deleteCalls++
+	f.configurationScopes.scopes = filtered
+	if !deleteCredential {
+		return nil, nil
+	}
+	return []string{requestedID, canonicalID, physicalBucket}, nil
+}
+
 func (f *fakeCredentialStore) DeleteS3Credential(_ context.Context, bucket string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

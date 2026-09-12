@@ -56,7 +56,7 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 | C02 | Return durable object identities and assign LFS accounting ownership | P0 | Complete | None |
 | C03 | Commit canonical duplicate repair atomically | P0 | Complete | C01, with C02 reuse when practical |
 | C04 | Preserve typed failures in bulk access | P1 | Complete | None |
-| C05 | Commit credential and scope deletion atomically | P1 | Ready | Completed bucket configuration and cleanup fixes |
+| C05 | Commit credential and scope deletion atomically | P1 | Complete | Completed bucket configuration and cleanup fixes |
 | C06 | Honor SQLite parameter limits | P1 | Ready | None |
 | C07 | Enforce one multipart input contract | P1 | Ready | None |
 | C08 | Reject ambiguous configuration | P1 | Ready | None |

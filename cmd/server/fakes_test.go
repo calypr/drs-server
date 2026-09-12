@@ -444,6 +444,13 @@ func (s *serverBucketStore) SaveBucketConfiguration(ctx context.Context, configu
 	})
 }
 
+func (s *serverBucketStore) DeleteBucketScopeConfiguration(ctx context.Context, scope buckets.Scope) ([]string, error) {
+	if err := s.DeleteBucketScope(ctx, scope.Organization, scope.ProjectID, scope.CredentialID, scope.PathPrefix); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
 func (s *serverBucketStore) DeleteS3Credential(_ context.Context, id string) error {
 	delete(s.credentials, id)
 	return nil

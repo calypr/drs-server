@@ -2,7 +2,6 @@ package buckets
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/errorapi"
@@ -22,47 +21,16 @@ func (s *Service) CreateBucketScope(ctx context.Context, scope *Scope) error {
 // DeleteBucketScope deletes the requested scope and removes its credential
 // after the last scope is gone.
 func (s *Service) DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error {
-	organization = strings.TrimSpace(organization)
-	projectID = strings.TrimSpace(projectID)
-	credentialID = strings.TrimSpace(credentialID)
-	pathPrefix = strings.Trim(strings.TrimSpace(pathPrefix), "/")
-	resolvedID := strings.TrimSpace(credentialID)
-	resolvedBucket := ""
-	cred, lookupErr := s.GetS3Credential(ctx, credentialID)
-	if lookupErr != nil && !errors.Is(lookupErr, errorapi.ErrStorageCredentialMissing) {
-		return lookupErr
-	}
-	if lookupErr == nil && cred != nil {
-		resolvedID = s.credentialIDForCredential(*cred)
-		resolvedBucket = strings.TrimSpace(cred.Bucket)
-	}
-
-	scopes, err := s.ListBucketScopes(ctx)
+	aliases, err := s.credentialAdmin.DeleteBucketScopeConfiguration(ctx, Scope{
+		Organization: strings.TrimSpace(organization),
+		ProjectID:    strings.TrimSpace(projectID),
+		CredentialID: strings.TrimSpace(credentialID),
+		PathPrefix:   strings.Trim(strings.TrimSpace(pathPrefix), "/"),
+	})
 	if err != nil {
 		return err
 	}
-	remaining := false
-	for _, scope := range scopes {
-		if strings.TrimSpace(scope.Organization) == organization &&
-			strings.TrimSpace(scope.ProjectID) == projectID &&
-			strings.Trim(strings.TrimSpace(scope.PathPrefix), "/") == pathPrefix &&
-			s.scopeBelongsTo(scope, resolvedID, resolvedBucket) {
-			continue
-		}
-		if s.scopeBelongsTo(scope, resolvedID, resolvedBucket) {
-			remaining = true
-			break
-		}
-	}
-	if err := s.scopeStore.DeleteBucketScope(ctx, organization, projectID, credentialID, pathPrefix); err != nil {
-		return err
-	}
-	if remaining {
-		return nil
-	}
-	if err := s.deleteS3Credential(ctx, resolvedID, cred); err != nil && !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
-		return err
-	}
+	s.invalidateAliases(aliases...)
 	return nil
 }
 
