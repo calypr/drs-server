@@ -115,6 +115,10 @@ test:
 test-modules:
 	./scripts/check-independent-modules.sh
 
+.PHONY: test-race
+test-race:
+	./scripts/run-race-tests.sh
+
 .PHONY: test-unit
 test-unit:
 	@PKGS=$$(go list ./... ./client/... ./apigen/... | grep -Ev '/cmd/server$$|/tests/endpoints$$'); \
@@ -122,11 +126,15 @@ test-unit:
 
 .PHONY: coverage
 coverage:
-	./scripts/run_coverage.sh
+	COVERAGE_MIN=75 ./scripts/run_coverage.sh
 
 .PHONY: coverage-meaningful
 coverage-meaningful:
-	COVERAGE_SCOPE=meaningful ./scripts/run_coverage.sh
+	COVERAGE_SCOPE=meaningful COVERAGE_MIN=75 ./scripts/run_coverage.sh
+
+.PHONY: coverage-client
+coverage-client:
+	COVERAGE_SCOPE=client COVERAGE_MIN=75 ./scripts/run_coverage.sh
 
 .PHONY: coverage-full
 coverage-full:

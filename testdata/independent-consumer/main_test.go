@@ -15,7 +15,7 @@ import (
 	"github.com/calypr/syfon/client/services"
 )
 
-func TestPublishedModulesWorkWithoutWorkspace(t *testing.T) {
+func TestModulesWorkWithoutWorkspace(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		status int

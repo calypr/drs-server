@@ -104,4 +104,42 @@ func TestResourceAndAuthzHelpers(t *testing.T) {
 		}
 	})
 
+	t.Run("controlled access round trip", func(t *testing.T) {
+		claims := []string{
+			" /programs/syfon/projects/e2e ",
+			"/organization/syfon/project/e2e",
+			"https://example.test/organization/other",
+			"",
+		}
+		got := ControlledAccessToAuthzMap(claims)
+		want := map[string][]string{"syfon": {"e2e"}, "other": {}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("ControlledAccessToAuthzMap mismatch:\n got: %+v\nwant: %+v", got, want)
+		}
+		list := AuthzMapToControlledAccess(got)
+		sort.Strings(list)
+		wantList := []string{"/organization/other", "/organization/syfon/project/e2e"}
+		if !reflect.DeepEqual(list, wantList) {
+			t.Fatalf("AuthzMapToControlledAccess mismatch:\n got: %+v\nwant: %+v", list, wantList)
+		}
+	})
+
+	t.Run("resource scope", func(t *testing.T) {
+		for _, tc := range []struct {
+			resource     string
+			organization string
+			project      string
+			ok           bool
+		}{
+			{resource: "/organization/syfon", organization: "syfon", ok: true},
+			{resource: "/programs/syfon/projects/e2e", organization: "syfon", project: "e2e", ok: true},
+			{resource: "/unknown/syfon", ok: false},
+		} {
+			organization, project, ok := ResourceScope(tc.resource)
+			if organization != tc.organization || project != tc.project || ok != tc.ok {
+				t.Fatalf("ResourceScope(%q) = %q, %q, %t", tc.resource, organization, project, ok)
+			}
+		}
+	})
+
 }
