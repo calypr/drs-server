@@ -2,6 +2,7 @@ package objects
 
 import (
 	"context"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -240,7 +241,7 @@ func mergeChecksums(group []drs.DrsObject) []drs.Checksum {
 }
 
 func mergeAccessMethods(group []drs.DrsObject) *[]drs.AccessMethod {
-	seen := make(map[string]struct{})
+	seen := make(map[string][]drs.AccessMethod)
 	methods := make([]drs.AccessMethod, 0)
 	for _, obj := range group {
 		if obj.AccessMethods == nil {
@@ -251,13 +252,22 @@ func mergeAccessMethods(group []drs.DrsObject) *[]drs.AccessMethod {
 			if method.AccessUrl != nil {
 				url = method.AccessUrl.Url
 			}
-			key := string(method.Type) + "|" + url
-			if _, ok := seen[key]; ok {
+			if method.AccessId == nil || strings.TrimSpace(*method.AccessId) == "" {
+				accessID := AccessMethodID(string(method.Type), url)
+				method.AccessId = &accessID
+			}
+			key := string(method.Type) + "|" + url + "|" + strings.ToLower(strings.TrimSpace(*method.AccessId))
+			duplicate := false
+			for _, existing := range seen[key] {
+				if reflect.DeepEqual(existing, method) {
+					duplicate = true
+					break
+				}
+			}
+			if duplicate {
 				continue
 			}
-			seen[key] = struct{}{}
-			accessID := AccessMethodID(string(method.Type), url)
-			method.AccessId = &accessID
+			seen[key] = append(seen[key], method)
 			methods = append(methods, method)
 		}
 	}
@@ -274,6 +284,9 @@ func mergeAccessMethods(group []drs.DrsObject) *[]drs.AccessMethod {
 			jURL = methods[j].AccessUrl.Url
 		}
 		if methods[i].Type == methods[j].Type {
+			if iURL == jURL {
+				return *methods[i].AccessId < *methods[j].AccessId
+			}
 			return iURL < jURL
 		}
 		return methods[i].Type < methods[j].Type

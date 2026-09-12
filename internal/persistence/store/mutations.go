@@ -178,21 +178,8 @@ func (db *Store) replaceChildrenTx(ctx context.Context, tx *sql.Tx, id string, o
 		if _, err := db.txExecContext(ctx, tx, `DELETE FROM drs_object_access_method WHERE object_id = ?`, id); err != nil {
 			return fmt.Errorf("replace access methods: %w", err)
 		}
-		seenMethods := make(map[string]struct{}, len(*obj.AccessMethods))
-		for _, method := range *obj.AccessMethods {
-			if method.AccessUrl == nil || strings.TrimSpace(method.AccessUrl.Url) == "" {
-				continue
-			}
-			methodKey := strings.ToLower(strings.TrimSpace(string(method.Type))) + "\x00" + strings.TrimSpace(method.AccessUrl.Url)
-			if _, ok := seenMethods[methodKey]; ok {
-				continue
-			}
-			seenMethods[methodKey] = struct{}{}
-			if _, err := db.txExecContext(ctx, tx, `
-				INSERT INTO drs_object_access_method (object_id, url, type) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
-				id, strings.TrimSpace(method.AccessUrl.Url), strings.TrimSpace(string(method.Type))); err != nil {
-				return fmt.Errorf("replace access method: %w", err)
-			}
+		if err := db.upsertAccessMethodsTx(ctx, tx, id, *obj.AccessMethods, false); err != nil {
+			return fmt.Errorf("replace access method: %w", err)
 		}
 	}
 	if obj.ControlledAccess != nil {
@@ -410,13 +397,8 @@ func (db *Store) UpdateObjectAccessMethods(ctx context.Context, objectID string,
 		if _, err := db.txExecContext(ctx, tx, "DELETE FROM drs_object_access_method WHERE object_id = ?", canonicalID); err != nil {
 			return err
 		}
-		for _, am := range accessMethods {
-			if am.AccessUrl == nil || am.AccessUrl.Url == "" {
-				continue
-			}
-			if _, err := db.txExecContext(ctx, tx, `INSERT INTO drs_object_access_method (object_id, url, type) VALUES (?, ?, ?)`, canonicalID, am.AccessUrl.Url, am.Type); err != nil {
-				return err
-			}
+		if err := db.upsertAccessMethodsTx(ctx, tx, canonicalID, accessMethods, false); err != nil {
+			return err
 		}
 		return nil
 	})
@@ -552,13 +534,8 @@ func (db *Store) BulkUpdateAccessMethods(ctx context.Context, updates map[string
 			if _, err := db.txExecContext(ctx, tx, "DELETE FROM drs_object_access_method WHERE object_id = ?", canonicalID); err != nil {
 				return err
 			}
-			for _, am := range methods {
-				if am.AccessUrl == nil || am.AccessUrl.Url == "" {
-					continue
-				}
-				if _, err := db.txExecContext(ctx, tx, `INSERT INTO drs_object_access_method (object_id, url, type) VALUES (?, ?, ?)`, canonicalID, am.AccessUrl.Url, am.Type); err != nil {
-					return err
-				}
+			if err := db.upsertAccessMethodsTx(ctx, tx, canonicalID, methods, false); err != nil {
+				return err
 			}
 		}
 		return nil

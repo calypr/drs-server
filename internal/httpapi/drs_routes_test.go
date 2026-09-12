@@ -173,7 +173,7 @@ func (m *drsCaptureStorageAccess) Sign(_ context.Context, request storage.SignRe
 	return storage.SignedAccess{Location: request.Target.OriginalURL + "?signed=true"}, nil
 }
 
-func (m *drsCaptureStorageAccess) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+func (m *drsCaptureStorageAccess) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return "", nil
 }
 func (m *drsCaptureStorageAccess) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {

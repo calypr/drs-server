@@ -15,8 +15,12 @@ CREATE TABLE IF NOT EXISTS drs_object_access_method (
   object_id TEXT NOT NULL,
   url TEXT NOT NULL,
   type TEXT NOT NULL,
+  access_method_json TEXT,
   FOREIGN KEY(object_id) REFERENCES drs_object(id) ON DELETE CASCADE
 );
+
+ALTER TABLE drs_object_access_method
+  ADD COLUMN IF NOT EXISTS access_method_json TEXT;
 
 CREATE TABLE IF NOT EXISTS drs_object_controlled_access (
   object_id TEXT NOT NULL,

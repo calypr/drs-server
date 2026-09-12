@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,15 +13,20 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
-func (s *backend) BeginMultipart(ctx context.Context, binding storage.ProviderBinding, target storage.Target) (storage.UploadID, error) {
+func (s *backend) BeginMultipart(ctx context.Context, binding storage.ProviderBinding, request storage.BeginMultipartRequest) (storage.UploadID, error) {
 	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return "", err
 	}
 
+	metadata := map[string]string{}
+	if strings.TrimSpace(request.CompletionID) != "" {
+		metadata[storage.MultipartCompletionMarkerMetadataKey] = request.CompletionID
+	}
 	output, err := clients.client.CreateMultipartUpload(ctx, &awss3.CreateMultipartUploadInput{
-		Bucket: aws.String(target.PhysicalBucket),
-		Key:    aws.String(target.Key),
+		Bucket:   aws.String(request.Target.PhysicalBucket),
+		Key:      aws.String(request.Target.Key),
+		Metadata: metadata,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to init s3 multipart upload: %w", err)
@@ -56,6 +62,11 @@ func (s *backend) CompleteMultipart(ctx context.Context, binding storage.Provide
 	if err != nil {
 		return err
 	}
+	if matched, err := s.multipartCompletionMatches(ctx, clients.client, request.Target, request.CompletionID); err != nil {
+		return err
+	} else if matched {
+		return nil
+	}
 
 	completedParts := make([]types.CompletedPart, 0, len(request.Parts))
 	for _, part := range request.Parts {
@@ -73,7 +84,15 @@ func (s *backend) CompleteMultipart(ctx context.Context, binding storage.Provide
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to complete s3 multipart upload: %w", err)
+		completionErr := fmt.Errorf("failed to complete s3 multipart upload: %w", err)
+		matched, reconcileErr := s.multipartCompletionMatches(ctx, clients.client, request.Target, request.CompletionID)
+		if reconcileErr != nil {
+			return errors.Join(completionErr, reconcileErr)
+		}
+		if matched {
+			return nil
+		}
+		return completionErr
 	}
 	return nil
 }

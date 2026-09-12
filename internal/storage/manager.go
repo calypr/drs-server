@@ -64,8 +64,8 @@ func (m *Manager) Sign(ctx context.Context, request SignRequest) (SignedAccess, 
 	return registration.complete.Sign(ctx, binding, request)
 }
 
-func (m *Manager) BeginMultipart(ctx context.Context, target Target) (UploadID, error) {
-	binding, target, err := m.resolveTarget(ctx, target, "multipart", false)
+func (m *Manager) BeginMultipart(ctx context.Context, request BeginMultipartRequest) (UploadID, error) {
+	binding, target, err := m.resolveTarget(ctx, request.Target, "multipart", false)
 	if err != nil {
 		return "", err
 	}
@@ -73,7 +73,8 @@ func (m *Manager) BeginMultipart(ctx context.Context, target Target) (UploadID, 
 	if err != nil {
 		return "", err
 	}
-	return registration.complete.BeginMultipart(ctx, binding, target)
+	request.Target = target
+	return registration.complete.BeginMultipart(ctx, binding, request)
 }
 
 func (m *Manager) SignMultipartPart(ctx context.Context, request MultipartPartRequest) (SignedAccess, error) {

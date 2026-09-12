@@ -22,6 +22,7 @@ func newTestBackend() *backend {
 }
 
 type fakeClient struct {
+	createInput   *awss3.CreateMultipartUploadInput
 	createOutput  *awss3.CreateMultipartUploadOutput
 	createErr     error
 	completeInput *awss3.CompleteMultipartUploadInput
@@ -38,7 +39,8 @@ type fakeClient struct {
 	deleteErr     error
 }
 
-func (f *fakeClient) CreateMultipartUpload(context.Context, *awss3.CreateMultipartUploadInput, ...func(*awss3.Options)) (*awss3.CreateMultipartUploadOutput, error) {
+func (f *fakeClient) CreateMultipartUpload(_ context.Context, input *awss3.CreateMultipartUploadInput, _ ...func(*awss3.Options)) (*awss3.CreateMultipartUploadOutput, error) {
+	f.createInput = input
 	return f.createOutput, f.createErr
 }
 
@@ -163,8 +165,11 @@ func TestMultipartPreservesOpaqueIDETagsAndCallerOrder(t *testing.T) {
 	provider := cachedBackend(client, presigner)
 	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
 	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
-	if got, err := provider.BeginMultipart(context.Background(), binding, target); err != nil || got != "opaque" {
+	if got, err := provider.BeginMultipart(context.Background(), binding, storage.BeginMultipartRequest{Target: target, CompletionID: "completion"}); err != nil || got != "opaque" {
 		t.Fatalf("init = %q, %v", got, err)
+	}
+	if got := client.createInput.Metadata[storage.MultipartCompletionMarkerMetadataKey]; got != "completion" {
+		t.Fatalf("create metadata marker = %q, want completion", got)
 	}
 	if _, err := provider.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4}); err != nil {
 		t.Fatal(err)
@@ -190,12 +195,32 @@ func TestMultipartPreservesOpaqueIDETagsAndCallerOrder(t *testing.T) {
 	}
 }
 
+func TestCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
+	client := &fakeClient{headOutput: &awss3.HeadObjectOutput{Metadata: map[string]string{
+		storage.MultipartCompletionMarkerMetadataKey: "completion",
+	}}}
+	provider := cachedBackend(client, &fakePresigner{})
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	request := storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "bucket", Key: "key"},
+		UploadID:     "opaque",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1, ETag: "etag"}},
+	}
+	if err := provider.CompleteMultipart(context.Background(), binding, request); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if client.completeInput != nil {
+		t.Fatalf("provider finalize request = %#v, want no finalize after matching marker", client.completeInput)
+	}
+}
+
 func TestBeginMultipartRejectsMissingUploadID(t *testing.T) {
 	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
 	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
 	for _, output := range []*awss3.CreateMultipartUploadOutput{nil, {}} {
 		provider := cachedBackend(&fakeClient{createOutput: output}, &fakePresigner{})
-		if _, err := provider.BeginMultipart(context.Background(), binding, target); err == nil {
+		if _, err := provider.BeginMultipart(context.Background(), binding, storage.BeginMultipartRequest{Target: target, CompletionID: "completion"}); err == nil {
 			t.Fatalf("BeginMultipart accepted output %#v", output)
 		}
 	}

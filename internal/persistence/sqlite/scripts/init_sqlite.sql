@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS drs_object_access_method (
   object_id TEXT,
   url TEXT,
   type TEXT,
+  access_method_json TEXT,
   FOREIGN KEY(object_id) REFERENCES drs_object(id) ON DELETE CASCADE
 );
 
@@ -57,6 +58,21 @@ CREATE TABLE IF NOT EXISTS bucket_scope (
 
 CREATE INDEX IF NOT EXISTS idx_bucket_scope_credential_id ON bucket_scope(credential_id);
 CREATE INDEX IF NOT EXISTS idx_bucket_scope_bucket ON bucket_scope(bucket);
+
+CREATE TABLE IF NOT EXISTS multipart_upload_session (
+  upload_id TEXT PRIMARY KEY,
+  completion_id TEXT NOT NULL DEFAULT '',
+  target_json TEXT NOT NULL,
+  authorization_json TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('active','completing','completed')),
+  completion_token TEXT NOT NULL DEFAULT '',
+  parts_fingerprint TEXT NOT NULL DEFAULT '',
+  completed_location TEXT NOT NULL DEFAULT '',
+  created_time TIMESTAMP NOT NULL,
+  updated_time TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_multipart_upload_session_state_updated ON multipart_upload_session(state, updated_time);
 
 CREATE TABLE IF NOT EXISTS access_grant (
   access_grant_id TEXT PRIMARY KEY,

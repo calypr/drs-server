@@ -2,11 +2,15 @@ package azure
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/calypr/syfon/internal/storage"
 )
@@ -48,6 +52,11 @@ func (b *backend) CompleteMultipart(ctx context.Context, binding storage.Provide
 	if err != nil {
 		return fmt.Errorf("failed to create azure block blob client: %w", err)
 	}
+	if matched, err := b.multipartCompletionMatches(ctx, client, request.Target, request.CompletionID); err != nil {
+		return err
+	} else if matched {
+		return nil
+	}
 
 	partList := append([]storage.CompletedPart(nil), request.Parts...)
 	sort.Slice(partList, func(i, j int) bool { return partList[i].PartNumber < partList[j].PartNumber })
@@ -58,10 +67,43 @@ func (b *backend) CompleteMultipart(ctx context.Context, binding storage.Provide
 		blockIDs = append(blockIDs, b.azureBlockID(request.UploadID, part.PartNumber))
 	}
 
-	if _, err := client.CommitBlockList(ctx, blockIDs, nil); err != nil {
-		return fmt.Errorf("failed to complete azure multipart upload: %w", err)
+	var options *blockblob.CommitBlockListOptions
+	if strings.TrimSpace(request.CompletionID) != "" {
+		options = &blockblob.CommitBlockListOptions{Metadata: map[string]*string{
+			storage.MultipartCompletionMarkerMetadataKey: &request.CompletionID,
+		}}
+	}
+	if _, err := client.CommitBlockList(ctx, blockIDs, options); err != nil {
+		completionErr := fmt.Errorf("failed to complete azure multipart upload: %w", err)
+		matched, reconcileErr := b.multipartCompletionMatches(ctx, client, request.Target, request.CompletionID)
+		if reconcileErr != nil {
+			return errors.Join(completionErr, reconcileErr)
+		}
+		if matched {
+			return nil
+		}
+		return completionErr
 	}
 	return nil
+}
+
+func (b *backend) multipartCompletionMatches(ctx context.Context, client *blockblob.Client, target storage.Target, completionID string) (bool, error) {
+	if strings.TrimSpace(completionID) == "" {
+		return false, nil
+	}
+	properties, err := client.GetProperties(ctx, (*blob.GetPropertiesOptions)(nil))
+	if err != nil {
+		if bloberror.HasCode(err, bloberror.BlobNotFound, bloberror.ContainerNotFound) {
+			return false, nil
+		}
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("inspect azure multipart completion marker for %s/%s: %w", target.PhysicalBucket, target.Key, err))
+	}
+	for key, value := range properties.Metadata {
+		if strings.EqualFold(key, storage.MultipartCompletionMarkerMetadataKey) && value != nil {
+			return *value == completionID, nil
+		}
+	}
+	return false, nil
 }
 
 func (b *backend) blockBlobClientOptions() *blockblob.ClientOptions {

@@ -44,10 +44,12 @@ func TestPostgresSchemaContract(t *testing.T) {
 	}{
 		"drs_object":                 {[]string{"id", "size", "created_time", "updated_time", "name", "version", "description"}, []string{"id"}},
 		"drs_object_alias":           {[]string{"alias_id", "object_id"}, []string{"alias_id"}},
+		"drs_object_access_method":   {[]string{"object_id", "url", "type", "access_method_json"}, nil},
 		"s3_credential":              {[]string{"credential_id", "bucket", "provider", "region", "access_key", "secret_key", "endpoint"}, []string{"credential_id"}},
 		"bucket_scope":               {[]string{"organization", "project_id", "credential_id", "bucket", "path_prefix"}, []string{"organization", "project_id"}},
 		"object_usage":               {[]string{"object_id", "upload_count", "download_count", "last_upload_time", "last_download_time", "updated_time"}, []string{"object_id"}},
 		"object_usage_event":         {[]string{"id", "object_id", "event_type", "event_time"}, []string{"id"}},
+		"multipart_upload_session":   {[]string{"upload_id", "completion_id", "target_json", "authorization_json", "state", "completion_token", "parts_fingerprint", "completed_location", "created_time", "updated_time"}, []string{"upload_id"}},
 		"transfer_attribution_event": {[]string{"event_id", "access_grant_id", "event_type", "direction", "event_time", "request_id", "object_id", "sha256", "object_size", "organization", "project", "access_id", "provider", "bucket", "storage_url", "range_start", "range_end", "bytes_requested", "bytes_completed", "actor_email", "actor_subject", "auth_mode", "client_name", "client_version", "transfer_session_id"}, []string{"event_id"}},
 		"access_grant":               {[]string{"access_grant_id", "first_issued_at", "last_issued_at", "issue_count", "object_id", "sha256", "object_size", "organization", "project", "access_id", "provider", "bucket", "storage_url", "actor_email", "actor_subject", "auth_mode"}, []string{"access_grant_id"}},
 	}

@@ -71,6 +71,9 @@ func mapDownloadError(c fiber.Ctx, err error) error {
 }
 
 func (s *internalServer) InternalMultipartInit(c fiber.Ctx) error {
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
 	var req internalapi.InternalMultipartInitRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
@@ -83,6 +86,9 @@ func (s *internalServer) InternalMultipartInit(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalMultipartUpload(c fiber.Ctx) error {
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
 	var req internalapi.InternalMultipartUploadRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
@@ -98,6 +104,9 @@ func (s *internalServer) InternalMultipartUpload(c fiber.Ctx) error {
 }
 
 func (s *internalServer) InternalMultipartComplete(c fiber.Ctx) error {
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
 	var req internalapi.InternalMultipartCompleteRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
@@ -109,10 +118,11 @@ func (s *internalServer) InternalMultipartComplete(c fiber.Ctx) error {
 	for i, part := range req.Parts {
 		parts[i] = domaintransfers.CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
 	}
-	if err := s.transfers.CompleteMultipart(c.Context(), req.UploadId, parts); err != nil {
+	location, err := s.transfers.CompleteMultipart(c.Context(), req.UploadId, parts)
+	if err != nil {
 		return HandleError(c, err)
 	}
-	return c.SendStatus(fiber.StatusOK)
+	return c.JSON(internalapi.InternalMultipartCompleteOutput{ObjectUrl: location})
 }
 
 func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
@@ -156,6 +166,9 @@ func (s *internalServer) InternalUploadURL(c fiber.Ctx, _ string, params interna
 }
 
 func (s *internalServer) InternalUploadBulk(c fiber.Ctx) error {
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
 	var req internalapi.InternalUploadBulkRequest
 	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")

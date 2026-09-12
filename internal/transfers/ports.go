@@ -21,7 +21,7 @@ type ObjectPort interface {
 // this boundary.
 type StoragePort interface {
 	Sign(context.Context, storage.SignRequest) (storage.SignedAccess, error)
-	BeginMultipart(context.Context, storage.Target) (storage.UploadID, error)
+	BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error)
 	SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error)
 	CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error
 }
@@ -38,6 +38,14 @@ type EventRecorder interface {
 	RecordTransferAttributionEvents(context.Context, []usage.Event) error
 }
 
+type MultipartSessionStore interface {
+	SaveMultipartSession(context.Context, MultipartSession) error
+	GetMultipartSession(context.Context, string) (MultipartSession, error)
+	ClaimMultipartCompletion(context.Context, string, string, string, time.Time, time.Time) (MultipartSession, bool, error)
+	ReleaseMultipartCompletion(context.Context, string, string, time.Time) error
+	FinishMultipartCompletion(context.Context, string, string, string, time.Time) (bool, error)
+}
+
 type Dependencies struct {
 	Objects              ObjectPort
 	Storage              StoragePort
@@ -45,6 +53,7 @@ type Dependencies struct {
 	Scopes               ScopeReader
 	Credentials          CredentialReader
 	Events               EventRecorder
+	MultipartSessions    MultipartSessionStore
 	Now                  func() time.Time
 	DefaultSigningExpiry time.Duration
 }

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"path"
 	"strconv"
 	"strings"
@@ -46,6 +47,15 @@ type ByteRange struct {
 
 type UploadID string
 
+const MultipartCompletionMarkerMetadataKey = "syfon-multipart-id"
+
+var ErrMultipartCompletionIndeterminate = errors.New("multipart completion outcome is indeterminate")
+
+type BeginMultipartRequest struct {
+	Target       Target
+	CompletionID string
+}
+
 func MultipartPartObjectKey(key string, uploadID UploadID, partNumber int32) string {
 	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
 	return path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), cleanKey, "parts", strconv.Itoa(int(partNumber)))
@@ -64,9 +74,10 @@ type MultipartPartRequest struct {
 }
 
 type CompleteMultipartRequest struct {
-	Target   Target
-	UploadID UploadID
-	Parts    []CompletedPart
+	Target       Target
+	UploadID     UploadID
+	CompletionID string
+	Parts        []CompletedPart
 }
 
 type ObjectMetadata struct {

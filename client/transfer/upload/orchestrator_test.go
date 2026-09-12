@@ -4,12 +4,57 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/transfer"
 )
+
+type completedLocationBackend struct{ uploaderStub }
+
+func (b *completedLocationBackend) MultipartCompleteWithLocation(context.Context, string, string, []transfer.MultipartPart) (string, error) {
+	return "s3://physical-bucket/original-project-prefix/payload.bin", nil
+}
+
+func TestRegisterLargeFileUsesCompletedMultipartLocation(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "payload.bin")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	size := int64(4.5 * float64(common.GB))
+	if err := file.Truncate(size); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATA_CLIENT_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	backend := &completedLocationBackend{uploaderStub: uploaderStub{resolveFunc: func(context.Context, string, string, common.FileMetadata, string) (string, error) {
+		return "", fmt.Errorf("completed multipart location must not be re-resolved")
+	}}}
+	metadata := &metadataClientStub{registeredID: "stored-id"}
+	obj := &drsapi.DrsObject{Id: "requested-id", Size: size}
+	got, err := RegisterFile(context.Background(), backend, metadata, obj, filePath, "physical-bucket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "s3://physical-bucket/original-project-prefix/payload.bin"
+	if got.AccessMethods == nil || len(*got.AccessMethods) != 1 {
+		t.Fatalf("access methods = %+v", got.AccessMethods)
+	}
+	if actual := (*got.AccessMethods)[0].AccessUrl.Url; actual != want {
+		t.Fatalf("registered URL = %q, want completed location %q", actual, want)
+	}
+	if len(metadata.requests) != 1 || (*metadata.requests[0].Candidates[0].AccessMethods)[0].AccessUrl.Url != want {
+		t.Fatalf("registration request = %+v", metadata.requests)
+	}
+}
 
 type metadataClientStub struct {
 	registeredID string

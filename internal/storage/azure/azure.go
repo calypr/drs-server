@@ -70,7 +70,7 @@ func (b *backend) Sign(ctx context.Context, binding storage.ProviderBinding, req
 	return storage.SignedAccess{Location: signed}, nil
 }
 
-func (b *backend) BeginMultipart(_ context.Context, _ storage.ProviderBinding, _ storage.Target) (storage.UploadID, error) {
+func (b *backend) BeginMultipart(_ context.Context, _ storage.ProviderBinding, _ storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return storage.UploadID(uuid.NewString()), nil
 }
 

@@ -110,10 +110,17 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 		canonicalInput = uploadURL
 	} else {
 		uploader := engine.GenericUploader{Backend: bk}
-		if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata, ForceMultipart: true}); err != nil {
+		canonicalInput, err = uploader.UploadWithLocation(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata, ForceMultipart: true})
+		if err != nil {
 			return nil, fmt.Errorf("multipart upload failed: %w", err)
 		}
-		canonicalInput = "s3://" + strings.Trim(strings.TrimSpace(bucketName), "/") + "/" + strings.Trim(strings.TrimSpace(uploadFilename), "/")
+		if strings.TrimSpace(canonicalInput) == "" {
+			// Older servers and custom backends may not return a completion location.
+			canonicalInput, err = bk.ResolveUploadURL(ctx, storageID, uploadFilename, metadata, bucketName)
+			if err != nil {
+				return nil, fmt.Errorf("resolve completed multipart location: %w", err)
+			}
+		}
 	}
 
 	// 4. Finalize registration with a concrete access location.

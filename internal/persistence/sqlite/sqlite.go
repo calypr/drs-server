@@ -44,7 +44,7 @@ func sqliteDSN(dsn string) string {
 		if end < 0 {
 			end = len(dsn) - marker
 		}
-		return dsn[:marker] + "_txlock=immediate" + dsn[marker+end:]
+		dsn = dsn[:marker] + "_txlock=immediate" + dsn[marker+end:]
 	}
 	params := make([]string, 0, 2)
 	if !strings.Contains(dsn, "_foreign_keys=") {

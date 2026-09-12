@@ -3,9 +3,11 @@ package services
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/apierror"
@@ -35,15 +37,30 @@ func (d *DataService) multipartUploadRequest(ctx context.Context, req internalap
 	return *resp.JSON200, nil
 }
 
-func (d *DataService) multipartCompleteRequest(ctx context.Context, req internalapi.InternalMultipartCompleteRequest) error {
+func (d *DataService) multipartCompleteRequest(ctx context.Context, req internalapi.InternalMultipartCompleteRequest) (string, error) {
 	resp, err := d.gen.InternalMultipartCompleteWithResponse(ctx, internalapi.InternalMultipartCompleteJSONRequestBody(req))
 	if err != nil {
-		return err
+		return "", err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
+		return "", apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
-	return nil
+	// Read the optional extension from the body so the standalone client also
+	// builds against published bindings from before completion returned a URL.
+	if strings.Contains(resp.HTTPResponse.Header.Get("Content-Type"), "json") && len(bytes.TrimSpace(resp.Body)) > 0 {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(resp.Body, &fields); err != nil {
+			return "", fmt.Errorf("decode multipart completion: %w", err)
+		}
+		if raw, ok := fields["object_url"]; ok {
+			var location string
+			if err := json.Unmarshal(raw, &location); err != nil {
+				return "", fmt.Errorf("decode completed object location: %w", err)
+			}
+			return location, nil
+		}
+	}
+	return "", nil
 }
 
 func (d *DataService) InitMultipartUploadWithMetadata(ctx context.Context, guid, filename, bucket string, metadata common.FileMetadata) (string, string, error) {
@@ -106,6 +123,12 @@ func (d *DataService) MultipartPart(ctx context.Context, guid string, uploadID s
 }
 
 func (d *DataService) MultipartComplete(ctx context.Context, guid string, uploadID string, parts []transfer.MultipartPart) error {
+	_, err := d.MultipartCompleteWithLocation(ctx, guid, uploadID, parts)
+	return err
+}
+
+// MultipartCompleteWithLocation returns the storage location selected by the upload session.
+func (d *DataService) MultipartCompleteWithLocation(ctx context.Context, guid string, uploadID string, parts []transfer.MultipartPart) (string, error) {
 	reqParts := make([]internalapi.InternalMultipartPart, 0, len(parts))
 	for _, p := range parts {
 		reqParts = append(reqParts, internalapi.InternalMultipartPart{

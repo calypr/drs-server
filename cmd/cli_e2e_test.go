@@ -343,7 +343,7 @@ func (a cliFileStorageAccess) Sign(_ context.Context, request storage.SignReques
 	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
 }
 
-func (cliFileStorageAccess) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+func (cliFileStorageAccess) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return "", fmt.Errorf("multipart storage is not configured in the CLI fixture")
 }
 

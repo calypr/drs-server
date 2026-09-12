@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
@@ -71,8 +71,7 @@ type Service struct {
 	events            EventRecorder
 	now               func() time.Time
 	signingExpiry     time.Duration
-	multipartMu       sync.Mutex
-	multipartSessions map[string]*multipartSession
+	multipartSessions MultipartSessionStore
 }
 
 const defaultSigningExpiry = 15 * time.Minute
@@ -86,7 +85,11 @@ func NewService(deps Dependencies) *Service {
 	if expires <= 0 {
 		expires = defaultSigningExpiry
 	}
-	return &Service{objects: deps.Objects, storage: deps.Storage, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now, signingExpiry: expires}
+	multipartSessions := deps.MultipartSessions
+	if multipartSessions == nil {
+		multipartSessions = newMemoryMultipartSessionStore()
+	}
+	return &Service{objects: deps.Objects, storage: deps.Storage, fileCounters: deps.FileCounters, scopes: deps.Scopes, credentials: deps.Credentials, events: deps.Events, now: now, signingExpiry: expires, multipartSessions: multipartSessions}
 }
 
 func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadResult, error) {
@@ -152,6 +155,9 @@ func (s *Service) UploadURL(ctx context.Context, req UploadRequest) (UploadResul
 	if req.Scope != nil {
 		organization = req.Scope.Organization
 		project = req.Scope.Project
+		if err := access.AuthorizeScopeWrite(ctx, organization, project, "file_upload", "create", "update"); err != nil {
+			return UploadResult{}, err
+		}
 	}
 	var obj *drs.DrsObject
 	var err error

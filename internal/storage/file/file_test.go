@@ -46,14 +46,14 @@ func TestInitMultipartUploadReturnsUUID(t *testing.T) {
 		t.Fatalf("newBackend failed: %v", err)
 	}
 
-	first, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.Target{})
+	first, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.BeginMultipartRequest{Target: storage.Target{}, CompletionID: "completion-1"})
 	if err != nil {
 		t.Fatalf("first InitMultipartUpload failed: %v", err)
 	}
 	if _, err := uuid.Parse(string(first)); err != nil {
 		t.Fatalf("upload ID %q is not a UUID: %v", first, err)
 	}
-	second, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.Target{})
+	second, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.BeginMultipartRequest{Target: storage.Target{}, CompletionID: "completion-2"})
 	if err != nil {
 		t.Fatalf("second InitMultipartUpload failed: %v", err)
 	}
@@ -94,6 +94,41 @@ func TestCompleteMultipartUploadSortsPartsAndCleansUp(t *testing.T) {
 		if _, err := b.rootBucket.NewReader(ctx, partKey, nil); err == nil {
 			t.Fatalf("part %q was not cleaned up", partKey)
 		}
+	}
+}
+
+func TestCompleteMultipartUploadRetriesAfterCommittedObject(t *testing.T) {
+	b, err := newBackend(t.TempDir())
+	if err != nil {
+		t.Fatalf("newBackend failed: %v", err)
+	}
+
+	ctx := context.Background()
+	key := "test/object.bin"
+	uploadID := storage.UploadID("upload-retry")
+	part := storage.MultipartPartObjectKey(key, uploadID, 1)
+	writeBlob(t, b, part, "hello world")
+	request := storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "ignored", Key: key},
+		UploadID:     uploadID,
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1}},
+	}
+	if err := b.CompleteMultipart(ctx, storage.ProviderBinding{}, request); err != nil {
+		t.Fatalf("first completion failed: %v", err)
+	}
+	attrs, err := b.rootBucket.Attributes(ctx, key)
+	if err != nil {
+		t.Fatalf("read completed object attributes: %v", err)
+	}
+	if got := attrs.Metadata[storage.MultipartCompletionMarkerMetadataKey]; got != "completion" {
+		t.Fatalf("completion marker = %q, want completion", got)
+	}
+	if err := b.CompleteMultipart(ctx, storage.ProviderBinding{}, request); err != nil {
+		t.Fatalf("retry completion failed: %v", err)
+	}
+	if got := readBlob(t, b, key); got != "hello world" {
+		t.Fatalf("retried object = %q, want hello world", got)
 	}
 }
 

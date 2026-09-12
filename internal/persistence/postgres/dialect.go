@@ -75,6 +75,9 @@ func (postgresDialect) Bootstrap(ctx context.Context, db *sql.DB) error {
 	if err := bootstrap.ensureLFSPendingSchema(); err != nil {
 		return err
 	}
+	if err := bootstrap.ensureMultipartUploadSchema(); err != nil {
+		return err
+	}
 	if err := bootstrap.ensureObjectUsageSchema(); err != nil {
 		return err
 	}
@@ -267,6 +270,32 @@ func (s *postgresSchemaBootstrap) ensureLFSPendingSchema() error {
 	for _, q := range queries {
 		if _, err := s.db.Exec(q); err != nil {
 			return fmt.Errorf("failed to initialize lfs pending metadata schema: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *postgresSchemaBootstrap) ensureMultipartUploadSchema() error {
+	queries := []string{
+		`CREATE TABLE IF NOT EXISTS multipart_upload_session (
+			upload_id TEXT PRIMARY KEY,
+			completion_id TEXT NOT NULL DEFAULT '',
+			target_json TEXT NOT NULL,
+			authorization_json TEXT NOT NULL,
+			state TEXT NOT NULL CHECK(state IN ('active','completing','completed')),
+			completion_token TEXT NOT NULL DEFAULT '',
+			parts_fingerprint TEXT NOT NULL DEFAULT '',
+			completed_location TEXT NOT NULL DEFAULT '',
+			created_time TIMESTAMPTZ NOT NULL,
+			updated_time TIMESTAMPTZ NOT NULL
+		)`,
+		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS parts_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS completion_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX IF NOT EXISTS idx_multipart_upload_session_state_updated ON multipart_upload_session(state, updated_time)`,
+	}
+	for _, query := range queries {
+		if _, err := s.db.Exec(query); err != nil {
+			return fmt.Errorf("failed to initialize multipart upload schema: %w", err)
 		}
 	}
 	return nil

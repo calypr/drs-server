@@ -39,6 +39,10 @@ type multipartInitWithMetadataResolver interface {
 	InitMultipartUploadWithMetadata(ctx context.Context, guid, filename, bucket string, metadata common.FileMetadata) (uploadID string, key string, err error)
 }
 
+type multipartLocationCompleter interface {
+	MultipartCompleteWithLocation(context.Context, string, string, []transfer.MultipartPart) (string, error)
+}
+
 func effectiveObjectKey(req transfer.TransferRequest) string {
 	if key := strings.TrimSpace(req.ObjectKey); key != "" {
 		return key
@@ -47,21 +51,27 @@ func effectiveObjectKey(req transfer.TransferRequest) string {
 }
 
 func (u *GenericUploader) Upload(ctx context.Context, req transfer.TransferRequest) error {
+	_, err := u.UploadWithLocation(ctx, req)
+	return err
+}
+
+// UploadWithLocation returns the completed multipart target when the backend supplies it.
+func (u *GenericUploader) UploadWithLocation(ctx context.Context, req transfer.TransferRequest) (string, error) {
 	file, err := os.Open(req.SourcePath)
 	if err != nil {
-		return fmt.Errorf("open source: %w", err)
+		return "", fmt.Errorf("open source: %w", err)
 	}
 	defer file.Close()
 
 	stat, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("stat source: %w", err)
+		return "", fmt.Errorf("stat source: %w", err)
 	}
 
 	if req.ForceMultipart || stat.Size() >= common.FileSizeLimit {
 		return u.uploadMultipart(ctx, req, file, stat.Size())
 	}
-	return u.uploadSingle(ctx, req, file, stat.Size())
+	return "", u.uploadSingle(ctx, req, file, stat.Size())
 }
 
 func (u *GenericUploader) uploadSingle(ctx context.Context, req transfer.TransferRequest, file *os.File, size int64) error {
@@ -111,18 +121,18 @@ func (u *GenericUploader) uploadSingle(ctx context.Context, req transfer.Transfe
 	return nil
 }
 
-func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.TransferRequest, file *os.File, fileSize int64) error {
+func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.TransferRequest, file *os.File, fileSize int64) (string, error) {
 	logger := u.Backend.Logger()
 	chunkSize := OptimalChunkSize(fileSize)
 	checkpointPath, err := CheckpointPath(req.SourcePath, req.GUID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	state, loaded := u.loadState(checkpointPath)
 	stat, err := file.Stat()
 	if err != nil {
-		return fmt.Errorf("stat upload source: %w", err)
+		return "", fmt.Errorf("stat upload source: %w", err)
 	}
 	objectKey := effectiveObjectKey(req)
 
@@ -137,7 +147,7 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 			uploadID, err = u.Backend.MultipartInit(ctx, objectKey)
 		}
 		if err != nil {
-			return err
+			return "", err
 		}
 		state = &uploaderResumeState{
 			SourcePath:      req.SourcePath,
@@ -151,7 +161,7 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 			Completed:       map[int]string{},
 		}
 		if err := u.saveState(checkpointPath, state); err != nil {
-			return fmt.Errorf("persist multipart checkpoint: %w", err)
+			return "", fmt.Errorf("persist multipart checkpoint: %w", err)
 		}
 	}
 
@@ -223,7 +233,7 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 	wg.Wait()
 
 	if uploadErr != nil {
-		return fmt.Errorf("multipart upload failed: %w", uploadErr)
+		return "", fmt.Errorf("multipart upload failed: %w", uploadErr)
 	}
 
 	parts := make([]transfer.MultipartPart, 0, len(state.Completed))
@@ -232,17 +242,23 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 	}
 	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
 
-	if err := u.Backend.MultipartComplete(ctx, objectKey, state.UploadID, parts); err != nil {
-		return err
+	location := ""
+	if backend, ok := u.Backend.(multipartLocationCompleter); ok {
+		location, err = backend.MultipartCompleteWithLocation(ctx, objectKey, state.UploadID, parts)
+	} else {
+		err = u.Backend.MultipartComplete(ctx, objectKey, state.UploadID, parts)
+	}
+	if err != nil {
+		return "", err
 	}
 	if err := tracker.CompleteUpload(); err != nil {
-		return transfer.NonRetryable(err)
+		return "", transfer.NonRetryable(err)
 	}
 
 	if err := os.Remove(checkpointPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove multipart checkpoint: %w", err)
+		return "", fmt.Errorf("remove multipart checkpoint: %w", err)
 	}
-	return nil
+	return location, nil
 }
 
 func (u *GenericUploader) loadState(path string) (*uploaderResumeState, bool) {

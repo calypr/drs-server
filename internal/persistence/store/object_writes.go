@@ -33,17 +33,39 @@ func (db *Store) flushObjectUsageEventsForIDsTx(ctx context.Context, tx *sql.Tx,
 		return nil
 	}
 	now := time.Now().UTC()
-	condition, idArgs := db.dialect.ListArgs("e.object_id", ids)
 	isPostgres := strings.HasPrefix(db.dialect.Rebind("?"), "$")
 	if isPostgres {
-		condition = strings.Replace(condition, "?", "$1", 1)
+		condition, idArgs := db.dialect.ListArgs("e.object_id", ids)
+		args := append(idArgs, now)
+		query := fmt.Sprintf(`
+			WITH consumed AS (
+				DELETE FROM object_usage_event AS e
+				USING drs_object AS o
+				WHERE e.object_id = o.id AND %s
+				RETURNING e.object_id, e.event_type, e.event_time
+			), aggregated AS (
+				SELECT c.object_id,
+					COALESCE(SUM(CASE WHEN c.event_type = 'upload' THEN 1 ELSE 0 END), 0) AS upload_count,
+					COALESCE(SUM(CASE WHEN c.event_type = 'download' THEN 1 ELSE 0 END), 0) AS download_count,
+					MAX(CASE WHEN c.event_type = 'upload' THEN c.event_time END) AS last_upload_time,
+					MAX(CASE WHEN c.event_type = 'download' THEN c.event_time END) AS last_download_time
+				FROM consumed c
+				GROUP BY c.object_id
+			)
+			INSERT INTO object_usage (object_id, upload_count, download_count, last_upload_time, last_download_time, updated_time)
+			SELECT object_id, upload_count, download_count, last_upload_time, last_download_time, ?
+			FROM aggregated
+			ON CONFLICT (object_id) DO UPDATE SET
+				upload_count = object_usage.upload_count + excluded.upload_count,
+				download_count = object_usage.download_count + excluded.download_count,
+				last_upload_time = CASE WHEN excluded.last_upload_time IS NULL THEN object_usage.last_upload_time WHEN object_usage.last_upload_time IS NULL THEN excluded.last_upload_time WHEN excluded.last_upload_time > object_usage.last_upload_time THEN excluded.last_upload_time ELSE object_usage.last_upload_time END,
+				last_download_time = CASE WHEN excluded.last_download_time IS NULL THEN object_usage.last_download_time WHEN object_usage.last_download_time IS NULL THEN excluded.last_download_time WHEN excluded.last_download_time > object_usage.last_download_time THEN excluded.last_download_time ELSE object_usage.last_download_time END,
+				updated_time = excluded.updated_time`, condition)
+		_, err := db.txExecContext(ctx, tx, query, args...)
+		return err
 	}
+	condition, idArgs := db.dialect.ListArgs("e.object_id", ids)
 	args := append([]any{now}, idArgs...)
-	timestampPlaceholder := "?"
-	if isPostgres {
-		args = append(idArgs, now)
-		timestampPlaceholder = "$2"
-	}
 	query := fmt.Sprintf(`
 		INSERT INTO object_usage (object_id, upload_count, download_count, last_upload_time, last_download_time, updated_time)
 		SELECT e.object_id,
@@ -60,17 +82,11 @@ func (db *Store) flushObjectUsageEventsForIDsTx(ctx context.Context, tx *sql.Tx,
 			download_count = object_usage.download_count + excluded.download_count,
 			last_upload_time = CASE WHEN excluded.last_upload_time IS NULL THEN object_usage.last_upload_time WHEN object_usage.last_upload_time IS NULL THEN excluded.last_upload_time WHEN excluded.last_upload_time > object_usage.last_upload_time THEN excluded.last_upload_time ELSE object_usage.last_upload_time END,
 			last_download_time = CASE WHEN excluded.last_download_time IS NULL THEN object_usage.last_download_time WHEN object_usage.last_download_time IS NULL THEN excluded.last_download_time WHEN excluded.last_download_time > object_usage.last_download_time THEN excluded.last_download_time ELSE object_usage.last_download_time END,
-			updated_time = excluded.updated_time`, timestampPlaceholder, condition)
+			updated_time = excluded.updated_time`, "?", condition)
 	if _, err := db.txExecContext(ctx, tx, query, args...); err != nil {
 		return err
 	}
 	deleteCondition, deleteArgs := db.dialect.ListArgs("object_usage_event.object_id", ids)
-	if isPostgres {
-		deleteCondition = strings.Replace(deleteCondition, "object_usage_event.object_id", "e.object_id", 1)
-		deleteCondition = strings.Replace(deleteCondition, "?", "$1", 1)
-		_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event e USING drs_object o WHERE e.object_id = o.id AND "+deleteCondition, deleteArgs...)
-		return err
-	}
 	_, err := db.txExecContext(ctx, tx, "DELETE FROM object_usage_event WHERE "+deleteCondition+" AND EXISTS (SELECT 1 FROM drs_object WHERE drs_object.id = object_usage_event.object_id)", deleteArgs...)
 	return err
 }
@@ -459,19 +475,8 @@ func (db *Store) mergeContentChildrenTx(ctx context.Context, tx *sql.Tx, id, sha
 		}
 	}
 	if obj.AccessMethods != nil {
-		for _, method := range *obj.AccessMethods {
-			if method.AccessUrl == nil || strings.TrimSpace(method.AccessUrl.Url) == "" {
-				continue
-			}
-			typ, rawURL := strings.TrimSpace(string(method.Type)), strings.TrimSpace(method.AccessUrl.Url)
-			if _, err := db.txExecContext(ctx, tx, `
-				INSERT INTO drs_object_access_method (object_id, url, type)
-				SELECT ?, ?, ? WHERE NOT EXISTS (
-					SELECT 1 FROM drs_object_access_method
-					WHERE object_id = ? AND lower(trim(type)) = lower(trim(?)) AND url = ?
-				)`, id, rawURL, typ, id, typ, rawURL); err != nil {
-				return fmt.Errorf("merge access method: %w", err)
-			}
+		if err := db.upsertAccessMethodsTx(ctx, tx, id, *obj.AccessMethods, true); err != nil {
+			return fmt.Errorf("merge access method: %w", err)
 		}
 	}
 	for _, alias := range normalizeObjectNameAliases(obj) {

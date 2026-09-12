@@ -20,6 +20,7 @@ type ObjectMetadata struct {
 	Size         int64
 	AcceptRanges bool
 	Provider     string
+	Identity     string
 }
 
 // TransferRequest represents a request to move a single file.

@@ -25,8 +25,9 @@ func (s *lfsUploadMultipartSpy) Sign(context.Context, storage.SignRequest) (stor
 	return storage.SignedAccess{Location: "https://provider.invalid/object"}, nil
 }
 
-func (s *lfsUploadMultipartSpy) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
+func (s *lfsUploadMultipartSpy) BeginMultipart(_ context.Context, request storage.BeginMultipartRequest) (storage.UploadID, error) {
 	s.events = append(s.events, "begin")
+	target := request.Target
 	if target.PhysicalBucket != "bucket" || target.Key != "object" {
 		return "", fmt.Errorf("unexpected target: %+v", target)
 	}

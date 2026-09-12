@@ -1,7 +1,10 @@
 package file
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
+	"gocloud.dev/gcerrors"
 )
 
 type backend struct {
@@ -46,7 +50,7 @@ func (b *backend) Sign(_ context.Context, _ storage.ProviderBinding, request sto
 	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(b.rootPath, request.Target.Key))}, nil
 }
 
-func (b *backend) BeginMultipart(context.Context, storage.ProviderBinding, storage.Target) (storage.UploadID, error) {
+func (b *backend) BeginMultipart(context.Context, storage.ProviderBinding, storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return storage.UploadID(uuid.NewString()), nil
 }
 
@@ -67,13 +71,24 @@ func (b *backend) CompleteMultipart(ctx context.Context, _ storage.ProviderBindi
 	if len(request.Parts) == 0 {
 		return fmt.Errorf("multipart complete requires at least one part")
 	}
+	if matched, err := b.multipartCompletionMatches(ctx, request.Target, request.CompletionID); err != nil {
+		return err
+	} else if matched {
+		return nil
+	}
 	partList := append([]storage.CompletedPart(nil), request.Parts...)
 	sort.Slice(partList, func(i, j int) bool { return partList[i].PartNumber < partList[j].PartNumber })
 
 	destinationKey := strings.Trim(strings.TrimSpace(request.Target.Key), "/")
 	writerContext, cancelWriter := context.WithCancel(ctx)
 	defer cancelWriter()
-	writer, err := b.rootBucket.NewWriter(writerContext, destinationKey, nil)
+	writerOptions := (*blob.WriterOptions)(nil)
+	if strings.TrimSpace(request.CompletionID) != "" {
+		writerOptions = &blob.WriterOptions{Metadata: map[string]string{
+			storage.MultipartCompletionMarkerMetadataKey: request.CompletionID,
+		}}
+	}
+	writer, err := b.rootBucket.NewWriter(writerContext, destinationKey, writerOptions)
 	if err != nil {
 		return fmt.Errorf("failed to open destination writer: %w", err)
 	}
@@ -103,14 +118,63 @@ func (b *backend) CompleteMultipart(ctx context.Context, _ storage.ProviderBindi
 	}
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("failed to finalize multipart object: %w", err)
+		completionErr := fmt.Errorf("failed to finalize multipart object: %w", err)
+		matched, reconcileErr := b.multipartCompletionMatches(ctx, request.Target, request.CompletionID)
+		if reconcileErr != nil {
+			return errors.Join(completionErr, reconcileErr)
+		}
+		if matched {
+			return nil
+		}
+		return completionErr
 	}
 	for _, partKey := range cleanupKeys {
 		if err := b.rootBucket.Delete(ctx, partKey); err != nil {
-			return fmt.Errorf("failed to delete multipart part %s: %w", partKey, err)
+			if strings.TrimSpace(request.CompletionID) == "" {
+				return fmt.Errorf("failed to delete multipart part %s: %w", partKey, err)
+			}
+			break
 		}
 	}
 	return nil
+}
+
+func (b *backend) multipartCompletionMatches(ctx context.Context, target storage.Target, completionID string) (bool, error) {
+	if strings.TrimSpace(completionID) == "" {
+		return false, nil
+	}
+	destinationKey := strings.Trim(strings.TrimSpace(target.Key), "/")
+	attrs, err := b.rootBucket.Attributes(ctx, destinationKey)
+	if err != nil {
+		if os.IsNotExist(err) || gcerrors.Code(err) == gcerrors.NotFound {
+			return false, nil
+		}
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("inspect file multipart completion marker for %s: %w", destinationKey, err))
+	}
+	if attrs == nil {
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("inspect file multipart completion marker for %s: provider returned an empty response", destinationKey))
+	}
+	if attrs.Metadata[storage.MultipartCompletionMarkerMetadataKey] != completionID || len(attrs.MD5) == 0 {
+		return false, nil
+	}
+
+	file, err := os.Open(b.pathForKey(destinationKey))
+	if err != nil {
+		if os.IsNotExist(err) || gcerrors.Code(err) == gcerrors.NotFound {
+			return false, nil
+		}
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("open file multipart destination %s: %w", destinationKey, err))
+	}
+	hash := md5.New()
+	_, copyErr := io.Copy(hash, file)
+	closeErr := file.Close()
+	if copyErr != nil {
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("read file multipart destination %s: %w", destinationKey, copyErr))
+	}
+	if closeErr != nil {
+		return false, errors.Join(storage.ErrMultipartCompletionIndeterminate, fmt.Errorf("close file multipart destination %s: %w", destinationKey, closeErr))
+	}
+	return bytes.Equal(attrs.MD5, hash.Sum(nil)), nil
 }
 
 func (b *backend) Delete(_ context.Context, _ storage.ProviderBinding, targets []storage.PhysicalTarget) error {

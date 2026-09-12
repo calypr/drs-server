@@ -1490,6 +1490,10 @@ paths:
       responses:
         '200':
           description: Upload completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalMultipartCompleteOutput'
         '400':
           description: Validation error
           content:
@@ -2337,6 +2341,14 @@ components:
           format: int32
         ETag:
           type: string
+    InternalMultipartCompleteOutput:
+      type: object
+      required:
+        - object_url
+      properties:
+        object_url:
+          type: string
+          description: Canonical location of the object completed by this upload session.
     InternalMultipartCompleteRequest:
       type: object
       required:

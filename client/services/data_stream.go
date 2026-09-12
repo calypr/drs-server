@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
@@ -17,7 +19,8 @@ func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMe
 		obj, err := d.drs.GetObject(ctx, guid)
 		if err == nil {
 			md := &transfer.ObjectMetadata{
-				Size: obj.Size,
+				Size:     obj.Size,
+				Identity: downloadObjectIdentity(&obj),
 			}
 			if obj.AccessMethods != nil && len(*obj.AccessMethods) > 0 {
 				md.AcceptRanges = true
@@ -33,6 +36,23 @@ func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMe
 		AcceptRanges: true,
 		Size:         0,
 	}, nil
+}
+
+func downloadObjectIdentity(object *drs.DrsObject) string {
+	if object == nil {
+		return ""
+	}
+	for _, checksum := range object.Checksums {
+		checksumType := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(checksum.Type), "-", ""))
+		if checksumType == "sha256" {
+			value := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(checksum.Checksum)), "sha256:")
+			decoded, err := hex.DecodeString(value)
+			if err == nil && len(decoded) == 32 {
+				return "sha256:" + value
+			}
+		}
+	}
+	return ""
 }
 
 func (d *DataService) GetReader(ctx context.Context, guid string) (io.ReadCloser, error) {
@@ -61,7 +81,7 @@ func (d *DataService) GetRangeReader(ctx context.Context, guid string, offset, l
 	if err != nil {
 		return nil, err
 	}
-	if offset > 0 && resp.StatusCode == http.StatusOK {
+	if resp.StatusCode == http.StatusOK {
 		resp.Body.Close()
 		return nil, transfer.ErrRangeIgnored
 	}

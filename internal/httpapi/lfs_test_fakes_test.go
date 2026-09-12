@@ -170,8 +170,8 @@ func (f *lfsTestStorage) Sign(_ context.Context, request storage.SignRequest) (s
 	return storage.SignedAccess{Location: location + "?signed=true"}, nil
 }
 
-func (f *lfsTestStorage) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
-	f.initTarget = target
+func (f *lfsTestStorage) BeginMultipart(_ context.Context, request storage.BeginMultipartRequest) (storage.UploadID, error) {
+	f.initTarget = request.Target
 	return storage.UploadID("opaque-upload-id"), nil
 }
 

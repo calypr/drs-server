@@ -69,7 +69,7 @@ func copyRecord(ctx context.Context, cmd *cobra.Command, sourceClient, targetCli
 	downloadProgress := transferprogress.New(cmd.OutOrStdout(), filepath.Base(progressName), size)
 	downloadProgress.Start()
 	downloadCtx := transferprogress.WithProgress(ctx, did, downloadProgress)
-	if err := engine.Download(downloadCtx, sourceClient.Data(), did, tempPath, engine.DownloadOptions{MultipartThreshold: 5 * common.GB}); err != nil {
+	if err := engine.Download(downloadCtx, sourceClient.Data(), did, tempPath, engine.DownloadOptions{MultipartThreshold: 5 * common.GB, EphemeralDestination: true}); err != nil {
 		downloadProgress.Abort()
 		return fmt.Errorf("failed to download file %s: %w", did, err)
 	}

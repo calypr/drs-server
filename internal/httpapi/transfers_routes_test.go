@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,9 +11,57 @@ import (
 
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/services"
+	clienttransfer "github.com/calypr/syfon/client/transfer"
+	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/transfers"
 	"github.com/gofiber/fiber/v3"
 )
+
+type multipartTestClient struct{ app *fiber.App }
+
+func (c multipartTestClient) Do(req *http.Request) (*http.Response, error) { return c.app.Test(req) }
+
+type multipartTestScope struct{ prefix string }
+
+func (s *multipartTestScope) LookupBucketScope(_ context.Context, _, project string) (buckets.Scope, bool, error) {
+	if project == "" {
+		return buckets.Scope{}, false, nil
+	}
+	return buckets.Scope{Bucket: "physical-bucket", PathPrefix: s.prefix}, true, nil
+}
+
+func TestMultipartCompletionReturnsOriginalScopedLocationThroughClient(t *testing.T) {
+	provider := &lfsTestStorage{}
+	scope := &multipartTestScope{prefix: "original-prefix"}
+	service := transfers.NewService(transfers.Dependencies{
+		Objects: objects.NewService(newDRSObjectStore(t, nil)), Storage: provider, Scopes: scope,
+	})
+	app := fiber.New()
+	internalapi.RegisterHandlers(app, &internalServer{transfers: service})
+	gen, err := internalapi.NewClientWithResponses("http://syfon.test", internalapi.WithHTTPClient(multipartTestClient{app}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := services.NewDataService(gen, nil, nil, nil)
+	uploadID, _, err := client.InitMultipartUploadWithMetadata(context.Background(), "requested-id", "payload.bin", "physical-bucket", common.FileMetadata{Authorizations: map[string][]string{"org": {"project"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope.prefix = "changed-prefix"
+	location, err := client.MultipartCompleteWithLocation(context.Background(), "payload.bin", uploadID, []clienttransfer.MultipartPart{{PartNumber: 1, ETag: "etag"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location != "s3://physical-bucket/original-prefix/requested-id" {
+		t.Fatalf("completed location = %q", location)
+	}
+	if provider.complete.Target.Key != "original-prefix/requested-id" {
+		t.Fatalf("provider completed key = %q", provider.complete.Target.Key)
+	}
+}
 
 func TestMultipartRoutesRejectInvalidParts(t *testing.T) {
 	app := fiber.New()

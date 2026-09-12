@@ -224,6 +224,83 @@ func TestCompleteMultipartSortsComposesInBatchesAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestCompleteMultipartWritesMarkerOnFinalCompose(t *testing.T) {
+	var composeBody []byte
+	transport := roundTripperFunc(func(r *http.Request) *http.Response {
+		switch r.Method {
+		case http.MethodGet:
+			return responseFor(r, http.StatusNotFound, "")
+		case http.MethodPost:
+			composeBody, _ = io.ReadAll(r.Body)
+			response := responseFor(r, http.StatusOK, `{"name":"composed"}`)
+			response.Header.Set("Content-Type", "application/json")
+			return response
+		case http.MethodDelete:
+			return responseFor(r, http.StatusNoContent, "")
+		default:
+			return responseFor(r, http.StatusNotFound, "")
+		}
+	})
+	previous := newClient
+	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {
+		return testClient(ctx, transport)
+	}
+	defer func() { newClient = previous }()
+
+	b := &backend{}
+	binding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{Bucket: "bucket"}}
+	err := b.CompleteMultipart(context.Background(), binding, storageports.CompleteMultipartRequest{
+		Target:       storageports.Target{PhysicalBucket: "bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storageports.CompletedPart{{PartNumber: 1}},
+	})
+	if err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if !strings.Contains(string(composeBody), `"syfon-multipart-id":"completion"`) {
+		t.Fatalf("final compose body = %s, want completion marker", composeBody)
+	}
+	if client, ok := b.cache.Load("bucket"); ok {
+		_ = client.(*storage.Client).Close()
+	}
+}
+
+func TestCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
+	var posts int
+	transport := roundTripperFunc(func(r *http.Request) *http.Response {
+		if r.Method == http.MethodGet {
+			return responseFor(r, http.StatusOK, `{"metadata":{"syfon-multipart-id":"completion"}}`)
+		}
+		if r.Method == http.MethodPost {
+			posts++
+		}
+		return responseFor(r, http.StatusInternalServerError, "unexpected provider finalize")
+	})
+	previous := newClient
+	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {
+		return testClient(ctx, transport)
+	}
+	defer func() { newClient = previous }()
+
+	b := &backend{}
+	binding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{Bucket: "bucket"}}
+	if err := b.CompleteMultipart(context.Background(), binding, storageports.CompleteMultipartRequest{
+		Target:       storageports.Target{PhysicalBucket: "bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storageports.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if posts != 0 {
+		t.Fatalf("provider finalize requests = %d, want 0 after matching marker", posts)
+	}
+	if client, ok := b.cache.Load("bucket"); ok {
+		_ = client.(*storage.Client).Close()
+	}
+}
+
 func TestInvalidateBucketEvictsCachedNativeClientByLookupKey(t *testing.T) {
 	previous := newClient
 	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {

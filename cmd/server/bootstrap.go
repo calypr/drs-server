@@ -147,6 +147,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		Scopes:               bucketService,
 		Credentials:          bucketService,
 		Events:               backend.usageIngest,
+		MultipartSessions:    database,
 		DefaultSigningExpiry: signingExpiry,
 	})
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)

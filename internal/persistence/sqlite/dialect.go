@@ -55,6 +55,7 @@ func (db *sqliteSchemaBootstrap) initSchema() error {
 			object_id TEXT,
 			url TEXT,
 			type TEXT,
+			access_method_json TEXT,
 			FOREIGN KEY(object_id) REFERENCES drs_object(id) ON DELETE CASCADE
 		)`,
 		`CREATE TABLE IF NOT EXISTS drs_object_controlled_access (
@@ -144,6 +145,19 @@ func (db *sqliteSchemaBootstrap) initSchema() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_lfs_pending_metadata_expires ON lfs_pending_metadata(expires_time)`,
 		`CREATE INDEX IF NOT EXISTS idx_lfs_pending_metadata_created ON lfs_pending_metadata(created_time)`,
+		`CREATE TABLE IF NOT EXISTS multipart_upload_session (
+			upload_id TEXT PRIMARY KEY,
+			completion_id TEXT NOT NULL DEFAULT '',
+			target_json TEXT NOT NULL,
+			authorization_json TEXT NOT NULL,
+			state TEXT NOT NULL CHECK(state IN ('active','completing','completed')),
+			completion_token TEXT NOT NULL DEFAULT '',
+			parts_fingerprint TEXT NOT NULL DEFAULT '',
+			completed_location TEXT NOT NULL DEFAULT '',
+			created_time TIMESTAMP NOT NULL,
+			updated_time TIMESTAMP NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_multipart_upload_session_state_updated ON multipart_upload_session(state, updated_time)`,
 		`CREATE TABLE IF NOT EXISTS object_usage (
 			object_id TEXT PRIMARY KEY,
 			upload_count INTEGER NOT NULL DEFAULT 0,
@@ -262,7 +276,22 @@ func (db *sqliteSchemaBootstrap) initSchema() error {
 			return err
 		}
 	}
+	if _, err := db.db.Exec(`ALTER TABLE drs_object_access_method ADD COLUMN access_method_json TEXT`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return err
+		}
+	}
 	if _, err := db.db.Exec(`ALTER TABLE s3_credential ADD COLUMN provider TEXT NOT NULL DEFAULT 's3'`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return err
+		}
+	}
+	if _, err := db.db.Exec(`ALTER TABLE multipart_upload_session ADD COLUMN parts_fingerprint TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return err
+		}
+	}
+	if _, err := db.db.Exec(`ALTER TABLE multipart_upload_session ADD COLUMN completion_id TEXT NOT NULL DEFAULT ''`); err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
 			return err
 		}

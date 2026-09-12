@@ -47,7 +47,7 @@ func (bareBackend) Sign(context.Context, ProviderBinding, SignRequest) (SignedAc
 	return SignedAccess{}, nil
 }
 
-func (bareBackend) BeginMultipart(context.Context, ProviderBinding, Target) (UploadID, error) {
+func (bareBackend) BeginMultipart(context.Context, ProviderBinding, BeginMultipartRequest) (UploadID, error) {
 	return "", nil
 }
 
@@ -64,8 +64,8 @@ func (f *fakeBackend) Sign(_ context.Context, _ ProviderBinding, request SignReq
 	return SignedAccess{Location: f.provider + "://" + request.Target.PhysicalBucket + "/" + request.Target.Key}, nil
 }
 
-func (f *fakeBackend) BeginMultipart(_ context.Context, _ ProviderBinding, target Target) (UploadID, error) {
-	f.accessRequests = append(f.accessRequests, SignRequest{Target: target})
+func (f *fakeBackend) BeginMultipart(_ context.Context, _ ProviderBinding, request BeginMultipartRequest) (UploadID, error) {
+	f.accessRequests = append(f.accessRequests, SignRequest{Target: request.Target})
 	return UploadID("upload"), nil
 }
 

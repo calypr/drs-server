@@ -48,7 +48,7 @@ func (bulkAccessStorage) Sign(_ context.Context, request storage.SignRequest) (s
 	return storage.SignedAccess{Location: "https://signed.invalid/" + request.Target.Key}, nil
 }
 
-func (bulkAccessStorage) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+func (bulkAccessStorage) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return "", nil
 }
 

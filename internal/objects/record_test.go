@@ -56,7 +56,7 @@ func TestMaterializeCandidatePreservesRegistrationContract(t *testing.T) {
 	if resources := AccessResources(&got); len(resources) != 1 || resources[0] != controlled[0] {
 		t.Fatalf("controlled access = %#v", resources)
 	}
-	if got.AccessMethods == nil || len(*got.AccessMethods) != 2 || (*got.AccessMethods)[0].AccessId == nil || *(*got.AccessMethods)[0].AccessId != accessID || (*got.AccessMethods)[1].AccessId == nil || *(*got.AccessMethods)[1].AccessId != "s3" {
+	if got.AccessMethods == nil || len(*got.AccessMethods) != 2 || (*got.AccessMethods)[0].AccessId == nil || *(*got.AccessMethods)[0].AccessId != accessID || (*got.AccessMethods)[1].AccessId == nil || *(*got.AccessMethods)[1].AccessId != "s3-0812f73732f52048578808c9" {
 		t.Fatalf("access IDs = %#v", got.AccessMethods)
 	}
 }

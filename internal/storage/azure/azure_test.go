@@ -24,18 +24,22 @@ func (f credentialLookupFunc) GetS3Credential(ctx context.Context, bucket string
 }
 
 type recordingTransport struct {
-	status      int
-	header      http.Header
-	requests    int
-	requestHost string
-	requestPath string
-	body        []byte
+	status         int
+	header         http.Header
+	statuses       []int
+	headers        []http.Header
+	requests       int
+	requestHost    string
+	requestPath    string
+	requestHeaders http.Header
+	body           []byte
 }
 
 func (r *recordingTransport) Do(request *http.Request) (*http.Response, error) {
 	r.requests++
 	r.requestHost = request.URL.Host
 	r.requestPath = request.URL.Path
+	r.requestHeaders = request.Header.Clone()
 	if request.Body != nil {
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -43,11 +47,18 @@ func (r *recordingTransport) Do(request *http.Request) (*http.Response, error) {
 		}
 		r.body = body
 	}
+	responseIndex := r.requests - 1
 	status := r.status
+	if responseIndex < len(r.statuses) {
+		status = r.statuses[responseIndex]
+	}
 	if status == 0 {
 		status = http.StatusOK
 	}
 	header := r.header
+	if responseIndex < len(r.headers) {
+		header = r.headers[responseIndex]
+	}
 	if header == nil {
 		header = make(http.Header)
 	}
@@ -262,9 +273,54 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	}
 }
 
+func TestAzureMultipartWritesCompletionMarker(t *testing.T) {
+	transport := &recordingTransport{
+		statuses: []int{http.StatusOK, http.StatusCreated},
+		headers:  []http.Header{{}, {"Content-Type": []string{"application/xml"}}},
+	}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
+	if err := b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	var got string
+	for key, values := range transport.requestHeaders {
+		if strings.EqualFold(key, "x-ms-meta-"+storage.MultipartCompletionMarkerMetadataKey) && len(values) > 0 {
+			got = values[0]
+		}
+	}
+	if got != "completion" {
+		t.Fatalf("completion metadata header = %q, headers=%#v, want completion", got, transport.requestHeaders)
+	}
+}
+
+func TestAzureCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
+	header := make(http.Header)
+	header.Set("x-ms-meta-"+storage.MultipartCompletionMarkerMetadataKey, "completion")
+	transport := &recordingTransport{status: http.StatusOK, header: header}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
+	if err := b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if transport.requests != 1 {
+		t.Fatalf("provider requests = %d, want one marker read and no commit", transport.requests)
+	}
+}
+
 func TestAzureInitMultipartUploadReturnsUUID(t *testing.T) {
 	b := &backend{}
-	uploadID, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"})
+	uploadID, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.BeginMultipartRequest{Target: storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"}, CompletionID: "completion"})
 	if err != nil {
 		t.Fatalf("InitMultipartUpload returned error: %v", err)
 	}

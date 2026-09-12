@@ -193,11 +193,11 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 	if s == nil || s.transfer == nil || s.objects == nil {
 		return fmt.Errorf("LFS upload service is not configured")
 	}
-	target, objectID, err := s.resolveUploadTarget(ctx, oid)
+	target, objectID, authorization, err := s.resolveUploadTarget(ctx, oid)
 	if err != nil {
 		return err
 	}
-	init, err := s.transfer.BeginMultipart(ctx, transfers.MultipartInitRequest{GUID: &objectID, Target: &target})
+	init, err := s.transfer.BeginMultipart(ctx, transfers.MultipartInitRequest{GUID: &objectID, Target: &target, Authorization: &authorization})
 	if err != nil {
 		return fmt.Errorf("failed to initialize multipart upload: %w", err)
 	}
@@ -238,7 +238,7 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 		}
 		parts = append(parts, transfers.CompletedPart{PartNumber: 1, ETag: etag})
 	}
-	if err := s.transfer.CompleteMultipart(ctx, init.UploadID, parts); err != nil {
+	if _, err := s.transfer.CompleteMultipart(ctx, init.UploadID, parts); err != nil {
 		return fmt.Errorf("failed to complete multipart upload: %w", err)
 	}
 	if s.accounting == nil {
@@ -250,30 +250,31 @@ func (s *Service) UploadProxy(ctx context.Context, oid string, body io.Reader) e
 	return nil
 }
 
-func (s *Service) resolveUploadTarget(ctx context.Context, oid string) (storage.Target, string, error) {
-	if object, err := s.objects.GetObject(ctx, oid, "read"); err == nil {
+func (s *Service) resolveUploadTarget(ctx context.Context, oid string) (storage.Target, string, transfers.MultipartAuthorization, error) {
+	if object, err := s.objects.GetObject(ctx, oid, "update"); err == nil {
 		target, targetErr := s.targetForObject(ctx, object)
-		return target, object.Id, targetErr
+		return target, object.Id, transfers.MultipartAuthorization{Resources: objects.AccessResources(object), Methods: []string{"update"}}, targetErr
 	} else if !errorapi.IsNotFoundError(err) {
-		return storage.Target{}, "", err
+		return storage.Target{}, "", transfers.MultipartAuthorization{}, err
 	}
+	createAuthorization := transfers.MultipartAuthorization{Resources: []string{"/data_file"}, Methods: []string{"create"}}
 	if s.pending != nil {
 		if pending, err := s.pending.GetPendingMetadata(ctx, oid); err == nil {
 			object, conversionErr := materializeCandidate(pending.Candidate, s.currentTime())
 			if conversionErr != nil {
-				return storage.Target{}, "", conversionErr
+				return storage.Target{}, "", transfers.MultipartAuthorization{}, conversionErr
 			}
 			target, targetErr := s.targetForObject(ctx, &object)
-			return target, oid, targetErr
+			return target, oid, createAuthorization, targetErr
 		} else if !errorapi.IsNotFoundError(err) {
-			return storage.Target{}, "", err
+			return storage.Target{}, "", transfers.MultipartAuthorization{}, err
 		}
 	}
 	bucket, err := s.firstConfiguredBucket(ctx)
 	if err != nil {
-		return storage.Target{}, "", err
+		return storage.Target{}, "", transfers.MultipartAuthorization{}, err
 	}
-	return storage.Target{Provider: "s3", LookupKey: bucket, PhysicalBucket: bucket, Key: oid, CanonicalURL: address.BucketToURL(bucket, oid), LookupCandidates: []string{bucket}}, oid, nil
+	return storage.Target{Provider: "s3", LookupKey: bucket, PhysicalBucket: bucket, Key: oid, CanonicalURL: address.BucketToURL(bucket, oid), LookupCandidates: []string{bucket}}, oid, createAuthorization, nil
 }
 
 func (s *Service) targetForObject(ctx context.Context, object *drs.DrsObject) (storage.Target, error) {

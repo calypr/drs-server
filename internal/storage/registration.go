@@ -7,7 +7,7 @@ import (
 
 type Provider interface {
 	Sign(context.Context, ProviderBinding, SignRequest) (SignedAccess, error)
-	BeginMultipart(context.Context, ProviderBinding, Target) (UploadID, error)
+	BeginMultipart(context.Context, ProviderBinding, BeginMultipartRequest) (UploadID, error)
 	SignMultipartPart(context.Context, ProviderBinding, MultipartPartRequest) (SignedAccess, error)
 	CompleteMultipart(context.Context, ProviderBinding, CompleteMultipartRequest) error
 }

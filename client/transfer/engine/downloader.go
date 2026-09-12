@@ -2,11 +2,14 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -16,10 +19,11 @@ import (
 )
 
 type DownloadOptions struct {
-	MultipartThreshold int64
-	ChunkSize          int64
-	Concurrency        int
-	RetryStrategy      transfer.RetryStrategy
+	MultipartThreshold   int64
+	ChunkSize            int64
+	Concurrency          int
+	RetryStrategy        transfer.RetryStrategy
+	EphemeralDestination bool
 }
 
 type downloader struct {
@@ -27,7 +31,16 @@ type downloader struct {
 	RetryStrategy transfer.RetryStrategy
 }
 
+type downloadResumeState struct {
+	Identity string `json:"identity"`
+	Size     int64  `json:"size"`
+	Complete bool   `json:"complete"`
+}
+
 func Download(ctx context.Context, source transfer.ReadBackend, guid, dstPath string, opts DownloadOptions) error {
+	if opts.EphemeralDestination {
+		defer os.Remove(downloadResumeStatePath(dstPath))
+	}
 	d := &downloader{Source: source, RetryStrategy: opts.RetryStrategy}
 	return d.download(ctx, guid, dstPath, opts.Concurrency, opts.ChunkSize, opts.MultipartThreshold)
 }
@@ -39,19 +52,163 @@ func (d *downloader) download(ctx context.Context, guid string, dstPath string, 
 	}
 
 	totalSize := meta.Size
+	complete, err := prepareDownloadDestination(dstPath, meta.Identity, totalSize)
+	if err != nil {
+		return err
+	}
+	if complete {
+		return nil
+	}
+	finish := func(err error) error {
+		if err != nil {
+			return err
+		}
+		if totalSize > 0 {
+			info, statErr := os.Stat(dstPath)
+			if statErr != nil {
+				return fmt.Errorf("stat completed download: %w", statErr)
+			}
+			if info.Size() != totalSize {
+				return fmt.Errorf("download size mismatch: got %d, expected %d", info.Size(), totalSize)
+			}
+			if strings.TrimSpace(meta.Identity) != "" {
+				matches, checksumErr := downloadMatchesIdentity(dstPath, meta.Identity)
+				if checksumErr != nil {
+					return checksumErr
+				}
+				if !matches {
+					_ = os.Remove(dstPath)
+					return fmt.Errorf("download checksum does not match %s", meta.Identity)
+				}
+				if stateErr := saveDownloadResumeState(dstPath, downloadResumeState{Identity: meta.Identity, Size: totalSize, Complete: true}); stateErr != nil {
+					return stateErr
+				}
+			}
+		}
+		return nil
+	}
 	if totalSize <= 0 {
-		return d.downloadSingle(ctx, guid, dstPath, totalSize)
+		return finish(d.downloadSingle(ctx, guid, dstPath, totalSize))
 	}
 
 	if multipartThreshold > 0 && totalSize < multipartThreshold {
-		return d.downloadSingle(ctx, guid, dstPath, totalSize)
+		return finish(d.downloadSingle(ctx, guid, dstPath, totalSize))
 	}
 
 	if totalSize < common.MB || !meta.AcceptRanges {
-		return d.downloadSingle(ctx, guid, dstPath, totalSize)
+		return finish(d.downloadSingle(ctx, guid, dstPath, totalSize))
 	}
 
-	return d.downloadParallel(ctx, guid, dstPath, totalSize, concurrency, chunkSize)
+	err = d.downloadParallel(ctx, guid, dstPath, totalSize, concurrency, chunkSize)
+	if !errors.Is(err, transfer.ErrRangeIgnored) {
+		return finish(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.Remove(dstPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("discard ranged download before restarting: %w", err)
+	}
+	return finish(d.downloadSingle(ctx, guid, dstPath, totalSize))
+}
+
+func prepareDownloadDestination(dstPath, identity string, expectedSize int64) (bool, error) {
+	statePath := downloadResumeStatePath(dstPath)
+	if expectedSize <= 0 || strings.TrimSpace(identity) == "" {
+		_ = os.Remove(statePath)
+		if err := os.Remove(dstPath); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("discard unverified destination: %w", err)
+		}
+		return false, nil
+	}
+
+	state, valid := loadDownloadResumeState(statePath)
+	matching := valid && state.Identity == identity && state.Size == expectedSize
+	if matching {
+		if info, err := os.Stat(dstPath); err == nil {
+			if state.Complete && info.Size() == expectedSize {
+				matchesIdentity, identityErr := downloadMatchesIdentity(dstPath, identity)
+				if identityErr != nil {
+					return false, identityErr
+				}
+				if matchesIdentity {
+					return true, nil
+				}
+			}
+			if !state.Complete && info.Size() > 0 && info.Size() < expectedSize {
+				return false, nil
+			}
+		} else if !os.IsNotExist(err) {
+			return false, err
+		}
+	}
+
+	if err := os.Remove(dstPath); err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("discard unverified destination: %w", err)
+	}
+	if err := saveDownloadResumeState(dstPath, downloadResumeState{Identity: identity, Size: expectedSize}); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+func downloadMatchesIdentity(path, identity string) (bool, error) {
+	normalized := strings.ToLower(strings.TrimSpace(identity))
+	expected, isSHA256 := strings.CutPrefix(normalized, "sha256:")
+	if !isSHA256 {
+		return true, nil
+	}
+	if len(expected) != sha256.Size*2 {
+		return false, fmt.Errorf("invalid SHA-256 download identity %q", identity)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false, fmt.Errorf("open download for checksum verification: %w", err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return false, fmt.Errorf("checksum downloaded file: %w", err)
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)) == expected, nil
+}
+
+func downloadResumeStatePath(dstPath string) string { return dstPath + ".syfon-download.json" }
+
+func loadDownloadResumeState(path string) (downloadResumeState, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return downloadResumeState{}, false
+	}
+	var state downloadResumeState
+	if json.Unmarshal(data, &state) != nil || strings.TrimSpace(state.Identity) == "" || state.Size <= 0 {
+		return downloadResumeState{}, false
+	}
+	return state, true
+}
+
+func saveDownloadResumeState(dstPath string, state downloadResumeState) error {
+	dir := filepath.Dir(dstPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(dir, ".syfon-download-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create download checkpoint: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := json.NewEncoder(temporary).Encode(state); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write download checkpoint: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close download checkpoint: %w", err)
+	}
+	if err := os.Rename(temporaryPath, downloadResumeStatePath(dstPath)); err != nil {
+		return fmt.Errorf("replace download checkpoint: %w", err)
+	}
+	return nil
 }
 
 func (d *downloader) downloadSingle(ctx context.Context, guid string, dstPath string, expectedSize int64) error {
@@ -256,12 +413,18 @@ func (d *downloader) downloadParallel(ctx context.Context, guid string, dstPath 
 		partLength := partSize
 
 		g.Go(func() error {
+			if err := gctx.Err(); err != nil {
+				return err
+			}
 			strategy := d.RetryStrategy
 			if strategy == nil {
 				strategy = transfer.DefaultBackoff()
 			}
 			return transfer.RetryAction(gctx, d.Source.Logger(), strategy, common.MaxRetryCount, func() error {
 				partBody, err := d.Source.GetRangeReader(gctx, guid, partStart, partLength)
+				if errors.Is(err, transfer.ErrRangeIgnored) {
+					return transfer.NonRetryable(err)
+				}
 				if err != nil {
 					return fmt.Errorf("range download [%d,%d]: %w", partStart, partEnd, err)
 				}

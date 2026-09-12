@@ -260,6 +260,12 @@ type InternalInspectProjectScopesResponse struct {
 	Items []InternalInspectProjectScopeItem `json:"items"`
 }
 
+// InternalMultipartCompleteOutput defines model for InternalMultipartCompleteOutput.
+type InternalMultipartCompleteOutput struct {
+	// ObjectUrl Canonical location of the object completed by this upload session.
+	ObjectUrl string `json:"object_url"`
+}
+
 // InternalMultipartCompleteRequest defines model for InternalMultipartCompleteRequest.
 type InternalMultipartCompleteRequest struct {
 	Bucket   *string                 `json:"bucket,omitempty"`
@@ -3959,6 +3965,7 @@ func (r InternalInspectProjectScopesPostResp) StatusCode() int {
 type InternalMultipartCompleteResp struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *InternalMultipartCompleteOutput
 	JSON400      *APIError
 	JSON401      *APIError
 	JSON403      *APIError
@@ -5718,8 +5725,12 @@ func ParseInternalMultipartCompleteResp(rsp *http.Response) (*InternalMultipartC
 
 	decoded, decodeErr := func() (*InternalMultipartCompleteResp, error) {
 		switch {
-		case rsp.StatusCode == 200:
-			break // No content-type
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+			var dest InternalMultipartCompleteOutput
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON200 = &dest
 
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 			var dest APIError
@@ -8745,12 +8756,13 @@ type InternalMultipartCompleteResponseObject interface {
 	VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error
 }
 
-type InternalMultipartComplete200Response struct {
-}
+type InternalMultipartComplete200JSONResponse InternalMultipartCompleteOutput
 
-func (response InternalMultipartComplete200Response) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+func (response InternalMultipartComplete200JSONResponse) VisitInternalMultipartCompleteResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
-	return nil
+
+	return ctx.JSON(&response)
 }
 
 type InternalMultipartComplete400JSONResponse APIError

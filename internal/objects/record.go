@@ -320,7 +320,11 @@ func MaterializeCandidate(c drs.DrsObjectCandidate, now time.Time) (drs.DrsObjec
 	methods := make([]drs.AccessMethod, 0, len(*c.AccessMethods))
 	for _, method := range *c.AccessMethods {
 		if method.AccessId == nil || *method.AccessId == "" {
-			method.AccessId = objectStringPtr(string(method.Type))
+			location := ""
+			if method.AccessUrl != nil {
+				location = method.AccessUrl.Url
+			}
+			method.AccessId = objectStringPtr(AccessMethodID(string(method.Type), location))
 		}
 		methods = append(methods, method)
 	}

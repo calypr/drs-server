@@ -200,7 +200,7 @@ func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[st
 	ids := sortedObjectIDs(objectsByID)
 	condition, args := db.dialect.ListArgs("object_id", ids)
 	query := fmt.Sprintf(`
-		SELECT object_id, url, type
+		SELECT object_id, url, type, access_method_json
 		FROM drs_object_access_method
 		WHERE %s
 		ORDER BY object_id`, condition)
@@ -213,7 +213,8 @@ func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[st
 	seenAccess := make(map[string]map[string]struct{}, len(objectsByID))
 	for rows.Next() {
 		var objectID, accessURL, accessType string
-		if err := rows.Scan(&objectID, &accessURL, &accessType); err != nil {
+		var payload sql.NullString
+		if err := rows.Scan(&objectID, &accessURL, &accessType, &payload); err != nil {
 			return err
 		}
 		obj := objectsByID[objectID]
@@ -223,7 +224,11 @@ func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[st
 		if _, ok := seenAccess[objectID]; !ok {
 			seenAccess[objectID] = make(map[string]struct{})
 		}
-		key := accessType + "|" + accessURL
+		method, err := decodeAccessMethod(accessURL, accessType, payload.String)
+		if err != nil {
+			return err
+		}
+		key := accessMethodKey(method)
 		if _, exists := seenAccess[objectID][key]; exists {
 			continue
 		}
@@ -231,11 +236,7 @@ func (db *Store) attachBulkAccessMethods(ctx context.Context, objectsByID map[st
 		if obj.AccessMethods == nil {
 			obj.AccessMethods = &[]drs.AccessMethod{}
 		}
-		*obj.AccessMethods = append(*obj.AccessMethods, drs.AccessMethod{
-			AccessUrl: &drs.AccessURL{Url: accessURL},
-			Type:      drs.AccessMethodType(accessType),
-			AccessId:  ptr(objects.AccessMethodID(accessType, accessURL)),
-		})
+		*obj.AccessMethods = append(*obj.AccessMethods, method)
 	}
 	return rows.Err()
 }

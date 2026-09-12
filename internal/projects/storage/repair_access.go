@@ -31,6 +31,10 @@ func (s *Service) classifyAccessMethods(ctx context.Context, object *auditedObje
 		if !canonicalExists && pathStyleExists {
 			targetURL = pathStyleURL
 		}
+		if !canonicalExists && !pathStyleExists {
+			object.findings = append(object.findings, newFinding(FindingNonCanonicalAccessURL, SeverityWarn, object.record, object.sha256, object.currentURLs, targetURL, false, "no replacement storage location could be confirmed; existing access methods retained"))
+			return
+		}
 	}
 	hasTarget := false
 	for _, method := range methods {

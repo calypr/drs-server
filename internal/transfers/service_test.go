@@ -26,7 +26,7 @@ func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (stora
 	return f.result, f.err
 }
 
-func (f *accessFake) BeginMultipart(context.Context, storage.Target) (storage.UploadID, error) {
+func (f *accessFake) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
 	return "upload", nil
 }
 func (f *accessFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
@@ -52,8 +52,8 @@ func (f *multipartFake) Sign(_ context.Context, _ storage.SignRequest) (storage.
 	return storage.SignedAccess{}, nil
 }
 
-func (f *multipartFake) BeginMultipart(_ context.Context, target storage.Target) (storage.UploadID, error) {
-	f.beginTarget = target
+func (f *multipartFake) BeginMultipart(_ context.Context, request storage.BeginMultipartRequest) (storage.UploadID, error) {
+	f.beginTarget = request.Target
 	return f.beginID, f.beginErr
 }
 
@@ -298,7 +298,7 @@ func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
 	}
 	parts := []CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
 	providerParts := []storage.CompletedPart{{PartNumber: 2, ETag: "two"}, {PartNumber: 7, ETag: "seven"}}
-	if err := service.CompleteMultipart(ctx, result.UploadID, parts); err != nil {
+	if _, err := service.CompleteMultipart(ctx, result.UploadID, parts); err != nil {
 		t.Fatalf("CompleteMultipartUpload() error = %v", err)
 	}
 	if port.partRequest.UploadID != storage.UploadID(result.UploadID) || port.partRequest.PartNumber != 7 {

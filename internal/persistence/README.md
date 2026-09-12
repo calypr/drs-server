@@ -43,6 +43,9 @@ This table stores the provider locations for an object.
 - `object_id` references `drs_object.id`.
 - `url` stores a location such as `s3://bucket/key`.
 - `type` stores the provider type, such as `s3`.
+- `access_method_json` stores the complete DRS access method, including `access_id`, URL headers, authorizations, availability, cloud, and region.
+
+The runtime keeps `url` and `type` as indexed columns for location queries. It adds `access_method_json` to existing databases at startup. If the payload is missing, reads hydrate the method from the indexed columns and generate a stable access ID.
 
 Organization and project columns do not belong to this table. Scoped authorization uses `drs_object_controlled_access`.
 
@@ -78,6 +81,10 @@ The `(organization, project_id)` pair is the primary key. Each row maps a projec
 
 This table stores pending LFS metadata by `oid`, with creation and expiry timestamps. The LFS implementation consumes entries atomically when it verifies an upload.
 
+### `multipart_upload_session`
+
+This table stores the frozen storage target, authorization intent, completion claim, parts fingerprint, and completed location for multipart uploads. Shared state lets any server replica sign later parts and makes identical completion retries return the original result without dispatching the provider again.
+
 ### `object_usage` and `object_usage_event`
 
 `object_usage` stores upload and download counters and their last-event timestamps. `object_usage_event` stores the event history used by usage reporting.
@@ -91,9 +98,9 @@ These tables store issued-access records, access grant aggregates, and provider 
 The application initializes its schema when it creates a database:
 
 - `sqlite.NewSqliteDB` opens the configured SQLite file, enables its connection settings, delegates to `sqlite/dialect.go` for `initSchema`, and runs compatibility upgrades before returning.
-- `postgres.NewPostgresDB` opens and pings PostgreSQL, loads `object_schema.sql`, then runs the credential, bucket-scope, LFS, usage, and transfer schema initializers.
+- `postgres.NewPostgresDB` opens and pings PostgreSQL, loads `object_schema.sql`, then runs the credential, bucket-scope, LFS, multipart, usage, and transfer schema initializers.
 
-The SQLite runtime schema includes `drs_object`, the access and policy tables, aliases, credentials and scopes, LFS pending metadata, usage tables, transfer attribution tables, access grants, provider transfer events, indexes, and credential uniqueness triggers. Runtime initialization also handles older databases. It adds missing columns, migrates old credential identity shape, removes retired object columns, removes the retired browse index, and backfills access grants.
+The SQLite runtime schema includes `drs_object`, the access and policy tables, aliases, credentials and scopes, LFS pending metadata, multipart sessions, usage tables, transfer attribution tables, access grants, provider transfer events, indexes, and credential uniqueness triggers. Runtime initialization also handles older databases. It adds missing columns, including `access_method_json`, migrates old credential identity shape, removes retired object columns, removes the retired browse index, and backfills access grants.
 
 The PostgreSQL runtime schema has the same logical table groups. Its object DDL lives in `postgres/object_schema.sql`. The remaining DDL and compatibility statements live in `postgres/dialect.go`.
 
