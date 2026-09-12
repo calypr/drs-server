@@ -583,8 +583,7 @@ func (db *Store) transferResourceClause(resources []string) (string, []any) {
 
 	orgOnly := make([]string, 0)
 	orgSeen := make(map[string]struct{})
-	projectClauses := make([]string, 0)
-	args := make([]any, 0, len(resources)*2)
+	projectResources := make([]string, 0)
 	for _, resource := range resources {
 		org, project, ok := clientaccess.ResourceScope(resource)
 		if !ok {
@@ -598,18 +597,20 @@ func (db *Store) transferResourceClause(resources []string) (string, []any) {
 			orgOnly = append(orgOnly, org)
 			continue
 		}
-		projectClauses = append(projectClauses, "(organization = ? AND project = ?)")
-		args = append(args, org, project)
+		projectResources = append(projectResources, resource)
 	}
 
 	clauses := make([]string, 0, 2)
+	args := make([]any, 0, 2)
 	if len(orgOnly) > 0 {
 		clause, orgArgs := db.dialect.ListArgs("organization", orgOnly)
 		clauses = append(clauses, clause)
 		args = append(args, orgArgs...)
 	}
-	if len(projectClauses) > 0 {
-		clauses = append(clauses, strings.Join(projectClauses, " OR "))
+	if len(projectResources) > 0 {
+		clause, projectArgs := db.dialect.ListArgs("'/organization/' || organization || '/project/' || project", projectResources)
+		clauses = append(clauses, clause)
+		args = append(args, projectArgs...)
 	}
 	return strings.Join(clauses, " OR "), args
 }

@@ -3,13 +3,12 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/calypr/syfon/internal/persistence/store"
 )
-
-const sqliteMaxParams = 900
 
 type sqliteDialect struct{}
 
@@ -23,27 +22,8 @@ func (sqliteDialect) ListArgs(column string, values []string) (string, []any) {
 	if len(values) == 0 {
 		return "1 = 0", nil
 	}
-	placeholders := makePlaceholders(len(values))
-	args := make([]any, len(values))
-	for i, value := range values {
-		args[i] = value
-	}
-	return fmt.Sprintf("%s IN (%s)", column, placeholders), args
-}
-
-func makePlaceholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
-}
-
-func (sqliteDialect) MaxParameters() int {
-	return sqliteMaxParams
+	encoded, _ := json.Marshal(values) // A string slice cannot contain unsupported JSON values.
+	return fmt.Sprintf("%s IN (SELECT value FROM json_each(?))", column), []any{string(encoded)}
 }
 
 func (sqliteDialect) LockContentWrite(context.Context, *sql.Tx) error {

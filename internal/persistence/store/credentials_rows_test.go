@@ -117,7 +117,6 @@ func (iterationTestDialect) Rebind(query string) string { return query }
 func (iterationTestDialect) ListArgs(string, []string) (string, []any) {
 	return "", nil
 }
-func (iterationTestDialect) MaxParameters() int { return 1 }
 func (iterationTestDialect) LockContentWrite(context.Context, *sql.Tx) error {
 	return nil
 }

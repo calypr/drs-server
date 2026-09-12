@@ -664,18 +664,18 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	}
 }
 
-func TestSqliteDB_RegisterObjectsChunksUsageFlushParameters(t *testing.T) {
+func TestSqliteDB_RegisterObjectsAcceptsLargeUsageFlush(t *testing.T) {
 	ctx := context.Background()
 	database, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	records := make([]drs.DrsObject, sqliteMaxParams+1)
+	records := make([]drs.DrsObject, 901)
 	for i := range records {
 		records[i] = drs.DrsObject{Id: fmt.Sprintf("chunk-%d", i)}
 	}
 	if err := database.RegisterObjects(ctx, records); err != nil {
-		t.Fatalf("RegisterObjects should chunk usage flush parameters: %v", err)
+		t.Fatalf("RegisterObjects should accept more than 900 records: %v", err)
 	}
 	got, err := database.GetBulkObjects(ctx, []string{"chunk-0", fmt.Sprintf("chunk-%d", len(records)-1)})
 	if err != nil {
@@ -894,7 +894,7 @@ func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 		t.Fatalf("expected empty map for empty checksum input, got %+v", emptyRes)
 	}
 
-	large := make([]string, sqliteMaxParams)
+	large := make([]string, 901)
 	for i := range large {
 		large[i] = fmt.Sprintf("large-%d", i)
 	}

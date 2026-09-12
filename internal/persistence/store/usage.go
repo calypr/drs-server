@@ -68,40 +68,23 @@ func (db *Store) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]
 	if err := db.flushObjectUsageEvents(ctx); err != nil {
 		return nil, err
 	}
-	maxIDs := db.dialect.MaxParameters()
-	if maxIDs <= 0 {
-		maxIDs = len(ids)
+	condition, args := db.dialect.ListArgs("o.id", ids)
+	rows, err := db.queryContext(ctx, `
+		SELECT o.id, o.name, o.size,
+			COALESCE(u.upload_count, 0),
+			COALESCE(u.download_count, 0),
+			u.last_upload_time,
+			u.last_download_time
+		FROM drs_object o
+		LEFT JOIN object_usage u ON u.object_id = o.id
+		WHERE `+condition+`
+		ORDER BY o.id
+	`, args...)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]metricsapi.FileUsage, 0, len(ids))
-	for start := 0; start < len(ids); start += maxIDs {
-		end := start + maxIDs
-		if end > len(ids) {
-			end = len(ids)
-		}
-		chunk := ids[start:end]
-		condition, args := db.dialect.ListArgs("o.id", chunk)
-		rows, err := db.queryContext(ctx, `
-			SELECT o.id, o.name, o.size,
-				COALESCE(u.upload_count, 0),
-				COALESCE(u.download_count, 0),
-				u.last_upload_time,
-				u.last_download_time
-			FROM drs_object o
-			LEFT JOIN object_usage u ON u.object_id = o.id
-			WHERE `+condition+`
-			ORDER BY o.id
-		`, args...)
-		if err != nil {
-			return nil, err
-		}
-		items, err := scanFileUsageRows(rows, len(chunk))
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, items...)
-	}
-	return out, nil
+	defer rows.Close()
+	return scanFileUsageRows(rows, len(ids))
 }
 
 func (db *Store) ListFileUsage(ctx context.Context, limit, offset int, inactiveSince *time.Time) ([]metricsapi.FileUsage, error) {
@@ -317,18 +300,8 @@ func (db *Store) flushObjectUsageEvents(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	maxIDs := db.dialect.MaxParameters() - 1
-	if maxIDs <= 0 {
-		maxIDs = len(ids)
-	}
-	for start := 0; start < len(ids); start += maxIDs {
-		end := start + maxIDs
-		if end > len(ids) {
-			end = len(ids)
-		}
-		if err := db.flushObjectUsageEventsForIDsTx(ctx, tx, ids[start:end]); err != nil {
-			return err
-		}
+	if err := db.flushObjectUsageEventsForIDsTx(ctx, tx, ids); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

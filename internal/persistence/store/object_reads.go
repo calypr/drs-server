@@ -136,26 +136,6 @@ func (db *Store) ListScopedObjectIDsByChecksums(ctx context.Context, organizatio
 	if len(normalized) == 0 {
 		return map[string][]string{}, nil
 	}
-	// Keep the checksum predicate below within SQLite's bound-parameter limit.
-	// The two fixed parameters are the project resource and checksum type.
-	maxChecksums := db.dialect.MaxParameters() - 2
-	if len(normalized) > maxChecksums {
-		out := make(map[string][]string, len(normalized))
-		for start := 0; start < len(normalized); start += maxChecksums {
-			end := start + maxChecksums
-			if end > len(normalized) {
-				end = len(normalized)
-			}
-			part, err := db.ListScopedObjectIDsByChecksums(ctx, organization, project, normalized[start:end])
-			if err != nil {
-				return nil, err
-			}
-			for checksum, ids := range part {
-				out[checksum] = append(out[checksum], ids...)
-			}
-		}
-		return out, nil
-	}
 	args := make([]any, 0, len(normalized)+2)
 	args = append(args, resource, "sha256")
 	checksumCondition, checksumArgs := db.dialect.ListArgs("replace(lower(trim(c.checksum)), 'sha256:', '')", normalized)
@@ -257,16 +237,13 @@ func (db *Store) ListObjectIDsByResources(ctx context.Context, resources []strin
 	args := make([]any, 0, len(resources))
 	parts := make([]string, 0, 2)
 	if len(resources) > 0 {
-		placeholders := make([]string, 0, len(resources))
-		for _, resource := range resources {
-			args = append(args, resource)
-			placeholders = append(placeholders, "?")
-		}
+		resourceCondition, resourceArgs := db.dialect.ListArgs("ca.resource", resources)
 		parts = append(parts, `EXISTS (
 			SELECT 1
 			FROM drs_object_controlled_access ca
-			WHERE ca.object_id = o.id AND ca.resource IN (`+strings.Join(placeholders, ",")+`)
+			WHERE ca.object_id = o.id AND `+resourceCondition+`
 		)`)
+		args = append(args, resourceArgs...)
 	}
 	if includeUnscoped {
 		parts = append(parts, `NOT EXISTS (

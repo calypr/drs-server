@@ -57,7 +57,7 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 | C03 | Commit canonical duplicate repair atomically | P0 | Complete | C01, with C02 reuse when practical |
 | C04 | Preserve typed failures in bulk access | P1 | Complete | None |
 | C05 | Commit credential and scope deletion atomically | P1 | Complete | Completed bucket configuration and cleanup fixes |
-| C06 | Honor SQLite parameter limits | P1 | Ready | None |
+| C06 | Honor SQLite parameter limits | P1 | Complete | None |
 | C07 | Enforce one multipart input contract | P1 | Ready | None |
 | C08 | Reject ambiguous configuration | P1 | Ready | None |
 | C09 | Remove the duplicate project-delete route and specification operation | P1 | Ready | Audit generated-client use |

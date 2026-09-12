@@ -10,7 +10,6 @@ import (
 type Dialect interface {
 	Rebind(string) string
 	ListArgs(string, []string) (string, []any)
-	MaxParameters() int
 	LockContentWrite(context.Context, *sql.Tx) error
 	Bootstrap(context.Context, *sql.DB) error
 }

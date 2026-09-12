@@ -56,10 +56,6 @@ func (postgresDialect) ListArgs(column string, values []string) (string, []any) 
 	return fmt.Sprintf("%s = ANY(?)", column), []any{pq.Array(values)}
 }
 
-func (postgresDialect) MaxParameters() int {
-	return 65535
-}
-
 func (postgresDialect) LockContentWrite(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('syfon-content-write', 0))`)
 	return err
