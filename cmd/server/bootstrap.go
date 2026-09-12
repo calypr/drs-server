@@ -108,7 +108,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	if len(cfg.Buckets) > 0 {
 		encryptionEnabled, encErr := cipher.Enabled()
 		if encErr != nil {
-			return nil, fmt.Errorf("invalid credential encryption configuration for %s: %w", credentialcipher.CredentialMasterKeyEnv, encErr)
+			return nil, fmt.Errorf("configured bucket credential encryption is unavailable: %w", encErr)
 		}
 		if !encryptionEnabled {
 			return nil, fmt.Errorf("s3 credential encryption key is required: %s", credentialcipher.CredentialMasterKeyEnv)
@@ -116,7 +116,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 
 		logger.Info("loading configured bucket credentials", "count", len(cfg.Buckets))
 		// Bucket credentials are encrypted before persistence and audited on read/write/delete/list.
-		for _, c := range cfg.Buckets {
+		for i, c := range cfg.Buckets {
 			cred := &buckets.Credential{
 				CredentialID: c.CredentialID,
 				Bucket:       c.Bucket,
@@ -127,7 +127,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 				Endpoint:     c.Endpoint,
 			}
 			if err := bucketService.SaveS3Credential(ctx, cred); err != nil {
-				logger.Error("failed to save s3 credential", "bucket", c.Bucket, "err", err)
+				return nil, fmt.Errorf("buckets[%d] bucket=%s credential save failed: %w", i, c.Bucket, err)
 			}
 		}
 	}

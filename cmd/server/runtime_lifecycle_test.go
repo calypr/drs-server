@@ -75,6 +75,69 @@ func TestFailedRuntimeConstructionClosesSQLiteDatabase(t *testing.T) {
 	}
 }
 
+func TestConfiguredCredentialSaveFailureStopsRuntimeConstruction(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	t.Setenv(credentialcipher.CredentialKeyManagerEnv, "")
+	t.Setenv(credentialcipher.CredentialKMSKeyIDEnv, "")
+
+	for _, test := range []struct {
+		name   string
+		scopes []config.BucketScopeConfig
+	}{
+		{name: "without dependent scope"},
+		{name: "with dependent scope", scopes: []config.BucketScopeConfig{{
+			Organization: "org",
+			ProjectID:    "project",
+			CredentialID: "second",
+			Bucket:       "shared-bucket",
+		}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+				Auth:     config.AuthConfig{Mode: config.AuthModeLocal},
+				Buckets: []config.BucketConfig{
+					{CredentialID: "first", Bucket: "shared-bucket", Provider: "s3", Region: "us-east-1", AccessKey: "first-access", SecretKey: "first-secret"},
+					{CredentialID: "second", Bucket: "shared-bucket", Provider: "s3", Region: "us-east-1", AccessKey: "second-access", SecretKey: "second-secret"},
+				},
+				BucketScopes: test.scopes,
+			}
+			runtime, err := buildServerRuntime(context.Background(), cfg, slog.Default())
+			if err == nil || runtime != nil {
+				t.Fatalf("buildServerRuntime() = (%v, %v), want nil runtime and error", runtime, err)
+			}
+			if !strings.Contains(err.Error(), "buckets[1]") || !strings.Contains(err.Error(), "shared-bucket") {
+				t.Fatalf("startup error does not identify configured bucket: %v", err)
+			}
+		})
+	}
+}
+
+func TestConfiguredBucketRejectsUnavailableSelectedKeyManager(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	t.Setenv(credentialcipher.CredentialKeyManagerEnv, "unavailable-kms")
+	t.Setenv(credentialcipher.CredentialKMSKeyIDEnv, "")
+
+	runtime, err := buildServerRuntime(context.Background(), &config.Config{
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+		Auth:     config.AuthConfig{Mode: config.AuthModeLocal},
+		Buckets: []config.BucketConfig{{
+			CredentialID: "configured",
+			Bucket:       "configured-bucket",
+			Provider:     "s3",
+			Region:       "us-east-1",
+			AccessKey:    "access",
+			SecretKey:    "secret",
+		}},
+	}, slog.Default())
+	if err == nil || runtime != nil {
+		t.Fatalf("buildServerRuntime() = (%v, %v), want nil runtime and error", runtime, err)
+	}
+	if !strings.Contains(err.Error(), `credential key manager "unavailable-kms" is not registered`) {
+		t.Fatalf("startup error does not identify selected key manager: %v", err)
+	}
+}
+
 func TestRuntimeCloseStopsOwnedListener(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

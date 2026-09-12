@@ -43,6 +43,13 @@ func (c *Cipher) manager() (CredentialKeyManager, error) {
 }
 
 func (c *Cipher) Enabled() (bool, error) {
+	manager, err := c.manager()
+	if err != nil {
+		return false, err
+	}
+	if manager.Name() != defaultCredentialKeyManager {
+		return true, nil
+	}
 	key, err := credentialMasterKey()
 	if err != nil {
 		return false, err

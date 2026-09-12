@@ -57,6 +57,10 @@ func (m *awsKMSKeyManager) UnwrapDataKey(ctx context.Context, wrapped *WrappedDa
 }
 
 func newAWSKMSKeyManagerFromEnv() (CredentialKeyManager, error) {
+	keyID := strings.TrimSpace(os.Getenv(CredentialKMSKeyIDEnv))
+	if keyID == "" {
+		return nil, fmt.Errorf("%s is required for %s", CredentialKMSKeyIDEnv, awsKMSKeyManagerName)
+	}
 	loadOpts := []func(*awsconfig.LoadOptions) error{}
 	if strings.TrimSpace(os.Getenv("AWS_REGION")) == "" && strings.TrimSpace(os.Getenv("AWS_DEFAULT_REGION")) == "" {
 		loadOpts = append(loadOpts, awsconfig.WithRegion("us-east-1"))
@@ -67,6 +71,6 @@ func newAWSKMSKeyManagerFromEnv() (CredentialKeyManager, error) {
 	}
 	return &awsKMSKeyManager{
 		client: kms.NewFromConfig(cfg),
-		keyID:  strings.TrimSpace(os.Getenv(CredentialKMSKeyIDEnv)),
+		keyID:  keyID,
 	}, nil
 }

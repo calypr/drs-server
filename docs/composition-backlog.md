@@ -61,7 +61,7 @@ Configuration decoding accepts ambiguous input, and some SQLite queries accept m
 | C07 | Enforce one multipart input contract | P1 | Complete | None |
 | C08 | Reject ambiguous configuration | P1 | Complete | None |
 | C09 | Remove the duplicate project-delete route and specification operation | P1 | Complete | Public bucket client selects bucket operation |
-| C10 | Fail startup when configured credentials cannot be used | P2 | Ready | Prefer C08 first |
+| C10 | Fail startup when configured credentials cannot be used | P2 | Complete | C08 |
 | C11 | Use the canonical SHA rule for transfer attribution | P2 | Ready | Coordinate with C02 |
 | C12 | Bound LFS limiter state and prevent quota-key collisions | P2 | Ready | None |
 

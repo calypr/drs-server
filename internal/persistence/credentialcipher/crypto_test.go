@@ -79,6 +79,29 @@ func TestCredentialMasterKeyAcceptsHexBeforeBase64(t *testing.T) {
 	}
 }
 
+func TestEnabledValidatesSelectedKeyManager(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(CredentialKeyManagerEnv, "not-registered")
+	t.Setenv(CredentialKMSKeyIDEnv, "")
+
+	cipher := newTestCipher(t)
+	if enabled, err := cipher.Enabled(); err == nil || enabled || !strings.Contains(err.Error(), `credential key manager "not-registered" is not registered`) {
+		t.Fatalf("Enabled() = (%v, %v), want selected-manager error", enabled, err)
+	}
+}
+
+func TestEnabledRejectsAWSKMSWithoutKeyID(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(CredentialKeyManagerEnv, awsKMSKeyManagerName)
+	t.Setenv(CredentialKMSKeyIDEnv, "")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	cipher := newTestCipher(t)
+	if enabled, err := cipher.Enabled(); err == nil || enabled || !strings.Contains(err.Error(), CredentialKMSKeyIDEnv) {
+		t.Fatalf("Enabled() = (%v, %v), want missing KMS key ID error", enabled, err)
+	}
+}
+
 func TestDecryptField_LegacyV1Ciphertext(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	codec := newTestCipher(t)
