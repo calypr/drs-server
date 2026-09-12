@@ -13,26 +13,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func (s *internalServer) InternalDeleteProject(c fiber.Ctx, _, _ string) error {
-	if s.projectStorage == nil {
-		return HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
-	}
-	organization := strings.TrimSpace(c.Params("organization"))
-	projectID := strings.TrimSpace(c.Params("project_id"))
-	if organization == "" || projectID == "" {
-		return Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
-	}
-	if access.MissingGen3AuthHeader(c.Context()) {
-		return HandleError(c, errorapi.ErrAuthenticationRequired)
-	}
-	result, err := s.projectStorage.DeleteProjectDataAuthorized(c.Context(), organization, projectID)
-	if err != nil {
-		return HandleError(c, err)
-	}
-
-	return c.JSON(result)
-}
-
 func (s *internalServer) InternalScopeRepairAudit(c fiber.Ctx) error {
 	return s.internalScopeRepair(c, false)
 }

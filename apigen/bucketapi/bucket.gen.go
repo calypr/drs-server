@@ -894,6 +894,7 @@ type DeleteProjectDataResp struct {
 	JSON400      *APIError
 	JSON401      *APIError
 	JSON403      *APIError
+	JSON404      *APIError
 	JSON500      *APIError
 }
 
@@ -1412,6 +1413,13 @@ func ParseDeleteProjectDataResp(rsp *http.Response) (*DeleteProjectDataResp, err
 				return nil, err
 			}
 			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON404 = &dest
 
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 			var dest APIError
@@ -2115,6 +2123,15 @@ type DeleteProjectData403JSONResponse APIError
 func (response DeleteProjectData403JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
+
+	return ctx.JSON(&response)
+}
+
+type DeleteProjectData404JSONResponse APIError
+
+func (response DeleteProjectData404JSONResponse) VisitDeleteProjectDataResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(404)
 
 	return ctx.JSON(&response)
 }

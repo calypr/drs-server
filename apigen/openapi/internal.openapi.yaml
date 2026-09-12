@@ -1105,60 +1105,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIError'
-  /data/projects/{organization}/{project_id}:
-    delete:
-      tags:
-        - internal-maintenance
-      operationId: internalDeleteProject
-      description: Delete all project data and configured bucket scopes.
-      parameters:
-        - in: path
-          name: organization
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: project_id
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Project cleanup result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectCleanupResponse'
-        '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIError'
-        '401':
-          description: Authentication required
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIError'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIError'
-        '404':
-          description: Project not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIError'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIError'
   /data/upload:
     post:
       tags:
@@ -2272,22 +2218,6 @@ components:
         error:
           type: string
           x-go-type-skip-optional-pointer: true
-    ProjectCleanupResponse:
-      type: object
-      required:
-        - organization
-        - project_id
-        - deleted_objects
-        - deleted_bucket_scopes
-      properties:
-        organization:
-          type: string
-        project_id:
-          type: string
-        deleted_objects:
-          type: integer
-        deleted_bucket_scopes:
-          type: integer
     InternalUploadBlankRequest:
       type: object
       properties:

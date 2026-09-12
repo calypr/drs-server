@@ -97,9 +97,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 			buckets:        deps.Buckets,
 		}
 		internalapi.RegisterHandlers(api, server)
-		registerBucketRoutes(api, deps.Buckets, func(c fiber.Ctx) error {
-			return server.InternalDeleteProject(c, c.Params("organization"), c.Params("project_id"))
-		})
+		registerBucketRoutes(api, deps.Buckets, deps.ProjectStorage)
 	}
 	if options.LFS {
 		registerLFSRoutes(api, deps.LFS, options.LFSProtocol)

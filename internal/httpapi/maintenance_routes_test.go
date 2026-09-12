@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/bucketapi"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
@@ -64,6 +66,80 @@ func newMaintenanceRouteApp(t *testing.T) *fiber.App {
 	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
 	RegisterRoutes(app, Dependencies{ProjectStorage: storageService}, Options{Internal: true})
 	return app
+}
+
+func TestProjectDeleteRouteHasOneGeneratedOwner(t *testing.T) {
+	app := fiber.New()
+	RegisterRoutes(app, Dependencies{}, Options{Internal: true})
+
+	const path = "/data/projects/:organization/:project_id"
+	count := 0
+	for _, methodRoutes := range app.Stack() {
+		for _, route := range methodRoutes {
+			if route.Method == http.MethodDelete && route.Path == path {
+				count++
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("DELETE %s route count = %d, want 1", path, count)
+	}
+}
+
+type maintenanceCleanupObjects struct {
+	deleted []string
+}
+
+func (f *maintenanceCleanupObjects) DeleteBulkByScope(_ context.Context, organization, project string) (int, error) {
+	f.deleted = append(f.deleted, organization+"/"+project)
+	return 2, nil
+}
+
+type maintenanceCleanupScopes struct {
+	deleted []string
+}
+
+func (f *maintenanceCleanupScopes) ListBucketScopes(context.Context) ([]domainbuckets.Scope, error) {
+	return []domainbuckets.Scope{{Organization: "org", ProjectID: "project", CredentialID: "credential"}}, nil
+}
+
+func (f *maintenanceCleanupScopes) DeleteBucketScope(_ context.Context, organization, project, credential, path string) error {
+	f.deleted = append(f.deleted, strings.Join([]string{organization, project, credential, path}, "/"))
+	return nil
+}
+
+func TestBucketProjectDeleteRouteRunsProjectCleanup(t *testing.T) {
+	objects := &maintenanceCleanupObjects{}
+	scopes := &maintenanceCleanupScopes{}
+	app := fiber.New(fiber.Config{ErrorHandler: FiberErrorHandler})
+	RegisterRoutes(app, Dependencies{ProjectStorage: projectstorage.NewService(projectstorage.Dependencies{
+		ObjectCleanup: objects,
+		ScopeCatalog:  scopes,
+	})}, Options{Internal: true})
+
+	request := httptest.NewRequest(http.MethodDelete, "/data/projects/org/project", nil)
+	request = request.WithContext(dataTestAuthContext(request.Context(), "gen3", true, map[string]map[string]bool{
+		"/programs/org/projects/project": {"delete": true},
+	}))
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("DELETE project data: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("status = %d, want 200: %s", response.StatusCode, payload)
+	}
+	var result bucketapi.DeleteProjectDataResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Organization != "org" || result.ProjectId != "project" || result.DeletedObjects != 2 || result.DeletedBucketScopes != 1 {
+		t.Fatalf("response = %+v", result)
+	}
+	if len(objects.deleted) != 1 || objects.deleted[0] != "org/project" || len(scopes.deleted) != 1 || scopes.deleted[0] != "org/project/credential/" {
+		t.Fatalf("cleanup calls = objects:%v scopes:%v", objects.deleted, scopes.deleted)
+	}
 }
 
 func TestMaintenanceInspectBoundaryCharacterization(t *testing.T) {

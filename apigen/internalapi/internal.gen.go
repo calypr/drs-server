@@ -409,14 +409,6 @@ type ListRecordsResponse struct {
 	Records *[]InternalRecord `json:"records,omitempty"`
 }
 
-// ProjectCleanupResponse defines model for ProjectCleanupResponse.
-type ProjectCleanupResponse struct {
-	DeletedBucketScopes int    `json:"deleted_bucket_scopes"`
-	DeletedObjects      int    `json:"deleted_objects"`
-	Organization        string `json:"organization"`
-	ProjectId           string `json:"project_id"`
-}
-
 // ScopeRepairApplyResult defines model for ScopeRepairApplyResult.
 type ScopeRepairApplyResult struct {
 	AutoFixable int               `json:"auto_fixable"`
@@ -862,11 +854,6 @@ type ClientInterface interface {
 	// InternalMultipartUpload performs a POST /data/multipart/upload (the `InternalMultipartUpload` operationId) request.
 	// Takes a body of the `application/json` content type.
 	InternalMultipartUpload(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// InternalDeleteProject performs a DELETE /data/projects/{organization}/{project_id} (the `InternalDeleteProject` operationId) request.
-	//
-	// Delete all project data and configured bucket scopes.
-	InternalDeleteProject(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// InternalScopeRepairApplyWithBody performs a POST /data/repair/project-scope/apply (the `InternalScopeRepairApply` operationId) request,
 	// with any type of body and a specified content type.
@@ -1383,21 +1370,6 @@ func (c *Client) InternalMultipartUploadWithBody(ctx context.Context, contentTyp
 // Takes a body of the `application/json` content type.
 func (c *Client) InternalMultipartUpload(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInternalMultipartUploadRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// InternalDeleteProject performs a DELETE /data/projects/{organization}/{project_id} (the `InternalDeleteProject` operationId) request.
-//
-// Delete all project data and configured bucket scopes.
-func (c *Client) InternalDeleteProject(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewInternalDeleteProjectRequest(c.Server, organization, projectId)
 	if err != nil {
 		return nil, err
 	}
@@ -2513,47 +2485,6 @@ func NewInternalMultipartUploadRequestWithBody(server string, contentType string
 	return req, nil
 }
 
-// NewInternalDeleteProjectRequest constructs an http.Request for the InternalDeleteProject method
-func NewInternalDeleteProjectRequest(server string, organization string, projectId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "organization", organization, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "project_id", projectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/data/projects/%s/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewInternalScopeRepairApplyRequest calls the generic InternalScopeRepairApply builder with application/json body
 func NewInternalScopeRepairApplyRequest(server string, body InternalScopeRepairApplyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3652,9 +3583,6 @@ type ClientWithResponsesInterface interface {
 
 	InternalMultipartUploadWithResponse(ctx context.Context, body InternalMultipartUploadJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartUploadResp, error)
 
-	// InternalDeleteProjectWithResponse request
-	InternalDeleteProjectWithResponse(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*InternalDeleteProjectResp, error)
-
 	// InternalScopeRepairApplyWithBodyWithResponse request with any body
 	InternalScopeRepairApplyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalScopeRepairApplyResp, error)
 
@@ -4099,33 +4027,6 @@ func (r InternalMultipartUploadResp) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r InternalMultipartUploadResp) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type InternalDeleteProjectResp struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ProjectCleanupResponse
-	JSON400      *APIError
-	JSON401      *APIError
-	JSON403      *APIError
-	JSON404      *APIError
-	JSON500      *APIError
-}
-
-// Status returns HTTPResponse.Status
-func (r InternalDeleteProjectResp) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r InternalDeleteProjectResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4836,15 +4737,6 @@ func (c *ClientWithResponses) InternalMultipartUploadWithResponse(ctx context.Co
 		return nil, err
 	}
 	return ParseInternalMultipartUploadResp(rsp)
-}
-
-// InternalDeleteProjectWithResponse request returning *InternalDeleteProjectResp
-func (c *ClientWithResponses) InternalDeleteProjectWithResponse(ctx context.Context, organization string, projectId string, reqEditors ...RequestEditorFn) (*InternalDeleteProjectResp, error) {
-	rsp, err := c.InternalDeleteProject(ctx, organization, projectId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseInternalDeleteProjectResp(rsp)
 }
 
 // InternalScopeRepairApplyWithBodyWithResponse request with arbitrary body returning *InternalScopeRepairApplyResp
@@ -5971,74 +5863,6 @@ func ParseInternalMultipartUploadResp(rsp *http.Response) (*InternalMultipartUpl
 				return nil, err
 			}
 			response.JSON403 = &dest
-
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-			var dest APIError
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON500 = &dest
-
-		}
-
-		return response, nil
-	}()
-	// Error responses may use legacy or proxy payloads outside the schema.
-	if decodeErr != nil && rsp.StatusCode/100 != 2 {
-		return response, nil
-	}
-	return decoded, decodeErr
-}
-
-// ParseInternalDeleteProjectResp parses an HTTP response from a InternalDeleteProjectWithResponse call
-func ParseInternalDeleteProjectResp(rsp *http.Response) (*InternalDeleteProjectResp, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &InternalDeleteProjectResp{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	decoded, decodeErr := func() (*InternalDeleteProjectResp, error) {
-		switch {
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-			var dest ProjectCleanupResponse
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON200 = &dest
-
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-			var dest APIError
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON400 = &dest
-
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-			var dest APIError
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON401 = &dest
-
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-			var dest APIError
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON403 = &dest
-
-		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-			var dest APIError
-			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-				return nil, err
-			}
-			response.JSON404 = &dest
 
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 			var dest APIError
@@ -7251,9 +7075,6 @@ type ServerInterface interface {
 	// (POST /data/multipart/upload)
 	InternalMultipartUpload(c fiber.Ctx) error
 
-	// (DELETE /data/projects/{organization}/{project_id})
-	InternalDeleteProject(c fiber.Ctx, organization string, projectId string) error
-
 	// (POST /data/repair/project-scope/apply)
 	InternalScopeRepairApply(c fiber.Ctx) error
 
@@ -7654,43 +7475,6 @@ func (siw *ServerInterfaceWrapper) InternalMultipartUpload(c fiber.Ctx) error {
 
 	handler := func(c fiber.Ctx) error {
 		return siw.Handler.InternalMultipartUpload(c)
-	}
-
-	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
-		m := siw.HandlerMiddlewares[i]
-		next := handler
-		handler = func(c fiber.Ctx) error {
-			return m(c, next)
-		}
-	}
-
-	return handler(c)
-}
-
-// InternalDeleteProject operation middleware
-func (siw *ServerInterfaceWrapper) InternalDeleteProject(c fiber.Ctx) error {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "organization" -------------
-	var organization string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "organization", c.Params("organization"), &organization, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter organization: %w", err).Error())
-	}
-
-	// ------------- Path parameter "project_id" -------------
-	var projectId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "project_id", c.Params("project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter project_id: %w", err).Error())
-	}
-
-	handler := func(c fiber.Ctx) error {
-		return siw.Handler.InternalDeleteProject(c, organization, projectId)
 	}
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -8310,8 +8094,6 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 	router.Post(options.BaseURL+"/data/multipart/init", wrapper.InternalMultipartInit)
 
 	router.Post(options.BaseURL+"/data/multipart/upload", wrapper.InternalMultipartUpload)
-
-	router.Delete(options.BaseURL+"/data/projects/:organization/:project_id", wrapper.InternalDeleteProject)
 
 	router.Post(options.BaseURL+"/data/repair/project-scope/apply", wrapper.InternalScopeRepairApply)
 
@@ -9107,69 +8889,6 @@ func (response InternalMultipartUpload403JSONResponse) VisitInternalMultipartUpl
 type InternalMultipartUpload500JSONResponse APIError
 
 func (response InternalMultipartUpload500JSONResponse) VisitInternalMultipartUploadResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(500)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProjectRequestObject struct {
-	Organization string `json:"organization"`
-	ProjectId    string `json:"project_id"`
-}
-
-type InternalDeleteProjectResponseObject interface {
-	VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error
-}
-
-type InternalDeleteProject200JSONResponse ProjectCleanupResponse
-
-func (response InternalDeleteProject200JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(200)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProject400JSONResponse APIError
-
-func (response InternalDeleteProject400JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(400)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProject401JSONResponse APIError
-
-func (response InternalDeleteProject401JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(401)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProject403JSONResponse APIError
-
-func (response InternalDeleteProject403JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(403)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProject404JSONResponse APIError
-
-func (response InternalDeleteProject404JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
-	ctx.Response().Header.Set("Content-Type", "application/json")
-	ctx.Status(404)
-
-	return ctx.JSON(&response)
-}
-
-type InternalDeleteProject500JSONResponse APIError
-
-func (response InternalDeleteProject500JSONResponse) VisitInternalDeleteProjectResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
@@ -10221,9 +9940,6 @@ type StrictServerInterface interface {
 	// (POST /data/multipart/upload)
 	InternalMultipartUpload(ctx context.Context, request InternalMultipartUploadRequestObject) (InternalMultipartUploadResponseObject, error)
 
-	// (DELETE /data/projects/{organization}/{project_id})
-	InternalDeleteProject(ctx context.Context, request InternalDeleteProjectRequestObject) (InternalDeleteProjectResponseObject, error)
-
 	// (POST /data/repair/project-scope/apply)
 	InternalScopeRepairApply(ctx context.Context, request InternalScopeRepairApplyRequestObject) (InternalScopeRepairApplyResponseObject, error)
 
@@ -10711,34 +10427,6 @@ func (sh *strictHandler) InternalMultipartUpload(ctx fiber.Ctx) error {
 		return err
 	} else if validResponse, ok := response.(InternalMultipartUploadResponseObject); ok {
 		if err := validResponse.VisitInternalMultipartUploadResponse(ctx); err != nil {
-			return err
-		}
-	} else if response != nil {
-		return fmt.Errorf("unexpected response type: %T", response)
-	}
-	return nil
-}
-
-// InternalDeleteProject operation middleware
-func (sh *strictHandler) InternalDeleteProject(ctx fiber.Ctx, organization string, projectId string) error {
-	var request InternalDeleteProjectRequestObject
-
-	request.Organization = organization
-	request.ProjectId = projectId
-
-	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
-		return sh.ssi.InternalDeleteProject(ctx.Context(), request.(InternalDeleteProjectRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "InternalDeleteProject")
-	}
-
-	response, err := handler(ctx, request)
-
-	if err != nil {
-		return err
-	} else if validResponse, ok := response.(InternalDeleteProjectResponseObject); ok {
-		if err := validResponse.VisitInternalDeleteProjectResponse(ctx); err != nil {
 			return err
 		}
 	} else if response != nil {

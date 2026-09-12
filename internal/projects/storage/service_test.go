@@ -417,7 +417,7 @@ func TestDeleteProjectDataAuthorizedChecksBeforeAnyDeletion(t *testing.T) {
 	if !errors.Is(err, errorapi.ErrAccessDenied) {
 		t.Fatalf("DeleteProjectDataAuthorized() error = %v, want access denied", err)
 	}
-	if result.Organization != "org" || result.ProjectId != "project" {
+	if result.Organization != "org" || result.ProjectID != "project" {
 		t.Fatalf("authorized result = %+v, want trimmed identifiers", result)
 	}
 	if len(objects.deleted) != 0 || len(scopes.deleted) != 0 {

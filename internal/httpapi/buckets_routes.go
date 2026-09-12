@@ -7,12 +7,13 @@ import (
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/access"
 	domainbuckets "github.com/calypr/syfon/internal/buckets"
+	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/gofiber/fiber/v3"
 )
 
 type bucketServer struct {
-	bucketService         *domainbuckets.Service
-	projectCleanupHandler fiber.Handler
+	bucketService  *domainbuckets.Service
+	projectStorage *projectstorage.Service
 }
 
 func (s *bucketServer) DeleteBucketScope(c fiber.Ctx, bucket string, params bucketapi.DeleteBucketScopeParams) error {
@@ -39,10 +40,27 @@ func (s *bucketServer) DeleteBucketScope(c fiber.Ctx, bucket string, params buck
 }
 
 func (s *bucketServer) DeleteProjectData(c fiber.Ctx, organization, projectID string) error {
-	if s.projectCleanupHandler == nil {
-		return fiber.ErrNotFound
+	if s.projectStorage == nil {
+		return HandleError(c, errorapi.Define(errorapi.ErrorCodeStorageUnavailable, errorapi.ErrorCategoryUnavailable, "project storage service is not configured"))
 	}
-	return s.projectCleanupHandler(c)
+	organization = strings.TrimSpace(organization)
+	projectID = strings.TrimSpace(projectID)
+	if organization == "" || projectID == "" {
+		return Reject(c, fiber.StatusBadRequest, "organization and project_id are required")
+	}
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return HandleError(c, errorapi.ErrAuthenticationRequired)
+	}
+	result, err := s.projectStorage.DeleteProjectDataAuthorized(c.Context(), organization, projectID)
+	if err != nil {
+		return HandleError(c, err)
+	}
+	return c.JSON(bucketapi.DeleteProjectDataResponse{
+		Organization:        result.Organization,
+		ProjectId:           result.ProjectID,
+		DeletedObjects:      result.DeletedObjects,
+		DeletedBucketScopes: result.DeletedBucketScopes,
+	})
 }
 
 func (s *bucketServer) ListBuckets(c fiber.Ctx) error {
@@ -170,9 +188,9 @@ func (s *bucketServer) ListBucketScopes(c fiber.Ctx, bucket string) error {
 	return c.JSON(result)
 }
 
-func registerBucketRoutes(router fiber.Router, bucketService *domainbuckets.Service, projectCleanupHandler fiber.Handler) {
+func registerBucketRoutes(router fiber.Router, bucketService *domainbuckets.Service, projectStorage *projectstorage.Service) {
 	bucketapi.RegisterHandlers(router, &bucketServer{
-		bucketService:         bucketService,
-		projectCleanupHandler: projectCleanupHandler,
+		bucketService:  bucketService,
+		projectStorage: projectStorage,
 	})
 }
