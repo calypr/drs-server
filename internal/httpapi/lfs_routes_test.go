@@ -432,6 +432,23 @@ func TestLFSVerifyRejectsNegativeSize(t *testing.T) {
 	}
 }
 
+func TestLFSVerifyRejectsRecordedSizeMismatch(t *testing.T) {
+	oid := strings.Repeat("f", 64)
+	ports := newLFSTestPorts(t, map[string]*drs.DrsObject{
+		oid: {Id: oid, Size: 12},
+	}, nil)
+	server := &lfsServer{service: newLFSTestDependencies(ports, &lfsTestStorage{}), opts: defaultLFSOptions()}
+	response, err := server.LfsVerify(context.Background(), lfsapi.LfsVerifyRequestObject{
+		Body: &lfsapi.LfsVerifyApplicationVndGitLfsPlusJSONRequestBody{Oid: oid, Size: 11},
+	})
+	if err != nil {
+		t.Fatalf("LfsVerify() error = %v", err)
+	}
+	if invalid, ok := response.(lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse); !ok || !strings.Contains(invalid.Message, "size mismatch") {
+		t.Fatalf("recorded size mismatch response = %#v", response)
+	}
+}
+
 func TestLFSStageMetadataRejectsNegativeCandidateSize(t *testing.T) {
 	server := newLFSTestServerForNumericValidation(t)
 	size := int64(-1)

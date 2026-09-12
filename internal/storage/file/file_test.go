@@ -11,6 +11,7 @@ import (
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/google/uuid"
+	"gocloud.dev/blob"
 )
 
 func TestAccessReturnsRawSlashNormalizedPathAndIgnoresCloudOptions(t *testing.T) {
@@ -37,6 +38,46 @@ func TestAccessReturnsRawSlashNormalizedPathAndIgnoresCloudOptions(t *testing.T)
 	}
 	if ranged.Location != want {
 		t.Fatalf("ranged path = %q, want %q", ranged.Location, want)
+	}
+}
+
+func TestCredentialEndpointIsEffectiveMultipartRoot(t *testing.T) {
+	constructorRoot := t.TempDir()
+	credentialRoot := t.TempDir()
+	b, err := newBackend(constructorRoot)
+	if err != nil {
+		t.Fatalf("newBackend failed: %v", err)
+	}
+	defer b.Close()
+	binding := storage.ProviderBinding{Provider: "file", LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{
+		Provider: "file", Bucket: "bucket", Endpoint: credentialRoot,
+	}}
+	access, err := b.Sign(context.Background(), binding, storage.SignRequest{Target: storage.Target{Key: "object.bin"}})
+	if err != nil {
+		t.Fatalf("Sign failed: %v", err)
+	}
+	if want := filepath.ToSlash(filepath.Join(credentialRoot, "object.bin")); access.Location != want {
+		t.Fatalf("access location = %q, want %q", access.Location, want)
+	}
+
+	ctx := context.Background()
+	partKey := storage.MultipartPartObjectKey("object.bin", "upload", 1)
+	credentialBucket, err := b.bucketForRoot(credentialRoot)
+	if err != nil {
+		t.Fatalf("bucketForRoot failed: %v", err)
+	}
+	writeBucket(t, credentialBucket, partKey, "contents")
+	if err := b.CompleteMultipart(ctx, binding, storage.CompleteMultipartRequest{
+		Target: storage.Target{Key: "object.bin"}, UploadID: "upload", CompletionID: "completion",
+		Parts: []storage.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart failed: %v", err)
+	}
+	if got := readBucket(t, credentialBucket, "object.bin"); got != "contents" {
+		t.Fatalf("completed contents = %q, want contents", got)
+	}
+	if _, err := os.Stat(filepath.Join(constructorRoot, "object.bin")); !os.IsNotExist(err) {
+		t.Fatalf("constructor root was modified, stat error = %v", err)
 	}
 }
 
@@ -257,7 +298,12 @@ func (fileCredentialLookup) GetS3Credential(context.Context, string) (*buckets.C
 
 func writeBlob(t *testing.T, b *backend, key, contents string) {
 	t.Helper()
-	writer, err := b.rootBucket.NewWriter(context.Background(), key, nil)
+	writeBucket(t, b.rootBucket, key, contents)
+}
+
+func writeBucket(t *testing.T, bucket *blob.Bucket, key, contents string) {
+	t.Helper()
+	writer, err := bucket.NewWriter(context.Background(), key, nil)
 	if err != nil {
 		t.Fatalf("open writer %q: %v", key, err)
 	}
@@ -271,7 +317,12 @@ func writeBlob(t *testing.T, b *backend, key, contents string) {
 
 func readBlob(t *testing.T, b *backend, key string) string {
 	t.Helper()
-	reader, err := b.rootBucket.NewReader(context.Background(), key, nil)
+	return readBucket(t, b.rootBucket, key)
+}
+
+func readBucket(t *testing.T, bucket *blob.Bucket, key string) string {
+	t.Helper()
+	reader, err := bucket.NewReader(context.Background(), key, nil)
 	if err != nil {
 		t.Fatalf("open reader %q: %v", key, err)
 	}

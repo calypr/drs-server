@@ -420,8 +420,12 @@ func (s *Service) visibleBuckets(ctx context.Context) (map[string]buckets.Visibl
 	return cloneVisible(visible), err
 }
 
-func visibleBucketContains(visible map[string]buckets.VisibleBucket, bucket, credentialID string) bool {
+func visibleBucketContains(ctx context.Context, visible map[string]buckets.VisibleBucket, bucket, credentialID string) bool {
+	restricted := restrictedBucketVisibility(ctx)
 	for key, entry := range visible {
+		if restricted && len(entry.Programs) == 0 {
+			continue
+		}
 		if strings.EqualFold(strings.TrimSpace(entry.Credential.Bucket), bucket) ||
 			strings.EqualFold(strings.TrimSpace(key), credentialID) ||
 			strings.EqualFold(strings.TrimSpace(entry.Credential.CredentialID), credentialID) {
@@ -429,4 +433,10 @@ func visibleBucketContains(visible map[string]buckets.VisibleBucket, bucket, cre
 		}
 	}
 	return false
+}
+
+func restrictedBucketVisibility(ctx context.Context) bool {
+	return access.IsAuthzEnforced(ctx) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/programs"}) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/data_file"})
 }

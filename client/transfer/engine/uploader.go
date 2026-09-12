@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -15,16 +17,29 @@ import (
 	"github.com/calypr/syfon/client/transfer"
 )
 
+type uploadCheckpointPhase string
+
+const (
+	uploadCheckpointUploading  uploadCheckpointPhase = "uploading"
+	uploadCheckpointCompleting uploadCheckpointPhase = "completing"
+	uploadCheckpointCompleted  uploadCheckpointPhase = "completed"
+)
+
 type uploaderResumeState struct {
-	SourcePath      string         `json:"source_path"`
-	ObjectKey       string         `json:"object_key"`
-	GUID            string         `json:"guid"`
-	Bucket          string         `json:"bucket"`
-	FileSize        int64          `json:"file_size"`
-	FileModUnixNano int64          `json:"file_mod_unix_nano"`
-	ChunkSize       int64          `json:"chunk_size"`
-	UploadID        string         `json:"upload_id"`
-	Completed       map[int]string `json:"completed"`
+	SourcePath            string                   `json:"source_path"`
+	ObjectKey             string                   `json:"object_key"`
+	GUID                  string                   `json:"guid"`
+	Bucket                string                   `json:"bucket"`
+	FileSize              int64                    `json:"file_size"`
+	FileModUnixNano       int64                    `json:"file_mod_unix_nano"`
+	ChunkSize             int64                    `json:"chunk_size"`
+	UploadID              string                   `json:"upload_id"`
+	RoutingFingerprint    string                   `json:"routing_fingerprint"`
+	Phase                 uploadCheckpointPhase    `json:"phase"`
+	Completed             map[int]string           `json:"completed"`
+	CompletionParts       []transfer.MultipartPart `json:"completion_parts,omitempty"`
+	CompletionFingerprint string                   `json:"completion_fingerprint,omitempty"`
+	CompletedLocation     string                   `json:"completed_location"`
 }
 
 type GenericUploader struct {
@@ -41,6 +56,57 @@ type multipartInitWithMetadataResolver interface {
 
 type multipartLocationCompleter interface {
 	MultipartCompleteWithLocation(context.Context, string, string, []transfer.MultipartPart) (string, error)
+}
+
+type multipartCompletionReplaySafety interface {
+	MultipartCompletionReplaySafe(context.Context, string, string, []transfer.MultipartPart) bool
+}
+
+var errMultipartCompletionRecoveryRequired = errors.New("multipart completion requires recovery")
+var errMultipartCompletionUncertain = errors.New("multipart completion outcome is uncertain")
+
+type canonicalUploadAuthorization struct {
+	Organization string   `json:"organization"`
+	Projects     []string `json:"projects,omitempty"`
+}
+
+func uploadRoutingFingerprint(metadata common.FileMetadata) string {
+	organizationProjects := make(map[string]map[string]struct{}, len(metadata.Authorizations))
+	for rawOrganization, rawProjects := range metadata.Authorizations {
+		organization := strings.TrimSpace(rawOrganization)
+		if organization == "" {
+			continue
+		}
+		projectSet := organizationProjects[organization]
+		if projectSet == nil {
+			projectSet = make(map[string]struct{}, len(rawProjects))
+			organizationProjects[organization] = projectSet
+		}
+		for _, rawProject := range rawProjects {
+			project := strings.TrimSpace(rawProject)
+			if project != "" {
+				projectSet[project] = struct{}{}
+			}
+		}
+	}
+	organizations := make([]canonicalUploadAuthorization, 0, len(organizationProjects))
+	for organization, projectSet := range organizationProjects {
+		projects := make([]string, 0, len(projectSet))
+		for project := range projectSet {
+			projects = append(projects, project)
+		}
+		sort.Strings(projects)
+		organizations = append(organizations, canonicalUploadAuthorization{
+			Organization: organization,
+			Projects:     projects,
+		})
+	}
+	sort.Slice(organizations, func(i, j int) bool {
+		return organizations[i].Organization < organizations[j].Organization
+	})
+	encoded, _ := json.Marshal(organizations)
+	digest := sha256.Sum256(append([]byte("syfon-upload-routing-v1:"), encoded...))
+	return fmt.Sprintf("%x", digest[:])
 }
 
 func effectiveObjectKey(req transfer.TransferRequest) string {
@@ -136,6 +202,41 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 	}
 	objectKey := effectiveObjectKey(req)
 
+	if loaded && u.matches(state, req, stat, chunkSize) {
+		switch state.Phase {
+		case uploadCheckpointCompleted:
+			_, err := completionParts(state)
+			if err != nil {
+				return "", err
+			}
+			tracker := newMultipartProgressTracker(ctx, common.GetOid(ctx), fileSize)
+			tracker.committed = fileSize
+			return u.finishMultipart(checkpointPath, state, tracker)
+		case uploadCheckpointCompleting:
+			parts, err := completionParts(state)
+			if err != nil {
+				return "", err
+			}
+			replaySafe, ok := u.Backend.(multipartCompletionReplaySafety)
+			if !ok || !replaySafe.MultipartCompletionReplaySafe(ctx, objectKey, state.UploadID, parts) {
+				return "", errMultipartCompletionRecoveryRequired
+			}
+			location, completeErr := u.completeMultipart(ctx, objectKey, checkpointPath, state, parts)
+			if completeErr != nil {
+				return location, completeErr
+			}
+			tracker := newMultipartProgressTracker(ctx, common.GetOid(ctx), fileSize)
+			tracker.committed = fileSize
+			return u.finishMultipart(checkpointPath, state, tracker)
+		case uploadCheckpointUploading:
+		default:
+			loaded = false
+		}
+	}
+	if loaded && state != nil && state.Phase == uploadCheckpointCompleting && !u.matches(state, req, stat, chunkSize) {
+		return "", errMultipartCompletionRecoveryRequired
+	}
+
 	if !loaded || !u.matches(state, req, stat, chunkSize) {
 		var (
 			uploadID string
@@ -150,15 +251,17 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 			return "", err
 		}
 		state = &uploaderResumeState{
-			SourcePath:      req.SourcePath,
-			ObjectKey:       objectKey,
-			GUID:            req.GUID,
-			Bucket:          req.Bucket,
-			FileSize:        fileSize,
-			FileModUnixNano: stat.ModTime().UnixNano(),
-			ChunkSize:       chunkSize,
-			UploadID:        uploadID,
-			Completed:       map[int]string{},
+			SourcePath:         req.SourcePath,
+			ObjectKey:          objectKey,
+			GUID:               req.GUID,
+			Bucket:             req.Bucket,
+			FileSize:           fileSize,
+			FileModUnixNano:    stat.ModTime().UnixNano(),
+			ChunkSize:          chunkSize,
+			UploadID:           uploadID,
+			RoutingFingerprint: uploadRoutingFingerprint(req.Metadata),
+			Phase:              uploadCheckpointUploading,
+			Completed:          map[int]string{},
 		}
 		if err := u.saveState(checkpointPath, state); err != nil {
 			return "", fmt.Errorf("persist multipart checkpoint: %w", err)
@@ -242,7 +345,23 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 	}
 	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
 
+	state.Phase = uploadCheckpointCompleting
+	state.CompletionParts = append([]transfer.MultipartPart(nil), parts...)
+	state.CompletionFingerprint = uploadPartsFingerprint(parts)
+	if err := u.saveState(checkpointPath, state); err != nil {
+		return "", fmt.Errorf("persist multipart completion intent: %w", err)
+	}
+
+	location, err := u.completeMultipart(ctx, objectKey, checkpointPath, state, parts)
+	if err != nil {
+		return location, err
+	}
+	return u.finishMultipart(checkpointPath, state, tracker)
+}
+
+func (u *GenericUploader) completeMultipart(ctx context.Context, objectKey, checkpointPath string, state *uploaderResumeState, parts []transfer.MultipartPart) (string, error) {
 	location := ""
+	var err error
 	if backend, ok := u.Backend.(multipartLocationCompleter); ok {
 		location, err = backend.MultipartCompleteWithLocation(ctx, objectKey, state.UploadID, parts)
 	} else {
@@ -251,14 +370,24 @@ func (u *GenericUploader) uploadMultipart(ctx context.Context, req transfer.Tran
 	if err != nil {
 		return "", err
 	}
-	if err := tracker.CompleteUpload(); err != nil {
-		return "", transfer.NonRetryable(err)
-	}
 
-	if err := os.Remove(checkpointPath); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("remove multipart checkpoint: %w", err)
+	state.Phase = uploadCheckpointCompleted
+	state.CompletedLocation = location
+	if err := u.saveState(checkpointPath, state); err != nil {
+		return location, fmt.Errorf("%w: persist terminal multipart checkpoint: %v", errMultipartCompletionUncertain, err)
 	}
 	return location, nil
+}
+
+func (u *GenericUploader) finishMultipart(checkpointPath string, state *uploaderResumeState, tracker *multipartProgressTracker) (string, error) {
+	if err := tracker.CompleteUpload(); err != nil {
+		return state.CompletedLocation, transfer.NonRetryable(err)
+	}
+
+	if err := removeMultipartCheckpoint(checkpointPath); err != nil && !os.IsNotExist(err) {
+		return state.CompletedLocation, fmt.Errorf("remove multipart checkpoint: %w", err)
+	}
+	return state.CompletedLocation, nil
 }
 
 func (u *GenericUploader) loadState(path string) (*uploaderResumeState, bool) {
@@ -277,12 +406,60 @@ func (u *GenericUploader) loadState(path string) (*uploaderResumeState, bool) {
 }
 
 func (u *GenericUploader) saveState(path string, state *uploaderResumeState) error {
+	return uploadCheckpointWriter(path, state)
+}
+
+func writeUploadCheckpoint(path string, state *uploaderResumeState) error {
 	data, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("marshal upload checkpoint: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	dir := filepath.Dir(path)
+	temp, err := os.CreateTemp(dir, ".multipart-checkpoint-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create upload checkpoint: %w", err)
+	}
+	tempPath := temp.Name()
+	defer func() {
+		if tempPath != "" {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if err := temp.Chmod(0o644); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("chmod upload checkpoint: %w", err)
+	}
+	written, err := temp.Write(data)
+	if err != nil {
+		_ = temp.Close()
 		return fmt.Errorf("write upload checkpoint: %w", err)
+	}
+	if written != len(data) {
+		_ = temp.Close()
+		return fmt.Errorf("write upload checkpoint: %w", io.ErrShortWrite)
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("sync upload checkpoint: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close upload checkpoint: %w", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("publish upload checkpoint: %w", err)
+	}
+	tempPath = ""
+	directory, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open upload checkpoint directory: %w", err)
+	}
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	if syncErr != nil {
+		return fmt.Errorf("sync upload checkpoint directory: %w", syncErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close upload checkpoint directory: %w", closeErr)
 	}
 	return nil
 }
@@ -291,15 +468,43 @@ func (u *GenericUploader) matches(s *uploaderResumeState, req transfer.TransferR
 	if s == nil {
 		return false
 	}
-	return s.UploadID != "" &&
+	return (s.Phase == uploadCheckpointUploading || s.Phase == uploadCheckpointCompleting || s.Phase == uploadCheckpointCompleted) &&
+		s.UploadID != "" &&
 		s.Bucket == req.Bucket &&
 		s.FileModUnixNano == info.ModTime().UnixNano() &&
 		s.SourcePath == req.SourcePath &&
 		s.GUID == req.GUID &&
 		s.ObjectKey == effectiveObjectKey(req) &&
 		s.FileSize == info.Size() &&
-		s.ChunkSize == chunkSize
+		s.ChunkSize == chunkSize &&
+		s.RoutingFingerprint != "" &&
+		s.RoutingFingerprint == uploadRoutingFingerprint(req.Metadata)
 }
+
+func completionParts(state *uploaderResumeState) ([]transfer.MultipartPart, error) {
+	if state == nil || len(state.CompletionParts) == 0 {
+		return nil, fmt.Errorf("%w: checkpoint has no completion manifest", errMultipartCompletionRecoveryRequired)
+	}
+	parts := append([]transfer.MultipartPart(nil), state.CompletionParts...)
+	for i, part := range parts {
+		if part.PartNumber <= 0 || (i > 0 && parts[i-1].PartNumber >= part.PartNumber) {
+			return nil, fmt.Errorf("%w: checkpoint completion manifest is not sorted and unique", errMultipartCompletionRecoveryRequired)
+		}
+	}
+	if state.CompletionFingerprint != "" && state.CompletionFingerprint != uploadPartsFingerprint(parts) {
+		return nil, fmt.Errorf("%w: checkpoint completion manifest fingerprint mismatch", errMultipartCompletionRecoveryRequired)
+	}
+	return parts, nil
+}
+
+func uploadPartsFingerprint(parts []transfer.MultipartPart) string {
+	encoded, _ := json.Marshal(parts)
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", digest[:])
+}
+
+var uploadCheckpointWriter = writeUploadCheckpoint
+var removeMultipartCheckpoint = os.Remove
 
 func emitProgress(ctx context.Context, delta, total int64) {
 	progress := common.GetProgress(ctx)

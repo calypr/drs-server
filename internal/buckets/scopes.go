@@ -82,15 +82,3 @@ func (s *Service) scopeCredentialIDForCredentials(scope Scope, creds []Credentia
 	}
 	return candidate
 }
-
-func (s *Service) scopeBelongsTo(scope Scope, credentialID, bucket string) bool {
-	for _, candidate := range []string{scope.CredentialID, scope.Bucket} {
-		if strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(credentialID)) {
-			return true
-		}
-		if bucket != "" && strings.EqualFold(strings.TrimSpace(candidate), bucket) {
-			return true
-		}
-	}
-	return false
-}

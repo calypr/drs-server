@@ -3,6 +3,7 @@ package lfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -203,11 +204,73 @@ func TestLFSMetadataWorkflowReportsPendingLookupFailureForExistingObject(t *test
 		nil,
 	)
 
-	if err := service.Verify(context.Background(), "record"); err != pendingErr {
+	if err := service.Verify(context.Background(), "record", 0); err != pendingErr {
 		t.Fatalf("Verify() error = %v, want %v", err, pendingErr)
 	}
 	if strings.Join(events, ",") != "get" {
 		t.Fatalf("events = %v, want pending failure before accounting", events)
+	}
+}
+
+func TestLFSVerifyRetainsPendingMetadataWhenRecordedSizeMismatches(t *testing.T) {
+	events := make([]string, 0, 4)
+	sha := strings.Repeat("e", 64)
+	typeName := "s3"
+	url := "s3://bucket/" + sha
+	methods := []lfsapi.AccessMethod{{Type: &typeName, AccessUrl: &lfsapi.AccessMethodAccessUrl{Url: &url}}}
+	candidate := lfsapi.DrsObjectCandidate{
+		Checksums:     &[]lfsapi.Checksum{{Type: "sha256", Checksum: sha}},
+		AccessMethods: &methods,
+		Size:          func() *int64 { size := int64(7); return &size }(),
+	}
+	pending := &metadataPendingSpy{
+		events: &events,
+		entry:  &PendingMetadata{OID: sha, Candidate: candidate},
+	}
+	objectsPort := &lfsMetadataObjectSpy{events: &events, getErr: errorapi.ErrNotFound}
+	accounting := &lfsUploadAccountingSpy{events: &events}
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
+
+	err := service.Verify(context.Background(), sha, 8)
+	var candidateErr *MetadataCandidateError
+	if !errors.As(err, &candidateErr) {
+		t.Fatalf("Verify() error = %v, want metadata candidate error", err)
+	}
+	if !strings.Contains(err.Error(), "size mismatch") {
+		t.Fatalf("Verify() error = %v, want size mismatch", err)
+	}
+	if len(objectsPort.registered) != 0 || accounting.object != "" || pending.entry == nil {
+		t.Fatalf("size mismatch side effects = registered=%v accounted=%q pending=%v", objectsPort.registered, accounting.object, pending.entry)
+	}
+	if strings.Join(events, ",") != "get" {
+		t.Fatalf("size mismatch events = %v, want [get]", events)
+	}
+}
+
+func TestLFSVerifyRejectsExistingObjectSizeMismatchBeforePendingMutation(t *testing.T) {
+	events := make([]string, 0, 4)
+	sha := strings.Repeat("f", 64)
+	pending := &metadataPendingSpy{
+		events: &events,
+		entry:  &PendingMetadata{OID: sha},
+	}
+	objectsPort := &lfsMetadataObjectSpy{
+		events: &events,
+		object: &drs.DrsObject{Id: "record", Size: 7},
+	}
+	accounting := &lfsUploadAccountingSpy{events: &events}
+	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
+
+	err := service.Verify(context.Background(), sha, 8)
+	var candidateErr *MetadataCandidateError
+	if !errors.As(err, &candidateErr) || !strings.Contains(err.Error(), "size mismatch") {
+		t.Fatalf("Verify() error = %v, want metadata size mismatch", err)
+	}
+	if len(objectsPort.registered) != 0 || accounting.object != "" || pending.entry == nil {
+		t.Fatalf("existing mismatch side effects = registered=%v accounted=%q pending=%v", objectsPort.registered, accounting.object, pending.entry)
+	}
+	if strings.Join(events, ",") != "get" {
+		t.Fatalf("existing mismatch events = %v, want [get]", events)
 	}
 }
 
@@ -230,7 +293,7 @@ func TestLFSMetadataWorkflowConsumesRegistersThenAccounts(t *testing.T) {
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
 
-	if err := service.Verify(context.Background(), sha); err != nil {
+	if err := service.Verify(context.Background(), sha, 0); err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
 
@@ -268,7 +331,7 @@ func TestLFSMetadataWorkflowRetainsPendingMetadataWhenRegistrationFails(t *testi
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
 
-	if err := service.Verify(context.Background(), sha); err != registerErr {
+	if err := service.Verify(context.Background(), sha, 0); err != registerErr {
 		t.Fatalf("first Verify() error = %v, want %v", err, registerErr)
 	}
 	if pending.entry == nil {
@@ -279,7 +342,7 @@ func TestLFSMetadataWorkflowRetainsPendingMetadataWhenRegistrationFails(t *testi
 	}
 
 	objectsPort.registerErr = nil
-	if err := service.Verify(context.Background(), sha); err != nil {
+	if err := service.Verify(context.Background(), sha, 0); err != nil {
 		t.Fatalf("retry Verify() error = %v", err)
 	}
 	if pending.entry != nil {
@@ -324,10 +387,10 @@ func TestLFSMetadataWorkflowProcessesPendingReplacementAfterObjectExists(t *test
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
 
-	if err := service.Verify(context.Background(), sha); err != nil {
+	if err := service.Verify(context.Background(), sha, 0); err != nil {
 		t.Fatalf("first Verify() error = %v", err)
 	}
-	if err := service.Verify(context.Background(), sha); err != nil {
+	if err := service.Verify(context.Background(), sha, 0); err != nil {
 		t.Fatalf("replacement Verify() error = %v", err)
 	}
 
@@ -365,7 +428,7 @@ func TestLFSMetadataWorkflowReturnsConsumptionFailureAfterRegistration(t *testin
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, pending, accounting, nil)
 
-	if err := service.Verify(context.Background(), sha); err != consumeErr {
+	if err := service.Verify(context.Background(), sha, 0); err != consumeErr {
 		t.Fatalf("Verify() error = %v, want %v", err, consumeErr)
 	}
 	if len(objectsPort.registered) != 1 {
@@ -386,7 +449,7 @@ func TestLFSMetadataWorkflowExistingObjectWithoutPendingMetadataIsAlreadyVerifie
 	accounting := &lfsUploadAccountingSpy{events: &events}
 	service := NewService(nil, objectsPort, nil, nil, accounting, nil)
 
-	if err := service.Verify(context.Background(), "oid"); err != nil {
+	if err := service.Verify(context.Background(), "oid", 0); err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
 

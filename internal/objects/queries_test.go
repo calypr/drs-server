@@ -2,11 +2,14 @@ package objects_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 )
 
@@ -315,6 +318,31 @@ func TestListRecordsFiltersUnauthorizedScopes(t *testing.T) {
 	}
 	if len(ids) != 0 {
 		t.Fatalf("expected authz fallback to filter ids, got %+v", ids)
+	}
+}
+
+func TestListRecordsDoesNotBroadenMalformedAuthorizationResource(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	controlled := []string{"/organization/secure"}
+	object := drs.DrsObject{
+		Id:               "org-wide",
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		ControlledAccess: &controlled,
+		AccessMethods:    &[]drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/org-wide"}}},
+	}
+	if err := database.RegisterObjects(context.Background(), []drs.DrsObject{object}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
+	}
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations([]string{"/organization/secure/project"}, nil, true)
+
+	got, err := objects.NewService(database).GetObject(access.WithSession(context.Background(), session), object.Id, "read")
+	if !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("GetObject error=%v, want access denied", err)
+	}
+	if got != nil {
+		t.Fatalf("malformed authorization unexpectedly returned object: %+v", got)
 	}
 }
 

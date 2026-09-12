@@ -101,6 +101,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		if storageErr != nil {
 			return nil, fmt.Errorf("failed to initialize storage manager: %w", storageErr)
 		}
+		runtime.storageManager = storageManager
 		invalidator.manager = storageManager
 	}
 

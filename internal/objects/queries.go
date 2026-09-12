@@ -191,7 +191,7 @@ func (s *Service) listReadableObjectIDs(ctx context.Context) ([]string, bool, er
 		return []string{}, true, nil
 	}
 
-	resources := authorizedResources(ctx, objectMethodRead)
+	resources := access.AuthorizedResources(ctx, objectMethodRead)
 	ids, err := s.store.ListObjectIDsByResources(ctx, resources, true)
 	return ids, true, err
 }
@@ -207,21 +207,7 @@ func objectMethodResourceFilter(ctx context.Context, method string) ([]string, b
 	if access.HasMethodAccess(ctx, method, []string{"/programs"}) || access.HasMethodAccess(ctx, method, []string{"/data_file"}) {
 		return nil, strings.EqualFold(method, objectMethodRead), false
 	}
-	return authorizedResources(ctx, method), strings.EqualFold(method, objectMethodRead), true
-}
-
-func authorizedResources(ctx context.Context, method string) []string {
-	privileges := access.GetUserPrivileges(ctx)
-	if len(privileges) == 0 {
-		return clientaccess.NormalizeAccessResources(access.GetUserAuthz(ctx))
-	}
-	resources := make([]string, 0, len(privileges))
-	for resource, methods := range privileges {
-		if methods[method] || methods["*"] {
-			resources = append(resources, resource)
-		}
-	}
-	return clientaccess.NormalizeAccessResources(resources)
+	return access.AuthorizedResources(ctx, method), strings.EqualFold(method, objectMethodRead), true
 }
 
 func searchAfterID(ids []string, startAfter string) int {

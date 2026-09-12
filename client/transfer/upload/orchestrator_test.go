@@ -2,6 +2,7 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -72,7 +74,7 @@ func (m *metadataClientStub) GetObject(context.Context, string) (drsapi.DrsObjec
 	if m.object.Id != "" {
 		return m.object, nil
 	}
-	return drsapi.DrsObject{}, fmt.Errorf("not found")
+	return drsapi.DrsObject{}, errorapi.ErrNotFound
 }
 
 func (m *metadataClientStub) RegisterObjects(_ context.Context, req drsapi.RegisterObjectsJSONRequestBody) (drsapi.N201ObjectsCreated, error) {
@@ -158,6 +160,75 @@ func TestRegisterFileUploadsUsingRegisteredObjectID(t *testing.T) {
 	}
 	if uploader.lastResolve.fileName != "3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7" {
 		t.Fatalf("expected checksum upload key, got %q", uploader.lastResolve.fileName)
+	}
+}
+
+func TestRegisterFileUsesSHA256AliasAsCASKey(t *testing.T) {
+	t.Parallel()
+
+	file := createTempFileWithData(t, "payload")
+	defer file.Close()
+	const checksum = "3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"
+	obj := &drsapi.DrsObject{
+		Id:   "requested-object-id",
+		Size: 7,
+		Checksums: []drsapi.Checksum{{
+			Type:     "SHA-256",
+			Checksum: checksum,
+		}},
+	}
+	backend := &uploaderStub{}
+	metadata := &metadataClientStub{registeredID: "server-object-id"}
+	if _, err := RegisterFile(context.Background(), backend, metadata, obj, file.Name(), "bucket-a"); err != nil {
+		t.Fatalf("RegisterFile returned error: %v", err)
+	}
+	if backend.lastResolve.fileName != checksum {
+		t.Fatalf("upload key = %q, want checksum %q", backend.lastResolve.fileName, checksum)
+	}
+}
+
+func TestRegisterFileOnlyFallsBackForTypedNotFound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		lookupErr  error
+		wantErr    bool
+		wantLookup error
+	}{
+		{name: "not found", lookupErr: errorapi.ErrNotFound},
+		{name: "wrapped not found", lookupErr: fmt.Errorf("lookup: %w", errorapi.ErrObjectNotFound)},
+		{name: "unauthorized", lookupErr: fmt.Errorf("lookup: %w", errorapi.ErrUnauthorized), wantErr: true, wantLookup: errorapi.ErrUnauthorized},
+		{name: "transport", lookupErr: errors.New("transport unavailable"), wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			file := createTempFileWithData(t, "payload")
+			defer file.Close()
+			backend := &uploaderStub{}
+			metadata := &metadataClientStub{registeredID: "server-object-id", getErr: test.lookupErr}
+			obj := &drsapi.DrsObject{Id: "requested-object-id", Size: 7}
+
+			_, err := RegisterFile(context.Background(), backend, metadata, obj, file.Name(), "bucket-a")
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "failed to look up existing object") {
+					t.Fatalf("lookup error = %v, want wrapped lookup failure", err)
+				}
+				if test.wantLookup != nil && !errors.Is(err, test.wantLookup) {
+					t.Fatalf("lookup error = %v, want cause %v", err, test.wantLookup)
+				}
+				if metadata.registers != 0 {
+					t.Fatalf("RegisterObjects calls = %d, want 0", metadata.registers)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("typed not-found RegisterFile error = %v", err)
+			}
+			if metadata.registers != 1 {
+				t.Fatalf("RegisterObjects calls = %d, want 1", metadata.registers)
+			}
+		})
 	}
 }
 

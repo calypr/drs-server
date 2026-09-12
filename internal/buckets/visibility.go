@@ -97,6 +97,10 @@ func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows
 	}
 
 	for credentialID, entry := range byCredential {
+		if filterExplicitScopes && len(entry.Programs) == 0 {
+			delete(byCredential, credentialID)
+			continue
+		}
 		sort.Strings(entry.Programs)
 		byCredential[credentialID] = entry
 	}

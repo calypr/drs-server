@@ -561,6 +561,85 @@ func TestLoadConfig_InvalidDBPortEnv(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_PartialPostgresEnvRequiresSelector(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+
+	for _, name := range []string{"DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "configured")
+			_, err := LoadConfig("")
+			if err == nil {
+				t.Fatalf("LoadConfig(%s) succeeded without a PostgreSQL selector", name)
+			}
+			if !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "DRS_DB_HOST") || !strings.Contains(err.Error(), "DRS_DB_DATABASE") {
+				t.Fatalf("error = %v, want variable and selector guidance", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_PartialPostgresEnvIsIgnoredForSQLite(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_DB_SQLITE_FILE", ":memory:")
+	t.Setenv("DRS_AUTH_MODE", "local")
+	t.Setenv("DRS_ALLOW_UNAUTHENTICATED_LOCAL", "true")
+
+	for _, test := range []struct {
+		name  string
+		env   string
+		value string
+	}{
+		{name: "port", env: "DRS_DB_PORT", value: "not-a-number"},
+		{name: "user", env: "DRS_DB_USER", value: "ignored-user"},
+		{name: "password", env: "DRS_DB_PASSWORD", value: "ignored-password"},
+		{name: "sslmode", env: "DRS_DB_SSLMODE", value: "ignored-sslmode"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(test.env, test.value)
+			cfg, err := LoadConfig("")
+			if err != nil {
+				t.Fatalf("LoadConfig failed with SQLite and %s: %v", test.env, err)
+			}
+			if cfg.Database.Sqlite == nil || cfg.Database.Sqlite.File != ":memory:" {
+				t.Fatalf("SQLite configuration changed: %+v", cfg.Database)
+			}
+			if cfg.Database.Postgres != nil {
+				t.Fatalf("unexpected PostgreSQL configuration: %+v", cfg.Database.Postgres)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_PostgresEnvAppliesAllFieldsAfterSelection(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_DB_HOST", "db.example")
+	t.Setenv("DRS_DB_DATABASE", "syfon")
+	t.Setenv("DRS_DB_PORT", "5433")
+	t.Setenv("DRS_DB_USER", "syfon-user")
+	t.Setenv("DRS_DB_PASSWORD", "syfon-password")
+	t.Setenv("DRS_DB_SSLMODE", "verify-full")
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Database.Postgres == nil {
+		t.Fatal("expected PostgreSQL configuration")
+	}
+	want := PostgresConfig{Host: "db.example", Port: 5433, User: "syfon-user", Password: "syfon-password", Database: "syfon", SSLMode: "verify-full"}
+	if *cfg.Database.Postgres != want {
+		t.Fatalf("PostgreSQL configuration = %+v, want %+v", *cfg.Database.Postgres, want)
+	}
+}
+
 func TestLoadConfig_LFSEnvOverrides(t *testing.T) {
 	t.Setenv("DRS_DB_SQLITE_FILE", "drs.db")
 	t.Setenv("DRS_AUTH_MODE", "local")

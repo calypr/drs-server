@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,6 +29,115 @@ type Client struct {
 
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
+}
+
+type redactingLogger struct {
+	logger *logs.Gen3Logger
+}
+
+func (l redactingLogger) Error(msg string, keysAndValues ...interface{}) {
+	if l.logger == nil || l.logger.Logger == nil {
+		return
+	}
+	l.logger.Error(redactLogText(msg), redactLogValues(keysAndValues)...)
+}
+
+func (l redactingLogger) Info(msg string, keysAndValues ...interface{}) {
+	if l.logger == nil || l.logger.Logger == nil {
+		return
+	}
+	l.logger.Info(redactLogText(msg), redactLogValues(keysAndValues)...)
+}
+
+func (l redactingLogger) Debug(msg string, keysAndValues ...interface{}) {
+	if l.logger == nil || l.logger.Logger == nil {
+		return
+	}
+	l.logger.Debug(redactLogText(msg), redactLogValues(keysAndValues)...)
+}
+
+func (l redactingLogger) Warn(msg string, keysAndValues ...interface{}) {
+	if l.logger == nil || l.logger.Logger == nil {
+		return
+	}
+	l.logger.Warn(redactLogText(msg), redactLogValues(keysAndValues)...)
+}
+
+func (l redactingLogger) Printf(format string, args ...interface{}) {
+	if l.logger == nil || l.logger.Logger == nil {
+		return
+	}
+	l.logger.Printf("%s", redactLogText(fmt.Sprintf(format, args...)))
+}
+
+func redactLogValues(values []interface{}) []interface{} {
+	redacted := make([]interface{}, len(values))
+	for i, value := range values {
+		switch value := value.(type) {
+		case string:
+			redacted[i] = redactLogText(value)
+		case *url.URL:
+			if value == nil {
+				redacted[i] = value
+				continue
+			}
+			redacted[i] = redactURL(value)
+		case url.URL:
+			redacted[i] = redactURL(&value)
+		case error:
+			if safe := redactLogText(value.Error()); safe != value.Error() {
+				redacted[i] = redactedError{err: value, message: safe}
+				continue
+			}
+			redacted[i] = value
+		default:
+			redacted[i] = value
+		}
+	}
+	return redacted
+}
+
+type redactedError struct {
+	err     error
+	message string
+}
+
+func (e redactedError) Error() string {
+	return e.message
+}
+
+func (e redactedError) Unwrap() error {
+	return e.err
+}
+
+var logURLPattern = regexp.MustCompile(`(?i)https?://[^\s]+`)
+
+func redactLogText(text string) string {
+	return logURLPattern.ReplaceAllStringFunc(text, func(candidate string) string {
+		suffix := ""
+		for len(candidate) > 0 && strings.ContainsRune(".,;:!?)]}\"'", rune(candidate[len(candidate)-1])) {
+			suffix = candidate[len(candidate)-1:] + suffix
+			candidate = candidate[:len(candidate)-1]
+		}
+		parsed, err := url.Parse(candidate)
+		if err != nil || parsed.Host == "" {
+			return candidate + suffix
+		}
+		return redactURL(parsed) + suffix
+	})
+}
+
+func redactURL(raw *url.URL) string {
+	if raw == nil {
+		return ""
+	}
+	redacted := *raw
+	if _, hasPassword := redacted.User.Password(); hasPassword {
+		redacted.User = url.UserPassword(redacted.User.Username(), "xxxxx")
+	}
+	redacted.RawQuery = ""
+	redacted.Fragment = ""
+	return redacted.String()
 }
 
 func NewClient(
@@ -84,7 +195,7 @@ func NewClient(
 		return resp, nil
 	}
 	retry.RetryMax = 5
-	retry.Logger = logger
+	retry.Logger = redactingLogger{logger: logger}
 	retry.RetryWaitMin = defaultRetryWaitMin
 	retry.RetryWaitMax = defaultRetryWaitMax
 	retry.HTTPClient = standard

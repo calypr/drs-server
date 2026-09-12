@@ -14,6 +14,7 @@ import (
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
+	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
@@ -24,6 +25,7 @@ type serverRuntime struct {
 	app              *fiber.App
 	cfg              *config.Config
 	database         *store.Store
+	storageManager   *storage.Manager
 	authRuntime      *authentication.Runtime
 	listener         net.Listener
 	closeOnce        sync.Once
@@ -76,6 +78,11 @@ func (rt *serverRuntime) Close(ctx context.Context) error {
 		}
 		if rt.authRuntime != nil {
 			rt.authRuntime.Close()
+		}
+		if rt.storageManager != nil {
+			if err := rt.storageManager.Close(); err != nil {
+				cleanupErrors = append(cleanupErrors, err)
+			}
 		}
 		if rt.database != nil {
 			if err := rt.database.Close(); err != nil {

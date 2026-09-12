@@ -104,13 +104,12 @@ func (db *Store) SaveS3Credential(ctx context.Context, cred *buckets.Credential)
 		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", bucket, wrapped)
 		return wrapped
 	}
-	if err := db.ensureUniquePhysicalBucket(ctx, db.db, stored.CredentialID, stored.Bucket); err != nil {
-		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
-		return err
-	}
-
-	// SQLite UPSERT syntax: INSERT INTO ... ON CONFLICT (...) DO UPDATE SET ...
-	err = db.saveS3CredentialOn(ctx, db.db, stored)
+	err = db.withContentWrite(ctx, func(tx *sql.Tx) error {
+		if err := db.ensureUniquePhysicalBucket(ctx, tx, stored.CredentialID, stored.Bucket); err != nil {
+			return err
+		}
+		return db.saveS3CredentialOn(ctx, tx, stored)
+	})
 	if err != nil {
 		auditCredentialAccess(ctx, requestid.GetRequestID(ctx), "write", stored.Bucket, err)
 		return err
@@ -164,7 +163,7 @@ func (db *Store) SaveBucketConfiguration(ctx context.Context, configuration buck
 		return err
 	}
 
-	err = db.withWrite(ctx, func(tx *sql.Tx) error {
+	err = db.withContentWrite(ctx, func(tx *sql.Tx) error {
 		if err := db.ensureUniquePhysicalBucket(ctx, tx, stored.CredentialID, stored.Bucket); err != nil {
 			return err
 		}
@@ -271,7 +270,7 @@ func (db *Store) ensureUniquePhysicalBucket(ctx context.Context, executor sqlExe
 }
 
 func (db *Store) DeleteS3Credential(ctx context.Context, credentialID string) error {
-	err := db.withWrite(ctx, func(tx *sql.Tx) error {
+	err := db.withContentWrite(ctx, func(tx *sql.Tx) error {
 		resolvedID, _, found, err := db.resolveCredentialIdentityOn(ctx, tx, credentialID)
 		if err != nil {
 			return err
@@ -367,7 +366,7 @@ func (db *Store) DeleteBucketScopeConfiguration(ctx context.Context, scope bucke
 	}
 
 	var aliases []string
-	err := db.withWrite(ctx, func(tx *sql.Tx) error {
+	err := db.withContentWrite(ctx, func(tx *sql.Tx) error {
 		canonicalID, physicalBucket, found, err := db.resolveCredentialIdentityOn(ctx, tx, requestedID)
 		if err != nil {
 			return err
@@ -471,7 +470,9 @@ func (db *Store) CreateBucketScope(ctx context.Context, scope *buckets.Scope) er
 	if err != nil {
 		return err
 	}
-	return db.createBucketScopeOn(ctx, db.db, normalized)
+	return db.withContentWrite(ctx, func(tx *sql.Tx) error {
+		return db.createBucketScopeOn(ctx, tx, normalized)
+	})
 }
 
 func (db *Store) GetBucketScope(ctx context.Context, organization, projectID string) (*buckets.Scope, error) {

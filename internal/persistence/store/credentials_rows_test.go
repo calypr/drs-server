@@ -59,7 +59,7 @@ type iterationErrorConnector struct {
 }
 
 func (c iterationErrorConnector) Connect(context.Context) (driver.Conn, error) {
-	return iterationErrorConn{columns: c.columns, row: c.row}, nil
+	return iterationErrorConn(c), nil
 }
 
 func (iterationErrorConnector) Driver() driver.Driver { return iterationErrorDriver{} }

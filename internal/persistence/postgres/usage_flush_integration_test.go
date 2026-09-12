@@ -21,6 +21,157 @@ import (
 const usageFlushBarrierKey int64 = 73002
 const usageAggregateBarrierKey int64 = 73003
 
+func TestPostgresScopedUsageSummaryAndPageBindArgumentsInPlaceholderOrder(t *testing.T) {
+	db := openPostgresUsageTestStore(t)
+	ctx := context.Background()
+	suffix := uuid.NewString()
+	resourceOne := "/organization/usage-bind/project/one-" + suffix
+	resourceTwo := "/organization/usage-bind/project/two-" + suffix
+	objectOne := "usage-bind-one-" + suffix
+	objectTwo := "usage-bind-two-" + suffix
+	objectUnscoped := "usage-bind-unscoped-" + suffix
+	objectOther := "usage-bind-other-" + suffix
+	now := time.Now().UTC()
+	objects := []drs.DrsObject{
+		postgresScopedUsageObject(objectOne, objectOne, now, resourceOne),
+		postgresScopedUsageObject(objectTwo, objectTwo, now, resourceTwo),
+		postgresScopedUsageObject(objectUnscoped, objectUnscoped, now),
+		postgresScopedUsageObject(objectOther, objectOther, now, "/organization/usage-bind/project/other-"+suffix),
+	}
+	if err := db.RegisterObjects(ctx, objects); err != nil {
+		t.Fatalf("RegisterObjects: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, object := range objects {
+			_ = db.DeleteObject(ctx, object.Id)
+		}
+	})
+	if err := db.RecordFileUpload(ctx, objectOne); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RecordFileDownload(ctx, objectOne); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := db.RecordFileUpload(ctx, objectTwo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.RecordFileUpload(ctx, objectUnscoped); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := db.RecordFileUpload(ctx, objectOther); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cutoff := time.Now().UTC().Add(time.Minute)
+	tests := []struct {
+		name                        string
+		resources                   []string
+		includeUnscoped             bool
+		inactiveSince               *time.Time
+		wantIDs                     []string
+		wantFiles, wantUploads      int64
+		wantDownloads, wantInactive int64
+	}{
+		{
+			name:          "one resource with cutoff",
+			resources:     []string{resourceOne},
+			inactiveSince: &cutoff,
+			wantIDs:       []string{objectOne},
+			wantFiles:     1,
+			wantUploads:   1,
+			wantDownloads: 1,
+			wantInactive:  1,
+		},
+		{
+			name:          "mixed resources with cutoff",
+			resources:     []string{resourceOne, resourceTwo},
+			inactiveSince: &cutoff,
+			wantIDs:       []string{objectTwo, objectOne},
+			wantFiles:     2,
+			wantUploads:   3,
+			wantDownloads: 1,
+			wantInactive:  2,
+		},
+		{
+			name:            "resource and unscoped with cutoff",
+			resources:       []string{resourceOne},
+			includeUnscoped: true,
+			inactiveSince:   &cutoff,
+			wantIDs:         []string{objectUnscoped, objectOne},
+			wantFiles:       2,
+			wantUploads:     2,
+			wantDownloads:   1,
+			wantInactive:    2,
+		},
+		{
+			name:          "empty resource result",
+			resources:     []string{"/organization/usage-bind/project/missing-" + suffix},
+			inactiveSince: &cutoff,
+			wantIDs:       []string{},
+			wantFiles:     0,
+			wantUploads:   0,
+			wantDownloads: 0,
+			wantInactive:  0,
+		},
+		{
+			name:          "one resource without cutoff",
+			resources:     []string{resourceTwo},
+			wantIDs:       []string{objectTwo},
+			wantFiles:     1,
+			wantUploads:   2,
+			wantDownloads: 0,
+			wantInactive:  0,
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			summary, err := db.GetFileUsageSummaryByResources(ctx, testCase.resources, testCase.includeUnscoped, testCase.inactiveSince)
+			if err != nil {
+				t.Fatalf("GetFileUsageSummaryByResources: %v", err)
+			}
+			if got := postgresUsageCount(summary.TotalFiles); got != testCase.wantFiles {
+				t.Fatalf("summary total files = %d, want %d", got, testCase.wantFiles)
+			}
+			if got := postgresUsageCount(summary.TotalUploads); got != testCase.wantUploads {
+				t.Fatalf("summary total uploads = %d, want %d", got, testCase.wantUploads)
+			}
+			if got := postgresUsageCount(summary.TotalDownloads); got != testCase.wantDownloads {
+				t.Fatalf("summary total downloads = %d, want %d", got, testCase.wantDownloads)
+			}
+			if got := postgresUsageCount(summary.InactiveFileCount); got != testCase.wantInactive {
+				t.Fatalf("summary inactive files = %d, want %d", got, testCase.wantInactive)
+			}
+
+			page, err := db.ListFileUsagePageByResources(ctx, testCase.resources, testCase.includeUnscoped, 10, 0, testCase.inactiveSince)
+			if err != nil {
+				t.Fatalf("ListFileUsagePageByResources: %v", err)
+			}
+			gotIDs := make([]string, 0, len(page))
+			for _, item := range page {
+				if item.ObjectId == nil {
+					t.Fatal("usage page contained a row without an object ID")
+				}
+				gotIDs = append(gotIDs, *item.ObjectId)
+			}
+			if strings.Join(gotIDs, "\x00") != strings.Join(testCase.wantIDs, "\x00") {
+				t.Fatalf("usage page IDs = %v, want %v", gotIDs, testCase.wantIDs)
+			}
+		})
+	}
+}
+
+func postgresScopedUsageObject(id, checksumSeed string, now time.Time, resources ...string) drs.DrsObject {
+	object := postgresUsageObject(id, checksumSeed, now)
+	if len(resources) > 0 {
+		object.ControlledAccess = &resources
+	}
+	return object
+}
+
 func TestPostgresUsageFlushDoesNotDeleteConcurrentAppend(t *testing.T) {
 	db := openPostgresUsageTestStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

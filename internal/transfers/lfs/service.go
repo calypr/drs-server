@@ -323,10 +323,15 @@ func (s *Service) Stage(ctx context.Context, candidates []lfsapi.DrsObjectCandid
 	return s.pending.SavePendingMetadata(ctx, entries)
 }
 
-func (s *Service) Verify(ctx context.Context, oid string) error {
-	_, objectErr := s.objects.GetObject(ctx, oid, "read")
+func (s *Service) Verify(ctx context.Context, oid string, expectedSize int64) error {
+	object, objectErr := s.objects.GetObject(ctx, oid, "read")
 	if objectErr != nil && !errorapi.IsNotFoundError(objectErr) {
 		return objectErr
+	}
+	if objectErr == nil && object != nil {
+		if err := verifyRecordedSize(expectedSize, object.Size); err != nil {
+			return err
+		}
 	}
 	if s.pending == nil {
 		if objectErr == nil {
@@ -339,6 +344,9 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 		internalObject, err := materializeCandidate(pending.Candidate, s.currentTime())
 		if err != nil {
 			return &MetadataCandidateError{Err: err}
+		}
+		if err := verifyRecordedSize(expectedSize, internalObject.Size); err != nil {
+			return err
 		}
 		registered, err := s.objects.RegisterObjects(ctx, []drs.DrsObject{internalObject})
 		if err != nil {
@@ -360,6 +368,13 @@ func (s *Service) Verify(ctx context.Context, oid string) error {
 		return nil
 	}
 	return err
+}
+
+func verifyRecordedSize(expected, recorded int64) error {
+	if expected == recorded {
+		return nil
+	}
+	return &MetadataCandidateError{Err: fmt.Errorf("size mismatch: expected %d, recorded %d", expected, recorded)}
 }
 
 func materializeCandidate(value lfsapi.DrsObjectCandidate, now time.Time) (drs.DrsObject, error) {

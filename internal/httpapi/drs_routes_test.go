@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/calypr/syfon/apigen/drs"
 	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
@@ -24,11 +23,11 @@ type drsCaptureStorageAccess struct {
 }
 
 func TestGeneratedChecksumNilAndEmptySlicesRemainDistinct(t *testing.T) {
-	nilValue := drs.DrsObject{}
+	nilValue := generated.DrsObject{}
 	if nilValue.Checksums != nil {
 		t.Fatalf("nil domain checksums became empty generated slice: %#v", nilValue.Checksums)
 	}
-	emptyValue := drs.DrsObject{Checksums: []drs.Checksum{}}
+	emptyValue := generated.DrsObject{Checksums: []generated.Checksum{}}
 	if emptyValue.Checksums == nil || len(emptyValue.Checksums) != 0 {
 		t.Fatalf("empty domain checksums changed: %#v", emptyValue.Checksums)
 	}
@@ -38,7 +37,7 @@ func TestObjectPayloadIncludesLegacyIdentityAliases(t *testing.T) {
 	name := "sample"
 	aliases := []string{"sample.alias"}
 	created := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
-	record := drs.DrsObject{
+	record := generated.DrsObject{
 		Id: "record-1", Did: valuePointer("record-1"), Name: &name, NameAliases: &aliases, CreatedTime: created,
 	}
 	data, err := json.Marshal(record)
@@ -57,7 +56,7 @@ func TestObjectPayloadIncludesLegacyIdentityAliases(t *testing.T) {
 }
 
 func TestObjectPayloadInvalidTimeFallsBackToIdentity(t *testing.T) {
-	record := drs.DrsObject{Id: "record-1", Did: valuePointer("record-1"), SelfUri: "drs://example/record-1", CreatedTime: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)}
+	record := generated.DrsObject{Id: "record-1", Did: valuePointer("record-1"), SelfUri: "drs://example/record-1", CreatedTime: time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)}
 	data, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +104,7 @@ func newDRSTestApp(services *testDRSServicesFixture) *fiber.App {
 }
 
 func TestRegisterObjects(t *testing.T) {
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{})
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
 
@@ -146,7 +145,7 @@ func TestRegisterObjects(t *testing.T) {
 }
 
 func TestRegisterObjectsRejectsMissingAccessMethods(t *testing.T) {
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{})
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
 
@@ -185,13 +184,13 @@ func (m *drsCaptureStorageAccess) CompleteMultipart(context.Context, storage.Com
 
 func TestGetObjectAndAccessURLAliases(t *testing.T) {
 	accessID := objects.AccessMethodID("s3", "s3://bucket/object-1")
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{
 		"object-1": {
 			Id:   "object-1",
 			Name: valuePointer("test-file"),
-			AccessMethods: &[]drs.AccessMethod{{
+			AccessMethods: &[]generated.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &drs.AccessURL{Url: "s3://bucket/object-1"},
+				AccessUrl: &generated.AccessURL{Url: "s3://bucket/object-1"},
 			}},
 		},
 	})
@@ -242,11 +241,11 @@ func TestGetObjectAndAccessURLAliases(t *testing.T) {
 
 func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
 	accessID := objects.AccessMethodID("s3", "s3://bucket/a")
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{
 		"object-1": {
 			Id: "object-1",
-			AccessMethods: &[]drs.AccessMethod{
-				{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/a"}},
+			AccessMethods: &[]generated.AccessMethod{
+				{Type: "s3", AccessUrl: &generated.AccessURL{Url: "s3://bucket/a"}},
 			},
 		},
 	})
@@ -289,8 +288,8 @@ func TestBulkAccessResponsePreservesResolutionContract(t *testing.T) {
 
 func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 	checksum := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
-		"object-1": {Id: "object-1", Checksums: []drs.Checksum{{Type: "sha256", Checksum: checksum}}},
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{
+		"object-1": {Id: "object-1", Checksums: []generated.Checksum{{Type: "sha256", Checksum: checksum}}},
 	})
 	om := testDRSServices(db, nil)
 	app := newDRSTestApp(om)
@@ -334,6 +333,40 @@ func TestBulkObjectAndChecksumHandlers(t *testing.T) {
 	}
 }
 
+func TestBulkObjectsEmptyFormsRemainSuccessfulNoOps(t *testing.T) {
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{})
+	app := newDRSTestApp(testDRSServices(db, nil))
+
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing field", body: `{}`},
+		{name: "empty list", body: `{"bulk_object_ids":[]}`},
+		{name: "null body", body: `null`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/objects", strings.NewReader(test.body)))
+			if err != nil {
+				t.Fatalf("bulk request failed: %v", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("bulk status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			var payload generated.N200OkDrsObjectsJSONResponse
+			if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode bulk response: %v", err)
+			}
+			if payload.Summary == nil || payload.Summary.Requested == nil || *payload.Summary.Requested != 0 || payload.Summary.Resolved == nil || *payload.Summary.Resolved != 0 {
+				t.Fatalf("empty bulk summary = %+v, want requested=0 resolved=0", payload.Summary)
+			}
+			if payload.ResolvedDrsObject != nil && len(*payload.ResolvedDrsObject) != 0 {
+				t.Fatalf("empty bulk resolved objects = %+v, want empty", *payload.ResolvedDrsObject)
+			}
+		})
+	}
+}
+
 func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 	for _, methodPath := range []struct {
 		method string
@@ -342,7 +375,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		{method: http.MethodPut, path: "/objects/object-1/delete"},
 		{method: http.MethodPut, path: "/objects/delete"},
 	} {
-		db := newDRSObjectStore(t, map[string]*drs.DrsObject{
+		db := newDRSObjectStore(t, map[string]*generated.DrsObject{
 			"object-1": {Id: "object-1"},
 		})
 		om := testDRSServices(db, nil)
@@ -367,7 +400,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		{path: "/objects/object-1/delete", body: `{"delete_storage_data":true}`},
 		{path: "/objects/delete", body: `{"bulk_object_ids":["object-1"],"delete_storage_data":true}`},
 	} {
-		db := newDRSObjectStore(t, map[string]*drs.DrsObject{"object-1": {Id: "object-1"}})
+		db := newDRSObjectStore(t, map[string]*generated.DrsObject{"object-1": {Id: "object-1"}})
 		app := newDRSTestApp(testDRSServices(db, nil))
 		resp, err := app.Test(httptest.NewRequest(http.MethodPut, request.path, strings.NewReader(request.body)))
 		if err != nil {
@@ -381,7 +414,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 		}
 	}
 
-	db := newDRSObjectStore(t, map[string]*drs.DrsObject{
+	db := newDRSObjectStore(t, map[string]*generated.DrsObject{
 		"object-1": {Id: "object-1"},
 	})
 	om := testDRSServices(db, nil)

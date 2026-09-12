@@ -61,12 +61,26 @@ func TestResourceAndAuthzHelpers(t *testing.T) {
 			"/programs/other/projects/proj-1",
 		})
 		want := map[string][]string{
-			"syfon": []string{"e2e"},
+			"syfon": []string{},
 			"other": []string{"proj-1"},
 			"aced":  []string{"proj-2"},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("AuthzListToMap mismatch:\n got: %+v\nwant: %+v", got, want)
+		}
+	})
+
+	t.Run("organization-wide entries absorb project entries in either order", func(t *testing.T) {
+		for name, paths := range map[string][]string{
+			"organization first": {"/organization/org", "/organization/org/project/project"},
+			"project first":      {"/organization/org/project/project", "/organization/org"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				want := map[string][]string{"org": {}}
+				if got := AuthzListToMap(paths); !reflect.DeepEqual(got, want) {
+					t.Fatalf("AuthzListToMap(%v) = %+v, want %+v", paths, got, want)
+				}
+			})
 		}
 	})
 
@@ -79,10 +93,33 @@ func TestResourceAndAuthzHelpers(t *testing.T) {
 			{raw: "/organization/cbds/project/training", want: "/organization/cbds/project/training"},
 			{raw: "https://example.org/organization/cbds/project/training", want: "/organization/cbds/project/training"},
 			{raw: "/programs/cbds/projects/training", want: "/organization/cbds/project/training"},
+			{raw: "/organizations/cbds/projects/training", want: "/organization/cbds/project/training"},
+			{raw: "/program/cbds/project/training", want: "/organization/cbds/project/training"},
+			{raw: "/programs", want: "/programs"},
 		}
 		for _, tc := range tests {
 			if got := NormalizeAccessResource(tc.raw); got != tc.want {
 				t.Fatalf("NormalizeAccessResource(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("rejects malformed recognized paths and preserves unknown prefixes", func(t *testing.T) {
+		for _, raw := range []string{
+			"/organization",
+			"/organization/cbds/project",
+			"/organization/cbds/project/training/extra",
+			"/organization/cbds/unknown/training",
+			"/organizations//project/training",
+			"/programs/cbds/projects/",
+		} {
+			if got := NormalizeAccessResource(raw); got != "" {
+				t.Errorf("NormalizeAccessResource(%q) = %q, want empty", raw, got)
+			}
+		}
+		for _, raw := range []string{"/data_file", "/custom/scope", "s3://bucket/object"} {
+			if got := NormalizeAccessResource(raw); got != raw {
+				t.Errorf("NormalizeAccessResource(%q) = %q, want unchanged", raw, got)
 			}
 		}
 	})

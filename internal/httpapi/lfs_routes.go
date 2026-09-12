@@ -331,7 +331,7 @@ func (s *lfsServer) LfsVerify(ctx context.Context, request lfsapi.LfsVerifyReque
 	if request.Body.Size < 0 {
 		return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: "size must be non-negative"}, nil
 	}
-	if err := s.service.Verify(ctx, oid); err != nil {
+	if err := s.service.Verify(ctx, oid, request.Body.Size); err != nil {
 		var candidateErr *transferlfs.MetadataCandidateError
 		if errors.As(err, &candidateErr) {
 			return lfsapi.LfsVerify400ApplicationVndGitLfsPlusJSONResponse{Message: err.Error()}, nil

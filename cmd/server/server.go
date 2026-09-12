@@ -14,6 +14,7 @@ import (
 	"github.com/calypr/syfon/internal/persistence/store"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
+	"github.com/calypr/syfon/internal/version"
 )
 
 func serviceInfoForBackend(sqlite bool) drs.Service {
@@ -32,7 +33,7 @@ func serviceInfoForBackend(sqlite bool) drs.Service {
 		CreatedAt:   &createdAt,
 		UpdatedAt:   &updatedAt,
 		Environment: &environment,
-		Version:     "1.0.0",
+		Version:     version.Version,
 	}
 }
 

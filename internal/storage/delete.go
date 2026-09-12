@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -40,7 +41,7 @@ func (m *Manager) physicalTargetWithBinding(ctx context.Context, raw string) (Ph
 		}
 		provider := address.NormalizeProvider(credential.Provider, parsed.Provider)
 		if provider == address.FileProvider {
-			root := filepath.Clean(strings.TrimSpace(credential.Endpoint))
+			root := fileRootFromEndpoint(credential.Endpoint)
 			if root == "." || root == "" {
 				root = strings.TrimPrefix(strings.TrimSpace(credential.Bucket), "/")
 			}
@@ -57,6 +58,18 @@ func (m *Manager) physicalTargetWithBinding(ctx context.Context, raw string) (Ph
 		return PhysicalTarget{Provider: address.FileProvider, Path: filepath.Clean(trimmed)}, ProviderBinding{Provider: address.FileProvider}, true, nil
 	}
 	return PhysicalTarget{}, ProviderBinding{}, false, nil
+}
+
+func fileRootFromEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if strings.HasPrefix(strings.ToLower(endpoint), "file://") {
+		u, err := url.Parse(endpoint)
+		if err != nil || (u.Host != "" && u.Host != "localhost") {
+			return ""
+		}
+		return filepath.Clean(u.Path)
+	}
+	return filepath.Clean(endpoint)
 }
 
 func physicalTargetKey(target PhysicalTarget) string {

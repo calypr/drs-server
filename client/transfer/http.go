@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/request"
@@ -117,7 +118,10 @@ func GenericDownload(ctx context.Context, client request.HTTPDoer, signedURL str
 			if end >= start {
 				length = end - start + 1
 			}
-			reader = io.NopCloser(io.NewSectionReader(f, start, length))
+			reader = &sectionReadCloser{
+				reader: io.NewSectionReader(f, start, length),
+				closer: f,
+			}
 			status = http.StatusPartialContent
 			contentLength = length
 		}
@@ -146,6 +150,29 @@ func GenericDownload(ctx context.Context, client request.HTTPDoer, signedURL str
 	}
 
 	return client.Do(req)
+}
+
+type sectionReadCloser struct {
+	reader   io.Reader
+	closer   io.Closer
+	closeMu  sync.Mutex
+	closed   bool
+	closeErr error
+}
+
+func (r *sectionReadCloser) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *sectionReadCloser) Close() error {
+	r.closeMu.Lock()
+	defer r.closeMu.Unlock()
+	if r.closed {
+		return r.closeErr
+	}
+	r.closed = true
+	r.closeErr = r.closer.Close()
+	return r.closeErr
 }
 
 func needsAzureBlobTypeHeader(parsed *url.URL) bool {

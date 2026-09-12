@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -113,6 +114,29 @@ func TestEndpointAccessPreservesPathAndOmitsRange(t *testing.T) {
 	}
 	if got := partURL.Query().Get("name"); got != ".syfon-multipart/upload/nested/file.txt/parts/4" {
 		t.Fatalf("endpoint part name = %q", got)
+	}
+}
+
+func TestNewClientFallsBackToApplicationDefaultCredentials(t *testing.T) {
+	credentialsPath := t.TempDir() + "/application-default-credentials.json"
+	credentials := `{"type":"authorized_user","client_id":"test-client","client_secret":"test-secret","refresh_token":"test-token"}`
+	if err := os.WriteFile(credentialsPath, []byte(credentials), 0o600); err != nil {
+		t.Fatalf("write application default credentials: %v", err)
+	}
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", credentialsPath)
+
+	client, err := newClient(context.Background(), &buckets.Credential{
+		AccessKey: "split-form@example.test",
+		SecretKey: "not-service-account-json",
+	})
+	if err != nil {
+		t.Fatalf("newClient returned error for ADC credentials: %v", err)
+	}
+	if client == nil {
+		t.Fatal("newClient returned a nil client")
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("close ADC client: %v", err)
 	}
 }
 
@@ -275,6 +299,9 @@ func TestCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
 		if r.Method == http.MethodPost {
 			posts++
 		}
+		if r.Method == http.MethodDelete {
+			return responseFor(r, http.StatusNotFound, "")
+		}
 		return responseFor(r, http.StatusInternalServerError, "unexpected provider finalize")
 	})
 	previous := newClient
@@ -333,6 +360,114 @@ func TestInvalidateBucketEvictsCachedNativeClientByLookupKey(t *testing.T) {
 	}
 	_ = first.Close()
 	_ = third.Close()
+}
+
+func TestInvalidateCannotPublishOldConfiguration(t *testing.T) {
+	previous := newClient
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {
+		calls++
+		if calls == 1 {
+			close(entered)
+			<-release
+		}
+		return testClient(ctx, func(r *http.Request) *http.Response { return responseFor(r, http.StatusNotFound, "") })
+	}
+	defer func() { newClient = previous }()
+
+	b := &backend{}
+	oldBinding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{Bucket: "bucket", SecretKey: "old"}}
+	result := make(chan *storage.Client, 1)
+	go func() {
+		client, err := b.getClient(context.Background(), oldBinding)
+		if err != nil {
+			t.Errorf("old getClient failed: %v", err)
+			return
+		}
+		result <- client
+	}()
+	<-entered
+	invalidateDone := make(chan struct{})
+	go func() {
+		b.InvalidateBucket("BUCKET")
+		close(invalidateDone)
+	}()
+	select {
+	case <-invalidateDone:
+		t.Fatal("invalidation completed before the factory returned")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	oldClient := <-result
+	<-invalidateDone
+
+	newBinding := oldBinding
+	newBinding.Credential = &buckets.Credential{Bucket: "bucket", SecretKey: "new"}
+	newClientValue, err := b.getClient(context.Background(), newBinding)
+	if err != nil {
+		t.Fatalf("new getClient failed: %v", err)
+	}
+	if newClientValue == oldClient {
+		t.Fatal("new configuration reused stale client")
+	}
+	if err := b.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+}
+
+func TestMarkerCleanupFailureRetriesWithoutRecomposition(t *testing.T) {
+	var posts, deletes int
+	published := false
+	transport := roundTripperFunc(func(r *http.Request) *http.Response {
+		switch r.Method {
+		case http.MethodGet:
+			if published {
+				return responseFor(r, http.StatusOK, `{"metadata":{"syfon-multipart-id":"completion"}}`)
+			}
+			return responseFor(r, http.StatusNotFound, "")
+		case http.MethodPost:
+			posts++
+			published = true
+			return responseFor(r, http.StatusOK, `{"name":"composed"}`)
+		case http.MethodDelete:
+			deletes++
+			if deletes == 1 {
+				return responseFor(r, http.StatusInternalServerError, "cleanup failed")
+			}
+			return responseFor(r, http.StatusNoContent, "")
+		default:
+			return responseFor(r, http.StatusNotFound, "")
+		}
+	})
+	previous := newClient
+	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {
+		return testClient(ctx, transport)
+	}
+	defer func() { newClient = previous }()
+
+	b := &backend{}
+	binding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{Bucket: "bucket"}}
+	request := storageports.CompleteMultipartRequest{
+		Target: storageports.Target{PhysicalBucket: "bucket", Key: "object.bin"}, UploadID: "upload", CompletionID: "completion",
+		Parts: []storageports.CompletedPart{{PartNumber: 1}},
+	}
+	if err := b.CompleteMultipart(context.Background(), binding, request); err == nil {
+		t.Fatal("first completion succeeded despite cleanup failure")
+	}
+	if err := b.CompleteMultipart(context.Background(), binding, request); err != nil {
+		t.Fatalf("cleanup retry failed: %v", err)
+	}
+	if posts != 1 {
+		t.Fatalf("compose requests = %d, want 1", posts)
+	}
+	if deletes != 2 {
+		t.Fatalf("delete requests = %d, want 2", deletes)
+	}
+	if err := b.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
 }
 
 func TestDeleteNormalizesNotFoundToIdempotentSuccess(t *testing.T) {

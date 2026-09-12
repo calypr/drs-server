@@ -22,7 +22,14 @@ func TestDownloadObjectIdentityUsesCanonicalSHA256(t *testing.T) {
 	if got := downloadObjectIdentity(object); got != "sha256:"+strings.ToLower(checksum) {
 		t.Fatalf("download identity = %q, want canonical SHA-256", got)
 	}
-	object.Checksums[0].Checksum = "SHA256:not-a-checksum"
+	object.Checksums = []drs.Checksum{
+		{Type: "SHA-256", Checksum: strings.Repeat("CD", 32)},
+		{Type: "sha256", Checksum: checksum},
+	}
+	if got := downloadObjectIdentity(object); got != "sha256:"+strings.ToLower(checksum) {
+		t.Fatalf("duplicate alias download identity = %q, want canonical spelling value", got)
+	}
+	object.Checksums[1].Checksum = "SHA256:not-a-checksum"
 	if got := downloadObjectIdentity(object); got != "" {
 		t.Fatalf("invalid download identity = %q, want empty", got)
 	}

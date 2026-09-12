@@ -178,7 +178,7 @@ func (s *Service) inspectRaw(ctx context.Context, request internalapi.InternalIn
 	if err != nil {
 		return nil, err
 	}
-	if !visibleBucketContains(visible, bucket, credential.CredentialID) {
+	if !visibleBucketContains(ctx, visible, bucket, credential.CredentialID) {
 		return nil, &Error{Kind: ErrorPermissionDenied, Message: fmt.Sprintf("bucket %q is not visible to the caller", bucket)}
 	}
 	if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {

@@ -2,7 +2,9 @@ package azure
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,19 +15,29 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/google/uuid"
 )
 
 type backend struct {
-	cache     sync.Map // keyed by lookup key, stores *azureCreds
-	transport policy.Transporter
+	cache       sync.Map // keyed by lookup key, stores *azureCreds
+	cacheMu     sync.Mutex
+	generation  map[string]uint64
+	entries     map[string]*cacheEntry
+	invalidated map[string]map[string]struct{}
+	transport   policy.Transporter
 }
 
 type azureCreds struct {
 	SharedKey        *azblob.SharedKeyCredential
 	ServiceURL       string
 	DeleteServiceURL string
+}
+
+type cacheEntry struct {
+	creds       *azureCreds
+	fingerprint string
 }
 
 // New returns the Azure storage registration. Azure intentionally does not
@@ -36,11 +48,37 @@ func New() storage.Registration {
 }
 
 func (b *backend) InvalidateBucket(bucket string) {
-	bucket = strings.TrimSpace(bucket)
+	bucket = strings.ToLower(strings.TrimSpace(bucket))
 	if bucket == "" {
 		return
 	}
-	b.cache.Delete(bucket)
+	b.cacheMu.Lock()
+	if b.generation == nil {
+		b.generation = make(map[string]uint64)
+	}
+	if b.entries == nil {
+		b.entries = make(map[string]*cacheEntry)
+	}
+	if b.invalidated == nil {
+		b.invalidated = make(map[string]map[string]struct{})
+	}
+	if current := b.entries[bucket]; current != nil {
+		if current.fingerprint != "" {
+			if b.invalidated[bucket] == nil {
+				b.invalidated[bucket] = make(map[string]struct{})
+			}
+			b.invalidated[bucket][current.fingerprint] = struct{}{}
+		}
+		delete(b.entries, bucket)
+	}
+	b.generation[bucket]++
+	b.cache.Range(func(key, _ any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == bucket {
+			b.cache.Delete(key)
+		}
+		return true
+	})
+	b.cacheMu.Unlock()
 }
 
 func (b *backend) Sign(ctx context.Context, binding storage.ProviderBinding, request storage.SignRequest) (storage.SignedAccess, error) {
@@ -75,8 +113,51 @@ func (b *backend) BeginMultipart(_ context.Context, _ storage.ProviderBinding, _
 }
 
 func (b *backend) getCreds(binding storage.ProviderBinding) (*azureCreds, error) {
-	if value, ok := b.cache.Load(binding.LookupKey); ok {
-		return value.(*azureCreds), nil
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+	cacheKey := strings.ToLower(strings.TrimSpace(binding.LookupKey))
+	if cacheKey == "" {
+		cacheKey = strings.ToLower(strings.TrimSpace(binding.PhysicalBucket))
+	}
+	if b.entries == nil {
+		b.entries = make(map[string]*cacheEntry)
+	}
+	if b.invalidated == nil {
+		b.invalidated = make(map[string]map[string]struct{})
+	}
+	fingerprint := b.credentialFingerprint(binding.Credential)
+	if current := b.entries[cacheKey]; current != nil {
+		if current.fingerprint == "" || current.fingerprint == fingerprint {
+			return current.creds, nil
+		}
+		if _, stale := b.invalidated[cacheKey][fingerprint]; stale {
+			return current.creds, nil
+		}
+		delete(b.entries, cacheKey)
+		b.cache.Delete(cacheKey)
+	}
+	if value, ok := b.cache.Load(cacheKey); ok {
+		cached := value.(*azureCreds)
+		if _, stale := b.invalidated[cacheKey][fingerprint]; !stale {
+			b.entries[cacheKey] = &cacheEntry{creds: cached, fingerprint: fingerprint}
+		}
+		return cached, nil
+	}
+	var cached *azureCreds
+	b.cache.Range(func(key, value any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == cacheKey {
+			cached, _ = value.(*azureCreds)
+			return false
+		}
+		return true
+	})
+	if cached != nil {
+		if _, stale := b.invalidated[cacheKey][fingerprint]; stale {
+			return cached, nil
+		}
+		b.entries[cacheKey] = &cacheEntry{creds: cached, fingerprint: fingerprint}
+		b.cache.Store(cacheKey, cached)
+		return cached, nil
 	}
 
 	cred := binding.Credential
@@ -103,8 +184,20 @@ func (b *backend) getCreds(binding storage.ProviderBinding) (*azureCreds, error)
 		ServiceURL:       b.azureServiceURL(accountName, cred.Endpoint),
 		DeleteServiceURL: b.azureDeleteServiceURL(accountName, cred.Endpoint),
 	}
-	b.cache.Store(binding.LookupKey, value)
+	if _, stale := b.invalidated[cacheKey][fingerprint]; !stale {
+		b.entries[cacheKey] = &cacheEntry{creds: value, fingerprint: fingerprint}
+		b.cache.Store(cacheKey, value)
+	}
 	return value, nil
+}
+
+func (b *backend) credentialFingerprint(cred *buckets.Credential) string {
+	if cred == nil {
+		return ""
+	}
+	material := strings.Join([]string{cred.Provider, cred.Bucket, cred.Region, cred.AccessKey, cred.SecretKey, cred.Endpoint}, "\x00")
+	hash := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(hash[:])
 }
 
 func (b *backend) azureSignedURL(serviceURL, bucketName, key, method string, expiry time.Duration, rangeStr, downloadName string, sharedKey *azblob.SharedKeyCredential) (string, error) {

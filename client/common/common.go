@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -28,11 +29,39 @@ const (
 )
 
 func IsCloudPresignedURL(raw string) bool {
-	return strings.Contains(raw, "X-Amz-Signature") ||
-		strings.Contains(raw, "X-Goog-Signature") ||
-		strings.Contains(raw, "Signature=") ||
-		strings.Contains(raw, "AWSAccessKeyId=") ||
-		strings.Contains(raw, "Expires=")
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil {
+		return false
+	}
+
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return false
+	}
+	nonEmpty := func(key string) bool {
+		for _, value := range query[key] {
+			if strings.TrimSpace(value) != "" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// AWS and GCS V4 URLs carry provider-specific signature parameters.
+	if nonEmpty("X-Amz-Signature") || nonEmpty("X-Goog-Signature") {
+		return true
+	}
+
+	// Legacy S3/GCS URLs need a signature's companion expiry or access key.
+	if nonEmpty("Signature") && nonEmpty("Expires") {
+		return true
+	}
+	if (nonEmpty("AWSAccessKeyId") || nonEmpty("GoogleAccessId")) && (nonEmpty("Signature") || nonEmpty("Expires")) {
+		return true
+	}
+
+	// Azure SAS emits sig together with either its version or expiry field.
+	return nonEmpty("sig") && (nonEmpty("sv") || nonEmpty("se"))
 }
 
 func FormatSize(size int64) string {

@@ -113,11 +113,91 @@ func cloneClaims(in map[string]interface{}) map[string]interface{} {
 	if len(in) == 0 {
 		return map[string]interface{}{}
 	}
+	return cloneClaimMap(in)
+}
+
+func cloneClaimMap(in map[string]interface{}) map[string]interface{} {
+	if in == nil {
+		return nil
+	}
 	out := make(map[string]interface{}, len(in))
 	for k, v := range in {
-		out[k] = v
+		out[k] = cloneClaimValue(v)
 	}
 	return out
+}
+
+func cloneClaimValue(value interface{}) interface{} {
+	switch value := value.(type) {
+	case map[string]interface{}:
+		return cloneClaimMap(value)
+	case []interface{}:
+		if value == nil {
+			return []interface{}(nil)
+		}
+		out := make([]interface{}, len(value))
+		for i, item := range value {
+			out[i] = cloneClaimValue(item)
+		}
+		return out
+	case []string:
+		if value == nil {
+			return []string(nil)
+		}
+		out := make([]string, len(value))
+		copy(out, value)
+		return out
+	case map[string]map[string]bool:
+		if value == nil {
+			return map[string]map[string]bool(nil)
+		}
+		return clonePrivileges(value)
+	case map[string]string:
+		if value == nil {
+			return map[string]string(nil)
+		}
+		out := make(map[string]string, len(value))
+		for key, item := range value {
+			out[key] = item
+		}
+		return out
+	case map[string][]string:
+		if value == nil {
+			return map[string][]string(nil)
+		}
+		out := make(map[string][]string, len(value))
+		for key, item := range value {
+			if item == nil {
+				out[key] = nil
+				continue
+			}
+			cloned := make([]string, len(item))
+			copy(cloned, item)
+			out[key] = cloned
+		}
+		return out
+	case []map[string]interface{}:
+		if value == nil {
+			return []map[string]interface{}(nil)
+		}
+		out := make([]map[string]interface{}, len(value))
+		for i, item := range value {
+			out[i] = cloneClaimMap(item)
+		}
+		return out
+	case [][]interface{}:
+		if value == nil {
+			return [][]interface{}(nil)
+		}
+		out := make([][]interface{}, len(value))
+		for i, item := range value {
+			cloned := cloneClaimValue(item)
+			out[i] = cloned.([]interface{})
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 func clonePrivileges(in map[string]map[string]bool) map[string]map[string]bool {

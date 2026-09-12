@@ -76,21 +76,70 @@ func loadOrCreateLocalCredentialKey() ([]byte, error) {
 	}
 	encoded := base64.StdEncoding.EncodeToString(key) + "\n"
 
-	f, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.CreateTemp(filepath.Dir(keyPath), ".syfon-credential-kek-*")
 	if err != nil {
+		return nil, fmt.Errorf("create temporary local credential key file for %s: %w", keyPath, err)
+	}
+	tempPath := f.Name()
+	cleanupTemp := func(cause error) error {
+		closeErr := f.Close()
+		removeErr := os.Remove(tempPath)
+		cleanupErrs := make([]error, 0, 2)
+		if closeErr != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("close temporary local credential key file %s: %w", tempPath, closeErr))
+		}
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("remove temporary local credential key file %s: %w", tempPath, removeErr))
+		}
+		if len(cleanupErrs) == 0 {
+			return cause
+		}
+		return errors.Join(append([]error{cause}, cleanupErrs...)...)
+	}
+
+	if err := f.Chmod(0o600); err != nil {
+		return nil, cleanupTemp(fmt.Errorf("set local credential key file permissions %s: %w", tempPath, err))
+	}
+
+	if _, err := f.WriteString(encoded); err != nil {
+		return nil, cleanupTemp(fmt.Errorf("write temporary local credential key file %s: %w", tempPath, err))
+	}
+	if err := f.Sync(); err != nil {
+		return nil, cleanupTemp(fmt.Errorf("sync temporary local credential key file %s: %w", tempPath, err))
+	}
+	if err := f.Close(); err != nil {
+		removeErr := os.Remove(tempPath)
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return nil, errors.Join(
+				fmt.Errorf("close temporary local credential key file %s: %w", tempPath, err),
+				fmt.Errorf("remove temporary local credential key file %s: %w", tempPath, removeErr),
+			)
+		}
+		return nil, fmt.Errorf("close temporary local credential key file %s: %w", tempPath, err)
+	}
+
+	if err := os.Link(tempPath, keyPath); err != nil {
+		removeErr := os.Remove(tempPath)
 		if errors.Is(err, os.ErrExist) {
+			if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				return nil, fmt.Errorf("remove losing local credential key file %s: %w", tempPath, removeErr)
+			}
 			b, readErr := os.ReadFile(keyPath)
 			if readErr != nil {
 				return nil, fmt.Errorf("read concurrent local credential key file %s: %w", keyPath, readErr)
 			}
 			return parseUserProvidedKey(strings.TrimSpace(string(b)), CredentialLocalKeyFileEnv)
 		}
-		return nil, fmt.Errorf("create local credential key file %s: %w", keyPath, err)
+		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return nil, errors.Join(
+				fmt.Errorf("publish local credential key file %s: %w", keyPath, err),
+				fmt.Errorf("remove temporary local credential key file %s: %w", tempPath, removeErr),
+			)
+		}
+		return nil, fmt.Errorf("publish local credential key file %s: %w", keyPath, err)
 	}
-	defer f.Close()
-
-	if _, err := f.WriteString(encoded); err != nil {
-		return nil, fmt.Errorf("write local credential key file %s: %w", keyPath, err)
+	if err := os.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("remove published local credential key temporary file %s: %w", tempPath, err)
 	}
 	return key, nil
 }

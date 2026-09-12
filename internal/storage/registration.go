@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"reflect"
 )
 
@@ -35,6 +36,7 @@ type Registration struct {
 	prober      Prober
 	inventory   Inventoryer
 	deleter     Deleter
+	closer      io.Closer
 }
 
 func NewRegistration(provider string, backend Provider) Registration {
@@ -53,6 +55,9 @@ func NewRegistration(provider string, backend Provider) Registration {
 	}
 	if deleter, ok := backend.(Deleter); ok && !isNilInterface(deleter) {
 		registration.deleter = deleter
+	}
+	if closer, ok := backend.(io.Closer); ok && !isNilInterface(closer) {
+		registration.closer = closer
 	}
 	return registration
 }

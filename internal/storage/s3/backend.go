@@ -2,6 +2,8 @@ package s3
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -23,13 +26,22 @@ const defaultExpiry = 15 * time.Minute
 // remains keyed by the lookup bucket string, matching the previous signer.
 // Request-scoped policy caches stay above this package.
 type backend struct {
-	cache   sync.Map // bucket string -> *clients
-	limiter *probeLimiter
+	cache       sync.Map // bucket string -> *clients
+	cacheMu     sync.Mutex
+	generation  map[string]uint64
+	entries     map[string]*cacheEntry
+	invalidated map[string]map[string]struct{}
+	limiter     *probeLimiter
 }
 
 type clients struct {
 	client    s3Client
 	presigner s3Presigner
+}
+
+type cacheEntry struct {
+	clients     *clients
+	fingerprint string
 }
 
 type s3Client interface {
@@ -55,17 +67,85 @@ func New() storage.Registration {
 }
 
 func (s *backend) InvalidateBucket(bucket string) {
-	bucket = strings.TrimSpace(bucket)
+	bucket = strings.ToLower(strings.TrimSpace(bucket))
 	if bucket == "" {
 		return
 	}
-	s.cache.Delete(bucket)
+	s.cacheMu.Lock()
+	if s.generation == nil {
+		s.generation = make(map[string]uint64)
+	}
+	if s.entries == nil {
+		s.entries = make(map[string]*cacheEntry)
+	}
+	if s.invalidated == nil {
+		s.invalidated = make(map[string]map[string]struct{})
+	}
+	if current := s.entries[bucket]; current != nil {
+		if current.fingerprint != "" {
+			if s.invalidated[bucket] == nil {
+				s.invalidated[bucket] = make(map[string]struct{})
+			}
+			s.invalidated[bucket][current.fingerprint] = struct{}{}
+		}
+		delete(s.entries, bucket)
+	}
+	s.generation[bucket]++
+	s.cache.Range(func(key, _ any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == bucket {
+			s.cache.Delete(key)
+		}
+		return true
+	})
+	s.cacheMu.Unlock()
 }
 
 func (s *backend) getClients(ctx context.Context, binding storage.ProviderBinding) (*clients, error) {
-	cacheKey := strings.TrimSpace(binding.LookupKey)
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	cacheKey := strings.ToLower(strings.TrimSpace(binding.LookupKey))
+	if cacheKey == "" {
+		cacheKey = strings.ToLower(strings.TrimSpace(binding.PhysicalBucket))
+	}
+	if s.entries == nil {
+		s.entries = make(map[string]*cacheEntry)
+	}
+	if s.invalidated == nil {
+		s.invalidated = make(map[string]map[string]struct{})
+	}
+	fingerprint := s.credentialFingerprint(binding.Credential)
+	if current := s.entries[cacheKey]; current != nil {
+		if current.fingerprint == "" || current.fingerprint == fingerprint {
+			return current.clients, nil
+		}
+		if _, stale := s.invalidated[cacheKey][fingerprint]; stale {
+			return current.clients, nil
+		}
+		delete(s.entries, cacheKey)
+		s.cache.Delete(cacheKey)
+	}
 	if value, ok := s.cache.Load(cacheKey); ok {
-		return value.(*clients), nil
+		cached := value.(*clients)
+		if _, stale := s.invalidated[cacheKey][fingerprint]; !stale {
+			s.entries[cacheKey] = &cacheEntry{clients: cached, fingerprint: fingerprint}
+		}
+		return cached, nil
+	}
+	var cached *clients
+	s.cache.Range(func(key, value any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == cacheKey {
+			cached, _ = value.(*clients)
+			return false
+		}
+		return true
+	})
+	if cached != nil {
+		if _, stale := s.invalidated[cacheKey][fingerprint]; stale {
+			return cached, nil
+		}
+		s.entries[cacheKey] = &cacheEntry{clients: cached, fingerprint: fingerprint}
+		s.cache.Store(cacheKey, cached)
+		return cached, nil
 	}
 	cred := binding.Credential
 	if cred == nil {
@@ -98,8 +178,20 @@ func (s *backend) getClients(ctx context.Context, binding storage.ProviderBindin
 		}
 	})
 	result := &clients{client: client, presigner: awss3.NewPresignClient(client)}
-	s.cache.Store(cacheKey, result)
+	if _, stale := s.invalidated[cacheKey][fingerprint]; !stale {
+		s.entries[cacheKey] = &cacheEntry{clients: result, fingerprint: fingerprint}
+		s.cache.Store(cacheKey, result)
+	}
 	return result, nil
+}
+
+func (s *backend) credentialFingerprint(cred *buckets.Credential) string {
+	if cred == nil {
+		return ""
+	}
+	material := strings.Join([]string{cred.Provider, cred.Bucket, cred.Region, cred.AccessKey, cred.SecretKey, cred.Endpoint}, "\x00")
+	hash := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(hash[:])
 }
 
 func expiry(expiresIn time.Duration) time.Duration {

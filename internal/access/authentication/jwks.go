@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -16,6 +17,44 @@ import (
 	"time"
 )
 
+type redirectPolicyError struct {
+	err error
+}
+
+func (e *redirectPolicyError) Error() string {
+	return e.err.Error()
+}
+
+func (e *redirectPolicyError) Unwrap() error {
+	return e.err
+}
+
+func httpsOnlyHTTPClient(client *http.Client) *http.Client {
+	if client == nil {
+		client = &http.Client{Timeout: defaultAuthenticationTimeout}
+	}
+	guarded := *client
+	existingCheckRedirect := client.CheckRedirect
+	guarded.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req == nil || req.URL == nil || !strings.EqualFold(req.URL.Scheme, "https") {
+			return &redirectPolicyError{err: errors.New("redirect target must use HTTPS")}
+		}
+		if existingCheckRedirect == nil {
+			return nil
+		}
+		if err := existingCheckRedirect(req, via); err != nil {
+			// net/http recognizes ErrUseLastResponse by identity, so preserve
+			// that special case while marking other injected policy failures.
+			if err == http.ErrUseLastResponse {
+				return err
+			}
+			return &redirectPolicyError{err: err}
+		}
+		return nil
+	}
+	return &guarded
+}
+
 const (
 	defaultJWKSCacheTTL          = 15 * time.Minute
 	defaultUnknownKeyCooldown    = 30 * time.Second
@@ -25,11 +64,20 @@ const (
 func discoverJWKSURLContext(ctx context.Context, issuer string, client *http.Client) (string, error) {
 	issuer = strings.TrimRight(issuer, "/")
 	openidConfigURL := issuer + "/.well-known/openid-configuration"
+	if err := validateHTTPSURL(openidConfigURL, "discovery endpoint"); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, openidConfigURL, nil)
 	if err != nil {
 		return "", err
 	}
-	resp, err := client.Do(req)
+	resp, err := httpsOnlyHTTPClient(client).Do(req)
+	if err != nil {
+		var policyErr *redirectPolicyError
+		if errors.As(err, &policyErr) {
+			return "", err
+		}
+	}
 	if err == nil {
 		if resp.StatusCode == http.StatusOK {
 			var data struct {
@@ -126,7 +174,7 @@ func (c *jwksCache) fetchKeysLocked(ctx context.Context, force bool) error {
 	if err != nil {
 		return fmt.Errorf("create JWKS request: %w", err)
 	}
-	resp, err := c.client.Do(req)
+	resp, err := httpsOnlyHTTPClient(c.client).Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch JWKS from %s: %w", c.jwksURL, err)
 	}
@@ -168,12 +216,16 @@ func (c *jwksCache) fetchKeysLocked(ctx context.Context, force bool) error {
 }
 
 func validateJWKSURL(raw string) error {
+	return validateHTTPSURL(raw, "JWKS endpoint")
+}
+
+func validateHTTPSURL(raw, label string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("invalid JWKS endpoint: %w", err)
+		return fmt.Errorf("invalid %s: %w", label, err)
 	}
-	if u.Scheme != "https" || u.Host == "" {
-		return fmt.Errorf("JWKS endpoint must use HTTPS, got: %s", raw)
+	if !strings.EqualFold(u.Scheme, "https") || u.Host == "" {
+		return fmt.Errorf("%s must use HTTPS, got: %s", label, raw)
 	}
 	return nil
 }

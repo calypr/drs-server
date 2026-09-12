@@ -1,6 +1,10 @@
 package server
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/calypr/syfon/internal/version"
+)
 
 func TestServiceInfoForBackend(t *testing.T) {
 	tests := []struct {
@@ -15,7 +19,7 @@ func TestServiceInfoForBackend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			info := serviceInfoForBackend(tt.sqlite)
-			if info.Id != "drs-service-calypr" || info.Name != "Calypr DRS Server" || info.Version != "1.0.0" {
+			if info.Id != "drs-service-calypr" || info.Name != "Calypr DRS Server" || info.Version != version.Version {
 				t.Fatalf("unexpected service identity: %+v", info)
 			}
 			if info.Type.Group != "org.ga4gh" || info.Type.Artifact != "drs" || info.Type.Version != "1.2.0" {
@@ -31,5 +35,19 @@ func TestServiceInfoForBackend(t *testing.T) {
 				t.Fatalf("timestamps must be populated: %+v", info)
 			}
 		})
+	}
+}
+
+func TestServiceInfoUsesLinkerProvidedVersion(t *testing.T) {
+	original := version.Version
+	t.Cleanup(func() { version.Version = original })
+	version.Version = "v9.8.7-test"
+
+	info := serviceInfoForBackend(false)
+	if info.Version != "v9.8.7-test" {
+		t.Fatalf("service version = %q, want linker-provided version", info.Version)
+	}
+	if info.Type.Version != "1.2.0" {
+		t.Fatalf("DRS type version = %q, want 1.2.0", info.Type.Version)
 	}
 }

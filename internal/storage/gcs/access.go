@@ -2,6 +2,8 @@ package gcs
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,7 +23,26 @@ import (
 // contract. GCS intentionally has no Probe or Inventory methods: those are
 // optional capabilities and are not implemented by this provider.
 type backend struct {
-	cache sync.Map // keyed by the lookup bucket string, stores *storage.Client
+	cache       sync.Map // keyed by canonical lookup bucket, stores *storage.Client
+	cacheMu     sync.Mutex
+	clients     map[string]*clientEntry
+	allClients  map[*clientEntry]struct{}
+	generation  map[string]uint64
+	invalidated map[string]map[string]struct{}
+	closed      bool
+	closeOnce   sync.Once
+	closeErr    error
+	closeErrors []error
+	activeCond  *sync.Cond
+}
+
+type clientEntry struct {
+	client      *storage.Client
+	fingerprint string
+	generation  uint64
+	users       int
+	retired     bool
+	closed      bool
 }
 
 // New constructs the GCS provider registration.
@@ -30,11 +51,57 @@ func New() storageports.Registration {
 }
 
 func (b *backend) InvalidateBucket(bucket string) {
-	bucket = strings.TrimSpace(bucket)
+	bucket = canonicalCacheKey(bucket)
 	if bucket == "" {
 		return
 	}
-	b.cache.Delete(bucket)
+	b.cacheMu.Lock()
+	if b.generation == nil {
+		b.generation = make(map[string]uint64)
+	}
+	if b.clients == nil {
+		b.clients = make(map[string]*clientEntry)
+	}
+	if b.allClients == nil {
+		b.allClients = make(map[*clientEntry]struct{})
+	}
+	if b.invalidated == nil {
+		b.invalidated = make(map[string]map[string]struct{})
+	}
+	b.generation[bucket]++
+	if current := b.clients[bucket]; current != nil {
+		if current.fingerprint != "" {
+			if b.invalidated[bucket] == nil {
+				b.invalidated[bucket] = make(map[string]struct{})
+			}
+			b.invalidated[bucket][current.fingerprint] = struct{}{}
+		}
+		current.retired = true
+		delete(b.clients, bucket)
+		if current.users == 0 {
+			b.closeEntryLocked(current)
+		}
+	}
+	b.cache.Range(func(key, _ any) bool {
+		if canonicalCacheKey(fmt.Sprint(key)) == bucket {
+			b.cache.Delete(key)
+		}
+		return true
+	})
+	b.cacheMu.Unlock()
+}
+
+func canonicalCacheKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func credentialFingerprint(cred *buckets.Credential) string {
+	if cred == nil {
+		return ""
+	}
+	material := strings.Join([]string{cred.Provider, cred.Bucket, cred.Region, cred.AccessKey, cred.SecretKey, cred.Endpoint}, "\x00")
+	hash := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(hash[:])
 }
 
 func (b *backend) Sign(ctx context.Context, binding storageports.ProviderBinding, request storageports.SignRequest) (storageports.SignedAccess, error) {

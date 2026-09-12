@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	dockerE2EMinioImage     = "minio/minio:RELEASE.2025-03-12T18-04-18Z"
+	dockerE2EMinioImage     = "quay.io/minio/minio:RELEASE.2025-03-12T18-04-18Z"
 	dockerE2EMinioBucket    = "syfon-e2e-bucket"
 	dockerE2EMinioRegion    = "us-east-1"
 	dockerE2EMinioAccessKey = "minioadmin"

@@ -108,9 +108,18 @@ func applyEnvironmentOverrides(cfg *Config) error {
 		cfg.Routes.LFS = b
 	}
 
-	// DB Env Vars overrides
-	// If Postgres env vars are provided, we assume Postgres.
-	if os.Getenv("DRS_DB_HOST") != "" || os.Getenv("DRS_DB_DATABASE") != "" {
+	postgresHost := os.Getenv("DRS_DB_HOST")
+	postgresDatabase := os.Getenv("DRS_DB_DATABASE")
+	postgresSelectedByEnv := postgresHost != "" || postgresDatabase != ""
+	if cfg.Database.Postgres == nil && cfg.Database.Sqlite == nil && !postgresSelectedByEnv && os.Getenv("DRS_DB_SQLITE_FILE") == "" {
+		for _, name := range []string{"DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+			if os.Getenv(name) != "" {
+				return fmt.Errorf("%s is set, but PostgreSQL is not selected; set DRS_DB_HOST or DRS_DB_DATABASE to select PostgreSQL", name)
+			}
+		}
+	}
+
+	if postgresSelectedByEnv {
 		if cfg.Database.Postgres == nil {
 			cfg.Database.Postgres = &PostgresConfig{
 				Host:    "localhost",

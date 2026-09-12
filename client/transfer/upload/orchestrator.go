@@ -2,6 +2,7 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"strings"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/common"
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/client/transfer"
 	"github.com/calypr/syfon/client/transfer/engine"
 
@@ -60,11 +63,8 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 	// 2. Determine upload filename/key
 	// Content-Addressable Storage (CAS): We prioritize the SHA256 hash as the storage key.
 	uploadFilename := filepath.Base(filePath)
-	for _, c := range drsObject.Checksums {
-		if strings.ToLower(c.Type) == "sha256" {
-			uploadFilename = c.Checksum
-			break
-		}
+	if sha256 := clienthash.ConvertDrsChecksumsToHashInfo(drsObject.Checksums).SHA256; sha256 != "" {
+		uploadFilename = sha256
 	}
 
 	if drsObject.AccessMethods != nil && len(*drsObject.AccessMethods) > 0 {
@@ -134,6 +134,9 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 
 	current, getErr := dc.GetObject(ctx, drsObject.Id)
 	if getErr != nil {
+		if !errors.Is(getErr, errorapi.ErrNotFound) {
+			return nil, fmt.Errorf("failed to look up existing object: %w", getErr)
+		}
 		current = *drsObject
 	}
 	controlledAccess := drsObject.ControlledAccess

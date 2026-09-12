@@ -108,6 +108,22 @@ func RecordHasChecksumTypeAndValue(obj drs.DrsObject, hashType, hashValue string
 	if targetType == "" || targetValue == "" {
 		return false
 	}
+	if targetType == "sha256" {
+		targetValue = NormalizeOID(targetValue)
+		if targetValue == "" {
+			return false
+		}
+		for _, checksum := range obj.Checksums {
+			if NormalizeChecksumType(checksum.Type) != targetType {
+				continue
+			}
+			candidate := NormalizeOID(checksum.Checksum)
+			if candidate != "" && candidate == targetValue {
+				return true
+			}
+		}
+		return false
+	}
 	for _, checksum := range obj.Checksums {
 		if NormalizeChecksumType(checksum.Type) == targetType && strings.Trim(strings.TrimSpace(normalizeChecksum(checksum.Checksum)), `"'`) == targetValue {
 			return true

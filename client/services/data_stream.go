@@ -6,13 +6,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/common"
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/client/transfer"
 )
+
+const maxDownloadErrorPreview = 4 << 10
 
 func (d *DataService) Stat(ctx context.Context, guid string) (*transfer.ObjectMetadata, error) {
 	if d.drs != nil {
@@ -42,15 +48,11 @@ func downloadObjectIdentity(object *drs.DrsObject) string {
 	if object == nil {
 		return ""
 	}
-	for _, checksum := range object.Checksums {
-		checksumType := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(checksum.Type), "-", ""))
-		if checksumType == "sha256" {
-			value := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(checksum.Checksum)), "sha256:")
-			decoded, err := hex.DecodeString(value)
-			if err == nil && len(decoded) == 32 {
-				return "sha256:" + value
-			}
-		}
+	checksum := clienthash.ConvertDrsChecksumsToHashInfo(object.Checksums).SHA256
+	value := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(checksum)), "sha256:")
+	decoded, err := hex.DecodeString(value)
+	if err == nil && len(decoded) == 32 {
+		return "sha256:" + value
 	}
 	return ""
 }
@@ -64,7 +66,7 @@ func (d *DataService) GetReader(ctx context.Context, guid string) (io.ReadCloser
 	if err != nil {
 		return nil, err
 	}
-	return resp.Body, nil
+	return readBackendResponse(resp)
 }
 
 func (d *DataService) GetRangeReader(ctx context.Context, guid string, offset, length int64) (io.ReadCloser, error) {
@@ -81,11 +83,61 @@ func (d *DataService) GetRangeReader(ctx context.Context, guid string, offset, l
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		return nil, fmt.Errorf("download response is nil")
+	}
+	if resp.Body == nil {
+		return nil, fmt.Errorf("download response body is nil")
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, failedDownloadResponse(resp)
+	}
 	if resp.StatusCode == http.StatusOK {
 		resp.Body.Close()
 		return nil, transfer.ErrRangeIgnored
 	}
 	return resp.Body, nil
+}
+
+func readBackendResponse(resp *http.Response) (io.ReadCloser, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("download response is nil")
+	}
+	if resp.Body == nil {
+		return nil, fmt.Errorf("download response body is nil")
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, failedDownloadResponse(resp)
+	}
+	return resp.Body, nil
+}
+
+func failedDownloadResponse(resp *http.Response) error {
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxDownloadErrorPreview))
+	closeErr := resp.Body.Close()
+	var err error = apierror.FromResponse(redactedResponse(resp), body)
+	if readErr != nil {
+		err = fmt.Errorf("read download error response: %w: %v", err, readErr)
+	}
+	if closeErr != nil && readErr == nil {
+		err = fmt.Errorf("close download error response: %w: %v", err, closeErr)
+	}
+	return err
+}
+
+func redactedResponse(resp *http.Response) *http.Response {
+	if resp == nil || resp.Request == nil || resp.Request.URL == nil {
+		return resp
+	}
+	copyResponse := *resp
+	copyRequest := *resp.Request
+	copyURL := *resp.Request.URL
+	copyURL.RawQuery = ""
+	copyURL.ForceQuery = false
+	copyURL.Fragment = ""
+	copyRequest.URL = &copyURL
+	copyResponse.Request = &copyRequest
+	return &copyResponse
 }
 
 func (d *DataService) ResolveDownloadURL(ctx context.Context, guid string, accessID string) (string, error) {
@@ -104,7 +156,10 @@ func (d *DataService) Download(ctx context.Context, signedURL string, rangeStart
 }
 
 func (d *DataService) ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error) {
-	organization, project := uploadScopeFromMetadata(metadata)
+	organization, project, err := uploadScopeFromMetadata(metadata)
+	if err != nil {
+		return "", err
+	}
 	params := &internalapi.InternalUploadURLParams{Key: &filename}
 	if organization != "" {
 		params.Organization = &organization
@@ -122,24 +177,58 @@ func (d *DataService) ResolveUploadURL(ctx context.Context, guid, filename strin
 	return *resp.Url, nil
 }
 
-func uploadScopeFromMetadata(metadata common.FileMetadata) (string, string) {
+type uploadScope struct {
+	organization string
+	project      string
+}
+
+func uploadScopeFromMetadata(metadata common.FileMetadata) (string, string, error) {
 	if len(metadata.Authorizations) == 0 {
-		return "", ""
+		return "", "", nil
 	}
+
+	scopes := make([]uploadScope, 0, len(metadata.Authorizations))
 	for org, projects := range metadata.Authorizations {
 		org = strings.TrimSpace(org)
 		if org == "" {
 			continue
 		}
+		projectSeen := false
+		broadScopeSeen := false
 		for _, project := range projects {
 			project = strings.TrimSpace(project)
-			if project != "" {
-				return org, project
+			if project == "" {
+				broadScopeSeen = true
+				continue
 			}
+			projectSeen = true
+			scopes = append(scopes, uploadScope{organization: org, project: project})
 		}
-		return org, ""
+		if broadScopeSeen || !projectSeen {
+			scopes = append(scopes, uploadScope{organization: org})
+		}
 	}
-	return "", ""
+
+	sort.Slice(scopes, func(i, j int) bool {
+		if scopes[i].organization != scopes[j].organization {
+			return scopes[i].organization < scopes[j].organization
+		}
+		return scopes[i].project < scopes[j].project
+	})
+	unique := scopes[:0]
+	for _, scope := range scopes {
+		if len(unique) > 0 && unique[len(unique)-1] == scope {
+			continue
+		}
+		unique = append(unique, scope)
+	}
+	if len(unique) == 0 {
+		return "", "", nil
+	}
+	if len(unique) > 1 {
+		return "", "", fmt.Errorf("%w: upload metadata must identify one organization-wide or project scope", errorapi.ErrInvalidInput)
+	}
+	return unique[0].organization, unique[0].project, nil
 }
 
 func (d *DataService) Upload(ctx context.Context, url string, body io.Reader, size int64) error {

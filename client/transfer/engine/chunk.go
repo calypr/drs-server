@@ -3,6 +3,7 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"time"
@@ -66,8 +67,23 @@ func cleanupStaleMultipartCheckpoints(base string, maxAge time.Duration) {
 		if err != nil || info.ModTime().After(cutoff) {
 			continue
 		}
+		if !expiredUploadingCheckpoint(filepath.Join(base, entry.Name())) {
+			continue
+		}
 		_ = os.Remove(filepath.Join(base, entry.Name()))
 	}
+}
+
+func expiredUploadingCheckpoint(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var state uploaderResumeState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return false
+	}
+	return state.Phase == uploadCheckpointUploading && state.UploadID != ""
 }
 
 func scaleLinear(size, minSize, maxSize, minChunk, maxChunk int64) int64 {

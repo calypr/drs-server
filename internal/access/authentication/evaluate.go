@@ -93,10 +93,15 @@ func (r *Runtime) evaluateGen3(req access.EvaluationRequest, session *access.Ses
 			Metadata:   map[string]interface{}{},
 		})
 		if err != nil {
-			r.logger.Debug("authentication failed", "error", err)
+			r.logger.Debug("authentication failed", "request_id", req.RequestID, "authenticated", false)
 			return access.EvaluationResult{Session: session, Decision: access.DecisionUnauthorized}
 		}
-		r.logger.Debug("authentication plugin output", "authenticated", output.Authenticated, "subject", output.Subject, "claims", output.Claims, "reason", output.Reason)
+		r.logger.Debug(
+			"authentication plugin output",
+			"request_id", req.RequestID,
+			"authenticated", output.Authenticated,
+			"claim_count", len(output.Claims),
+		)
 	}
 	if output == nil || !output.Authenticated {
 		return access.EvaluationResult{Session: session, Decision: access.DecisionUnauthorized}

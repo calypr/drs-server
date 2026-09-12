@@ -45,6 +45,25 @@ func TestHashInfoUnmarshalJSON(t *testing.T) {
 		}
 	})
 
+	t.Run("checksum aliases", func(t *testing.T) {
+		payload := []byte(`[{"type":"SHA-256","checksum":"hyphen"},{"type":"sha256","checksum":"canonical"}]`)
+		var got HashInfo
+		if err := json.Unmarshal(payload, &got); err != nil {
+			t.Fatalf("unmarshal checksum aliases: %v", err)
+		}
+		if got.SHA256 != "canonical" {
+			t.Fatalf("SHA-256 alias precedence = %q, want canonical value", got.SHA256)
+		}
+
+		payload = []byte(`{"SHA-256":"hyphen","sha256":"canonical"}`)
+		if err := json.Unmarshal(payload, &got); err != nil {
+			t.Fatalf("unmarshal map aliases: %v", err)
+		}
+		if got.SHA256 != "canonical" {
+			t.Fatalf("map SHA-256 alias precedence = %q, want canonical value", got.SHA256)
+		}
+	})
+
 	t.Run("unsupported payload", func(t *testing.T) {
 		var got HashInfo
 		err := json.Unmarshal([]byte(`123`), &got)
@@ -63,6 +82,27 @@ func TestHashConversions(t *testing.T) {
 	}
 	if got := NormalizeChecksumType(" SHA "); got != ChecksumTypeSHA1 || got.String() != "sha1" {
 		t.Fatalf("unexpected checksum type normalization: %q", got)
+	}
+	for _, test := range []struct {
+		raw  string
+		want ChecksumType
+	}{
+		{raw: "sha-256", want: ChecksumTypeSHA256},
+		{raw: " SHA-256 ", want: ChecksumTypeSHA256},
+		{raw: "SHA256", want: ChecksumTypeSHA256},
+		{raw: "sha-512", want: ChecksumTypeSHA512},
+		{raw: "SHA-1", want: ChecksumTypeSHA1},
+	} {
+		if got := NormalizeChecksumType(test.raw); got != test.want {
+			t.Fatalf("NormalizeChecksumType(%q) = %q, want %q", test.raw, got, test.want)
+		}
+	}
+	const value = "abcdef"
+	if got := ConvertDrsChecksumsToHashInfo([]drsapi.Checksum{{Type: "sha-256", Checksum: value}}); got.SHA256 != value {
+		t.Fatalf("sha-256 conversion = %+v, want SHA256 %q", got, value)
+	}
+	if got := ConvertDrsChecksumsToHashInfo([]drsapi.Checksum{{Type: "sha-256", Checksum: "alias"}, {Type: "sha256", Checksum: value}}); got.SHA256 != value {
+		t.Fatalf("duplicate alias conversion = %+v, want canonical value %q", got, value)
 	}
 }
 

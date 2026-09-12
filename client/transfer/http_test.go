@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestDoUploadHTTPModesAndErrors(t *testing.T) {
 
 	t.Run("azure signed put sets headers and trims etag", func(t *testing.T) {
 		req := &captureRequester{resp: &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Etag": []string{"\"etag-123\""}}, Body: io.NopCloser(strings.NewReader("ok"))}}
-		urlStr := "https://acct.blob.core.windows.net/container/blob?sr=b&sig=sig&sv=2024-01-01&X-Amz-Signature=1"
+		urlStr := "https://acct.blob.core.windows.net/container/blob?sr=b&sig=sig&sv=2024-01-01"
 		etag, err := DoUpload(ctx, req, urlStr, strings.NewReader("payload"), 7)
 		if err != nil {
 			t.Fatalf("DoUpload returned error: %v", err)
@@ -113,6 +114,16 @@ func TestDoUploadHTTPModesAndErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("ordinary expiry upload keeps auth enabled", func(t *testing.T) {
+		req := &captureRequester{resp: &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}}
+		if _, err := DoUpload(ctx, req, "https://api.example/upload?Expires=1", strings.NewReader("payload"), 7); err != nil {
+			t.Fatalf("DoUpload returned error: %v", err)
+		}
+		if req.request.Header.Get(request.SkipAuthHeader) == "true" {
+			t.Fatal("did not expect skip auth for ordinary expiry query")
+		}
+	})
+
 	t.Run("request and status errors bubble up", func(t *testing.T) {
 		reqErr := &captureRequester{err: errors.New("boom")}
 		if _, err := DoUpload(ctx, reqErr, "https://example.test/upload", strings.NewReader("x"), 1); err == nil || !strings.Contains(err.Error(), "upload to https://example.test/upload failed") {
@@ -134,7 +145,7 @@ func TestGenericDownloadOptions(t *testing.T) {
 	end := int64(9)
 	resp := &http.Response{StatusCode: http.StatusPartialContent, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}
 	req := &captureRequester{resp: resp}
-	urlStr := "https://download.example/file?Expires=1700000000"
+	urlStr := "https://download.example/file?AWSAccessKeyId=test-key&Expires=1700000000"
 
 	got, err := GenericDownload(ctx, req, urlStr, &start, &end)
 	if err != nil {
@@ -162,6 +173,125 @@ func TestGenericDownloadOptions(t *testing.T) {
 	}
 	if noEnd.request.Header.Get(request.SkipAuthHeader) == "true" {
 		t.Fatal("did not expect skip auth for non-presigned URL")
+	}
+
+	azure := &captureRequester{resp: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}}
+	azureURL := "https://acct.blob.core.windows.net/container/blob?sv=2024-01-01&sig=abc%2Fdef&se=2030-01-01"
+	if _, err := GenericDownload(ctx, azure, azureURL, nil, nil); err != nil {
+		t.Fatalf("GenericDownload Azure SAS returned error: %v", err)
+	}
+	if azure.request.Header.Get(request.SkipAuthHeader) != "true" {
+		t.Fatal("expected skip auth for Azure SAS")
+	}
+	if azure.path != azureURL {
+		t.Fatalf("request URL changed from signed URL: got %q want %q", azure.path, azureURL)
+	}
+
+	ordinary := &captureRequester{resp: &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}}
+	if _, err := GenericDownload(ctx, ordinary, "https://api.example/file?Expires=1", nil, nil); err != nil {
+		t.Fatalf("GenericDownload ordinary expiry URL returned error: %v", err)
+	}
+	if ordinary.request.Header.Get(request.SkipAuthHeader) == "true" {
+		t.Fatal("did not expect skip auth for ordinary expiry query")
+	}
+}
+
+func TestSectionReadCloserClosesUnderlyingFileOnce(t *testing.T) {
+	t.Parallel()
+
+	file, err := os.CreateTemp(t.TempDir(), "source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("0123456789"); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	reader := &sectionReadCloser{reader: io.NewSectionReader(file, 3, 4), closer: file}
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "3456" {
+		t.Fatalf("section bytes = %q, want 3456", got)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("second Close returned error: %v", err)
+	}
+	if _, err := file.Stat(); err == nil {
+		t.Fatal("underlying file remained usable after close")
+	}
+}
+
+func TestGenericDownloadLocalRangeClosesBody(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start, end := int64(3), int64(6)
+	resp, err := GenericDownload(context.Background(), &captureRequester{}, path, &start, &end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "3456" || resp.ContentLength != 4 || resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("local range response bytes=%q length=%d status=%d", got, resp.ContentLength, resp.StatusCode)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("second body close returned error: %v", err)
+	}
+}
+
+func TestGenericDownloadLocalRangeDoesNotLeakDescriptors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/dev/fd is not available on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	countDescriptors := func() int {
+		dir, err := os.Open("/dev/fd")
+		if err != nil {
+			t.Fatalf("read descriptor directory: %v", err)
+		}
+		defer dir.Close()
+		entries, err := dir.Readdirnames(-1)
+		if err != nil {
+			t.Fatalf("read descriptor names: %v", err)
+		}
+		return len(entries)
+	}
+
+	before := countDescriptors()
+	for i := 0; i < 128; i++ {
+		start, end := int64(2), int64(7)
+		resp, err := GenericDownload(context.Background(), &captureRequester{}, path, &start, &end)
+		if err != nil {
+			t.Fatalf("range download %d: %v", i, err)
+		}
+		if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+			t.Fatalf("read range download %d: %v", i, err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("close range download %d: %v", i, err)
+		}
+	}
+	after := countDescriptors()
+	if after > before+2 {
+		t.Fatalf("local ranged downloads leaked descriptors: before=%d after=%d", before, after)
 	}
 }
 

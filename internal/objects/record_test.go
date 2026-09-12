@@ -189,6 +189,27 @@ func TestNormalizeRecordRejectsMissingID(t *testing.T) {
 	}
 }
 
+func TestRecordHasChecksumTypeAndValueNormalizesValidSHAOnly(t *testing.T) {
+	valid := strings.Repeat("a", 64)
+	object := drs.DrsObject{Checksums: []drs.Checksum{
+		{Type: "sha-256", Checksum: strings.ToUpper(valid)},
+		{Type: "sha256", Checksum: "not-a-sha"},
+		{Type: "md5", Checksum: "CaseSensitive"},
+	}}
+	if !RecordHasChecksumTypeAndValue(object, "sha-256", "SHA256:"+strings.ToUpper(valid)) {
+		t.Fatal("valid SHA-256 query should match a differently cased candidate")
+	}
+	if RecordHasChecksumTypeAndValue(object, "sha256", "not-a-sha") {
+		t.Fatal("invalid SHA-256 values must not compare equal")
+	}
+	if !RecordHasChecksumTypeAndValue(object, "md5", "CaseSensitive") {
+		t.Fatal("generic checksum should match literally")
+	}
+	if RecordHasChecksumTypeAndValue(object, "md5", "casesensitive") {
+		t.Fatal("generic checksum matching must remain case-sensitive")
+	}
+}
+
 func TestEnforceCanonicalProjectScope(t *testing.T) {
 	initial := []string{"/organization/other/project/proj"}
 	obj, err := enforceCanonicalProjectScope(drs.DrsObject{

@@ -15,6 +15,10 @@ import (
 	"github.com/calypr/syfon/client/transfer"
 )
 
+var _ interface {
+	MultipartCompletionReplaySafe(context.Context, string, string, []transfer.MultipartPart) bool
+} = (*DataService)(nil)
+
 func (s *DataService) multipartInitRequest(ctx context.Context, req internalapi.InternalMultipartInitRequest) (internalapi.InternalMultipartInitOutput, error) {
 	resp, err := s.gen.InternalMultipartInitWithResponse(ctx, internalapi.InternalMultipartInitJSONRequestBody(req))
 	if err != nil {
@@ -64,7 +68,10 @@ func (d *DataService) multipartCompleteRequest(ctx context.Context, req internal
 }
 
 func (d *DataService) InitMultipartUploadWithMetadata(ctx context.Context, guid, filename, bucket string, metadata common.FileMetadata) (string, string, error) {
-	organization, project := uploadScopeFromMetadata(metadata)
+	organization, project, err := uploadScopeFromMetadata(metadata)
+	if err != nil {
+		return "", "", err
+	}
 	req := internalapi.InternalMultipartInitRequest{
 		Guid:         &guid,
 		Key:          &filename,
@@ -125,6 +132,11 @@ func (d *DataService) MultipartPart(ctx context.Context, guid string, uploadID s
 func (d *DataService) MultipartComplete(ctx context.Context, guid string, uploadID string, parts []transfer.MultipartPart) error {
 	_, err := d.MultipartCompleteWithLocation(ctx, guid, uploadID, parts)
 	return err
+}
+
+// MultipartCompletionReplaySafe reports that the server makes completion retries idempotent.
+func (d *DataService) MultipartCompletionReplaySafe(context.Context, string, string, []transfer.MultipartPart) bool {
+	return true
 }
 
 // MultipartCompleteWithLocation returns the storage location selected by the upload session.

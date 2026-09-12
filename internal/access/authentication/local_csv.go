@@ -100,7 +100,11 @@ func loadLocalAuthzCSV(path string) (*localAuthzStore, error) {
 		if resource == "" {
 			return nil, fmt.Errorf("local authz csv line %d: resource is required", line)
 		}
-		resource = clientaccess.NormalizeAccessResource(resource)
+		rawResource := resource
+		resource = clientaccess.NormalizeAccessResource(rawResource)
+		if resource == "" {
+			return nil, fmt.Errorf("local authz csv line %d: invalid resource %q", line, rawResource)
+		}
 		methods := expandLocalAuthzMethods(localAuthzCell(record, methodsCol))
 		if len(methods) == 0 {
 			return nil, fmt.Errorf("local authz csv line %d: methods are required", line)

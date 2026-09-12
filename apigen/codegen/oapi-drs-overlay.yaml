@@ -27,6 +27,13 @@ actions:
   - target: $.components.schemas.BulkAccessMethodUpdateRequest.properties.updates.items
     update:
       $ref: '#/components/schemas/AccessMethodUpdate'
+  # Keep the public generated bulk request fields as slices. The published
+  # source schema is intentionally nullable and permits an omitted ID list;
+  # code generation still needs the long-standing field shape.
+  - target: $.components.requestBodies.BulkObjectBody.content.application/json.schema
+    update:
+      required:
+        - bulk_object_ids
   - target: $.components.schemas.DrsObject
     update:
       properties:

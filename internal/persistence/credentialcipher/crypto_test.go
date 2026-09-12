@@ -9,8 +9,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -193,6 +195,115 @@ func TestCredentialMasterKey_LocalKeyFile_DefaultPathFromSqlite(t *testing.T) {
 	path := localCredentialKeyPath()
 	if !strings.HasPrefix(path, sqliteDir) {
 		t.Fatalf("expected local key path under sqlite dir, got %q", path)
+	}
+}
+
+func TestCredentialMasterKey_LocalKeyFile_ConcurrentCreatorsConverge(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+
+	const creatorCount = 16
+	keys := make([][]byte, creatorCount)
+	errs := make([]error, creatorCount)
+	var ready sync.WaitGroup
+	var done sync.WaitGroup
+	start := make(chan struct{})
+	ready.Add(creatorCount)
+	done.Add(creatorCount)
+	for i := range keys {
+		go func(i int) {
+			defer done.Done()
+			ready.Done()
+			<-start
+			keys[i], errs[i] = loadOrCreateLocalCredentialKey()
+		}(i)
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("creator %d returned error: %v", i, err)
+		}
+		if len(keys[i]) != 32 {
+			t.Fatalf("creator %d returned %d-byte key, want 32", i, len(keys[i]))
+		}
+		if i > 0 && !bytes.Equal(keys[0], keys[i]) {
+			t.Fatalf("creator %d returned different key", i)
+		}
+	}
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatalf("stat published key: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("published key mode = %o, want 600", got)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read key directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(keyPath) {
+		t.Fatalf("key directory entries = %#v, want only %q", entries, filepath.Base(keyPath))
+	}
+}
+
+func TestCredentialMasterKey_LocalKeyFile_ExistingWinnerIsUnchanged(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+	winner := []byte("0123456789abcdef0123456789abcdef")
+	winnerEncoded := base64.StdEncoding.EncodeToString(winner) + "\n"
+	if err := os.WriteFile(keyPath, []byte(winnerEncoded), 0o600); err != nil {
+		t.Fatalf("write existing key: %v", err)
+	}
+
+	got, err := loadOrCreateLocalCredentialKey()
+	if err != nil {
+		t.Fatalf("load existing key: %v", err)
+	}
+	if !bytes.Equal(got, winner) {
+		t.Fatalf("loaded key = %x, want %x", got, winner)
+	}
+	contents, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("read existing key: %v", err)
+	}
+	if string(contents) != string(winnerEncoded) {
+		t.Fatalf("existing key contents changed to %q", contents)
+	}
+}
+
+func TestCredentialMasterKey_LocalKeyFile_MalformedWinnerIsUnchanged(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+	malformed := []byte("not-a-key\n")
+	if err := os.WriteFile(keyPath, malformed, 0o600); err != nil {
+		t.Fatalf("write malformed key: %v", err)
+	}
+
+	if _, err := loadOrCreateLocalCredentialKey(); err == nil {
+		t.Fatal("load malformed key succeeded")
+	}
+	contents, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("read malformed key: %v", err)
+	}
+	if string(contents) != string(malformed) {
+		t.Fatalf("malformed key contents changed to %q", contents)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read key directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(keyPath) {
+		t.Fatalf("key directory entries = %#v, want only %q", entries, filepath.Base(keyPath))
 	}
 }
 

@@ -94,7 +94,7 @@ func TestVerifyRetriesRealPendingMetadataAfterRegistrationFailure(t *testing.T) 
 	registrationError := errors.New("registration unavailable")
 	registrar := &retryRegistration{Service: objects.NewService(database), err: registrationError}
 	service := lfs.NewService(nil, registrar, nil, database, uploadRecorder{}, nil)
-	if err := service.Verify(ctx, oid); !errors.Is(err, registrationError) {
+	if err := service.Verify(ctx, oid, 0); !errors.Is(err, registrationError) {
 		t.Fatalf("first Verify() error = %v, want %v", err, registrationError)
 	}
 	if _, err := database.GetPendingMetadata(ctx, oid); err != nil {
@@ -102,7 +102,7 @@ func TestVerifyRetriesRealPendingMetadataAfterRegistrationFailure(t *testing.T) 
 	}
 
 	registrar.err = nil
-	if err := service.Verify(ctx, oid); err != nil {
+	if err := service.Verify(ctx, oid, 0); err != nil {
 		t.Fatalf("retry Verify() error = %v", err)
 	}
 	if _, err := database.GetPendingMetadata(ctx, oid); !errorapi.IsNotFoundError(err) {
@@ -145,7 +145,7 @@ func TestConcurrentVerifyAccountsOnceWithDurableObjectID(t *testing.T) {
 	service := lfs.NewService(nil, objects.NewService(database), nil, pendingStore, recorder, nil)
 	errs := make(chan error, 2)
 	for range 2 {
-		go func() { errs <- service.Verify(ctx, oid) }()
+		go func() { errs <- service.Verify(ctx, oid, 0) }()
 	}
 	for range 2 {
 		select {
@@ -164,7 +164,7 @@ func TestConcurrentVerifyAccountsOnceWithDurableObjectID(t *testing.T) {
 	if got, want := recorder.recordedIDs(), []string{canonicalID}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("upload accounting IDs = %v, want %v", got, want)
 	}
-	if err := service.Verify(ctx, oid); err != nil {
+	if err := service.Verify(ctx, oid, 0); err != nil {
 		t.Fatalf("completed Verify() retry error = %v", err)
 	}
 	if got := recorder.recordedIDs(); len(got) != 1 {

@@ -1,8 +1,11 @@
 package request
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -10,6 +13,7 @@ import (
 	"testing"
 
 	conf "github.com/calypr/syfon/client/config"
+	"github.com/calypr/syfon/client/logs"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -118,5 +122,43 @@ func TestClientDoesNotRetryRequestsWithBodies(t *testing.T) {
 	defer resp.Body.Close()
 	if calls != 1 {
 		t.Fatalf("PUT was retried %d times", calls)
+	}
+}
+
+func TestClientRedactsSignedQueryFromRetryLogs(t *testing.T) {
+	var logOutput bytes.Buffer
+	logger := logs.NewGen3Logger(slog.New(slog.NewTextHandler(&logOutput, nil)))
+	const signedURL = "https://download.example.test/object?X-Amz-Credential=sentinel-key&X-Amz-Signature=sentinel-secret"
+	var calls int
+	base := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if req.URL.String() != signedURL {
+			return nil, errors.New("request query was changed")
+		}
+		return nil, errors.New("signed request failed: " + signedURL)
+	})
+	client := NewClient(logger, nil, nil, "", &http.Client{Transport: base}, AuthModeBasic)
+	client.retry.RetryMax = 1
+	client.retry.RetryWaitMin = 0
+	client.retry.RetryWaitMax = 0
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, signedURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Do(req); err == nil {
+		t.Fatal("expected signed request failure")
+	}
+	if calls != 2 {
+		t.Fatalf("expected one retry, got %d requests", calls)
+	}
+	output := logOutput.String()
+	if strings.Contains(output, "sentinel-key") || strings.Contains(output, "sentinel-secret") {
+		t.Fatalf("retry logs exposed signed query: %s", output)
+	}
+	if strings.Contains(output, signedURL) {
+		t.Fatalf("retry logs exposed full signed URL: %s", output)
+	}
+	if !strings.Contains(output, "https://download.example.test/object") {
+		t.Fatalf("retry logs lost host/path diagnostics: %s", output)
 	}
 }

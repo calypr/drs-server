@@ -248,7 +248,7 @@ func TestChunkHelpers(t *testing.T) {
 	}
 
 	stale := filepath.Join(cache, "syfon", "multipart", "stale.json")
-	if err := os.WriteFile(stale, []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(stale, []byte(`{"phase":"uploading","upload_id":"stale"}`), 0o644); err != nil {
 		t.Fatalf("write stale checkpoint: %v", err)
 	}
 	old := time.Now().Add(-25 * time.Hour)
@@ -428,7 +428,7 @@ func TestGenericUploaderMultipartAndState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, FileModUnixNano: info.ModTime().UnixNano(), UploadID: "upload-123", ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
+	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, FileModUnixNano: info.ModTime().UnixNano(), UploadID: "upload-123", RoutingFingerprint: uploadRoutingFingerprint(common.FileMetadata{}), Phase: uploadCheckpointUploading, ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
 	uploader.saveState(checkpointPath, state)
 	loaded, ok := uploader.loadState(checkpointPath)
 	if !ok || !reflect.DeepEqual(loaded, state) {
@@ -888,7 +888,7 @@ func TestMultipartUploadRejectsStaleCheckpoint(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := transfer.TransferRequest{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", ForceMultipart: true}
-			state := &uploaderResumeState{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", FileSize: info.Size(), FileModUnixNano: info.ModTime().UnixNano(), ChunkSize: OptimalChunkSize(info.Size()), UploadID: "old-session", Completed: map[int]string{1: "old-etag"}}
+			state := &uploaderResumeState{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", FileSize: info.Size(), FileModUnixNano: info.ModTime().UnixNano(), ChunkSize: OptimalChunkSize(info.Size()), UploadID: "old-session", RoutingFingerprint: uploadRoutingFingerprint(common.FileMetadata{}), Phase: uploadCheckpointUploading, Completed: map[int]string{1: "old-etag"}}
 			switch mismatch {
 			case "bucket":
 				state.Bucket = "another-bucket"

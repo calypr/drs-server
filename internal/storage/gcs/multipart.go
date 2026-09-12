@@ -9,6 +9,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -61,14 +62,16 @@ func (b *backend) SignMultipartPart(_ context.Context, binding storageports.Prov
 }
 
 func (b *backend) CompleteMultipart(ctx context.Context, binding storageports.ProviderBinding, request storageports.CompleteMultipartRequest) error {
-	client, err := b.getClient(ctx, binding)
+	client, release, err := b.acquireClient(ctx, binding)
 	if err != nil {
 		return err
 	}
+	defer release()
 	if matched, err := b.multipartCompletionMatches(ctx, client, request.Target, request.CompletionID); err != nil {
 		return err
 	} else if matched {
-		return nil
+		partKeys := multipartPartKeys(request)
+		return b.cleanupKeys(ctx, client, binding.PhysicalBucket, append(partKeys, multipartIntermediateKeys(request.Target.Key, request.UploadID, len(partKeys))...))
 	}
 
 	partList := append([]storageports.CompletedPart(nil), request.Parts...)
@@ -83,41 +86,197 @@ func (b *backend) CompleteMultipart(ctx context.Context, binding storageports.Pr
 		completionErr := err
 		matched, reconcileErr := b.multipartCompletionMatches(ctx, client, request.Target, request.CompletionID)
 		if reconcileErr != nil {
-			return errors.Join(completionErr, reconcileErr)
+			return errors.Join(completionErr, reconcileErr, b.cleanupKeys(ctx, client, binding.PhysicalBucket, tempKeys))
 		}
 		if !matched {
-			return completionErr
+			return errors.Join(completionErr, b.cleanupKeys(ctx, client, binding.PhysicalBucket, tempKeys))
+		}
+		if cleanupErr := b.cleanupKeys(ctx, client, binding.PhysicalBucket, append(partKeys, tempKeys...)); cleanupErr != nil {
+			return cleanupErr
 		}
 	}
 
-	cleanupErr := error(nil)
-	for _, key := range append(partKeys, tempKeys...) {
-		if err := client.Bucket(binding.PhysicalBucket).Object(key).Delete(ctx); err != nil {
-			cleanupErr = fmt.Errorf("delete multipart component %s: %w", key, err)
-			break
+	if err == nil {
+		if cleanupErr := b.cleanupKeys(ctx, client, binding.PhysicalBucket, append(partKeys, tempKeys...)); cleanupErr != nil {
+			return cleanupErr
 		}
-	}
-	if cleanupErr != nil && strings.TrimSpace(request.CompletionID) == "" {
-		return cleanupErr
 	}
 	return nil
 }
 
 func (b *backend) getClient(ctx context.Context, binding storageports.ProviderBinding) (*storage.Client, error) {
-	if value, ok := b.cache.Load(binding.LookupKey); ok {
-		return value.(*storage.Client), nil
-	}
+	client, _, err := b.clientFor(ctx, binding)
+	return client, err
+}
 
+func (b *backend) acquireClient(ctx context.Context, binding storageports.ProviderBinding) (*storage.Client, func(), error) {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+	client, entry, err := b.clientForLocked(ctx, binding)
+	if err != nil {
+		return nil, nil, err
+	}
+	entry.users++
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			b.cacheMu.Lock()
+			if entry.users > 0 {
+				entry.users--
+			}
+			if entry.users == 0 && entry.retired {
+				b.closeEntryLocked(entry)
+			}
+			if b.activeCond != nil {
+				b.activeCond.Broadcast()
+			}
+			b.cacheMu.Unlock()
+		})
+	}
+	return client, release, nil
+}
+
+func (b *backend) clientFor(ctx context.Context, binding storageports.ProviderBinding) (*storage.Client, *clientEntry, error) {
+	b.cacheMu.Lock()
+	defer b.cacheMu.Unlock()
+	return b.clientForLocked(ctx, binding)
+}
+
+func (b *backend) clientForLocked(ctx context.Context, binding storageports.ProviderBinding) (*storage.Client, *clientEntry, error) {
+	if b.closed {
+		return nil, nil, errors.New("gcs storage backend is closed")
+	}
+	if b.clients == nil {
+		b.clients = make(map[string]*clientEntry)
+	}
+	if b.allClients == nil {
+		b.allClients = make(map[*clientEntry]struct{})
+	}
+	if b.generation == nil {
+		b.generation = make(map[string]uint64)
+	}
+	if b.invalidated == nil {
+		b.invalidated = make(map[string]map[string]struct{})
+	}
+	key := canonicalCacheKey(binding.LookupKey)
+	if key == "" {
+		key = canonicalCacheKey(binding.PhysicalBucket)
+	}
+	fingerprint := credentialFingerprint(binding.Credential)
+	if current := b.clients[key]; current != nil {
+		if current.fingerprint == "" || current.fingerprint == fingerprint {
+			return current.client, current, nil
+		}
+		if _, stale := b.invalidated[key][fingerprint]; stale {
+			return current.client, current, nil
+		}
+		current.retired = true
+		delete(b.clients, key)
+		if current.users == 0 {
+			b.closeEntryLocked(current)
+		}
+	}
+	if value, ok := b.cache.Load(key); ok {
+		if client, ok := value.(*storage.Client); ok {
+			entry := &clientEntry{client: client, fingerprint: fingerprint, generation: b.generation[key]}
+			if _, stale := b.invalidated[key][fingerprint]; stale {
+				entry.retired = true
+			} else {
+				b.clients[key] = entry
+			}
+			b.allClients[entry] = struct{}{}
+			return client, entry, nil
+		}
+	}
 	cred, err := b.credential(binding)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	generation := b.generation[key]
 	client, err := newClient(ctx, cred)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCS client: %w", err)
+		return nil, nil, fmt.Errorf("failed to create GCS client: %w", err)
 	}
-	b.cache.Store(binding.LookupKey, client)
-	return client, nil
+	if b.closed {
+		_ = client.Close()
+		return nil, nil, errors.New("gcs storage backend is closed")
+	}
+	entry := &clientEntry{client: client, fingerprint: fingerprint, generation: generation}
+	_, stale := b.invalidated[key][fingerprint]
+	if stale {
+		entry.retired = true
+	} else {
+		b.clients[key] = entry
+	}
+	b.allClients[entry] = struct{}{}
+	if !stale {
+		b.cache.Store(key, client)
+	}
+	return client, entry, nil
+}
+
+func (b *backend) closeEntryLocked(entry *clientEntry) {
+	if entry == nil || entry.closed {
+		return
+	}
+	entry.closed = true
+	if err := entry.client.Close(); err != nil {
+		b.closeErrors = append(b.closeErrors, err)
+	}
+}
+
+func (b *backend) Close() error {
+	b.closeOnce.Do(func() {
+		b.cacheMu.Lock()
+		if b.activeCond == nil {
+			b.activeCond = sync.NewCond(&b.cacheMu)
+		}
+		b.closed = true
+		if b.allClients == nil {
+			b.allClients = make(map[*clientEntry]struct{})
+		}
+		b.cache.Range(func(_, value any) bool {
+			client, ok := value.(*storage.Client)
+			if !ok {
+				return true
+			}
+			for entry := range b.allClients {
+				if entry.client == client {
+					return true
+				}
+			}
+			b.allClients[&clientEntry{client: client}] = struct{}{}
+			return true
+		})
+		for {
+			active := false
+			for entry := range b.allClients {
+				if entry.users > 0 {
+					active = true
+					break
+				}
+			}
+			if !active {
+				break
+			}
+			b.activeCond.Wait()
+		}
+		closeErrs := append([]error(nil), b.closeErrors...)
+		for entry := range b.allClients {
+			if entry.closed {
+				continue
+			}
+			entry.closed = true
+			if err := entry.client.Close(); err != nil {
+				closeErrs = append(closeErrs, err)
+			}
+		}
+		b.clients = make(map[string]*clientEntry)
+		b.cache.Range(func(key, _ any) bool { b.cache.Delete(key); return true })
+		b.cacheMu.Unlock()
+		b.closeErr = errors.Join(closeErrs...)
+	})
+	return b.closeErr
 }
 
 func (b *backend) composeObjects(ctx context.Context, client *storage.Client, bucket, destinationKey string, uploadID storageports.UploadID, partKeys []string, completionID string) ([]string, error) {
@@ -136,10 +295,10 @@ func (b *backend) composeObjects(ctx context.Context, client *storage.Client, bu
 				end = len(current)
 			}
 			temporary := path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), strings.Trim(strings.TrimSpace(destinationKey), "/"), "compose", fmt.Sprintf("%d-%d", round, i/32))
+			tempKeys = append(tempKeys, temporary)
 			if err := b.composeBatch(ctx, client, bucket, temporary, current[i:end], ""); err != nil {
 				return tempKeys, err
 			}
-			tempKeys = append(tempKeys, temporary)
 			next = append(next, temporary)
 		}
 		current = next
@@ -149,6 +308,49 @@ func (b *backend) composeObjects(ctx context.Context, client *storage.Client, bu
 		return tempKeys, err
 	}
 	return tempKeys, nil
+}
+
+func multipartPartKeys(request storageports.CompleteMultipartRequest) []string {
+	parts := append([]storageports.CompletedPart(nil), request.Parts...)
+	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
+	keys := make([]string, 0, len(parts))
+	for _, part := range parts {
+		keys = append(keys, storageports.MultipartPartObjectKey(request.Target.Key, request.UploadID, part.PartNumber))
+	}
+	return keys
+}
+
+func multipartIntermediateKeys(destinationKey string, uploadID storageports.UploadID, partCount int) []string {
+	if partCount <= 32 {
+		return nil
+	}
+	current := partCount
+	round := 0
+	keys := make([]string, 0)
+	for current > 32 {
+		groups := (current + 31) / 32
+		for index := 0; index < groups; index++ {
+			keys = append(keys, path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), strings.Trim(strings.TrimSpace(destinationKey), "/"), "compose", fmt.Sprintf("%d-%d", round, index)))
+		}
+		current = groups
+		round++
+	}
+	return keys
+}
+
+func (b *backend) cleanupKeys(ctx context.Context, client *storage.Client, bucket string, keys []string) error {
+	var cleanupErrs []error
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if err := client.Bucket(bucket).Object(key).Delete(ctx); err != nil && !isNotFound(err) {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete multipart component %s: %w", key, err))
+		}
+	}
+	return errors.Join(cleanupErrs...)
 }
 
 func (b *backend) composeBatch(ctx context.Context, client *storage.Client, bucket, destination string, sources []string, completionID string) error {

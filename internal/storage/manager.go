@@ -2,9 +2,11 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage/address"
@@ -20,6 +22,8 @@ type Manager struct {
 	credentials CredentialLookup
 	providers   map[string]Registration
 	order       []Registration
+	closeOnce   sync.Once
+	closeErr    error
 }
 
 func NewManager(credentials CredentialLookup, registrations ...Registration) (*Manager, error) {
@@ -50,6 +54,27 @@ func NewManager(credentials CredentialLookup, registrations ...Registration) (*M
 	return &Manager{credentials: credentials, providers: providers, order: order}, nil
 }
 
+// Close releases resources owned by the manager. Registrations are closed in
+// construction order and repeated calls return the same aggregate result.
+func (m *Manager) Close() error {
+	if m == nil {
+		return nil
+	}
+	m.closeOnce.Do(func() {
+		closeErrors := make([]error, 0)
+		for _, registration := range m.order {
+			if registration.closer == nil {
+				continue
+			}
+			if err := registration.closer.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		m.closeErr = errors.Join(closeErrors...)
+	})
+	return m.closeErr
+}
+
 // Sign resolves one credential binding and passes it to the provider.
 func (m *Manager) Sign(ctx context.Context, request SignRequest) (SignedAccess, error) {
 	binding, target, err := m.resolveTarget(ctx, request.Target, "access", true)
@@ -61,7 +86,8 @@ func (m *Manager) Sign(ctx context.Context, request SignRequest) (SignedAccess, 
 		return SignedAccess{}, err
 	}
 	request.Target = target
-	return registration.complete.Sign(ctx, binding, request)
+	access, err := registration.complete.Sign(ctx, binding, request)
+	return access, wrapProviderError(err, binding.Provider, "access")
 }
 
 func (m *Manager) BeginMultipart(ctx context.Context, request BeginMultipartRequest) (UploadID, error) {
@@ -74,7 +100,8 @@ func (m *Manager) BeginMultipart(ctx context.Context, request BeginMultipartRequ
 		return "", err
 	}
 	request.Target = target
-	return registration.complete.BeginMultipart(ctx, binding, request)
+	uploadID, err := registration.complete.BeginMultipart(ctx, binding, request)
+	return uploadID, wrapProviderError(err, binding.Provider, "multipart")
 }
 
 func (m *Manager) SignMultipartPart(ctx context.Context, request MultipartPartRequest) (SignedAccess, error) {
@@ -87,7 +114,8 @@ func (m *Manager) SignMultipartPart(ctx context.Context, request MultipartPartRe
 		return SignedAccess{}, err
 	}
 	request.Target = target
-	return registration.complete.SignMultipartPart(ctx, binding, request)
+	access, err := registration.complete.SignMultipartPart(ctx, binding, request)
+	return access, wrapProviderError(err, binding.Provider, "multipart")
 }
 
 func (m *Manager) CompleteMultipart(ctx context.Context, request CompleteMultipartRequest) error {
@@ -100,7 +128,7 @@ func (m *Manager) CompleteMultipart(ctx context.Context, request CompleteMultipa
 		return err
 	}
 	request.Target = target
-	return registration.complete.CompleteMultipart(ctx, binding, request)
+	return wrapProviderError(registration.complete.CompleteMultipart(ctx, binding, request), binding.Provider, "multipart")
 }
 
 func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResult {
@@ -147,7 +175,7 @@ func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResul
 				continue
 			}
 			results[item.index].Metadata = provided[index].Metadata
-			results[item.index].Err = provided[index].Err
+			results[item.index].Err = wrapProviderError(provided[index].Err, key.provider, "probe")
 		}
 	}
 	return results
@@ -166,7 +194,8 @@ func (m *Manager) Inventory(ctx context.Context, request InventoryRequest) (Inve
 		return InventoryResult{}, operationError(ErrorUnsupported, binding.Provider, "inventory", nil)
 	}
 	request.Target = target
-	return registration.inventory.Inventory(ctx, binding, request)
+	result, err := registration.inventory.Inventory(ctx, binding, request)
+	return result, wrapProviderError(err, binding.Provider, "inventory")
 }
 
 func (m *Manager) DeleteExact(ctx context.Context, targets []DeleteTarget) error {
@@ -234,7 +263,18 @@ func (m *Manager) deleteTargets(ctx context.Context, binding ProviderBinding, ta
 	if registration.deleter == nil {
 		return operationError(ErrorUnsupported, binding.Provider, "delete", nil)
 	}
-	return registration.deleter.Delete(ctx, binding, targets)
+	return wrapProviderError(registration.deleter.Delete(ctx, binding, targets), binding.Provider, "delete")
+}
+
+func wrapProviderError(err error, provider, capability string) error {
+	if err == nil {
+		return nil
+	}
+	var operation *OperationError
+	if errors.As(err, &operation) {
+		return err
+	}
+	return operationError(ErrorProvider, provider, capability, err)
 }
 
 func (m *Manager) InvalidateBucket(bucket string) {

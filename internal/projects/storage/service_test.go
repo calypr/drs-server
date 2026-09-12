@@ -96,8 +96,38 @@ func TestVisibleBucketContainsMatchesPhysicalAndCredentialAliases(t *testing.T) 
 		{name: "unknown", bucket: "other", credentialID: "other", want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := visibleBucketContains(visible, tc.bucket, tc.credentialID); got != tc.want {
+			if got := visibleBucketContains(context.Background(), visible, tc.bucket, tc.credentialID); got != tc.want {
 				t.Fatalf("visibleBucketContains()=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVisibleBucketContainsRequiresProgramsOnlyInRestrictedMode(t *testing.T) {
+	visible := map[string]buckets.VisibleBucket{
+		"credential-id": {Credential: buckets.Credential{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+	}
+	restricted := access.NewSession("gen3")
+	restricted.AuthHeaderPresent = true
+	restricted.SetAuthorizations(nil, map[string]map[string]bool{
+		"/organization/other/project/allowed": {"read": true},
+	}, true)
+	if got := visibleBucketContains(access.WithSession(context.Background(), restricted), visible, "physical-bucket", "credential-id"); got {
+		t.Fatal("restricted visibility accepted credential without an authorized program")
+	}
+
+	for name, session := range map[string]*access.Session{
+		"local": access.NewSession("local"),
+		"broad": func() *access.Session {
+			broad := access.NewSession("gen3")
+			broad.AuthHeaderPresent = true
+			broad.SetAuthorizations(nil, map[string]map[string]bool{"/programs": {"read": true}}, true)
+			return broad
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := visibleBucketContains(access.WithSession(context.Background(), session), visible, "physical-bucket", "credential-id"); !got {
+				t.Fatal("local or broad visibility rejected credential without programs")
 			}
 		})
 	}
@@ -340,6 +370,76 @@ func TestProbeObjectNormalizesScopedKeyAgainstEffectivePrefix(t *testing.T) {
 				t.Fatalf("probe targets = %+v, want key %q", probe.targets, tt.want)
 			}
 		})
+	}
+}
+
+func TestProbeObjectRestrictedVisibilityRejectsCredentialBeforeProvider(t *testing.T) {
+	allowed := "/organization/org/project/allowed"
+	credentialA := buckets.Credential{CredentialID: "cred-a", Bucket: "bucket-a", Provider: "s3"}
+	credentialB := buckets.Credential{CredentialID: "cred-b", Bucket: "bucket-b", Provider: "s3"}
+	probe := &recordingProbe{}
+	service := NewService(Dependencies{
+		Credentials: fakeCredentials{values: map[string]buckets.Credential{
+			"cred-a": credentialA,
+			"cred-b": credentialB,
+		}},
+		Visibility: &fakeVisibility{values: map[string]buckets.VisibleBucket{
+			"cred-a": {Credential: credentialA, Programs: []string{allowed}},
+			"cred-b": {Credential: credentialB},
+		}},
+		Providers: Providers{Probe: probe},
+	})
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{allowed: {"read": true}}, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	_, err := service.ProbeObject(ctx, internalapi.InternalInspectObjectRequest{ObjectUrl: "s3://bucket-b/private"})
+	var storageErr *Error
+	if !errors.As(err, &storageErr) || storageErr.Kind != ErrorPermissionDenied {
+		t.Fatalf("restricted probe error=%v, want permission denied", err)
+	}
+	if len(probe.targets) != 0 {
+		t.Fatalf("unauthorized provider was invoked with targets=%+v", probe.targets)
+	}
+
+	broad := access.NewSession("gen3")
+	broad.AuthHeaderPresent = true
+	broad.SetAuthorizations(nil, map[string]map[string]bool{"/programs": {"read": true}}, true)
+	metadata, err := service.ProbeObject(access.WithSession(context.Background(), broad), internalapi.InternalInspectObjectRequest{ObjectUrl: "s3://bucket-b/private"})
+	if err != nil {
+		t.Fatalf("broad probe error=%v", err)
+	}
+	if metadata.Bucket != "bucket-b" || len(probe.targets) != 1 {
+		t.Fatalf("broad probe metadata=%+v targets=%+v", metadata, probe.targets)
+	}
+}
+
+func TestValidateInventoryObjectsRestrictedVisibilityDeniesBeforeInventory(t *testing.T) {
+	credential := buckets.Credential{CredentialID: "cred-b", Bucket: "bucket-b", Provider: "s3"}
+	inventory := &fakeInventory{}
+	service := NewService(Dependencies{
+		Credentials: fakeCredentials{values: map[string]buckets.Credential{"cred-b": credential}},
+		Visibility: &fakeVisibility{values: map[string]buckets.VisibleBucket{
+			"cred-b": {Credential: credential},
+		}},
+		Providers: Providers{Inventory: inventory},
+	})
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{
+		"/organization/org/project/other": {"read": true},
+	}, true)
+
+	results := service.ValidateInventoryObjects(access.WithSession(context.Background(), session), []internalapi.InternalInspectObjectRequest{{
+		Id:        "unauthorized",
+		ObjectUrl: "s3://bucket-b/private",
+	}})
+	if len(results) != 1 || results[0].Status != string(probeForbidden) || results[0].ErrorKind != string(ErrorPermissionDenied) {
+		t.Fatalf("restricted inventory result=%+v, want forbidden permission denial", results)
+	}
+	if len(inventory.requests) != 0 {
+		t.Fatalf("unauthorized inventory provider was invoked with requests=%+v", inventory.requests)
 	}
 }
 

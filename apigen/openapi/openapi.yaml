@@ -2623,8 +2623,7 @@ components:
         application/json:
           schema:
             type: object
-            required:
-              - bulk_object_ids
+            nullable: true
             properties:
               passports:
                 type: array
@@ -2636,7 +2635,6 @@ components:
                 type: array
                 items:
                   type: string
-                minItems: 1
                 description: An array of ObjectIDs to retrieve metadata for
           examples:
             bulk_retrieve:

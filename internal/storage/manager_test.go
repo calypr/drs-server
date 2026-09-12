@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -42,6 +43,17 @@ type fakeBackend struct {
 }
 
 type bareBackend struct{}
+
+type closeableBackend struct {
+	fakeBackend
+	closed   *[]string
+	closeErr error
+}
+
+func (b *closeableBackend) Close() error {
+	*b.closed = append(*b.closed, b.provider)
+	return b.closeErr
+}
 
 func (bareBackend) Sign(context.Context, ProviderBinding, SignRequest) (SignedAccess, error) {
 	return SignedAccess{}, nil
@@ -149,6 +161,31 @@ func TestNewManagerRejectsTypedNilBackend(t *testing.T) {
 	}
 }
 
+func TestManagerCloseOwnsRegistrationsInOrderAndIsIdempotent(t *testing.T) {
+	closed := []string{}
+	firstErr := errors.New("first close")
+	secondErr := errors.New("second close")
+	first := &closeableBackend{fakeBackend: fakeBackend{provider: "s3"}, closed: &closed, closeErr: firstErr}
+	second := &closeableBackend{fakeBackend: fakeBackend{provider: "gcs"}, closed: &closed, closeErr: secondErr}
+	manager, err := NewManager(&fakeLookup{}, NewRegistration("s3", first), NewRegistration("gcs", second))
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	closeErr := manager.Close()
+	if !errors.Is(closeErr, firstErr) || !errors.Is(closeErr, secondErr) {
+		t.Fatalf("Close error = %v, want both close causes", closeErr)
+	}
+	if got, want := closed, []string{"s3", "gcs"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("close order = %#v, want %#v", got, want)
+	}
+	if err := manager.Close(); !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
+		t.Fatalf("second Close error = %v, want same causes", err)
+	}
+	if got, want := closed, []string{"s3", "gcs"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("close calls after retry = %#v, want %#v", got, want)
+	}
+}
+
 func TestSignUsesCandidateOrderAndPreservesOriginalHost(t *testing.T) {
 	lookup := &fakeLookup{
 		credentials: map[string]*buckets.Credential{"logical": credential("gcs", "physical")},
@@ -226,6 +263,7 @@ func TestMissingCapabilitiesReturnTypedErrors(t *testing.T) {
 }
 
 func TestProbeGroupsByProviderAndRestoresInputOrder(t *testing.T) {
+	probeSentinel := errors.New("provider probe result")
 	lookup := &fakeLookup{credentials: map[string]*buckets.Credential{
 		"s3-bucket":  credential("s3", "s3-bucket"),
 		"gcs-bucket": credential("gcs", "gcs-bucket"),
@@ -237,7 +275,7 @@ func TestProbeGroupsByProviderAndRestoresInputOrder(t *testing.T) {
 				ID:       "spoofed-" + target.ID,
 				Target:   Target{PhysicalBucket: "spoofed-bucket", Key: "spoofed-key"},
 				Metadata: ObjectMetadata{Bucket: target.Target.PhysicalBucket, Key: target.Target.Key},
-				Err:      errors.New("provider probe result"),
+				Err:      probeSentinel,
 			}
 		}
 		return results
@@ -259,8 +297,9 @@ func TestProbeGroupsByProviderAndRestoresInputOrder(t *testing.T) {
 	if results[1].Metadata.Key != "b" {
 		t.Fatalf("result metadata = %#v, want provider metadata", results[1].Metadata)
 	}
-	if results[1].Err == nil || results[1].Err.Error() != "provider probe result" {
-		t.Fatalf("result error = %v, want provider error", results[1].Err)
+	var operation *OperationError
+	if results[1].Err == nil || !errors.As(results[1].Err, &operation) || operation.Provider != "s3" || operation.Capability != "probe" || !errors.Is(results[1].Err, probeSentinel) {
+		t.Fatalf("result error = %v, want typed provider error", results[1].Err)
 	}
 	if len(gcs.probes) != 1 || len(gcs.probes[0]) != 2 || len(s3.probes) != 1 || len(s3.probes[0]) != 1 {
 		t.Fatalf("probe groups = gcs %#v, s3 %#v", gcs.probes, s3.probes)
@@ -355,6 +394,21 @@ func TestDeleteExactAllowsNilCloudCredentialUntilProviderDispatch(t *testing.T) 
 	var operationErr *OperationError
 	if !errors.As(err, &operationErr) || operationErr.Kind != ErrorNotFound {
 		t.Fatalf("file nil credential error = %v, want typed not-found error", err)
+	}
+}
+
+func TestDeleteExactUsesAbsoluteFileEndpoint(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "data")
+	lookup := &fakeLookup{credentials: map[string]*buckets.Credential{
+		"bucket": &buckets.Credential{Provider: "file", Bucket: "bucket", Endpoint: "file://" + root},
+	}}
+	backend := &fakeBackend{provider: "file"}
+	manager := managerWithBackends(t, lookup, backend)
+	if err := manager.DeleteExact(context.Background(), []DeleteTarget{{Location: "file://bucket/object"}}); err != nil {
+		t.Fatalf("DeleteExact returned error: %v", err)
+	}
+	if got, want := backend.deletions, [][]PhysicalTarget{{{Provider: "file", LookupKey: "bucket", PhysicalBucket: "bucket", Key: "object", Path: filepath.Join(root, "object")}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("file deletion targets = %#v, want %#v", got, want)
 	}
 }
 

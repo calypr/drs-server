@@ -257,7 +257,7 @@ func (db *Store) scopedFileUsageQuery(resources []string, includeUnscoped bool, 
 	if summary {
 		inactive := "0 AS inactive_files"
 		if inactiveSince != nil {
-			args = append(args, inactiveSince.UTC())
+			args = append([]any{inactiveSince.UTC()}, args...)
 			inactive = "COALESCE(SUM(CASE WHEN u.last_download_time IS NULL OR u.last_download_time < ? THEN 1 ELSE 0 END), 0) AS inactive_files"
 		}
 		selectClause = `SELECT COUNT(o.id),

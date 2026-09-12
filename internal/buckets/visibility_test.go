@@ -75,10 +75,13 @@ func TestListVisibleBucketsPreservesCredentialContracts(t *testing.T) {
 
 func TestListVisibleBucketsAuthorizationArguments(t *testing.T) {
 	query := &fakeVisibilityQuery{}
-	service, _, _ := newFakeService([]Credential{{CredentialID: "id-a", Bucket: "bucket-a"}}, nil, query, nil)
+	service, _, _ := newFakeService([]Credential{
+		{CredentialID: "id-a", Bucket: "bucket-a"},
+		{CredentialID: "id-b", Bucket: "bucket-b"},
+	}, nil, query, nil)
 
 	local, err := service.ListVisibleBuckets(context.Background())
-	if err != nil || len(local) != 1 {
+	if err != nil || len(local) != 2 {
 		t.Fatalf("local visibility=(%v,%v)", local, err)
 	}
 	if query.restrictToResources {
@@ -88,9 +91,12 @@ func TestListVisibleBucketsAuthorizationArguments(t *testing.T) {
 	session := access.NewSession("gen3")
 	session.AuthHeaderPresent = true
 	session.SetAuthorizations(nil, map[string]map[string]bool{"/programs": {"read": true}}, true)
-	_, err = service.ListVisibleBuckets(access.WithSession(context.Background(), session))
+	broad, err := service.ListVisibleBuckets(access.WithSession(context.Background(), session))
 	if err != nil {
 		t.Fatalf("authorized Gen3 visibility: %v", err)
+	}
+	if got := len(broad); got != 2 {
+		t.Fatalf("broad authorization should preserve configured credentials, got %d", got)
 	}
 	if query.restrictToResources {
 		t.Fatal("broad /programs authorization should bypass visibility restriction")
@@ -99,9 +105,12 @@ func TestListVisibleBucketsAuthorizationArguments(t *testing.T) {
 	session = access.NewSession("gen3")
 	session.AuthHeaderPresent = true
 	session.SetAuthorizations(nil, map[string]map[string]bool{"/programs/other": {"read": true}}, true)
-	_, err = service.ListVisibleBuckets(access.WithSession(context.Background(), session))
+	narrow, err := service.ListVisibleBuckets(access.WithSession(context.Background(), session))
 	if err != nil {
 		t.Fatalf("restricted Gen3 visibility: %v", err)
+	}
+	if len(narrow) != 0 {
+		t.Fatalf("restricted authorization should omit credentials without programs, got %d", len(narrow))
 	}
 	if !query.restrictToResources {
 		t.Fatal("narrow authorization should restrict visibility")
@@ -132,6 +141,34 @@ func TestListVisibleBucketsFiltersUnauthorizedExplicitScopes(t *testing.T) {
 	}
 	if denied == allowed {
 		t.Fatal("test resources must differ")
+	}
+}
+
+func TestListVisibleBucketsRestrictedDropsCredentialsWithoutAuthorizedPrograms(t *testing.T) {
+	allowed := mustResource(t, "org", "allowed")
+	query := &fakeVisibilityQuery{rows: []VisibilityRow{{AccessURL: "s3://bucket-a/object", Resource: allowed}}}
+	service, _, _ := newFakeService(
+		[]Credential{
+			{CredentialID: "id-a", Bucket: "bucket-a", Provider: "s3"},
+			{CredentialID: "id-b", Bucket: "bucket-b", Provider: "s3"},
+		},
+		nil,
+		query,
+		nil,
+	)
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{allowed: {"read": true}}, true)
+
+	got, err := service.ListVisibleBuckets(access.WithSession(context.Background(), session))
+	if err != nil {
+		t.Fatalf("ListVisibleBuckets: %v", err)
+	}
+	if _, ok := got["id-b"]; ok {
+		t.Fatalf("restricted visibility exposed unauthorized credential: %+v", got["id-b"])
+	}
+	if gotPrograms := got["id-a"].Programs; !reflect.DeepEqual(gotPrograms, []string{allowed}) {
+		t.Fatalf("authorized programs=%v, want [%s]", gotPrograms, allowed)
 	}
 }
 

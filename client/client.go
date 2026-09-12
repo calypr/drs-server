@@ -161,6 +161,12 @@ func parseBaseURL(addr string) (string, error) {
 	if u.Scheme == "" || u.Host == "" {
 		return "", fmt.Errorf("invalid address %q", addr)
 	}
+	if u.RawQuery != "" {
+		return "", fmt.Errorf("invalid address %q: query is not allowed", addr)
+	}
+	if u.Fragment != "" {
+		return "", fmt.Errorf("invalid address %q: fragment is not allowed", addr)
+	}
 	return strings.TrimRight(u.String(), "/"), nil
 }
 

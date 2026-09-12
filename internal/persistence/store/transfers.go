@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/calypr/syfon/apigen/metricsapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/storage/address"
 	"github.com/calypr/syfon/internal/usage"
 )
 
@@ -379,13 +381,39 @@ func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev metri
 	eventTime := timeVal(ev.EventTime)
 	args := []any{ev.Provider, ev.Bucket, eventTime.UTC().Add(15 * time.Minute), eventTime.UTC().Add(-24 * time.Hour)}
 	if stringVal(ev.StorageUrl) != "" {
-		query += " AND storage_url = ?"
-		args = append(args, stringVal(ev.StorageUrl))
-	} else if stringVal(ev.ObjectKey) != "" {
-		query += " AND (storage_url = ? OR storage_url LIKE ?)"
-		args = append(args, providerStorageURL(ev.Provider, ev.Bucket, stringVal(ev.ObjectKey)), "%/"+stringVal(ev.ObjectKey))
+		exactQuery := query + " AND storage_url = ? ORDER BY last_issued_at DESC, access_grant_id ASC LIMIT 2"
+		exactArgs := append(append([]any(nil), args...), stringVal(ev.StorageUrl))
+		matches, err := db.scanAccessGrantCandidates(ctx, tx, exactQuery, exactArgs...)
+		if err != nil {
+			return nil, err
+		}
+		if len(matches) > 0 {
+			return matches, nil
+		}
 	}
-	query += " ORDER BY last_issued_at DESC LIMIT 2"
+
+	key := providerEventObjectKey(ev)
+	if key == "" {
+		return nil, nil
+	}
+	query += " ORDER BY last_issued_at DESC, access_grant_id ASC"
+	matches, err := db.scanAccessGrantCandidates(ctx, tx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]usage.Grant, 0, 2)
+	for _, match := range matches {
+		if storageURLMatchesObjectKey(match.StorageURL, key) {
+			filtered = append(filtered, match)
+			if len(filtered) == 2 {
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+func (db *Store) scanAccessGrantCandidates(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]usage.Grant, error) {
 	rows, err := db.txQueryContext(ctx, tx, query, args...)
 	if err != nil {
 		return nil, err
@@ -404,6 +432,41 @@ func (db *Store) accessGrantCandidates(ctx context.Context, tx *sql.Tx, ev metri
 		out = append(out, match)
 	}
 	return out, rows.Err()
+}
+
+func providerEventObjectKey(ev metricsapi.ProviderTransferEvent) string {
+	if key := normalizeProviderObjectKey(stringVal(ev.ObjectKey)); key != "" {
+		return key
+	}
+	rawURL := stringVal(ev.StorageUrl)
+	if rawURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Path == "" {
+		return ""
+	}
+	if address.ProviderFromScheme(parsed.Scheme) != ev.Provider || parsed.Host != ev.Bucket {
+		return ""
+	}
+	return normalizeProviderObjectKey(parsed.Path)
+}
+
+func normalizeProviderObjectKey(value string) string {
+	return strings.TrimLeft(strings.TrimSpace(value), "/")
+}
+
+func storageURLMatchesObjectKey(rawURL, key string) bool {
+	key = normalizeProviderObjectKey(key)
+	if key == "" {
+		return false
+	}
+	if parsed, err := url.Parse(strings.TrimSpace(rawURL)); err == nil && parsed.Path != "" {
+		storedKey := normalizeProviderObjectKey(parsed.Path)
+		return storedKey == key || strings.HasSuffix(storedKey, "/"+key)
+	}
+	trimmed := strings.TrimSpace(rawURL)
+	return trimmed == "/"+key || strings.HasSuffix(trimmed, "/"+key)
 }
 
 func mergeAccessGrantIntoProviderEvent(ev *metricsapi.ProviderTransferEvent, grant usage.Grant) {
@@ -457,17 +520,6 @@ func normalizeProviderDirection(direction, method string) string {
 		return usage.ProviderTransferDirectionUpload
 	default:
 		return strings.ToLower(strings.TrimSpace(direction))
-	}
-}
-
-func providerStorageURL(provider, bucket, key string) string {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "gcs", "gs":
-		return "gs://" + bucket + "/" + strings.TrimLeft(key, "/")
-	case "azure", "az":
-		return "az://" + bucket + "/" + strings.TrimLeft(key, "/")
-	default:
-		return "s3://" + bucket + "/" + strings.TrimLeft(key, "/")
 	}
 }
 
