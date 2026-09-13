@@ -83,6 +83,36 @@ func TestMultipartInitRequiresExistingObjectUpdateAccess(t *testing.T) {
 	}
 }
 
+func TestMultipartInitValidatesScopeBeforeAuthorization(t *testing.T) {
+	service := transfers.NewService(transfers.Dependencies{
+		Objects: objects.NewService(newDRSObjectStore(t, nil)),
+		Storage: &lfsTestStorage{},
+		Scopes:  &multipartTestScope{prefix: "victim-project"},
+	})
+	app := uploadSecurityApp(t, service, config.AuthConfig{
+		Mode: "gen3",
+		Mock: config.MockAuthConfig{
+			Enabled:           true,
+			RequireAuthHeader: true,
+			Resources:         []string{"/organization/other/project/other"},
+			Methods:           []string{"read"},
+		},
+	})
+
+	status, body := uploadSecurityRequest(t, app, http.MethodPost, "/data/multipart/init", `{"key":"multipart-preflight.bin","bucket":"legacy-bucket"}`, "Bearer synthetic")
+	if status != http.StatusBadRequest {
+		t.Fatalf("multipart init without organization status = %d, want 400; body=%s", status, body)
+	}
+	if !strings.Contains(body, `"code":"invalid_input"`) {
+		t.Fatalf("multipart init without organization body = %s, want invalid_input", body)
+	}
+
+	status, body = uploadSecurityRequest(t, app, http.MethodPost, "/data/multipart/init", `{"key":"multipart-preflight.bin","organization":"victim","project":"private"}`, "Bearer synthetic")
+	if status != http.StatusForbidden {
+		t.Fatalf("unauthorized multipart init status = %d, want 403; body=%s", status, body)
+	}
+}
+
 func TestUploadSigningRequiresDestinationScopeAccess(t *testing.T) {
 	service := transfers.NewService(transfers.Dependencies{Objects: objects.NewService(newDRSObjectStore(t, nil)), Storage: &lfsTestStorage{}, Scopes: &multipartTestScope{prefix: "victim-project"}})
 	app := uploadSecurityApp(t, service, config.AuthConfig{Mode: "gen3", Mock: config.MockAuthConfig{Enabled: true, RequireAuthHeader: true, Resources: []string{"/organization/other/project/other"}, Methods: []string{"read"}}})

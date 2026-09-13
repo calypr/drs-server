@@ -234,12 +234,17 @@ func (s *Service) resolveMultipartTarget(ctx context.Context, req MultipartInitR
 }
 
 func (s *Service) resolveScopedMultipartTarget(ctx context.Context, req MultipartInitRequest, guid, key string) (storage.Target, string, MultipartAuthorization, error) {
-	scope := &AccessScope{Organization: pointerValue(req.Organization), Project: pointerValue(req.Project)}
+	organization := pointerValue(req.Organization)
+	project := pointerValue(req.Project)
+	if organization == "" {
+		return storage.Target{}, "", MultipartAuthorization{}, fmt.Errorf("%w: organization is required", errorapi.ErrInvalidInput)
+	}
+	scope := &AccessScope{Organization: organization, Project: project}
 	authorization := MultipartAuthorization{Scope: scope, Methods: []string{"file_upload", "create", "update"}}
-	if err := access.AuthorizeScopeWrite(ctx, pointerValue(req.Organization), pointerValue(req.Project), "file_upload", "create", "update"); err != nil {
+	if err := access.AuthorizeScopeWrite(ctx, organization, project, "file_upload", "create", "update"); err != nil {
 		return storage.Target{}, "", MultipartAuthorization{}, err
 	}
-	canonical, err := s.ResolveScopedUploadTarget(ctx, pointerValue(req.Organization), pointerValue(req.Project), key)
+	canonical, err := s.ResolveScopedUploadTarget(ctx, organization, project, key)
 	if err != nil {
 		return storage.Target{}, "", MultipartAuthorization{}, err
 	}
