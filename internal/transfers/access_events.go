@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
+	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -19,7 +21,8 @@ import (
 // Object is already authorized and hydrated by the caller; transfers does not
 // perform another object lookup.
 type AccessRequest struct {
-	Object *objects.Record
+	Object *drs.DrsObject
+	Target storage.Target
 	// Scope is an operation-selected attribution scope. It is optional because
 	// most transfer paths do not select a project independently of the object.
 	// RecordAccessIssued validates it against the object's canonical resources
@@ -82,12 +85,18 @@ func eventFromObject(ctx context.Context, request AccessRequest) usage.Event {
 		}
 	}
 	provider, bucket := providerBucket(storageURL)
+	if request.Target.Provider != "" {
+		provider = request.Target.Provider
+	}
+	if request.Target.PhysicalBucket != "" {
+		bucket = request.Target.PhysicalBucket
+	}
 	direction := strings.ToLower(strings.TrimSpace(request.Direction))
 	if direction != usage.ProviderTransferDirectionUpload {
 		direction = usage.ProviderTransferDirectionDownload
 	}
 	organization, project := scopeForAccess(ctx, obj, request.Scope, direction)
-	sha := sha256ForObject(obj)
+	sha, _ := objects.CanonicalSHA256(obj.Checksums)
 	bytesRequested := request.BytesRequested
 	if bytesRequested <= 0 && request.RangeStart != nil && request.RangeEnd != nil && *request.RangeEnd >= *request.RangeStart {
 		bytesRequested = *request.RangeEnd - *request.RangeStart + 1
@@ -100,7 +109,7 @@ func eventFromObject(ctx context.Context, request AccessRequest) usage.Event {
 		Direction:      direction,
 		EventTime:      time.Now().UTC(),
 		RequestID:      requestid.GetRequestID(ctx),
-		ObjectID:       string(obj.Id),
+		ObjectID:       obj.Id,
 		SHA256:         sha,
 		ObjectSize:     obj.Size,
 		Organization:   organization,
@@ -147,21 +156,21 @@ func authMode(ctx context.Context) string {
 	return strings.TrimSpace(access.FromContext(ctx).Mode)
 }
 
-func accessMethods(obj *objects.Record) []objects.AccessMethod {
+func accessMethods(obj *drs.DrsObject) []drs.AccessMethod {
 	if obj == nil || obj.AccessMethods == nil {
 		return nil
 	}
 	return *obj.AccessMethods
 }
 
-func accessMethodID(method objects.AccessMethod) string {
+func accessMethodID(method drs.AccessMethod) string {
 	if method.AccessId != nil && strings.TrimSpace(*method.AccessId) != "" {
 		return strings.TrimSpace(*method.AccessId)
 	}
-	return strings.TrimSpace(method.Type)
+	return strings.TrimSpace(string(method.Type))
 }
 
-func scopeForAccess(ctx context.Context, obj *objects.Record, selected *AccessScope, direction string) (string, string) {
+func scopeForAccess(ctx context.Context, obj *drs.DrsObject, selected *AccessScope, direction string) (string, string) {
 	if selected != nil {
 		organization, project := explicitScopeForAccess(obj, *selected)
 		if organization == "" {
@@ -189,7 +198,7 @@ func scopeForAccess(ctx context.Context, obj *objects.Record, selected *AccessSc
 	return organization, project
 }
 
-func explicitScopeForAccess(obj *objects.Record, selected AccessScope) (string, string) {
+func explicitScopeForAccess(obj *drs.DrsObject, selected AccessScope) (string, string) {
 	resource, err := clientaccess.ResourcePath(selected.Organization, selected.Project)
 	if err != nil || resource == "" {
 		return "", ""
@@ -212,13 +221,4 @@ func providerBucket(raw string) (string, string) {
 		return "", ""
 	}
 	return address.ProviderFromScheme(parsed.Scheme), strings.TrimSpace(parsed.Host)
-}
-
-func sha256ForObject(obj *objects.Record) string {
-	for _, checksum := range obj.Checksums {
-		if strings.EqualFold(checksum.Type, "sha256") {
-			return strings.TrimSpace(checksum.Checksum)
-		}
-	}
-	return ""
 }

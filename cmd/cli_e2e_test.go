@@ -13,14 +13,17 @@ import (
 	"time"
 
 	"github.com/calypr/syfon/apigen/drs"
-	clientservices "github.com/calypr/syfon/client/services"
+	"github.com/calypr/syfon/apigen/metricsapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
+	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	"github.com/calypr/syfon/internal/persistence/sqlite"
+	"github.com/calypr/syfon/internal/persistence/store"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 	"github.com/gofiber/fiber/v3"
 	"github.com/spf13/cobra"
@@ -40,9 +43,32 @@ func executeRootCommand(t *testing.T, args ...string) (string, error) {
 	return strings.TrimSpace(out.String() + errOut.String()), err
 }
 
-func newSQLiteDatabase(t testing.TB) *sqlite.SqliteDB {
+type transferSummaryOutput struct {
+	EventCount      int64                    `json:"event_count"`
+	BytesDownloaded int64                    `json:"bytes_downloaded"`
+	BytesUploaded   int64                    `json:"bytes_uploaded"`
+	Freshness       *transferFreshnessOutput `json:"freshness"`
+}
+
+type transferBreakdownOutput struct {
+	Key             string `json:"key"`
+	Provider        string `json:"provider"`
+	Bucket          string `json:"bucket"`
+	BytesDownloaded int64  `json:"bytes_downloaded"`
+	BytesUploaded   int64  `json:"bytes_uploaded"`
+}
+
+type transferFreshnessOutput struct {
+	IsStale bool `json:"is_stale"`
+}
+
+func newSQLiteDatabase(t testing.TB) *store.Store {
 	t.Helper()
-	database, err := sqlite.NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential cipher: %v", err)
+	}
+	database, err := sqlite.NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("create in-memory SQLite database: %v", err)
 	}
@@ -115,40 +141,40 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record access grant: %v", err)
 	}
-	if err := server.providerEvents.RecordProviderTransferEvents(context.Background(), []usage.ProviderEvent{
+	if err := server.providerEvents.RecordProviderTransferEvents(context.Background(), []metricsapi.ProviderTransferEvent{
 		{
-			ProviderEventID:      "cli-transfer-1",
-			AccessGrantID:        "cli-grant-1",
-			Direction:            usage.ProviderTransferDirectionDownload,
-			EventTime:            now,
-			ObjectID:             "did-cli-1",
-			SHA256:               "sha-cli-1",
-			Organization:         "syfon",
-			Project:              "e2e",
+			ProviderEventId:      "cli-transfer-1",
+			AccessGrantId:        stringPtr("cli-grant-1"),
+			Direction:            metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+			EventTime:            &now,
+			ObjectId:             stringPtr("did-cli-1"),
+			Sha256:               stringPtr("sha-cli-1"),
+			Organization:         stringPtr("syfon"),
+			Project:              stringPtr("e2e"),
 			Provider:             "file",
 			Bucket:               "syfon-bucket",
-			StorageURL:           "s3://syfon-bucket/sha-cli-1",
+			StorageUrl:           stringPtr("s3://syfon-bucket/sha-cli-1"),
 			BytesTransferred:     123,
-			ActorEmail:           "user@example.com",
-			ActorSubject:         "user@example.com",
-			ReconciliationStatus: usage.ProviderTransferMatched,
+			ActorEmail:           stringPtr("user@example.com"),
+			ActorSubject:         stringPtr("user@example.com"),
+			ReconciliationStatus: ptrProviderStatus(usage.ProviderTransferMatched),
 		},
 		{
-			ProviderEventID:      "cli-transfer-2",
-			AccessGrantID:        "cli-grant-3",
-			Direction:            usage.ProviderTransferDirectionDownload,
-			EventTime:            now.Add(10 * time.Second),
-			ObjectID:             "did-cli-3",
-			SHA256:               "sha-cli-3",
-			Organization:         "syfon",
-			Project:              "e2e",
+			ProviderEventId:      "cli-transfer-2",
+			AccessGrantId:        stringPtr("cli-grant-3"),
+			Direction:            metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+			EventTime:            timePtr(now.Add(10 * time.Second)),
+			ObjectId:             stringPtr("did-cli-3"),
+			Sha256:               stringPtr("sha-cli-3"),
+			Organization:         stringPtr("syfon"),
+			Project:              stringPtr("e2e"),
 			Provider:             "file",
 			Bucket:               "syfon-bucket",
-			StorageURL:           "s3://syfon-bucket/sha-cli-3",
+			StorageUrl:           stringPtr("s3://syfon-bucket/sha-cli-3"),
 			BytesTransferred:     7,
-			ActorEmail:           "other@example.com",
-			ActorSubject:         "other@example.com",
-			ReconciliationStatus: usage.ProviderTransferMatched,
+			ActorEmail:           stringPtr("other@example.com"),
+			ActorSubject:         stringPtr("other@example.com"),
+			ReconciliationStatus: ptrProviderStatus(usage.ProviderTransferMatched),
 		},
 	}); err != nil {
 		t.Fatalf("record transfer event: %v", err)
@@ -160,7 +186,7 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metrics transfers summary command failed: %v output=%s", err, out)
 	}
-	var summary clientservices.TransferAttributionSummary
+	var summary transferSummaryOutput
 	if err := json.Unmarshal([]byte(out), &summary); err != nil {
 		t.Fatalf("decode summary output %q: %v", out, err)
 	}
@@ -176,9 +202,9 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers breakdown command failed: %v output=%s", err, out)
 	}
 	var breakdown struct {
-		GroupBy   string                                        `json:"group_by"`
-		Data      []clientservices.TransferAttributionBreakdown `json:"data"`
-		Freshness *clientservices.TransferMetricsFreshness      `json:"freshness"`
+		GroupBy   string                    `json:"group_by"`
+		Data      []transferBreakdownOutput `json:"data"`
+		Freshness *transferFreshnessOutput  `json:"freshness"`
 	}
 	if err := json.Unmarshal([]byte(out), &breakdown); err != nil {
 		t.Fatalf("decode breakdown output %q: %v", out, err)
@@ -195,15 +221,15 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers users command failed: %v output=%s", err, out)
 	}
 	var users struct {
-		Summary clientservices.TransferAttributionSummary `json:"summary"`
+		Summary transferSummaryOutput `json:"summary"`
 		Users   []struct {
 			User            string `json:"user"`
 			BytesDownloaded int64  `json:"bytes_downloaded"`
 			BytesUploaded   int64  `json:"bytes_uploaded"`
 		} `json:"users"`
-		SortBy    string                                   `json:"sort_by"`
-		SortOrder string                                   `json:"sort_order"`
-		Freshness *clientservices.TransferMetricsFreshness `json:"freshness"`
+		SortBy    string                   `json:"sort_by"`
+		SortOrder string                   `json:"sort_order"`
+		Freshness *transferFreshnessOutput `json:"freshness"`
 	}
 	if err := json.Unmarshal([]byte(out), &users); err != nil {
 		t.Fatalf("decode users output %q: %v", out, err)
@@ -226,9 +252,9 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("metrics transfers billing command failed: %v output=%s", err, out)
 	}
 	var billing struct {
-		Summary          clientservices.TransferAttributionSummary     `json:"summary"`
-		StorageLocations []clientservices.TransferAttributionBreakdown `json:"storage_locations"`
-		Files            []clientservices.TransferAttributionBreakdown `json:"files"`
+		Summary          transferSummaryOutput     `json:"summary"`
+		StorageLocations []transferBreakdownOutput `json:"storage_locations"`
+		Files            []transferBreakdownOutput `json:"files"`
 	}
 	if err := json.Unmarshal([]byte(out), &billing); err != nil {
 		t.Fatalf("decode billing output %q: %v", out, err)
@@ -243,6 +269,13 @@ func TestSyfonMetricsTransfersCLI(t *testing.T) {
 		t.Fatalf("expected file-level billing rows, got %+v", billing.Files)
 	}
 }
+
+func ptrProviderStatus(value string) *metricsapi.ProviderTransferReconciliationStatus {
+	status := metricsapi.ProviderTransferReconciliationStatus(value)
+	return &status
+}
+
+func timePtr(value time.Time) *time.Time { return &value }
 
 func resetCommandFlags(cmd *cobra.Command) {
 	resetFlagSet(cmd.PersistentFlags())
@@ -291,19 +324,35 @@ type cliFileStorageAccess struct {
 	root string
 }
 
-func (a cliFileStorageAccess) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
-	parsed, err := url.Parse(strings.TrimSpace(request.Target.Location))
+func (a cliFileStorageAccess) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
+	location := request.Target.OriginalURL
+	if location == "" {
+		location = request.Target.CanonicalURL
+	}
+	parsed, err := url.Parse(strings.TrimSpace(location))
 	if err != nil {
-		return storage.Access{}, err
+		return storage.SignedAccess{}, err
 	}
 	key := strings.TrimPrefix(parsed.Path, "/")
 	if key == "" {
 		key = parsed.Path
 	}
 	if key == "" {
-		return storage.Access{}, fmt.Errorf("storage access target has no object key: %q", request.Target.Location)
+		return storage.SignedAccess{}, fmt.Errorf("storage access target has no object key: %q", location)
 	}
-	return storage.Access{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
+	return storage.SignedAccess{Location: filepath.ToSlash(filepath.Join(a.root, key))}, nil
+}
+
+func (cliFileStorageAccess) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
+	return "", fmt.Errorf("multipart storage is not configured in the CLI fixture")
+}
+
+func (cliFileStorageAccess) SignMultipartPart(context.Context, storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, fmt.Errorf("multipart storage is not configured in the CLI fixture")
+}
+
+func (cliFileStorageAccess) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return fmt.Errorf("multipart storage is not configured in the CLI fixture")
 }
 
 func (s *fiberTestServer) Close() {
@@ -340,57 +389,52 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	}
 
 	app := fiber.New()
-	objectDependencies := objectrecords.Dependencies{
-		Reader:        database,
-		Writer:        database,
-		AccessMethods: database,
-		AccessPolicy:  database,
-		Aliases:       database,
-		Content:       database,
-		ChecksumScope: database,
-		Scope:         database,
-		Resources:     database,
-		Pages:         database,
-		URLPages:      database,
-		Authorized:    database,
-	}
 	bucketService, err := buckets.NewService(buckets.Dependencies{
 		Credentials: database, CredentialAdmin: database, Scopes: database, Visibility: database,
 	}, nil)
 	if err != nil {
 		t.Fatalf("construct bucket service: %v", err)
 	}
-	objectService := objectrecords.NewService(objectDependencies)
+	objectService := objects.NewService(database)
 	usageService := usage.NewService(usage.Dependencies{Reports: database, Objects: objectService})
 	transferService := transfers.NewService(transfers.Dependencies{
-		Access: cliFileStorageAccess{root: storageDir}, Scopes: bucketService, Credentials: bucketService,
-		Events: database,
+		Objects: objectService, Storage: cliFileStorageAccess{root: storageDir}, FileCounters: database,
+		Scopes: bucketService, Credentials: bucketService, Events: database,
 	})
 	description := "Calypr test DRS server"
 	environment := "test"
 	createdAt := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
 	updatedAt := time.Date(2024, time.January, 3, 4, 5, 6, 0, time.UTC)
-	serviceInfo := drs.Service{
-		Id:          "drs-service-test",
-		Name:        "Calypr Test DRS Server",
-		Type:        drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.2.0"},
-		Description: &description,
-		CreatedAt:   &createdAt,
-		UpdatedAt:   &updatedAt,
-		Environment: &environment,
-		Version:     "1.0.0",
+	serviceInfo := drs.N200ServiceInfo{
+		Id:                   "drs-service-test",
+		Name:                 "Calypr Test DRS Server",
+		Type:                 drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.5.0"},
+		Description:          &description,
+		CreatedAt:            &createdAt,
+		UpdatedAt:            &updatedAt,
+		Environment:          &environment,
+		Version:              "1.0.0",
+		MaxBulkRequestLength: 100,
 	}
-	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{Scopes: bucketService, Credentials: bucketService, Visibility: bucketService, Physical: objectService, CleanupObjects: objectService, CleanupScopes: bucketService})
+	serviceInfo.Organization.Name = "Calypr"
+	serviceInfo.Organization.Url = "https://github.com/calypr/syfon"
+	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
+		ScopeResolver: bucketService,
+		Credentials:   bucketService,
+		Visibility:    bucketService,
+		ObjectCleanup: objectService,
+		ScopeCatalog:  bucketService,
+		Providers:     projectstorage.Providers{},
+	})
 	httpapi.RegisterRoutes(app, httpapi.Dependencies{
-		LFSPending:       database,
-		ServiceInfo:      serviceInfo,
-		Objects:          objectService,
-		Transfers:        transferService,
-		UsageIngest:      database,
-		UsageReports:     usageService.Reports(),
-		Buckets:          bucketService,
-		ProjectInspector: projectStorageService.Inspector,
-		ProjectCleanup:   projectStorageService.ProjectCleanup,
+		LFS:            transferlfs.NewService(transferService, objectService, bucketService, database, database, nil),
+		ServiceInfo:    serviceInfo,
+		Objects:        objectService,
+		Transfers:      transferService,
+		UsageIngest:    database,
+		UsageReports:   usageService,
+		Buckets:        bucketService,
+		ProjectStorage: projectStorageService,
 	}, httpapi.Options{Docs: true, GA4GH: true, Metrics: true, Internal: true})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

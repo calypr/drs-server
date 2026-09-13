@@ -3,12 +3,14 @@ package storage
 import (
 	"context"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/storage"
 )
 
-type ScopeReader interface {
-	LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error)
+type ScopeResolver interface {
+	ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error)
 }
 
 type CredentialReader interface {
@@ -36,19 +38,30 @@ type ObjectScopeDeleter interface {
 	DeleteBulkByScope(context.Context, string, string) (int, error)
 }
 
+type RecordRepairer interface {
+	ListObjects(context.Context, objects.RecordListQuery) ([]drs.DrsObject, error)
+	ListPhysicalObjectsByScope(context.Context, string, string, string) ([]drs.DrsObject, error)
+	UpdateObjectMetadata(context.Context, string, drs.DrsObject, objects.Scope, *int64) (drs.DrsObject, error)
+	CollapseProjectChecksumDuplicates(context.Context, string, string) (int, error)
+}
+
 type ScopeCatalog interface {
 	ListBucketScopes(context.Context) ([]buckets.Scope, error)
 	DeleteBucketScope(context.Context, string, string, string, string) error
 }
 
+type Providers struct {
+	Inventory InventoryPort
+	Probe     ProbePort
+	Delete    DeletePort
+}
+
 type Dependencies struct {
-	Scopes         ScopeReader
-	Credentials    CredentialReader
-	Visibility     VisibilityReader
-	Inventory      InventoryPort
-	Probe          ProbePort
-	Delete         DeletePort
-	Physical       PhysicalScopeReader
-	CleanupObjects ObjectScopeDeleter
-	CleanupScopes  ScopeCatalog
+	ScopeResolver ScopeResolver
+	Credentials   CredentialReader
+	Visibility    VisibilityReader
+	Records       RecordRepairer
+	ObjectCleanup ObjectScopeDeleter
+	ScopeCatalog  ScopeCatalog
+	Providers     Providers
 }

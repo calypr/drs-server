@@ -34,16 +34,16 @@ type listStats struct {
 	TerminalDisagreements  int
 }
 
-func (s *backend) Inventory(ctx context.Context, request storage.InventoryRequest) (storage.InventoryResult, error) {
-	clients, err := s.getClients(ctx, request.Target.Bucket)
+func (s *backend) Inventory(ctx context.Context, binding storage.ProviderBinding, request storage.InventoryRequest) (storage.InventoryResult, error) {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return storage.InventoryResult{}, providerError(storage.ErrorProvider, "inventory", err)
 	}
 	input := &awss3.ListObjectsV2Input{
-		Bucket:  aws.String(request.Target.Bucket),
+		Bucket:  aws.String(request.Target.PhysicalBucket),
 		MaxKeys: aws.Int32(listPageSize),
 	}
-	if prefix := strings.Trim(strings.TrimSpace(request.Target.Prefix), "/"); prefix != "" {
+	if prefix := strings.Trim(strings.TrimSpace(request.Prefix), "/"); prefix != "" {
 		if request.ExactPrefix {
 			input.Prefix = aws.String(prefix)
 		} else {
@@ -54,12 +54,12 @@ func (s *backend) Inventory(ctx context.Context, request storage.InventoryReques
 		input.MaxKeys = aws.Int32(request.MaxKeys)
 	}
 	requestPrefix := aws.ToString(input.Prefix)
-	items, stats, firstKeys, listErr := s.listPagesWithExactProbeRetry(ctx, clients.client, input, request.Target.Bucket, request.Target.Prefix, requestPrefix, request, storageLoggingEnabled(ctx))
+	items, stats, firstKeys, listErr := s.listPagesWithExactProbeRetry(ctx, clients.client, input, request.Target.PhysicalBucket, request.Prefix, requestPrefix, request, storageLoggingEnabled(ctx))
 	if listErr != nil {
 		if operation, ok := listErr.(*storage.OperationError); ok && operation.Kind == storage.ErrorIncomplete {
 			return storage.InventoryResult{Items: items, Complete: false}, listErr
 		}
-		classified := classifyListError(request.Target.Bucket, request.Target.Prefix, listErr)
+		classified := classifyListError(request.Target.PhysicalBucket, request.Prefix, listErr)
 		if len(items) > 0 {
 			return storage.InventoryResult{Items: items, Complete: false}, &storage.OperationError{
 				Kind:       storage.ErrorIncomplete,
@@ -75,7 +75,7 @@ func (s *backend) Inventory(ctx context.Context, request storage.InventoryReques
 	if request.IncludeHead && len(items) > 0 {
 		// Preserve the old IncludeHead contract: one HEAD failure drops the
 		// whole listed result and returns only that error.
-		if err := s.enrichInventoryHeads(ctx, clients, request.Target.Bucket, items); err != nil {
+		if err := s.enrichInventoryHeads(ctx, clients, request.Target.PhysicalBucket, items); err != nil {
 			return storage.InventoryResult{}, err
 		}
 	}
@@ -100,12 +100,12 @@ func (s *backend) enrichInventoryHeads(ctx context.Context, clients *clients, bu
 				if err != nil {
 					errMu.Lock()
 					if firstErr == nil {
-						firstErr = classifyHeadError(storage.ObjectTarget{Bucket: bucket, Key: items[index].Key}, err)
+						firstErr = classifyHeadError(storage.Target{PhysicalBucket: bucket, Key: items[index].Key}, err)
 					}
 					errMu.Unlock()
 					continue
 				}
-				metadata := metadataFromHead(storage.ObjectTarget{Bucket: bucket, Key: items[index].Key}, output)
+				metadata := metadataFromHead(storage.Target{PhysicalBucket: bucket, Key: items[index].Key}, output)
 				items[index].MetaSHA256 = strings.TrimSpace(metadata.MetaSHA256)
 				if items[index].ETag == "" {
 					items[index].ETag = metadata.ETag

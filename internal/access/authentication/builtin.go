@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -35,7 +36,7 @@ func (p *localAuthPlugin) Authenticate(ctx context.Context, in *plugin.Authentic
 }
 
 type gen3AuthPlugin struct {
-	mockConfig mockConfig
+	mockConfig config.MockAuthConfig
 }
 
 func (p *gen3AuthPlugin) Authenticate(_ context.Context, in *plugin.AuthenticationInput) (*plugin.AuthenticationOutput, error) {

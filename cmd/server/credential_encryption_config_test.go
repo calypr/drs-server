@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -33,6 +34,55 @@ func TestApplyCredentialEncryptionConfig(t *testing.T) {
 	}
 	if got := os.Getenv(credentialcipher.DatabaseSQLiteFileEnv); got != "drs.db" {
 		t.Fatalf("expected sqlite file env to be set from config, got %q", got)
+	}
+}
+
+func TestNormalizedCredentialConfigurationReachesPersistence(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(credentialcipher.CredentialLocalKeyFileEnv, "")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+auth:
+  mode: local
+  allow_unauthenticated: true
+database:
+  sqlite:
+    file: ":memory:"
+routes:
+  docs: false
+  ga4gh: false
+  metrics: false
+  internal: false
+  lfs: false
+buckets:
+  - bucket: "  EllrottLab  "
+    provider: " S3 "
+    region: " US-EAST-1 "
+    endpoint: " https://MINIO.example/ "
+    access_key: " access-key "
+    secret_key: " secret-key "
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := buildServerRuntime(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = runtime.Close(context.Background()) })
+	credential, err := runtime.database.GetS3Credential(context.Background(), cfg.Buckets[0].CredentialID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential.Bucket != "EllrottLab" || credential.Region != "us-east-1" || credential.Endpoint != "https://MINIO.example" {
+		t.Fatalf("persisted credential identity = %+v", credential)
+	}
+	if credential.AccessKey != " access-key " || credential.SecretKey != " secret-key " {
+		t.Fatalf("persisted credential material changed: access=%q secret=%q", credential.AccessKey, credential.SecretKey)
 	}
 }
 
@@ -81,7 +131,7 @@ func TestApplyCredentialEncryptionConfigDoesNotOverrideEnv(t *testing.T) {
 }
 
 func TestLoadConfiguredBucketScopes(t *testing.T) {
-	database := &configuredBucketStore{
+	database := &serverBucketStore{
 		credentials: map[string]buckets.Credential{
 			"calypr": {CredentialID: "calypr", Bucket: "calypr"},
 		},
@@ -108,33 +158,4 @@ func TestLoadConfiguredBucketScopes(t *testing.T) {
 	if scope.Bucket != "calypr" || scope.PathPrefix != "008b435e-c1da-58b8-80f1-3ad2882c43cd" {
 		t.Fatalf("unexpected saved bucket scope: %+v", scope)
 	}
-}
-
-type configuredBucketStore struct {
-	credentials map[string]buckets.Credential
-	scopes      map[string]buckets.Scope
-}
-
-func (s *configuredBucketStore) GetS3Credential(_ context.Context, id string) (*buckets.Credential, error) {
-	credential, ok := s.credentials[id]
-	if !ok {
-		return nil, nil
-	}
-	return &credential, nil
-}
-
-func (s *configuredBucketStore) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
-	credentials := make([]buckets.Credential, 0, len(s.credentials))
-	for _, credential := range s.credentials {
-		credentials = append(credentials, credential)
-	}
-	return credentials, nil
-}
-
-func (s *configuredBucketStore) CreateBucketScope(_ context.Context, scope *buckets.Scope) error {
-	if scope == nil {
-		return nil
-	}
-	s.scopes[scope.Organization+"|"+scope.ProjectID] = *scope
-	return nil
 }

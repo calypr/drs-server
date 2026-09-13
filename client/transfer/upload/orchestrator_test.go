@@ -2,14 +2,61 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/common"
+	"github.com/calypr/syfon/client/transfer"
 )
+
+type completedLocationBackend struct{ uploaderStub }
+
+func (b *completedLocationBackend) MultipartCompleteWithLocation(context.Context, string, string, []transfer.MultipartPart) (string, error) {
+	return "s3://physical-bucket/original-project-prefix/payload.bin", nil
+}
+
+func TestRegisterLargeFileUsesCompletedMultipartLocation(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "payload.bin")
+	file, err := os.Create(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	size := int64(4.5 * float64(common.GB))
+	if err := file.Truncate(size); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATA_CLIENT_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+	backend := &completedLocationBackend{uploaderStub: uploaderStub{resolveFunc: func(context.Context, string, string, common.FileMetadata, string) (string, error) {
+		return "", fmt.Errorf("completed multipart location must not be re-resolved")
+	}}}
+	metadata := &metadataClientStub{registeredID: "stored-id"}
+	obj := &drsapi.DrsObject{Id: "requested-id", Size: size}
+	got, err := RegisterFile(context.Background(), backend, metadata, obj, filePath, "physical-bucket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "s3://physical-bucket/original-project-prefix/payload.bin"
+	if got.AccessMethods == nil || len(*got.AccessMethods) != 1 {
+		t.Fatalf("access methods = %+v", got.AccessMethods)
+	}
+	if actual := (*got.AccessMethods)[0].AccessUrl.Url; actual != want {
+		t.Fatalf("registered URL = %q, want completed location %q", actual, want)
+	}
+	if len(metadata.requests) != 1 || (*metadata.requests[0].Candidates[0].AccessMethods)[0].AccessUrl.Url != want {
+		t.Fatalf("registration request = %+v", metadata.requests)
+	}
+}
 
 type metadataClientStub struct {
 	registeredID string
@@ -27,7 +74,7 @@ func (m *metadataClientStub) GetObject(context.Context, string) (drsapi.DrsObjec
 	if m.object.Id != "" {
 		return m.object, nil
 	}
-	return drsapi.DrsObject{}, fmt.Errorf("not found")
+	return drsapi.DrsObject{}, errorapi.ErrNotFound
 }
 
 func (m *metadataClientStub) RegisterObjects(_ context.Context, req drsapi.RegisterObjectsJSONRequestBody) (drsapi.N201ObjectsCreated, error) {
@@ -68,6 +115,24 @@ func cloneRegisterRequest(req drsapi.RegisterObjectsJSONRequestBody) drsapi.Regi
 	return out
 }
 
+func TestUploadUsesTransferEngine(t *testing.T) {
+	t.Parallel()
+
+	file := createTempFileWithData(t, "payload")
+	defer file.Close()
+	backend := &uploaderStub{}
+	metadata := common.FileMetadata{Authorizations: map[string][]string{"org": {"project"}}}
+	if err := Upload(context.Background(), backend, file.Name(), "object-key", "did", "bucket", metadata, false, false); err != nil {
+		t.Fatalf("Upload returned error: %v", err)
+	}
+	if backend.lastResolve.guid != "did" || backend.lastResolve.fileName != "object-key" || backend.lastResolve.bucket != "bucket" {
+		t.Fatalf("unexpected upload resolution: %+v", backend.lastResolve)
+	}
+	if backend.lastUpload.body != "payload" {
+		t.Fatalf("uploaded body = %q", backend.lastUpload.body)
+	}
+}
+
 func TestRegisterFileUploadsUsingRegisteredObjectID(t *testing.T) {
 	t.Parallel()
 
@@ -98,6 +163,75 @@ func TestRegisterFileUploadsUsingRegisteredObjectID(t *testing.T) {
 	}
 }
 
+func TestRegisterFileUsesSHA256AliasAsCASKey(t *testing.T) {
+	t.Parallel()
+
+	file := createTempFileWithData(t, "payload")
+	defer file.Close()
+	const checksum = "3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"
+	obj := &drsapi.DrsObject{
+		Id:   "requested-object-id",
+		Size: 7,
+		Checksums: []drsapi.Checksum{{
+			Type:     "SHA-256",
+			Checksum: checksum,
+		}},
+	}
+	backend := &uploaderStub{}
+	metadata := &metadataClientStub{registeredID: "server-object-id"}
+	if _, err := RegisterFile(context.Background(), backend, metadata, obj, file.Name(), "bucket-a"); err != nil {
+		t.Fatalf("RegisterFile returned error: %v", err)
+	}
+	if backend.lastResolve.fileName != checksum {
+		t.Fatalf("upload key = %q, want checksum %q", backend.lastResolve.fileName, checksum)
+	}
+}
+
+func TestRegisterFileOnlyFallsBackForTypedNotFound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		lookupErr  error
+		wantErr    bool
+		wantLookup error
+	}{
+		{name: "not found", lookupErr: errorapi.ErrNotFound},
+		{name: "wrapped not found", lookupErr: fmt.Errorf("lookup: %w", errorapi.ErrObjectNotFound)},
+		{name: "unauthorized", lookupErr: fmt.Errorf("lookup: %w", errorapi.ErrUnauthorized), wantErr: true, wantLookup: errorapi.ErrUnauthorized},
+		{name: "transport", lookupErr: errors.New("transport unavailable"), wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			file := createTempFileWithData(t, "payload")
+			defer file.Close()
+			backend := &uploaderStub{}
+			metadata := &metadataClientStub{registeredID: "server-object-id", getErr: test.lookupErr}
+			obj := &drsapi.DrsObject{Id: "requested-object-id", Size: 7}
+
+			_, err := RegisterFile(context.Background(), backend, metadata, obj, file.Name(), "bucket-a")
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "failed to look up existing object") {
+					t.Fatalf("lookup error = %v, want wrapped lookup failure", err)
+				}
+				if test.wantLookup != nil && !errors.Is(err, test.wantLookup) {
+					t.Fatalf("lookup error = %v, want cause %v", err, test.wantLookup)
+				}
+				if metadata.registers != 0 {
+					t.Fatalf("RegisterObjects calls = %d, want 0", metadata.registers)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("typed not-found RegisterFile error = %v", err)
+			}
+			if metadata.registers != 1 {
+				t.Fatalf("RegisterObjects calls = %d, want 1", metadata.registers)
+			}
+		})
+	}
+}
+
 func TestRegisterFilePreservesScopedRoutingMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -107,11 +241,8 @@ func TestRegisterFilePreservesScopedRoutingMetadata(t *testing.T) {
 	name := "payload.bin"
 	controlledAccess := []string{"/organization/syfon/project/e2e"}
 	accessMethods := []drsapi.AccessMethod{{
-		Type: "s3",
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://syfon-e2e-bucket/project-subpath/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
+		Type:      "s3",
+		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-e2e-bucket/project-subpath/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{
 		Id:               "requested-object-id",
@@ -174,11 +305,8 @@ func TestRegisterFilePrefersExplicitControlledAccessOverExistingObject(t *testin
 	targetControlledAccess := []string{"/organization/dst/project/copied"}
 	sourceControlledAccess := []string{"/organization/src/project/original"}
 	accessMethods := []drsapi.AccessMethod{{
-		Type: "s3",
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: "s3://syfon-bucket/original/3d71f043937a09b77826109db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
+		Type:      "s3",
+		AccessUrl: &drsapi.AccessURL{Url: "s3://syfon-bucket/original/3d71f043937a09db4f2b47c46f19923ef823f6a777a15fde0b2c9c7"},
 	}}
 	obj := &drsapi.DrsObject{
 		Id:               "requested-object-id",

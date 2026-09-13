@@ -5,45 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 )
 
-const defaultScopeCacheTTL = 30 * time.Second
+var errMissingVisibilitySource = fmt.Errorf("bucket service requires a visibility query")
 
-var errMissingVisibilitySource = fmt.Errorf("bucket service requires a visibility query or fallback")
-
-// Dependencies are the narrow repository and visibility ports used by Service.
-// Visibility is an optional persistence optimization; Fallback is the
-// composition-owned object scan used when that optimization is unavailable.
+// Dependencies are the repository and visibility ports required by Service.
 type Dependencies struct {
 	Credentials     CredentialReader
 	CredentialAdmin CredentialAdmin
 	Scopes          ScopeStore
 	Visibility      VisibilityQuery
-	Fallback        VisibilityFallback
 }
 
 type cacheInvalidator interface {
 	InvalidateBucket(string)
 }
 
-// Service owns bucket credential and scope policy, including cache
-// invalidation. Repository adapters remain responsible for SQL, encryption,
-// auditing, and transaction semantics.
+// Service owns bucket credential and scope policy. Repository adapters remain
+// responsible for SQL, encryption, auditing, and transaction semantics.
 type Service struct {
 	credentialReader       CredentialReader
 	credentialAdmin        CredentialAdmin
 	scopeStore             ScopeStore
 	visibility             VisibilityQuery
-	fallback               VisibilityFallback
-	scopeCache             *scopeCache
 	signerCacheInvalidator cacheInvalidator
 }
 
-// NewService validates and constructs the bucket service with its production
-// scope-cache lifetime. A nil invalidator is a supported no-op configuration.
+// NewService validates and constructs the bucket service. A nil invalidator is
+// a supported no-op configuration.
 func NewService(deps Dependencies, invalidator cacheInvalidator) (*Service, error) {
 	if deps.Credentials == nil {
 		return nil, fmt.Errorf("bucket service requires credential reader")
@@ -54,20 +45,18 @@ func NewService(deps Dependencies, invalidator cacheInvalidator) (*Service, erro
 	if deps.Scopes == nil {
 		return nil, fmt.Errorf("bucket service requires scope store")
 	}
-	if deps.Visibility == nil && deps.Fallback == nil {
+	if deps.Visibility == nil {
 		return nil, errMissingVisibilitySource
 	}
-	return newService(deps, invalidator, defaultScopeCacheTTL, time.Now), nil
+	return newService(deps, invalidator), nil
 }
 
-func newService(deps Dependencies, invalidator cacheInvalidator, ttl time.Duration, now func() time.Time) *Service {
+func newService(deps Dependencies, invalidator cacheInvalidator) *Service {
 	return &Service{
 		credentialReader:       deps.Credentials,
 		credentialAdmin:        deps.CredentialAdmin,
 		scopeStore:             deps.Scopes,
 		visibility:             deps.Visibility,
-		fallback:               deps.Fallback,
-		scopeCache:             newScopeCache(ttl, now),
 		signerCacheInvalidator: invalidator,
 	}
 }

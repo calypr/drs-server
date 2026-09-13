@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
 )
 
 var (
@@ -25,8 +25,8 @@ type Scope struct {
 
 // ScopeQuery describes an already-authorized report scope selection. An empty
 // Organization means an unscoped report unless Scopes contains aggregate
-// scopes. Resources are supplied explicitly for the optional persistence fast
-// path; usage deliberately does not know resource-path encoding.
+// scopes. Resources are supplied by the authorization boundary for scoped
+// persistence queries; usage deliberately does not know resource-path encoding.
 type ScopeQuery struct {
 	Organization    string
 	Project         string
@@ -59,7 +59,7 @@ func (q ScopeQuery) resources() []string {
 
 // FileUsageQuery is the explicit use-case input for a paged file report.
 // Limit <= 0 retains the existing convention of returning the complete
-// fallback result; public adapters validate pagination bounds.
+// result; public adapters validate pagination bounds.
 type FileUsageQuery struct {
 	Scope         ScopeQuery
 	Limit         int
@@ -90,14 +90,13 @@ type TransferBreakdownQuery struct {
 }
 
 type Reporter interface {
-	GetFileUsage(ctx context.Context, objectID string) (*FileUsage, error)
-	ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]FileUsage, error)
-	ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error)
-	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]FileUsage, error)
-	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (FileUsageSummary, error)
-	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (Summary, error)
-	GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]Breakdown, error)
-	GetTransferFreshness(ctx context.Context, filter Filter) (Freshness, error)
+	GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error)
+	ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error)
+	GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error)
+	ListFileUsage(ctx context.Context, query FileUsageQuery) ([]metricsapi.FileUsage, error)
+	GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error)
+	GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error)
+	GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error)
 }
 
 type Dependencies struct {
@@ -114,8 +113,6 @@ func NewService(deps Dependencies) *Service {
 	return &Service{reports: deps.Reports, objects: deps.Objects}
 }
 
-func (s *Service) Reports() Reporter { return s }
-
 func (s *Service) requireReports() error {
 	if s == nil || s.reports == nil {
 		return ErrReportsUnavailable
@@ -123,24 +120,14 @@ func (s *Service) requireReports() error {
 	return nil
 }
 
-func (s *Service) GetFileUsage(ctx context.Context, objectID string) (*FileUsage, error) {
+func (s *Service) GetFileUsage(ctx context.Context, objectID string) (*metricsapi.FileUsage, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
 	return s.reports.GetFileUsage(ctx, objectID)
 }
 
-func (s *Service) ListFileUsageByObjectIDs(ctx context.Context, ids []string) ([]FileUsage, error) {
-	if err := s.requireReports(); err != nil {
-		return nil, err
-	}
-	return s.reports.ListFileUsageByObjectIDs(ctx, ids)
-}
-
-// ListReadableObjectIDs resolves scope membership from the object reader and
-// returns only requested IDs in their original order. Unscoped callers retain
-// the existing behavior of passing requests through unchanged.
-func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error) {
+func (s *Service) listReadableObjectIDs(ctx context.Context, scope ScopeQuery, requested []string) ([]string, error) {
 	if !scope.isSingle() && !scope.isAggregate() {
 		return append([]string(nil), requested...), nil
 	}
@@ -183,277 +170,141 @@ func (s *Service) ListReadableObjectIDs(ctx context.Context, scope ScopeQuery, r
 	return out, nil
 }
 
-// ListFileUsage chooses a scoped persistence optimization when available and
-// otherwise runs the object-authorized fallback aggregation used by metrics.
-func (s *Service) ListFileUsage(ctx context.Context, query FileUsageQuery) ([]FileUsage, error) {
+// ListFileUsageBatch normalizes requested IDs, filters them through the
+// authorized scope, queries persistence once, and applies inactivity filtering
+// without changing persistence order.
+func (s *Service) ListFileUsageBatch(ctx context.Context, query FileUsageBatchQuery) ([]metricsapi.FileUsage, error) {
+	requested := uniqueNonEmptyStrings(query.ObjectIDs)
+	readable, err := s.listReadableObjectIDs(ctx, query.Scope, requested)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireReports(); err != nil {
+		return nil, err
+	}
+	items, err := s.reports.ListFileUsageByObjectIDs(ctx, readable)
+	if err != nil {
+		return nil, err
+	}
+	if query.InactiveSince == nil {
+		return items, nil
+	}
+	filtered := make([]metricsapi.FileUsage, 0, len(items))
+	for _, item := range items {
+		if item.LastDownloadTime == nil || item.LastDownloadTime.Before(*query.InactiveSince) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
+}
+
+// GetScopedFileUsage enforces object membership before exposing a single
+// report. Inaccessible objects intentionally look absent at the HTTP boundary.
+func (s *Service) GetScopedFileUsage(ctx context.Context, objectID string, scope ScopeQuery) (*metricsapi.FileUsage, error) {
+	if scope.isSingle() || scope.isAggregate() {
+		readable, err := s.listReadableObjectIDs(ctx, scope, []string{objectID})
+		if err != nil {
+			if errorsIsNotFoundOrDenied(err) {
+				return nil, errorapi.ErrNotFound
+			}
+			return nil, err
+		}
+		if len(readable) == 0 {
+			return nil, errorapi.ErrNotFound
+		}
+	}
+	return s.GetFileUsage(ctx, objectID)
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func errorsIsNotFoundOrDenied(err error) bool {
+	return errors.Is(err, errorapi.ErrNotFound) || errors.Is(err, errorapi.ErrAccessDenied)
+}
+
+// ListFileUsage routes scoped reports through the required Store capability.
+func (s *Service) ListFileUsage(ctx context.Context, query FileUsageQuery) ([]metricsapi.FileUsage, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
 	scope := query.Scope
 	if scope.isSingle() {
-		if scoped, ok := s.reports.(OptionalScopedFileUsageQuery); ok {
-			return scoped.ListFileUsagePageByScope(ctx, scope.Organization, scope.Project, query.Limit, query.Offset, query.InactiveSince)
-		}
-		items, _, err := s.collectScopedUsage(ctx, Scope{Organization: scope.Organization, Project: scope.Project}, query.InactiveSince)
-		if err != nil {
-			return nil, err
-		}
-		return pageFileUsage(items, query.Limit, query.Offset), nil
+		return s.reports.ListFileUsagePageByScope(ctx, scope.Organization, scope.Project, query.Limit, query.Offset, query.InactiveSince)
 	}
 	if scope.isAggregate() {
-		if scoped, ok := s.reports.(OptionalScopedFileUsageQuery); ok {
-			return scoped.ListFileUsagePageByResources(ctx, scope.resources(), scope.IncludeUnscoped, query.Limit, query.Offset, query.InactiveSince)
-		}
-		items, _, err := s.collectMultiScopedUsage(ctx, scope.aggregateScopes(), query.InactiveSince)
-		if err != nil {
-			return nil, err
-		}
-		return pageFileUsage(items, query.Limit, query.Offset), nil
+		return s.reports.ListFileUsagePageByResources(ctx, scope.resources(), scope.IncludeUnscoped, query.Limit, query.Offset, query.InactiveSince)
 	}
 	return s.reports.ListFileUsage(ctx, query.Limit, query.Offset, query.InactiveSince)
 }
 
-// GetFileUsageSummary chooses the scoped optimization when available and
-// preserves fallback record-count and inactive-file semantics.
-func (s *Service) GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (FileUsageSummary, error) {
+// GetFileUsageSummary routes scoped summaries through the required Store
+// capability and supplements single-scope reports with record metadata.
+func (s *Service) GetFileUsageSummary(ctx context.Context, query FileUsageSummaryQuery) (metricsapi.FileUsageSummary, error) {
 	if err := s.requireReports(); err != nil {
-		return FileUsageSummary{}, err
+		return metricsapi.FileUsageSummary{}, err
 	}
 	scope := query.Scope
 	if scope.isSingle() {
-		if scoped, ok := s.reports.(OptionalScopedFileUsageQuery); ok {
-			summary, err := scoped.GetFileUsageSummaryByScope(ctx, scope.Organization, scope.Project, query.InactiveSince)
-			if err != nil {
-				return FileUsageSummary{}, err
-			}
-			recordSummary, err := scoped.GetProjectRecordSummaryByScope(ctx, scope.Organization, scope.Project)
-			if err != nil {
-				return FileUsageSummary{}, err
-			}
-			summary.RecordCount = recordSummary.RecordCount
-			summary.RecordLatestUpdatedTime = recordSummary.RecordLatestUpdatedTime
-			return summary, nil
-		}
-		_, summary, err := s.collectScopedUsage(ctx, Scope{Organization: scope.Organization, Project: scope.Project}, query.InactiveSince)
+		summary, err := s.reports.GetFileUsageSummaryByScope(ctx, scope.Organization, scope.Project, query.InactiveSince)
 		if err != nil {
-			return FileUsageSummary{}, err
+			return metricsapi.FileUsageSummary{}, err
 		}
-		summary.RecordCount = summary.TotalFiles
+		recordSummary, err := s.reports.GetProjectRecordSummaryByScope(ctx, scope.Organization, scope.Project)
+		if err != nil {
+			return metricsapi.FileUsageSummary{}, err
+		}
+		summary.RecordCount = recordSummary.RecordCount
+		summary.RecordLatestUpdatedTime = recordSummary.RecordLatestUpdatedTime
 		return summary, nil
 	}
 	if scope.isAggregate() {
-		if scoped, ok := s.reports.(OptionalScopedFileUsageQuery); ok {
-			return scoped.GetFileUsageSummaryByResources(ctx, scope.resources(), scope.IncludeUnscoped, query.InactiveSince)
-		}
-		_, summary, err := s.collectMultiScopedUsage(ctx, scope.aggregateScopes(), query.InactiveSince)
-		return summary, err
+		return s.reports.GetFileUsageSummaryByResources(ctx, scope.resources(), scope.IncludeUnscoped, query.InactiveSince)
 	}
 	return s.reports.GetFileUsageSummary(ctx, query.InactiveSince)
 }
 
-// GetTransferAttributionSummary chooses the scoped optimization only for an
-// aggregate selection without an explicit organization filter.
-func (s *Service) GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (Summary, error) {
+// GetTransferAttributionSummary routes aggregate scope reports directly to the
+// resource-scoped Store capability when no explicit organization filter exists.
+func (s *Service) GetTransferAttributionSummary(ctx context.Context, query TransferSummaryQuery) (metricsapi.TransferAttributionSummary, error) {
 	if err := s.requireReports(); err != nil {
-		return Summary{}, err
+		return metricsapi.TransferAttributionSummary{}, err
 	}
+	var resources []string
 	if query.Scope.isAggregate() && strings.TrimSpace(query.Filter.Organization) == "" {
-		if scoped, ok := s.reports.(OptionalScopedTransferQuery); ok {
-			return scoped.GetTransferAttributionSummaryByResources(ctx, query.Filter, query.Scope.resources())
-		}
-		return s.aggregateTransferSummary(ctx, query.Filter, query.Scope.aggregateScopes())
+		resources = query.Scope.resources()
 	}
-	return s.reports.GetTransferAttributionSummary(ctx, query.Filter)
+	return s.reports.QueryTransferSummary(ctx, query.Filter, resources)
 }
 
-// GetTransferAttributionBreakdown preserves group validation, scoped
-// optimization, fallback merging, and latest-transfer ordering.
-func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]Breakdown, error) {
+// GetTransferAttributionBreakdown preserves group validation and routes
+// aggregate scope reports directly to the resource-scoped Store capability.
+func (s *Service) GetTransferAttributionBreakdown(ctx context.Context, query TransferBreakdownQuery) ([]metricsapi.TransferAttributionBreakdown, error) {
 	if err := s.requireReports(); err != nil {
 		return nil, err
 	}
 	if !validBreakdownGroup(query.GroupBy) {
 		return nil, ErrInvalidGroupBy
 	}
+	var resources []string
 	if query.Scope.isAggregate() && strings.TrimSpace(query.Filter.Organization) == "" {
-		if scoped, ok := s.reports.(OptionalScopedTransferQuery); ok {
-			return scoped.GetTransferAttributionBreakdownByResources(ctx, query.Filter, query.GroupBy, query.Scope.resources())
-		}
-		return s.aggregateTransferBreakdown(ctx, query.Filter, query.GroupBy, query.Scope.aggregateScopes())
+		resources = query.Scope.resources()
 	}
-	return s.reports.GetTransferAttributionBreakdown(ctx, query.Filter, query.GroupBy)
-}
-
-func (s *Service) GetTransferFreshness(_ context.Context, filter Filter) (Freshness, error) {
-	return Freshness{
-		IsStale:             false,
-		MissingBuckets:      []string{},
-		RequiredFrom:        filter.From,
-		RequiredTo:          filter.To,
-		LatestCompletedSync: nil,
-	}, nil
-}
-
-func (s *Service) collectScopedUsage(ctx context.Context, scope Scope, inactiveSince *time.Time) ([]FileUsage, FileUsageSummary, error) {
-	if s.objects == nil {
-		return nil, FileUsageSummary{}, ErrObjectsUnavailable
-	}
-	ids, err := s.objects.ListObjectIDsByScope(ctx, scope.Organization, scope.Project, "read")
-	if err != nil {
-		return nil, FileUsageSummary{}, err
-	}
-	sort.Strings(ids)
-
-	summary := FileUsageSummary{TotalFiles: int64(len(ids))}
-	bulkUsage, err := s.reports.ListFileUsageByObjectIDs(ctx, ids)
-	if err != nil {
-		return nil, FileUsageSummary{}, err
-	}
-	usageByID := make(map[string]FileUsage, len(bulkUsage))
-	for _, fileUsage := range bulkUsage {
-		usageByID[fileUsage.ObjectID] = fileUsage
-	}
-	items := make([]FileUsage, 0, len(ids))
-	for _, id := range ids {
-		fileUsage, ok := usageByID[id]
-		if !ok {
-			if inactiveSince != nil {
-				summary.InactiveFileCount++
-			}
-			obj, objErr := s.objects.GetObject(ctx, id, "read")
-			if objErr != nil {
-				if errors.Is(objErr, errorapi.ErrNotFound) || errors.Is(objErr, errorapi.ErrAccessDenied) {
-					continue
-				}
-				return nil, FileUsageSummary{}, objErr
-			}
-			item := FileUsage{ObjectID: id}
-			if obj != nil {
-				if obj.Name != nil {
-					item.Name = *obj.Name
-				}
-				item.Size = obj.Size
-			}
-			items = append(items, item)
-			continue
-		}
-		summary.TotalUploads += fileUsage.UploadCount
-		summary.TotalDownloads += fileUsage.DownloadCount
-		if inactiveSince != nil && (fileUsage.LastDownloadTime == nil || fileUsage.LastDownloadTime.Before(*inactiveSince)) {
-			summary.InactiveFileCount++
-		}
-		if inactiveSince != nil && fileUsage.LastDownloadTime != nil && !fileUsage.LastDownloadTime.Before(*inactiveSince) {
-			continue
-		}
-		items = append(items, fileUsage)
-	}
-	return items, summary, nil
-}
-
-func (s *Service) collectMultiScopedUsage(ctx context.Context, scopes []Scope, inactiveSince *time.Time) ([]FileUsage, FileUsageSummary, error) {
-	byID := make(map[string]FileUsage)
-	var summary FileUsageSummary
-	for _, scope := range scopes {
-		items, scopedSummary, err := s.collectScopedUsage(ctx, scope, inactiveSince)
-		if err != nil {
-			return nil, FileUsageSummary{}, err
-		}
-		summary.TotalFiles += scopedSummary.TotalFiles
-		summary.TotalUploads += scopedSummary.TotalUploads
-		summary.TotalDownloads += scopedSummary.TotalDownloads
-		summary.InactiveFileCount += scopedSummary.InactiveFileCount
-		for _, item := range items {
-			byID[item.ObjectID] = item
-		}
-	}
-	items := make([]FileUsage, 0, len(byID))
-	for _, item := range byID {
-		items = append(items, item)
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].ObjectID < items[j].ObjectID })
-	return items, summary, nil
-}
-
-func pageFileUsage(items []FileUsage, limit, offset int) []FileUsage {
-	if limit <= 0 {
-		return items
-	}
-	if offset >= len(items) {
-		return []FileUsage{}
-	}
-	end := offset + limit
-	if end > len(items) {
-		end = len(items)
-	}
-	return items[offset:end]
-}
-
-func (s *Service) aggregateTransferSummary(ctx context.Context, filter Filter, scopes []Scope) (Summary, error) {
-	var out Summary
-	for _, scope := range scopes {
-		scoped := filter
-		scoped.Organization = scope.Organization
-		scoped.Project = scope.Project
-		item, err := s.reports.GetTransferAttributionSummary(ctx, scoped)
-		if err != nil {
-			return Summary{}, err
-		}
-		out.EventCount += item.EventCount
-		out.AccessIssuedCount += item.AccessIssuedCount
-		out.DownloadEventCount += item.DownloadEventCount
-		out.UploadEventCount += item.UploadEventCount
-		out.BytesRequested += item.BytesRequested
-		out.BytesDownloaded += item.BytesDownloaded
-		out.BytesUploaded += item.BytesUploaded
-	}
-	return out, nil
-}
-
-func (s *Service) aggregateTransferBreakdown(ctx context.Context, filter Filter, groupBy string, scopes []Scope) ([]Breakdown, error) {
-	byKey := map[string]*Breakdown{}
-	for _, scope := range scopes {
-		scoped := filter
-		scoped.Organization = scope.Organization
-		scoped.Project = scope.Project
-		items, err := s.reports.GetTransferAttributionBreakdown(ctx, scoped, groupBy)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range items {
-			key := item.Key
-			if key == "" {
-				key = item.Organization + "/" + item.Project + "/" + item.Provider + "/" + item.Bucket + "/" + item.SHA256 + "/" + item.ActorEmail + "/" + item.ActorSubject
-			}
-			merged := byKey[key]
-			if merged == nil {
-				copy := item
-				byKey[key] = &copy
-				continue
-			}
-			merged.EventCount += item.EventCount
-			merged.BytesRequested += item.BytesRequested
-			merged.BytesDownloaded += item.BytesDownloaded
-			merged.BytesUploaded += item.BytesUploaded
-			if item.LastTransferTime != nil && (merged.LastTransferTime == nil || item.LastTransferTime.After(*merged.LastTransferTime)) {
-				t := *item.LastTransferTime
-				merged.LastTransferTime = &t
-			}
-		}
-	}
-	out := make([]Breakdown, 0, len(byKey))
-	for _, item := range byKey {
-		out = append(out, *item)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].LastTransferTime == nil || out[j].LastTransferTime == nil {
-			return out[i].Key < out[j].Key
-		}
-		if out[i].LastTransferTime.Equal(*out[j].LastTransferTime) {
-			return out[i].Key < out[j].Key
-		}
-		return out[i].LastTransferTime.After(*out[j].LastTransferTime)
-	})
-	return out, nil
+	return s.reports.QueryTransferBreakdown(ctx, query.Filter, query.GroupBy, resources)
 }
 
 func validBreakdownGroup(groupBy string) bool {

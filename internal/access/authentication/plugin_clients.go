@@ -5,10 +5,12 @@ import (
 	"net/rpc"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	hplugin "github.com/hashicorp/go-plugin"
 
+	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -18,23 +20,27 @@ type authenticationPluginManager struct {
 }
 
 // newAuthenticationPluginManager loads the plugin binary and returns a manager.
-func newAuthenticationPluginManager(pluginPath string) (*authenticationPluginManager, error) {
+func newAuthenticationPluginManager(pluginPath string, childEnv []string) (*authenticationPluginManager, error) {
+	cmd := exec.Command(pluginPath)
+	cmd.Env = append([]string(nil), childEnv...)
 	client := hplugin.NewClient(&hplugin.ClientConfig{
 		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
 			"authn": &authnPluginRPC{},
 		},
-		Cmd:              exec.Command(pluginPath),
+		Cmd:              cmd,
 		AllowedProtocols: []hplugin.Protocol{hplugin.ProtocolNetRPC},
 	})
 
 	rpcClient, err := client.Client()
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
 	raw, err := rpcClient.Dispense("authn")
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
@@ -83,23 +89,27 @@ type authorizationPluginManager struct {
 }
 
 // newAuthorizationPluginManager loads the plugin binary and returns a manager.
-func newAuthorizationPluginManager(pluginPath string) (*authorizationPluginManager, error) {
+func newAuthorizationPluginManager(pluginPath string, childEnv []string) (*authorizationPluginManager, error) {
+	cmd := exec.Command(pluginPath)
+	cmd.Env = append([]string(nil), childEnv...)
 	client := hplugin.NewClient(&hplugin.ClientConfig{
 		HandshakeConfig: plugin.Handshake,
 		Plugins: map[string]hplugin.Plugin{
 			"authz": &authzPluginRPC{},
 		},
-		Cmd:              exec.Command(pluginPath),
+		Cmd:              cmd,
 		AllowedProtocols: []hplugin.Protocol{hplugin.ProtocolNetRPC},
 	})
 
 	rpcClient, err := client.Client()
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
 	raw, err := rpcClient.Dispense("authz")
 	if err != nil {
+		client.Kill()
 		return nil, err
 	}
 
@@ -138,3 +148,82 @@ func (a *authzRPC) Authorize(ctx context.Context, in *plugin.AuthorizationInput)
 
 var _ plugin.AuthorizationPlugin = (*authorizationPluginManager)(nil)
 var _ plugin.AuthenticationPlugin = (*authenticationPluginManager)(nil)
+
+var documentedAuthEnvironmentKeys = []string{
+	"DRS_AUTH_MOCK_ENABLED",
+	"DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER",
+	"DRS_AUTH_MOCK_RESOURCES",
+	"DRS_AUTH_MOCK_METHODS",
+	"DRS_LOCAL_AUTHZ_CSV",
+	"SYFON_AUTHZ_PLUGIN_PATH",
+	"SYFON_AUTHN_PLUGIN_PATH",
+	"DRS_FENCE_URL",
+}
+
+func pluginEnvironment(auth config.AuthConfig) []string {
+	values := make(map[string]string, len(documentedAuthEnvironmentKeys))
+	if auth.Mock.Enabled {
+		values["DRS_AUTH_MOCK_ENABLED"] = "true"
+	} else if value, ok := os.LookupEnv("DRS_AUTH_MOCK_ENABLED"); ok {
+		values["DRS_AUTH_MOCK_ENABLED"] = value
+	}
+	if auth.Mock.RequireAuthHeader {
+		values["DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER"] = "true"
+	} else if value, ok := os.LookupEnv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER"); ok {
+		values["DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER"] = value
+	}
+	if len(auth.Mock.Resources) > 0 {
+		values["DRS_AUTH_MOCK_RESOURCES"] = strings.Join(auth.Mock.Resources, ",")
+	} else if value, ok := os.LookupEnv("DRS_AUTH_MOCK_RESOURCES"); ok {
+		values["DRS_AUTH_MOCK_RESOURCES"] = value
+	}
+	if len(auth.Mock.Methods) > 0 {
+		values["DRS_AUTH_MOCK_METHODS"] = strings.Join(auth.Mock.Methods, ",")
+	} else if value, ok := os.LookupEnv("DRS_AUTH_MOCK_METHODS"); ok {
+		values["DRS_AUTH_MOCK_METHODS"] = value
+	}
+	if auth.LocalAuthzCSV != "" {
+		values["DRS_LOCAL_AUTHZ_CSV"] = auth.LocalAuthzCSV
+	} else if value, ok := os.LookupEnv("DRS_LOCAL_AUTHZ_CSV"); ok {
+		values["DRS_LOCAL_AUTHZ_CSV"] = value
+	}
+	if auth.PluginPaths.Authz != "" {
+		values["SYFON_AUTHZ_PLUGIN_PATH"] = auth.PluginPaths.Authz
+	} else if value, ok := os.LookupEnv("SYFON_AUTHZ_PLUGIN_PATH"); ok {
+		values["SYFON_AUTHZ_PLUGIN_PATH"] = value
+	}
+	if auth.PluginPaths.Authn != "" {
+		values["SYFON_AUTHN_PLUGIN_PATH"] = auth.PluginPaths.Authn
+	} else if value, ok := os.LookupEnv("SYFON_AUTHN_PLUGIN_PATH"); ok {
+		values["SYFON_AUTHN_PLUGIN_PATH"] = value
+	}
+	if auth.FenceURL != "" {
+		values["DRS_FENCE_URL"] = auth.FenceURL
+	} else if value, ok := os.LookupEnv("DRS_FENCE_URL"); ok {
+		values["DRS_FENCE_URL"] = value
+	}
+
+	keySet := make(map[string]struct{}, len(documentedAuthEnvironmentKeys))
+	for _, key := range documentedAuthEnvironmentKeys {
+		keySet[key] = struct{}{}
+	}
+	env := make([]string, 0, len(os.Environ())+len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if _, documented := keySet[key]; documented {
+			if _, alreadySeen := seen[key]; alreadySeen {
+				continue
+			}
+			seen[key] = struct{}{}
+			continue
+		}
+		env = append(env, entry)
+	}
+	for _, key := range documentedAuthEnvironmentKeys {
+		if value, ok := values[key]; ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
+}

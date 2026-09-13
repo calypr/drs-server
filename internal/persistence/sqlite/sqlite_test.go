@@ -11,85 +11,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/lfsapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
-
-	"github.com/calypr/syfon/internal/objects"
 )
-
-var (
-	_ buckets.CredentialReader = (*SqliteDB)(nil)
-	_ buckets.CredentialAdmin  = (*SqliteDB)(nil)
-	_ buckets.ScopeStore       = (*SqliteDB)(nil)
-	_ buckets.VisibilityQuery  = (*SqliteDB)(nil)
-)
-
-func TestSqliteDB_CRUD(t *testing.T) {
-	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
-	if err != nil {
-		t.Fatalf("failed to create db: %v", err)
-	}
-
-	obj := &objects.Record{
-		Id:          "abc",
-		Size:        123,
-		CreatedTime: time.Now(),
-		UpdatedTime: func() *time.Time { t := time.Now(); return &t }(),
-		Version:     sqliteTestPtr("1.0"),
-		Name:        sqliteTestPtr("testing"),
-		AccessMethods: &[]objects.AccessMethod{
-			{
-				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/key"},
-			},
-		},
-		Checksums: []objects.Checksum{
-			{Type: "sha256", Checksum: "abc"},
-		},
-	}
-
-	// Create
-	if err := db.CreateObject(ctx, obj); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
-	}
-
-	// Get
-	fetched, err := db.GetObject(ctx, "abc")
-	if err != nil {
-		t.Fatalf("GetObject failed: %v", err)
-	}
-	if fetched.Size != obj.Size {
-		t.Errorf("expected size %d, got %d", obj.Size, fetched.Size)
-	}
-	if fetched.AccessMethods == nil || len(*fetched.AccessMethods) != 1 {
-		t.Errorf("expected 1 access method, got %v", fetched.AccessMethods)
-	}
-
-	// Get by Checksum
-	objs, err := db.GetObjectsByChecksum(ctx, "abc")
-	if err != nil {
-		t.Fatalf("GetObjectsByChecksum failed: %v", err)
-	}
-	if len(objs) != 1 || objs[0].Id != "abc" {
-		t.Errorf("expected 1 object with id abc, got %v", objs)
-	}
-
-	// Delete
-	if err := db.DeleteObject(ctx, "abc"); err != nil {
-		t.Fatalf("DeleteObject failed: %v", err)
-	}
-
-	// Verify Deleted
-	_, err = db.GetObject(ctx, "abc")
-	if err == nil {
-		t.Fatal("expected error getting deleted object, got nil")
-	}
-}
 
 func TestSqliteDB_InitializesControlledAccessTable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy.db")
@@ -108,13 +41,13 @@ func TestSqliteDB_InitializesControlledAccessTable(t *testing.T) {
 		t.Fatalf("close legacy db: %v", err)
 	}
 
-	db, err := NewSqliteDB(dbPath)
+	db, err := NewSqliteDB(dbPath, nil)
 	if err != nil {
 		t.Fatalf("open migrated db: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
-	rows, err := db.db.Query(`PRAGMA table_info(drs_object_controlled_access)`)
+	rows, err := db.DB().Query(`PRAGMA table_info(drs_object_controlled_access)`)
 	if err != nil {
 		t.Fatalf("inspect controlled access table: %v", err)
 	}
@@ -189,17 +122,17 @@ func TestSqliteDB_BackfillsAccessGrantsFromExistingAccessEvents(t *testing.T) {
 		t.Fatalf("close legacy db: %v", err)
 	}
 
-	db, err := NewSqliteDB(dbPath)
+	db, err := NewSqliteDB(dbPath, nil)
 	if err != nil {
 		t.Fatalf("open migrated db: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB().Close()
 
 	var grants, issueCount, distinctEventGrants int
-	if err := db.db.QueryRow(`SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grants, &issueCount); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grants, &issueCount); err != nil {
 		t.Fatalf("inspect access_grant rows: %v", err)
 	}
-	if err := db.db.QueryRow(`SELECT COUNT(DISTINCT access_grant_id) FROM transfer_attribution_event`).Scan(&distinctEventGrants); err != nil {
+	if err := db.DB().QueryRow(`SELECT COUNT(DISTINCT access_grant_id) FROM transfer_attribution_event`).Scan(&distinctEventGrants); err != nil {
 		t.Fatalf("inspect migrated event grant ids: %v", err)
 	}
 	if grants != 1 || issueCount != 2 || distinctEventGrants != 1 {
@@ -209,37 +142,38 @@ func TestSqliteDB_BackfillsAccessGrantsFromExistingAccessEvents(t *testing.T) {
 
 func TestSqliteDB_GetObjectsByChecksum_WhenIDDiffers(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	checksum := "47454ac45ec9e9d88d76ba2dc8dff527ba6899a0f4189eb67dfcb2da0aa7d125"
 
-	obj := &objects.Record{
+	obj := &drs.DrsObject{
 		Id:          "did-123",
 		Size:        10,
 		CreatedTime: time.Now(),
 		UpdatedTime: func() *time.Time { t := time.Now(); return &t }(),
 		Version:     sqliteTestPtr("1.0"),
 		Name:        sqliteTestPtr("oid-object"),
-		AccessMethods: &[]objects.AccessMethod{
+		AccessMethods: &[]drs.AccessMethod{
 			{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket/cbds/end_to_end_test/" + checksum},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket/cbds/end_to_end_test/" + checksum},
 			},
 		},
-		Checksums: []objects.Checksum{
+		Checksums: []drs.Checksum{
 			{Type: "sha256", Checksum: checksum},
 		},
 	}
-	if err := db.CreateObject(ctx, obj); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{*obj}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
-	objs, err := db.GetObjectsByChecksum(ctx, checksum)
+	byChecksum, err := db.GetObjectsByChecksums(ctx, []string{checksum})
 	if err != nil {
 		t.Fatalf("GetObjectsByChecksum failed: %v", err)
 	}
+	objs := byChecksum[checksum]
 	if len(objs) != 1 {
 		t.Fatalf("expected 1 object, got %d", len(objs))
 	}
@@ -250,20 +184,20 @@ func TestSqliteDB_GetObjectsByChecksum_WhenIDDiffers(t *testing.T) {
 
 func TestSqliteDB_GetObjectPreservesStoredName(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
 	now := time.Now().UTC()
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object (id, size, created_time, updated_time, name, version, description)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"legacy-1", int64(42), now, now, "file.txt", "v1", "desc",
 	); err != nil {
 		t.Fatalf("insert object: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object_access_method (object_id, url, type)
 		VALUES (?, ?, ?)`,
 		"legacy-1", "s3://bucket/key", "s3",
@@ -282,21 +216,20 @@ func TestSqliteDB_GetObjectPreservesStoredName(t *testing.T) {
 
 func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	// 1. Test CreateObject with Unix and Windows paths
 	now := time.Now().UTC()
-	objUnix := &objects.Record{
+	objUnix := &drs.DrsObject{
 		Id:          "unix-1",
 		Size:        100,
 		CreatedTime: now,
 		Name:        sqliteTestPtr("/path/to/some/unix_file.txt"),
 	}
-	if err := db.CreateObject(ctx, objUnix); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{*objUnix}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	gotUnix, err := db.GetObject(ctx, "unix-1")
@@ -307,14 +240,14 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 		t.Fatalf("expected name to be normalized to unix_file.txt, got %q", got)
 	}
 
-	objWin := &objects.Record{
+	objWin := &drs.DrsObject{
 		Id:          "win-1",
 		Size:        200,
 		CreatedTime: now,
 		Name:        sqliteTestPtr(`C:\Windows\System32\win_file.txt`),
 	}
-	if err := db.CreateObject(ctx, objWin); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{*objWin}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	gotWin, err := db.GetObject(ctx, "win-1")
@@ -325,8 +258,7 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 		t.Fatalf("expected name to be normalized to win_file.txt, got %q", got)
 	}
 
-	// 2. Test RegisterObjects with paths
-	bulkObjs := []objects.Record{
+	bulkObjs := []drs.DrsObject{
 		{
 			Id:          "bulk-unix",
 			Size:        300,
@@ -365,7 +297,7 @@ func TestSqliteDB_NormalizeNameToBasenameOnInsert(t *testing.T) {
 
 func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -375,18 +307,17 @@ func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 	checksum := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	now := time.Now().UTC()
 
-	if err := db.CreateObject(ctx, &objects.Record{
-		Id:          objects.RecordID(canonicalID),
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{{
+		Id:          canonicalID,
 		CreatedTime: now,
 		UpdatedTime: &now,
-		Checksums:   []objects.Checksum{{Type: "sha256", Checksum: checksum}},
-		AccessMethods: &[]objects.AccessMethod{
-			{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/path/object"}},
+		Checksums:   []drs.Checksum{{Type: "sha256", Checksum: checksum}},
+		AccessMethods: &[]drs.AccessMethod{
+			{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/path/object"}},
 		},
-
-		Authorizations: map[string][]string{"a": {"b"}},
-	}); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+		ControlledAccess: &[]string{"/organization/a/project/b"},
+	}}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	if err := db.CreateObjectAlias(ctx, aliasID, canonicalID); err != nil {
@@ -405,27 +336,22 @@ func TestSqliteDB_ObjectAliasLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject(alias) failed: %v", err)
 	}
-	if aliased.Id != objects.RecordID(canonicalID) {
+	if aliased.Id != canonicalID {
 		t.Fatalf("expected canonical id %s, got %s", canonicalID, aliased.Id)
 	}
 	if len(aliased.Checksums) != 1 || aliased.Checksums[0].Checksum != checksum {
 		t.Fatalf("expected checksum to resolve through alias, got %+v", aliased.Checksums)
 	}
 
-	byChecksum, err := db.GetObjectsByChecksum(ctx, checksum)
+	matches, err := db.GetObjectsByChecksums(ctx, []string{checksum})
 	if err != nil {
 		t.Fatalf("GetObjectsByChecksum failed: %v", err)
 	}
-	if len(byChecksum) != 1 || byChecksum[0].Id != objects.RecordID(canonicalID) {
+	byChecksum := matches[checksum]
+	if len(byChecksum) != 1 || byChecksum[0].Id != canonicalID {
 		t.Fatalf("expected exactly one canonical record for checksum, got %+v", byChecksum)
 	}
 
-	if err := db.DeleteObjectAlias(ctx, aliasID); err != nil {
-		t.Fatalf("DeleteObjectAlias(alias) failed: %v", err)
-	}
-	if _, err := db.ResolveObjectAlias(ctx, aliasID); err == nil {
-		t.Fatal("expected alias to be deleted")
-	}
 	if _, err := db.GetObject(ctx, canonicalID); err != nil {
 		t.Fatalf("expected canonical object to remain, got error: %v", err)
 	}
@@ -449,34 +375,35 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 
 	for mode, makeCtx := range buildCtx {
 		t.Run(mode, func(t *testing.T) {
-			db, err := NewSqliteDB(":memory:")
+			db, err := NewSqliteDB(":memory:", nil)
 			if err != nil {
 				t.Fatalf("failed to create db: %v", err)
 			}
 			now := time.Now().UTC()
 			checksum := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-			if err := db.CreateObject(context.Background(), &objects.Record{
+			if err := db.RegisterObjects(context.Background(), []drs.DrsObject{{
 
 				Id:          "obj-authz",
 				CreatedTime: now,
 				UpdatedTime: &now,
-				Checksums:   []objects.Checksum{{Type: "sha256", Checksum: checksum}},
-				AccessMethods: &[]objects.AccessMethod{
-					{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/path/object"}},
+				Checksums:   []drs.Checksum{{Type: "sha256", Checksum: checksum}},
+				AccessMethods: &[]drs.AccessMethod{
+					{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/path/object"}},
 				},
-				Authorizations: map[string][]string{"org": {"project"}},
-			}); err != nil {
-				t.Fatalf("CreateObject failed: %v", err)
+				ControlledAccess: &[]string{"/organization/org/project/project"},
+			}}); err != nil {
+				t.Fatalf("RegisterObjects failed: %v", err)
 			}
 
 			allowedCtx := makeCtx([]string{"/programs/org/projects/project"})
 			if _, err := db.GetObject(allowedCtx, "obj-authz"); err != nil {
 				t.Fatalf("expected GetObject to ignore auth context: %v", err)
 			}
-			byChecksum, err := db.GetObjectsByChecksum(allowedCtx, checksum)
+			matches, err := db.GetObjectsByChecksums(allowedCtx, []string{checksum})
 			if err != nil {
 				t.Fatalf("expected checksum lookup to ignore auth context: %v", err)
 			}
+			byChecksum := matches[checksum]
 			if len(byChecksum) != 1 || byChecksum[0].Id != "obj-authz" {
 				t.Fatalf("expected checksum lookup to return object, got %+v", byChecksum)
 			}
@@ -485,10 +412,11 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 			if _, err := db.GetObject(deniedCtx, "obj-authz"); err != nil {
 				t.Fatalf("expected GetObject to ignore denied auth context, got %v", err)
 			}
-			byChecksum, err = db.GetObjectsByChecksum(deniedCtx, checksum)
+			matches, err = db.GetObjectsByChecksums(deniedCtx, []string{checksum})
 			if err != nil {
 				t.Fatalf("expected denied checksum lookup to still return object: %v", err)
 			}
+			byChecksum = matches[checksum]
 			if len(byChecksum) != 1 || byChecksum[0].Id != "obj-authz" {
 				t.Fatalf("expected denied checksum lookup to return object, got %+v", byChecksum)
 			}
@@ -498,7 +426,7 @@ func TestSqliteDB_ObjectReadsIgnoreAuthContext(t *testing.T) {
 
 func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -507,15 +435,14 @@ func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 	aliasID := "22222222-2222-4222-8222-222222222222"
 	now := time.Now().UTC()
 
-	if err := db.CreateObject(ctx, &objects.Record{
-		Id:          objects.RecordID(canonicalID),
-		CreatedTime: now,
-		UpdatedTime: &now,
-		Name:        sqliteTestPtr("object.txt"),
-
-		Authorizations: map[string][]string{"a": {"b"}},
-	}); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{{
+		Id:               canonicalID,
+		CreatedTime:      now,
+		UpdatedTime:      &now,
+		Name:             sqliteTestPtr("object.txt"),
+		ControlledAccess: &[]string{"/organization/a/project/b"},
+	}}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 	if err := db.CreateObjectAlias(ctx, aliasID, canonicalID); err != nil {
 		t.Fatalf("CreateObjectAlias failed: %v", err)
@@ -542,7 +469,7 @@ func TestSqliteDB_DeleteObjectByAliasRemovesCanonicalObject(t *testing.T) {
 func TestSqliteDB_S3Credentials(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -583,7 +510,7 @@ func TestSqliteDB_S3Credentials(t *testing.T) {
 func TestSqliteDB_SaveS3CredentialRejectsDuplicatePhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -615,14 +542,18 @@ func TestSqliteDB_SaveS3CredentialRejectsDuplicatePhysicalBucket(t *testing.T) {
 func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential codec: %v", err)
+	}
+	db, err := NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_insert`); err != nil {
+	if _, err := db.DB().ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_insert`); err != nil {
 		t.Fatalf("drop insert trigger: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_update`); err != nil {
+	if _, err := db.DB().ExecContext(ctx, `DROP TRIGGER IF EXISTS s3_credential_unique_bucket_update`); err != nil {
 		t.Fatalf("drop update trigger: %v", err)
 	}
 
@@ -630,11 +561,11 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 		{CredentialID: "org-a/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-a", SecretKey: "secret-a"},
 		{CredentialID: "org-b/default", Bucket: "shared-bucket", Region: "us-east-1", AccessKey: "key-b", SecretKey: "secret-b"},
 	} {
-		stored, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &cred)
+		stored, err := cipher.Prepare(context.Background(), &cred)
 		if err != nil {
-			t.Fatalf("PrepareS3CredentialForStorage(%s) failed: %v", cred.CredentialID, err)
+			t.Fatalf("Prepare(%s) failed: %v", cred.CredentialID, err)
 		}
-		if _, err := db.db.ExecContext(ctx, `
+		if _, err := db.DB().ExecContext(ctx, `
 			INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, stored.CredentialID, stored.Bucket, "s3", stored.Region, stored.AccessKey, stored.SecretKey, stored.Endpoint); err != nil {
@@ -650,12 +581,16 @@ func TestSqliteDB_GetS3CredentialRejectsAmbiguousLegacyPhysicalBucket(t *testing
 func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	cipher, err := credentialcipher.NewFromEnv()
+	if err != nil {
+		t.Fatalf("create credential codec: %v", err)
+	}
+	db, err := NewSqliteDB(":memory:", cipher)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
-	first, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
+	first, err := cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-a/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -664,16 +599,16 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		SecretKey:    "secret-a",
 	})
 	if err != nil {
-		t.Fatalf("PrepareS3CredentialForStorage(first) failed: %v", err)
+		t.Fatalf("Prepare(first) failed: %v", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, first.CredentialID, first.Bucket, "s3", first.Region, first.AccessKey, first.SecretKey, first.Endpoint); err != nil {
 		t.Fatalf("raw first insert failed: %v", err)
 	}
 
-	second, err := credentialcipher.PrepareS3CredentialForStorage(context.Background(), &buckets.Credential{
+	second, err := cipher.Prepare(context.Background(), &buckets.Credential{
 		CredentialID: "org-b/default",
 		Bucket:       "shared-bucket",
 		Provider:     "s3",
@@ -682,9 +617,9 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 		SecretKey:    "secret-b",
 	})
 	if err != nil {
-		t.Fatalf("PrepareS3CredentialForStorage(second) failed: %v", err)
+		t.Fatalf("Prepare(second) failed: %v", err)
 	}
-	_, err = db.db.ExecContext(ctx, `
+	_, err = db.DB().ExecContext(ctx, `
 		INSERT INTO s3_credential (credential_id, bucket, provider, region, access_key, secret_key, endpoint)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, second.CredentialID, second.Bucket, "s3", second.Region, second.AccessKey, second.SecretKey, second.Endpoint)
@@ -696,7 +631,7 @@ func TestSqliteDB_DirectInsertRejectsDuplicatePhysicalBucket(t *testing.T) {
 func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -713,7 +648,7 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	}
 
 	var storedAK, storedSK string
-	if err := db.db.QueryRowContext(ctx, "SELECT access_key, secret_key FROM s3_credential WHERE bucket = ?", "enc-bucket").Scan(&storedAK, &storedSK); err != nil {
+	if err := db.DB().QueryRowContext(ctx, "SELECT access_key, secret_key FROM s3_credential WHERE bucket = ?", "enc-bucket").Scan(&storedAK, &storedSK); err != nil {
 		t.Fatalf("raw select failed: %v", err)
 	}
 	if storedAK == "plain-ak" || storedSK == "plain-sk" {
@@ -729,46 +664,18 @@ func TestSqliteDB_S3Credentials_EncryptedAtRest(t *testing.T) {
 	}
 }
 
-func TestSqliteDB_BulkOperations(t *testing.T) {
+func TestSqliteDB_RegisterObjectsAcceptsLargeUsageFlush(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
-
-	records := []objects.Record{
-		{Id: "bulk-1", Size: 10, Authorizations: map[string][]string{"org": {"p1"}}},
-		{Id: "bulk-2", Size: 20, Authorizations: map[string][]string{"org": {"p2"}}},
-	}
-
-	if err := db.RegisterObjects(ctx, records); err != nil {
-		t.Fatalf("RegisterObjects failed: %v", err)
-	}
-
-	fetched, _ := db.GetBulkObjects(ctx, []string{"bulk-1", "bulk-2"})
-	if len(fetched) != 2 {
-		t.Errorf("expected 2 objects, got %d", len(fetched))
-	}
-	for _, obj := range fetched {
-		if obj.ControlledAccess == nil || len(*obj.ControlledAccess) != 1 {
-			t.Fatalf("expected controlled access on %s, got %+v", obj.Id, obj.ControlledAccess)
-		}
-	}
-
-	if err := db.BulkDeleteObjects(ctx, []string{"bulk-1", "bulk-2"}); err != nil {
-		t.Fatalf("BulkDeleteObjects failed: %v", err)
-	}
-}
-
-func TestSqliteDB_RegisterObjectsChunksUsageFlushParameters(t *testing.T) {
-	ctx := context.Background()
-	database, err := NewSqliteDB(":memory:")
+	database, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	records := make([]objects.Record, sqliteMaxParams+1)
+	records := make([]drs.DrsObject, 901)
 	for i := range records {
-		records[i] = objects.Record{Id: objects.RecordID(fmt.Sprintf("chunk-%d", i))}
+		records[i] = drs.DrsObject{Id: fmt.Sprintf("chunk-%d", i)}
 	}
 	if err := database.RegisterObjects(ctx, records); err != nil {
-		t.Fatalf("RegisterObjects should chunk usage flush parameters: %v", err)
+		t.Fatalf("RegisterObjects should accept more than 900 records: %v", err)
 	}
 	got, err := database.GetBulkObjects(ctx, []string{"chunk-0", fmt.Sprintf("chunk-%d", len(records)-1)})
 	if err != nil {
@@ -781,42 +688,42 @@ func TestSqliteDB_RegisterObjectsChunksUsageFlushParameters(t *testing.T) {
 
 func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
-	records := []objects.Record{
+	records := []drs.DrsObject{
 		{
-			Id:   "bulk-a",
-			Size: 10,
-			AccessMethods: &[]objects.AccessMethod{
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "bulk-a",
+			Size:             10,
+			AccessMethods: &[]drs.AccessMethod{
 				{
 					Type:      "s3",
-					AccessUrl: &objects.AccessURL{Url: "s3://bucket/a"},
+					AccessUrl: &drs.AccessURL{Url: "s3://bucket/a"},
 				},
 				{
 					Type:      "s3",
-					AccessUrl: &objects.AccessURL{Url: "s3://bucket/a"},
+					AccessUrl: &drs.AccessURL{Url: "s3://bucket/a"},
 				},
 			},
-			Checksums: []objects.Checksum{
+			Checksums: []drs.Checksum{
 				{Type: "sha256", Checksum: "aaa"},
 				{Type: "sha256", Checksum: "aaa"},
 			},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 
 		{
-			Id:   "bulk-b",
-			Size: 20,
-			AccessMethods: &[]objects.AccessMethod{
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "bulk-b",
+			Size:             20,
+			AccessMethods: &[]drs.AccessMethod{
 				{
 					Type:      "gs",
-					AccessUrl: &objects.AccessURL{Url: "gs://bucket/b"},
+					AccessUrl: &drs.AccessURL{Url: "gs://bucket/b"},
 				},
 			},
-			Checksums: []objects.Checksum{
+			Checksums: []drs.Checksum{
 				{Type: "md5", Checksum: "bbb"},
 			},
-			Authorizations: map[string][]string{"org": {"p1"}},
 		},
 	}
 
@@ -841,15 +748,15 @@ func TestSqliteDB_GetBulkObjects_SplitHydrationPreservesOrderAndDedupes(t *testi
 
 func TestSqliteDB_UpdateAccessMethods(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
-	obj := &objects.Record{Id: "update-me"}
-	if err := db.CreateObject(ctx, obj); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	obj := &drs.DrsObject{Id: "update-me"}
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{*obj}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
-	newMethods := []objects.AccessMethod{
-		{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://new/path"}},
+	newMethods := []drs.AccessMethod{
+		{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://new/path"}},
 	}
 
 	if err := db.UpdateObjectAccessMethods(ctx, "update-me", newMethods); err != nil {
@@ -867,30 +774,30 @@ func TestSqliteDB_UpdateAccessMethods(t *testing.T) {
 
 func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	now := time.Now()
-	records := []objects.Record{
+	records := []drs.DrsObject{
 		{
 			Id:          "sha-x",
 			CreatedTime: now,
 			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "sha-x"}},
-			AccessMethods: &[]objects.AccessMethod{
+			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: "sha-x"}},
+			AccessMethods: &[]drs.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/b/sha-x"),
 			},
-			Authorizations: map[string][]string{"a": {"b"}},
+			ControlledAccess: &[]string{"/programs/a/projects/b"},
 		},
 
 		{
 			Id:          "sha-y",
 			CreatedTime: now,
 			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "sha-y"}},
-			AccessMethods: &[]objects.AccessMethod{
+			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: "sha-y"}},
+			AccessMethods: &[]drs.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/c/sha-y"),
 			},
-			Authorizations: map[string][]string{"a": {"c"}},
+			ControlledAccess: &[]string{"/programs/a/projects/c"},
 		},
 	}
 	if err := db.RegisterObjects(ctx, records); err != nil {
@@ -919,47 +826,47 @@ func TestSqliteDB_GetObjectsByChecksumsAndListByPrefix(t *testing.T) {
 
 func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 	now := time.Now()
-	records := []objects.Record{
+	records := []drs.DrsObject{
 		{
-			Id:             "proj-a-1",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-a-1",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 
 		{
-			Id:             "proj-a-2",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-a-2",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 
 		{
-			Id:             "other-project",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"org": {"p2"}},
+			Id:               "other-project",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
 		},
 
 		{
-			Id:             "other-org",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-a"}},
-			Authorizations: map[string][]string{"other": {"p1"}},
+			Id:               "other-org",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "sha-a"}},
+			ControlledAccess: &[]string{"/organization/other/project/p1"},
 		},
 
 		{
-			Id:             "proj-b",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "sha-b"}},
-			Authorizations: map[string][]string{"org": {"p1"}},
+			Id:               "proj-b",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "sha-b"}},
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
 		},
 	}
 	if err := db.RegisterObjects(ctx, records); err != nil {
@@ -987,7 +894,7 @@ func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 		t.Fatalf("expected empty map for empty checksum input, got %+v", emptyRes)
 	}
 
-	large := make([]string, sqliteMaxParams)
+	large := make([]string, 901)
 	for i := range large {
 		large[i] = fmt.Sprintf("large-%d", i)
 	}
@@ -1003,27 +910,27 @@ func TestSqliteDB_ListScopedObjectIDsByChecksums(t *testing.T) {
 
 func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 	now := time.Now()
 
-	if err := db.RegisterObjects(ctx, []objects.Record{
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{
 		{
-			Id:          "scoped",
-			CreatedTime: now,
-			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "scoped"}},
-			AccessMethods: &[]objects.AccessMethod{
+			ControlledAccess: &[]string{"/organization/a/project/b"},
+			Id:               "scoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "scoped"}},
+			AccessMethods: &[]drs.AccessMethod{
 				testAccessMethod("s3://bucket/programs/a/projects/b/scoped"),
 			},
-			Authorizations: map[string][]string{"a": {"b"}},
 		},
 
 		{
-			Id:             "unscoped",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "unscoped"}},
-			Authorizations: map[string][]string{"a": {"b"}},
+			ControlledAccess: &[]string{"/organization/a/project/b"},
+			Id:               "unscoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			Checksums:        []drs.Checksum{{Type: "sha256", Checksum: "unscoped"}},
 		},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
@@ -1044,15 +951,15 @@ func TestSqliteDB_ListObjectIDsByScopeRootIncludesUnscoped(t *testing.T) {
 
 func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now()
-	if err := db.RegisterObjects(ctx, []objects.Record{
-		{Id: "org-wide", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {}}},
-		{Id: "project-scoped", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"org": {"project"}}},
-		{Id: "other-org", CreatedTime: now, UpdatedTime: &now, Authorizations: map[string][]string{"other": {"project"}}},
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{
+		{Id: "org-wide", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/org"}},
+		{Id: "project-scoped", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/org/project/project"}},
+		{Id: "other-org", CreatedTime: now, UpdatedTime: &now, ControlledAccess: &[]string{"/organization/other/project/project"}},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
 	}
@@ -1067,11 +974,11 @@ func TestSqliteDB_ListObjectIDsByScopeOrgIncludesProjectScopes(t *testing.T) {
 }
 
 func TestSqliteDB_ListObjectIDsByScopeReturnsQueryError(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
-	if err := db.db.Close(); err != nil {
+	if err := db.DB().Close(); err != nil {
 		t.Fatalf("failed to close db: %v", err)
 	}
 
@@ -1081,17 +988,17 @@ func TestSqliteDB_ListObjectIDsByScopeReturnsQueryError(t *testing.T) {
 	}
 }
 
-func testAccessMethod(url string) objects.AccessMethod {
-	return objects.AccessMethod{
+func testAccessMethod(url string) drs.AccessMethod {
+	return drs.AccessMethod{
 		Type:      "s3",
-		AccessUrl: &objects.AccessURL{Url: url},
+		AccessUrl: &drs.AccessURL{Url: url},
 	}
 }
 
-func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
+func newLegacyDuplicateSHAFixture(t *testing.T) (*store.Store, string, string) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1099,26 +1006,26 @@ func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
 	now := time.Now()
 	objectA := "3f5b5dac-f07d-5fdb-998d-532a95dd42d1"
 	objectB := "f9be6500-ea29-5427-843f-eb44dcdc6fb5"
-	if err := db.RegisterObjects(ctx, []objects.Record{
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{
 		{
-			Id:            objects.RecordID(objectA),
+			Id:            objectA,
 			CreatedTime:   now,
 			UpdatedTime:   &now,
-			AccessMethods: &[]objects.AccessMethod{testAccessMethod("s3://bucket/original-a")},
+			AccessMethods: &[]drs.AccessMethod{testAccessMethod("s3://bucket/original-a")},
 		},
 
 		{
-			Id:            objects.RecordID(objectB),
+			Id:            objectB,
 			CreatedTime:   now,
 			UpdatedTime:   &now,
-			AccessMethods: &[]objects.AccessMethod{testAccessMethod("s3://bucket/original-b")},
+			AccessMethods: &[]drs.AccessMethod{testAccessMethod("s3://bucket/original-b")},
 		},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	const sha = "faec17cafc7af76bbdbe96a499545ff00ce2ef0ff4c65e05571dbbe0f17435ce"
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := db.DB().ExecContext(ctx, `
 		INSERT INTO drs_object_checksum (object_id, type, checksum)
 		VALUES (?, ?, ?), (?, ?, ?)
 	`, objectA, "sha256", sha, objectB, "sha256", sha); err != nil {
@@ -1127,7 +1034,7 @@ func newLegacyDuplicateSHAFixture(t *testing.T) (*SqliteDB, string, string) {
 	return db, objectA, objectB
 }
 
-func assertAccessMethodURL(t *testing.T, db *SqliteDB, objectID, wantURL string) {
+func assertAccessMethodURL(t *testing.T, db *store.Store, objectID, wantURL string) {
 	t.Helper()
 	obj, err := db.GetObject(context.Background(), objectID)
 	if err != nil {
@@ -1141,7 +1048,7 @@ func assertAccessMethodURL(t *testing.T, db *SqliteDB, objectID, wantURL string)
 func TestSqliteDB_UpdateObjectAccessMethodsTargetsPhysicalRowWithLegacyDuplicateSHA(t *testing.T) {
 	db, objectA, objectB := newLegacyDuplicateSHAFixture(t)
 
-	if err := db.UpdateObjectAccessMethods(context.Background(), objectA, []objects.AccessMethod{
+	if err := db.UpdateObjectAccessMethods(context.Background(), objectA, []drs.AccessMethod{
 		testAccessMethod("s3://bucket/repaired-a"),
 	}); err != nil {
 		t.Fatalf("UpdateObjectAccessMethods failed: %v", err)
@@ -1153,31 +1060,33 @@ func TestSqliteDB_UpdateObjectAccessMethodsTargetsPhysicalRowWithLegacyDuplicate
 
 func TestSqliteDB_BulkUpdateAccessMethods(t *testing.T) {
 	ctx := context.Background()
-	db, _ := NewSqliteDB(":memory:")
+	db, _ := NewSqliteDB(":memory:", nil)
 
 	now := time.Now()
-	if err := db.RegisterObjects(ctx, []objects.Record{
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{
 		{
-			Id:          "obj-a",
-			CreatedTime: now,
-			UpdatedTime: &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-a",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Id:          "obj-b",
-			CreatedTime: now,
-			UpdatedTime: &now,
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
+			Id:               "obj-b",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 	}); err != nil {
 		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
-	err := db.BulkUpdateAccessMethods(ctx, map[string][]objects.AccessMethod{
+	err := db.BulkUpdateAccessMethods(ctx, map[string][]drs.AccessMethod{
 		"obj-a": {
-			{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/a"}},
+			{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/a"}},
 		},
 		"obj-b": {
-			{Type: "s3", AccessUrl: &objects.AccessURL{Url: "s3://bucket/b"}},
+			{Type: "s3", AccessUrl: &drs.AccessURL{Url: "s3://bucket/b"}},
 		},
 	})
 	if err != nil {
@@ -1194,7 +1103,7 @@ func TestSqliteDB_BulkUpdateAccessMethodsTargetsPhysicalRowWithLegacyDuplicateSH
 	ctx := context.Background()
 	db, objectA, objectB := newLegacyDuplicateSHAFixture(t)
 
-	if err := db.BulkUpdateAccessMethods(ctx, map[string][]objects.AccessMethod{
+	if err := db.BulkUpdateAccessMethods(ctx, map[string][]drs.AccessMethod{
 		objectA: {testAccessMethod("s3://bucket/repaired-a")},
 	}); err != nil {
 		t.Fatalf("BulkUpdateAccessMethods failed: %v", err)
@@ -1206,15 +1115,15 @@ func TestSqliteDB_BulkUpdateAccessMethodsTargetsPhysicalRowWithLegacyDuplicateSH
 
 func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
-	candidate := objects.Candidate{
+	candidate := lfsapi.DrsObjectCandidate{
 		Name: sqliteTestPtr("candidate"),
 		Size: sqliteTestPtr(int64(123)),
-		Checksums: &[]objects.Checksum{
+		Checksums: &[]lfsapi.Checksum{
 			{Type: "sha256", Checksum: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		},
 	}
@@ -1230,30 +1139,33 @@ func TestSqliteDB_PendingLFSMetaLifecycle(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	entry, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	entry, err := db.GetPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	if err != nil {
-		t.Fatalf("PopPendingLFSMeta failed: %v", err)
+		t.Fatalf("GetPendingLFSMeta failed: %v", err)
 	}
 	if sqliteTestStringVal(entry.Candidate.Name) != "candidate" {
 		t.Fatalf("unexpected candidate payload: %+v", entry.Candidate)
 	}
 
-	if _, err := db.PopPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
-		t.Fatalf("expected not found after pop")
+	if _, err := db.ConsumePendingMetadata(ctx, *entry); err != nil {
+		t.Fatalf("ConsumePendingMetadata failed: %v", err)
+	}
+	if _, err := db.GetPendingMetadata(ctx, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
+		t.Fatalf("expected not found after consume")
 	}
 }
 
 func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
 	oid := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	candidate := objects.Candidate{
+	candidate := lfsapi.DrsObjectCandidate{
 		Name: sqliteTestPtr("expired"),
-		Checksums: &[]objects.Checksum{
+		Checksums: &[]lfsapi.Checksum{
 			{Type: "sha256", Checksum: oid},
 		},
 	}
@@ -1269,28 +1181,28 @@ func TestSqliteDB_PendingLFSMetaPrunesExpired(t *testing.T) {
 		t.Fatalf("SavePendingLFSMeta failed: %v", err)
 	}
 
-	if _, err := db.PopPendingMetadata(ctx, oid); err == nil {
+	if _, err := db.GetPendingMetadata(ctx, oid); err == nil {
 		t.Fatalf("expected not found for expired metadata")
 	}
 }
 
 func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
 	oid := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-	if err := db.CreateObject(ctx, &objects.Record{
-		Id:          objects.RecordID(oid),
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{{
+		Id:          oid,
 		Name:        sqliteTestPtr("metrics-object"),
 		Size:        42,
 		CreatedTime: now,
 		UpdatedTime: &now,
 		Version:     sqliteTestPtr("1"),
-	}); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	}}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	if err := db.RecordFileUpload(ctx, oid); err != nil {
@@ -1307,7 +1219,7 @@ func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsage failed: %v", err)
 	}
-	if usage.UploadCount != 1 || usage.DownloadCount != 2 {
+	if sqliteTestInt64Val(usage.UploadCount) != 1 || sqliteTestInt64Val(usage.DownloadCount) != 2 {
 		t.Fatalf("unexpected usage counters: %+v", usage)
 	}
 	if usage.LastAccessTime == nil {
@@ -1326,14 +1238,14 @@ func TestSqliteDB_FileUsageMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsageSummary failed: %v", err)
 	}
-	if summary.TotalFiles == 0 || summary.TotalUploads == 0 || summary.TotalDownloads == 0 {
+	if sqliteTestInt64Val(summary.TotalFiles) == 0 || sqliteTestInt64Val(summary.TotalUploads) == 0 || sqliteTestInt64Val(summary.TotalDownloads) == 0 {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
 }
 
 func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1351,56 +1263,59 @@ func TestSqliteDB_FileUsageMetrics_MissingObjectQueuedAndFlushedOnCreate(t *test
 	}
 
 	now := time.Now().UTC()
-	if err := db.CreateObject(ctx, &objects.Record{
-		Id:          objects.RecordID(oid),
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{{
+		Id:          oid,
 		Name:        sqliteTestPtr("later-created"),
 		Size:        11,
 		CreatedTime: now,
 		UpdatedTime: &now,
 		Version:     sqliteTestPtr("1"),
-	}); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	}}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 	usage, err := db.GetFileUsage(ctx, oid)
 	if err != nil {
 		t.Fatalf("GetFileUsage failed after create: %v", err)
 	}
-	if usage.UploadCount != 1 || usage.DownloadCount != 1 {
+	if sqliteTestInt64Val(usage.UploadCount) != 1 || sqliteTestInt64Val(usage.DownloadCount) != 1 {
 		t.Fatalf("expected queued usage to flush on create, got: %+v", usage)
 	}
 }
 
 func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
-	objectWithURL := func(id, rawURL string, authz map[string][]string) objects.Record {
-		return objects.Record{
-			Authorizations: authz,
-
-			Id:          objects.RecordID(id),
+	objectWithURL := func(id, rawURL string, authz map[string][]string) drs.DrsObject {
+		obj := drs.DrsObject{
+			Id:          id,
 			CreatedTime: now,
 			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: id + "-hash"}},
-			AccessMethods: &[]objects.AccessMethod{{
+			Checksums:   []drs.Checksum{{Type: "sha256", Checksum: id + "-hash"}},
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: rawURL},
+				AccessUrl: &drs.AccessURL{Url: rawURL},
 			}},
 		}
+		if authz != nil {
+			controlled := clientaccess.AuthzMapToControlledAccess(authz)
+			obj.ControlledAccess = &controlled
+		}
+		return obj
 	}
 	targetURL := "s3://bucket/path/image.offsets.json"
-	for _, obj := range []objects.Record{
+	for _, obj := range []drs.DrsObject{
 		objectWithURL("obj-a", targetURL, map[string][]string{"org": {"p1"}}),
 		objectWithURL("obj-b", targetURL, map[string][]string{"org": {"p2"}}),
 		objectWithURL("obj-c", targetURL, nil),
 		objectWithURL("obj-d", "s3://bucket/path/other.offsets.json", map[string][]string{"org": {"p1"}}),
 		objectWithURL("obj-e", targetURL, map[string][]string{"org": {"p1"}}),
 	} {
-		if err := db.CreateObject(ctx, &obj); err != nil {
-			t.Fatalf("CreateObject failed: %v", err)
+		if err := db.RegisterObjects(ctx, []drs.DrsObject{obj}); err != nil {
+			t.Fatalf("RegisterObjects failed: %v", err)
 		}
 	}
 
@@ -1437,96 +1352,43 @@ func TestSqliteDB_ListObjectIDsPageByURL(t *testing.T) {
 	}
 }
 
-func TestSqliteDB_AuthorizedObjectLookupQueries(t *testing.T) {
-	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
-	if err != nil {
-		t.Fatalf("failed to create db: %v", err)
-	}
-	now := time.Now().UTC()
-	for _, obj := range []objects.Record{
-		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-a",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-
-		{
-			Authorizations: map[string][]string{"org": {"p2"}},
-			Id:             "obj-b",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			Checksums:      []objects.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-
-		{
-			Id:          "obj-public",
-			CreatedTime: now,
-			UpdatedTime: &now,
-			Checksums:   []objects.Checksum{{Type: "sha256", Checksum: "same"}},
-		},
-	} {
-		if err := db.CreateObject(ctx, &obj); err != nil {
-			t.Fatalf("CreateObject failed: %v", err)
-		}
-	}
-
-	scopeIDs, err := db.ListObjectIDsByScopeAndResources(ctx, "org", "p1", []string{"/programs/org/projects/p1"}, true)
-	if err != nil {
-		t.Fatalf("ListObjectIDsByScopeAndResources failed: %v", err)
-	}
-	if !slices.Equal(scopeIDs, []string{"obj-a"}) {
-		t.Fatalf("unexpected scoped ids: %v", scopeIDs)
-	}
-
-	byChecksum, err := db.ListObjectIDsByChecksumsAndResources(ctx, []string{"same"}, []string{"/programs/org/projects/p1"}, true, true)
-	if err != nil {
-		t.Fatalf("ListObjectIDsByChecksumsAndResources failed: %v", err)
-	}
-	if !slices.Equal(byChecksum["same"], []string{"obj-a", "obj-public"}) {
-		t.Fatalf("unexpected checksum auth ids: %+v", byChecksum)
-	}
-}
-
 func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
-	for _, obj := range []objects.Record{
+	for _, obj := range []drs.DrsObject{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-1",
-			Name:           sqliteTestPtr("one"),
-			Size:           1,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-1",
+			Name:             sqliteTestPtr("one"),
+			Size:             1,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-2",
-			Name:           sqliteTestPtr("two"),
-			Size:           2,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-2",
+			Name:             sqliteTestPtr("two"),
+			Size:             2,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 
 		{
-			Authorizations: map[string][]string{"org": {"p2"}},
-			Id:             "obj-3",
-			Name:           sqliteTestPtr("three"),
-			Size:           3,
-			CreatedTime:    now,
-			UpdatedTime:    &now,
+			ControlledAccess: &[]string{"/organization/org/project/p2"},
+			Id:               "obj-3",
+			Name:             sqliteTestPtr("three"),
+			Size:             3,
+			CreatedTime:      now,
+			UpdatedTime:      &now,
 		},
 	} {
-		if err := db.CreateObject(ctx, &obj); err != nil {
-			t.Fatalf("CreateObject failed: %v", err)
+		if err := db.RegisterObjects(ctx, []drs.DrsObject{obj}); err != nil {
+			t.Fatalf("RegisterObjects failed: %v", err)
 		}
 	}
 	if err := db.RecordFileUpload(ctx, "obj-2"); err != nil {
@@ -1540,7 +1402,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFileUsagePageByScope failed: %v", err)
 	}
-	if len(rows) != 1 || rows[0].ObjectID != "obj-2" {
+	if len(rows) != 1 || sqliteTestStringVal(rows[0].ObjectId) != "obj-2" {
 		t.Fatalf("unexpected scoped usage page: %+v", rows)
 	}
 
@@ -1548,7 +1410,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFileUsageSummaryByScope failed: %v", err)
 	}
-	if summary.TotalFiles != 2 || summary.TotalUploads != 1 || summary.TotalDownloads != 1 || summary.InactiveFileCount != 0 {
+	if sqliteTestInt64Val(summary.TotalFiles) != 2 || sqliteTestInt64Val(summary.TotalUploads) != 1 || sqliteTestInt64Val(summary.TotalDownloads) != 1 || sqliteTestInt64Val(summary.InactiveFileCount) != 0 {
 		t.Fatalf("unexpected scoped summary: %+v", summary)
 	}
 
@@ -1556,7 +1418,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProjectRecordSummaryByScope failed: %v", err)
 	}
-	if recordSummary.RecordCount != 2 {
+	if sqliteTestInt64Val(recordSummary.RecordCount) != 2 {
 		t.Fatalf("unexpected scoped record count: %+v", recordSummary)
 	}
 	if recordSummary.RecordLatestUpdatedTime == nil || !recordSummary.RecordLatestUpdatedTime.Equal(now) {
@@ -1566,7 +1428,7 @@ func TestSqliteDB_ScopedFileUsageQueries(t *testing.T) {
 
 func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1607,39 +1469,39 @@ func TestSqliteDB_TransferAttributionByResources(t *testing.T) {
 		t.Fatalf("RecordTransferAttributionEvents failed: %v", err)
 	}
 
-	summary, err := db.GetTransferAttributionSummaryByResources(ctx, usage.Filter{}, []string{"/programs/org/projects/p1"})
+	summary, err := db.QueryTransferSummary(ctx, usage.Filter{}, []string{"/programs/org/projects/p1"})
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummaryByResources failed: %v", err)
 	}
-	if summary.EventCount != 1 || summary.BytesDownloaded != 11 {
+	if sqliteTestInt64Val(summary.EventCount) != 1 || sqliteTestInt64Val(summary.BytesDownloaded) != 11 {
 		t.Fatalf("unexpected scoped transfer summary: %+v", summary)
 	}
 
-	breakdown, err := db.GetTransferAttributionBreakdownByResources(ctx, usage.Filter{}, "user", []string{"/programs/org/projects/p1"})
+	breakdown, err := db.QueryTransferBreakdown(ctx, usage.Filter{}, "user", []string{"/programs/org/projects/p1"})
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdownByResources failed: %v", err)
 	}
-	if len(breakdown) != 1 || breakdown[0].ActorEmail != "user-a@example.com" || breakdown[0].BytesDownloaded != 11 {
+	if len(breakdown) != 1 || sqliteTestStringVal(breakdown[0].ActorEmail) != "user-a@example.com" || sqliteTestInt64Val(breakdown[0].BytesDownloaded) != 11 {
 		t.Fatalf("unexpected scoped transfer breakdown: %+v", breakdown)
 	}
 }
 
 func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
-	for _, obj := range []objects.Record{
+	for _, obj := range []drs.DrsObject{
 		{
-			Authorizations: map[string][]string{"org": {"p1"}},
-			Id:             "obj-scoped",
-			CreatedTime:    now,
-			UpdatedTime:    &now,
-			AccessMethods: &[]objects.AccessMethod{{
+			ControlledAccess: &[]string{"/organization/org/project/p1"},
+			Id:               "obj-scoped",
+			CreatedTime:      now,
+			UpdatedTime:      &now,
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket-a/scoped"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket-a/scoped"},
 			}},
 		},
 
@@ -1647,14 +1509,14 @@ func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 			Id:          "obj-public",
 			CreatedTime: now,
 			UpdatedTime: &now,
-			AccessMethods: &[]objects.AccessMethod{{
+			AccessMethods: &[]drs.AccessMethod{{
 				Type:      "s3",
-				AccessUrl: &objects.AccessURL{Url: "s3://bucket-b/public"},
+				AccessUrl: &drs.AccessURL{Url: "s3://bucket-b/public"},
 			}},
 		},
 	} {
-		if err := db.CreateObject(ctx, &obj); err != nil {
-			t.Fatalf("CreateObject failed: %v", err)
+		if err := db.RegisterObjects(ctx, []drs.DrsObject{obj}); err != nil {
+			t.Fatalf("RegisterObjects failed: %v", err)
 		}
 	}
 
@@ -1669,25 +1531,25 @@ func TestSqliteDB_ListBucketVisibilityRows(t *testing.T) {
 
 func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 	now := time.Now().UTC()
 	oid := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-	if err := db.CreateObject(ctx, &objects.Record{
-		Authorizations: map[string][]string{"calypr": {"proj-a"}},
-		Id:             "did-1",
-		Name:           sqliteTestPtr("transfer-object"),
-		Size:           42,
-		CreatedTime:    now,
-		UpdatedTime:    &now,
-		Version:        sqliteTestPtr("1"),
-		Checksums: []objects.Checksum{
+	if err := db.RegisterObjects(ctx, []drs.DrsObject{{
+		ControlledAccess: &[]string{"/organization/calypr/project/proj-a"},
+		Id:               "did-1",
+		Name:             sqliteTestPtr("transfer-object"),
+		Size:             42,
+		CreatedTime:      now,
+		UpdatedTime:      &now,
+		Version:          sqliteTestPtr("1"),
+		Checksums: []drs.Checksum{
 			{Type: "sha256", Checksum: oid},
 		},
-	}); err != nil {
-		t.Fatalf("CreateObject failed: %v", err)
+	}}); err != nil {
+		t.Fatalf("RegisterObjects failed: %v", err)
 	}
 
 	rangeStart := int64(0)
@@ -1751,33 +1613,33 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 	if err := db.RecordTransferAttributionEvents(ctx, grants[:1]); err != nil {
 		t.Fatalf("duplicate RecordTransferAttributionEvents failed: %v", err)
 	}
-	providerEvents := []usage.ProviderEvent{
+	providerEvents := []metricsapi.ProviderTransferEvent{
 		{
-			ProviderEventID:  "provider-download-1",
-			Direction:        usage.ProviderTransferDirectionDownload,
-			EventTime:        now.Add(2 * time.Second),
+			ProviderEventId:  "provider-download-1",
+			Direction:        metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+			EventTime:        sqliteTestPtr(now.Add(2 * time.Second)),
 			Provider:         "s3",
 			Bucket:           "bucket-a",
-			ObjectKey:        "program/proj/" + oid,
-			StorageURL:       "s3://bucket-a/program/proj/" + oid,
+			ObjectKey:        sqliteTestPtr("program/proj/" + oid),
+			StorageUrl:       sqliteTestPtr("s3://bucket-a/program/proj/" + oid),
 			RangeStart:       &rangeStart,
 			RangeEnd:         &rangeEnd,
 			BytesTransferred: 42,
-			HTTPMethod:       "GET",
-			HTTPStatus:       200,
+			HttpMethod:       sqliteTestPtr("GET"),
+			HttpStatus:       sqliteTestPtr(200),
 		},
 		{
-			ProviderEventID:  "provider-upload-1",
-			Direction:        usage.ProviderTransferDirectionUpload,
-			EventTime:        now.Add(3 * time.Second),
+			ProviderEventId:  "provider-upload-1",
+			Direction:        metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionUpload),
+			EventTime:        sqliteTestPtr(now.Add(3 * time.Second)),
 			Provider:         "s3",
 			Bucket:           "bucket-a",
-			ObjectKey:        "program/proj/" + oid,
-			StorageURL:       "s3://bucket-a/program/proj/" + oid,
+			ObjectKey:        sqliteTestPtr("program/proj/" + oid),
+			StorageUrl:       sqliteTestPtr("s3://bucket-a/program/proj/" + oid),
 			BytesTransferred: 42,
-			HTTPMethod:       "PUT",
-			HTTPStatus:       200,
-			ActorSubject:     "local-user",
+			HttpMethod:       sqliteTestPtr("PUT"),
+			HttpStatus:       sqliteTestPtr(200),
+			ActorSubject:     sqliteTestPtr("local-user"),
 		},
 	}
 	if err := db.RecordProviderTransferEvents(ctx, providerEvents); err != nil {
@@ -1787,80 +1649,80 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 		t.Fatalf("duplicate RecordProviderTransferEvents failed: %v", err)
 	}
 
-	summary, err := db.GetTransferAttributionSummary(ctx, usage.Filter{
+	summary, err := db.QueryTransferSummary(ctx, usage.Filter{
 		Organization: "calypr",
 		Project:      "proj-a",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary failed: %v", err)
 	}
-	if summary.EventCount != 2 || summary.DownloadEventCount != 1 || summary.UploadEventCount != 1 || summary.BytesDownloaded != 42 || summary.BytesUploaded != 42 {
+	if sqliteTestInt64Val(summary.EventCount) != 2 || sqliteTestInt64Val(summary.DownloadEventCount) != 1 || sqliteTestInt64Val(summary.UploadEventCount) != 1 || sqliteTestInt64Val(summary.BytesDownloaded) != 42 || sqliteTestInt64Val(summary.BytesUploaded) != 42 {
 		t.Fatalf("unexpected transfer summary: %+v", summary)
 	}
 
-	userBreakdown, err := db.GetTransferAttributionBreakdown(ctx, usage.Filter{Organization: "calypr"}, "user")
+	userBreakdown, err := db.QueryTransferBreakdown(ctx, usage.Filter{Organization: "calypr"}, "user", nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown(user) failed: %v", err)
 	}
 	if len(userBreakdown) != 2 {
 		t.Fatalf("expected two user breakdown rows, got %+v", userBreakdown)
 	}
-	providerBreakdown, err := db.GetTransferAttributionBreakdown(ctx, usage.Filter{Provider: "s3", Bucket: "bucket-a"}, "provider")
+	providerBreakdown, err := db.QueryTransferBreakdown(ctx, usage.Filter{Provider: "s3", Bucket: "bucket-a"}, "provider", nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown(provider) failed: %v", err)
 	}
-	if len(providerBreakdown) != 1 || providerBreakdown[0].BytesDownloaded != 42 || providerBreakdown[0].BytesUploaded != 42 {
+	if len(providerBreakdown) != 1 || sqliteTestInt64Val(providerBreakdown[0].BytesDownloaded) != 42 || sqliteTestInt64Val(providerBreakdown[0].BytesUploaded) != 42 {
 		t.Fatalf("unexpected provider breakdown: %+v", providerBreakdown)
 	}
-	objectBreakdown, err := db.GetTransferAttributionBreakdown(ctx, usage.Filter{SHA256: oid}, "object")
+	objectBreakdown, err := db.QueryTransferBreakdown(ctx, usage.Filter{SHA256: oid}, "object", nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionBreakdown(object) failed: %v", err)
 	}
-	if len(objectBreakdown) != 1 || objectBreakdown[0].SHA256 != oid {
+	if len(objectBreakdown) != 1 || sqliteTestStringVal(objectBreakdown[0].Sha256) != oid {
 		t.Fatalf("unexpected object breakdown: %+v", objectBreakdown)
 	}
 
 	if err := db.DeleteObject(ctx, "did-1"); err != nil {
 		t.Fatalf("DeleteObject failed: %v", err)
 	}
-	afterDelete, err := db.GetTransferAttributionSummary(ctx, usage.Filter{SHA256: oid})
+	afterDelete, err := db.QueryTransferSummary(ctx, usage.Filter{SHA256: oid}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary after delete failed: %v", err)
 	}
-	if afterDelete.EventCount != 2 || afterDelete.BytesDownloaded != 42 || afterDelete.BytesUploaded != 42 {
+	if sqliteTestInt64Val(afterDelete.EventCount) != 2 || sqliteTestInt64Val(afterDelete.BytesDownloaded) != 42 || sqliteTestInt64Val(afterDelete.BytesUploaded) != 42 {
 		t.Fatalf("expected transfer events to survive object deletion, got %+v", afterDelete)
 	}
-	unmatched := usage.ProviderEvent{
-		ProviderEventID:  "provider-unmatched-1",
-		Direction:        usage.ProviderTransferDirectionDownload,
-		EventTime:        now,
+	unmatched := metricsapi.ProviderTransferEvent{
+		ProviderEventId:  "provider-unmatched-1",
+		Direction:        metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+		EventTime:        sqliteTestPtr(now),
 		Provider:         "s3",
 		Bucket:           "bucket-a",
-		ObjectKey:        "missing",
+		ObjectKey:        sqliteTestPtr("missing"),
 		BytesTransferred: 10,
-		HTTPMethod:       "GET",
-		HTTPStatus:       200,
+		HttpMethod:       sqliteTestPtr("GET"),
+		HttpStatus:       sqliteTestPtr(200),
 	}
-	if err := db.RecordProviderTransferEvents(ctx, []usage.ProviderEvent{unmatched}); err != nil {
+	if err := db.RecordProviderTransferEvents(ctx, []metricsapi.ProviderTransferEvent{unmatched}); err != nil {
 		t.Fatalf("RecordProviderTransferEvents unmatched failed: %v", err)
 	}
-	defaultSummary, err := db.GetTransferAttributionSummary(ctx, usage.Filter{Bucket: "bucket-a"})
+	defaultSummary, err := db.QueryTransferSummary(ctx, usage.Filter{Bucket: "bucket-a"}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary default failed: %v", err)
 	}
-	if defaultSummary.EventCount != 2 {
+	if sqliteTestInt64Val(defaultSummary.EventCount) != 2 {
 		t.Fatalf("unmatched provider event should not be billed by default: %+v", defaultSummary)
 	}
-	allSummary, err := db.GetTransferAttributionSummary(ctx, usage.Filter{Bucket: "bucket-a", ReconciliationStatus: "all"})
+	allSummary, err := db.QueryTransferSummary(ctx, usage.Filter{Bucket: "bucket-a", ReconciliationStatus: "all"}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary all failed: %v", err)
 	}
-	if allSummary.EventCount != 2 {
+	if sqliteTestInt64Val(allSummary.EventCount) != 2 {
 		t.Fatalf("expected all reconciliation states when requested, got %+v", allSummary)
 	}
 
 	var grantCount, issueCount int
-	if err := db.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grantCount, &issueCount); err != nil {
+	if err := db.DB().QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(MAX(issue_count), 0) FROM access_grant`).Scan(&grantCount, &issueCount); err != nil {
 		t.Fatalf("count access grants: %v", err)
 	}
 	if grantCount != 1 || issueCount != 2 {
@@ -1870,7 +1732,7 @@ func TestSqliteDB_TransferAttributionMetrics(t *testing.T) {
 
 func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -1910,21 +1772,21 @@ func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *te
 	if err := db.RecordTransferAttributionEvents(ctx, events); err != nil {
 		t.Fatalf("RecordTransferAttributionEvents failed: %v", err)
 	}
-	if err := db.RecordProviderTransferEvents(ctx, []usage.ProviderEvent{{
-		ProviderEventID:  "ambiguous-provider-event",
-		Direction:        usage.ProviderTransferDirectionDownload,
-		EventTime:        now.Add(2 * time.Second),
+	if err := db.RecordProviderTransferEvents(ctx, []metricsapi.ProviderTransferEvent{{
+		ProviderEventId:  "ambiguous-provider-event",
+		Direction:        metricsapi.ProviderTransferDirection(usage.ProviderTransferDirectionDownload),
+		EventTime:        sqliteTestPtr(now.Add(2 * time.Second)),
 		Provider:         "s3",
 		Bucket:           "bucket-a",
-		ObjectKey:        "shared-key",
+		ObjectKey:        sqliteTestPtr("shared-key"),
 		BytesTransferred: 10,
-		HTTPMethod:       "GET",
-		HTTPStatus:       200,
+		HttpMethod:       sqliteTestPtr("GET"),
+		HttpStatus:       sqliteTestPtr(200),
 	}}); err != nil {
 		t.Fatalf("RecordProviderTransferEvents failed: %v", err)
 	}
 	var status string
-	if err := db.db.QueryRowContext(ctx, `SELECT reconciliation_status FROM provider_transfer_event WHERE provider_event_id = 'ambiguous-provider-event'`).Scan(&status); err != nil {
+	if err := db.DB().QueryRowContext(ctx, `SELECT reconciliation_status FROM provider_transfer_event WHERE provider_event_id = 'ambiguous-provider-event'`).Scan(&status); err != nil {
 		t.Fatalf("read provider event status: %v", err)
 	}
 	if status != usage.ProviderTransferAmbiguous {
@@ -1934,7 +1796,7 @@ func TestSqliteDB_AccessGrantReconciliationAmbiguousOnlyForDifferentGrants(t *te
 
 func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -2020,16 +1882,16 @@ func TestSqliteDB_BucketScopeLifecycle(t *testing.T) {
 
 func TestSqliteDB_GetPendingLFSMeta(t *testing.T) {
 	ctx := context.Background()
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
 
 	now := time.Now().UTC()
 	oid := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-	candidate := objects.Candidate{
+	candidate := lfsapi.DrsObjectCandidate{
 		Name: sqliteTestPtr("candidate-get"),
-		Checksums: &[]objects.Checksum{
+		Checksums: &[]lfsapi.Checksum{
 			{Type: "sha256", Checksum: oid},
 		},
 	}
@@ -2066,6 +1928,13 @@ func sqliteTestPtr[T any](value T) *T {
 func sqliteTestStringVal(value *string) string {
 	if value == nil {
 		return ""
+	}
+	return *value
+}
+
+func sqliteTestInt64Val(value *int64) int64 {
+	if value == nil {
+		return 0
 	}
 	return *value
 }

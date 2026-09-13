@@ -32,7 +32,7 @@ func TestHeadRetryRetriesTransientErrorAndReturnsMetadata(t *testing.T) {
 		},
 	}
 	provider := cachedBackend(client, &fakePresigner{})
-	metadata, err := provider.probeOne(context.Background(), objectTarget("bucket", "key"))
+	metadata, err := provider.probeOne(context.Background(), storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}, objectTarget("bucket", "key"))
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestHeadRetryRetriesTransientErrorAndReturnsMetadata(t *testing.T) {
 
 func TestHeadAndListShareOnePermitAndCancellationIsReleasable(t *testing.T) {
 	t.Setenv(envHeadMaxAttempts, "1")
-	provider := newBackend(nil)
+	provider := newTestBackend()
 	provider.limiter = newProbeLimiter(1)
 	started := make(chan struct{})
 	unblock := make(chan struct{})
@@ -90,7 +90,7 @@ func TestHeadAndListShareOnePermitAndCancellationIsReleasable(t *testing.T) {
 
 func TestHeadReleasesPermitAfterProviderError(t *testing.T) {
 	t.Setenv(envHeadMaxAttempts, "1")
-	provider := newBackend(nil)
+	provider := newTestBackend()
 	provider.limiter = newProbeLimiter(1)
 	client := &fakeClient{headErrs: []error{&smithy.GenericAPIError{Code: "AccessDenied", Message: "no"}}, headOutput: &awss3.HeadObjectOutput{}}
 	if _, err := provider.headWithRetry(context.Background(), client, "bucket", "key"); err == nil {
@@ -122,6 +122,6 @@ func (client *blockingProbeClient) ListObjectsV2(_ context.Context, _ *awss3.Lis
 	return &awss3.ListObjectsV2Output{}, nil
 }
 
-func objectTarget(bucket, key string) storage.ObjectTarget {
-	return storage.ObjectTarget{Bucket: bucket, Key: key}
+func objectTarget(bucket, key string) storage.Target {
+	return storage.Target{PhysicalBucket: bucket, Key: key}
 }

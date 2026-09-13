@@ -4,17 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/calypr/syfon/internal/httpapi/middleware"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/requestid"
 	providerstorage "github.com/calypr/syfon/internal/storage"
-	"github.com/gofiber/fiber/v3"
 )
 
 func TestMapStorageErrorPreservesProviderIdentityAndCause(t *testing.T) {
@@ -57,37 +53,6 @@ func TestMapStorageErrorPreservesProviderIdentityAndCause(t *testing.T) {
 	}
 }
 
-func TestTransientProviderErrorUsesUnavailableContractAndRedactsCause(t *testing.T) {
-	cause := fmt.Errorf("private provider detail: %w", context.DeadlineExceeded)
-	source := &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "probe", Cause: cause}
-	mapped := mapStorageError(source, "probe", "bucket", "key")
-	var operationErr *providerstorage.OperationError
-	if !errors.As(mapped, &operationErr) || operationErr != source {
-		t.Fatalf("provider operation identity was not preserved: %v", mapped)
-	}
-	if !errors.Is(mapped, context.DeadlineExceeded) {
-		t.Fatal("deadline cause was not preserved")
-	}
-
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-	app.Get("/probe", func(c fiber.Ctx) error { return middleware.HandleError(c, mapped) })
-	response, err := app.Test(httptest.NewRequest("GET", "/probe", nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.StatusCode != 503 {
-		t.Fatalf("status = %d, want 503", response.StatusCode)
-	}
-	if strings.Contains(string(body), "private provider detail") {
-		t.Fatalf("provider cause escaped public response: %s", body)
-	}
-}
-
 func TestMappedIncompleteDiagnosticLogsCauseOnceWithRequestID(t *testing.T) {
 	cause := errors.New("private provider detail")
 	source := &providerstorage.OperationError{Kind: providerstorage.ErrorIncomplete, Provider: "s3", Capability: "inventory", Cause: cause}
@@ -112,40 +77,6 @@ func TestMappedIncompleteDiagnosticLogsCauseOnceWithRequestID(t *testing.T) {
 	}
 }
 
-func TestMappedProviderErrorsRedactCauseAtHTTPBoundary(t *testing.T) {
-	tests := []struct {
-		name string
-		kind providerstorage.ErrorKind
-	}{
-		{name: "invalid", kind: providerstorage.ErrorInvalid},
-		{name: "incomplete", kind: providerstorage.ErrorIncomplete},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			mapped := mapStorageError(&providerstorage.OperationError{
-				Kind:       test.kind,
-				Provider:   "s3",
-				Capability: "inventory",
-				Cause:      errors.New("private provider detail"),
-			}, "inventory", "bucket", "prefix")
-			app := fiber.New(fiber.Config{ErrorHandler: middleware.FiberErrorHandler})
-			app.Get("/storage", func(c fiber.Ctx) error { return middleware.HandleError(c, mapped) })
-			response, err := app.Test(httptest.NewRequest("GET", "/storage", nil))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(body), "private provider detail") {
-				t.Fatalf("provider cause escaped HTTP response: %s", body)
-			}
-		})
-	}
-}
-
 type errorProbe struct {
 	cause error
 }
@@ -155,7 +86,7 @@ func (p errorProbe) Probe(_ context.Context, targets []providerstorage.ProbeTarg
 	if target.Key == "bad" {
 		return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Err: p.cause}}
 	}
-	return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: providerstorage.ObjectMetadata{Bucket: target.Bucket, Key: target.Key}}}
+	return []providerstorage.ProbeResult{{ID: targets[0].ID, Target: target, Metadata: providerstorage.ObjectMetadata{Bucket: target.PhysicalBucket, Key: target.Key}}}
 }
 
 type errorInventory struct {
@@ -163,8 +94,8 @@ type errorInventory struct {
 }
 
 func (i errorInventory) Inventory(_ context.Context, request providerstorage.InventoryRequest) (providerstorage.InventoryResult, error) {
-	if request.Target.Prefix == "prefix/project/good" {
-		return providerstorage.InventoryResult{Items: []providerstorage.ObjectMetadata{{Bucket: "bucket", Key: request.Target.Prefix}}, Complete: true}, nil
+	if request.Prefix == "prefix/project/good" {
+		return providerstorage.InventoryResult{Items: []providerstorage.ObjectMetadata{{Bucket: "bucket", Key: request.Prefix}}, Complete: true}, nil
 	}
 	return providerstorage.InventoryResult{}, i.cause
 }
@@ -173,11 +104,11 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 	cause := errors.New("private provider detail")
 	service, _ := projectService(&fakeInventory{}, nil)
 	service.probe = errorProbe{cause: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "probe", Cause: cause}}
-	probeResults := service.ProbeObjects(context.Background(), []InspectRequest{
-		{ID: "good", ObjectURL: "s3://bucket/good"},
-		{ID: "bad", ObjectURL: "s3://bucket/bad"},
+	probeResults := service.ProbeObjects(context.Background(), []internalapi.InternalInspectObjectRequest{
+		{Id: "good", ObjectUrl: "s3://bucket/good"},
+		{Id: "bad", ObjectUrl: "s3://bucket/bad"},
 	})
-	if probeResults[0].Status != ProbePresent || probeResults[1].Status != ProbeError {
+	if probeResults[0].Status != "present" || probeResults[1].Status != "error" {
 		t.Fatalf("probe results = %+v", probeResults)
 	}
 	if probeResults[1].ErrorKind != "storage_unavailable" || strings.Contains(probeResults[1].Error, "private provider detail") {
@@ -185,11 +116,11 @@ func TestBatchProbeAndValidationRedactPartialProviderFailures(t *testing.T) {
 	}
 
 	service.inventory = errorInventory{cause: &providerstorage.OperationError{Kind: providerstorage.ErrorUnavailable, Provider: "s3", Capability: "inventory", Cause: cause}}
-	validationResults := service.ValidateInventoryObjects(context.Background(), []ListValidationRequest{
-		{ID: "good", ObjectURL: "s3://bucket/prefix/project/good"},
-		{ID: "bad", ObjectURL: "s3://bucket/prefix/project/bad"},
+	validationResults := service.ValidateInventoryObjects(context.Background(), []internalapi.InternalInspectObjectRequest{
+		{Id: "good", ObjectUrl: "s3://bucket/prefix/project/good"},
+		{Id: "bad", ObjectUrl: "s3://bucket/prefix/project/bad"},
 	})
-	if validationResults[0].Status != ProbePresent || validationResults[1].Status != ProbeError {
+	if validationResults[0].Status != "present" || validationResults[1].Status != "error" {
 		t.Fatalf("validation results = %+v", validationResults)
 	}
 	if validationResults[1].ErrorKind != "storage_unavailable" || strings.Contains(validationResults[1].Error, "private provider detail") {

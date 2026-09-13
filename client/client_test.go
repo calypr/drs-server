@@ -8,9 +8,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/calypr/syfon/apigen/internalapi"
-	"github.com/calypr/syfon/client/request"
+	"github.com/calypr/syfon/client/common"
 	syfonclient "github.com/calypr/syfon/client/services"
 )
 
@@ -50,12 +51,7 @@ func TestClientBasicAuthAndUserAgent(t *testing.T) {
 		}, nil
 	})}
 
-	c, err := NewClient(&Config{
-		Address:    "http://example.test",
-		BasicAuth:  &BasicAuth{Username: "u", Password: "p"},
-		UserAgent:  "syfon-test-client",
-		HTTPClient: httpClient,
-	})
+	c, err := New("http://example.test", WithBasicAuth("u", "p"), WithUserAgent("syfon-test-client"), WithHTTPClient(httpClient))
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -98,7 +94,7 @@ func TestGeneratedClientUsesBasicAuthTransport(t *testing.T) {
 	}
 }
 
-func TestGeneratedClientUsesUserAgentAndRetriesSafeGET(t *testing.T) {
+func TestGeneratedClientUsesUserAgent(t *testing.T) {
 	t.Parallel()
 
 	var mu sync.Mutex
@@ -106,13 +102,9 @@ func TestGeneratedClientUsesUserAgentAndRetriesSafeGET(t *testing.T) {
 	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		mu.Lock()
 		calls++
-		attempt := calls
 		mu.Unlock()
 		if got := r.Header.Get("User-Agent"); got != "generated-test-client" {
 			t.Fatalf("unexpected generated user agent: %q", got)
-		}
-		if attempt == 1 {
-			return &http.Response{StatusCode: http.StatusBadGateway, Status: "502 Bad Gateway", Body: io.NopCloser(strings.NewReader("retry")), Header: make(http.Header), Request: r}, nil
 		}
 		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"records":[]}`)), Header: http.Header{"Content-Type": []string{"application/json"}}, Request: r}, nil
 	})}
@@ -120,19 +112,13 @@ func TestGeneratedClientUsesUserAgentAndRetriesSafeGET(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient returned error: %v", err)
 	}
-	r, ok := c.requestor.(*request.Request)
-	if !ok {
-		t.Fatalf("requestor type = %T, want *request.Request", c.requestor)
-	}
-	r.RetryClient.RetryWaitMin = 0
-	r.RetryClient.RetryWaitMax = 0
 	if _, err := c.InternalAPI().InternalListWithResponse(context.Background(), &internalapi.InternalListParams{}); err != nil {
 		t.Fatalf("generated GET returned error: %v", err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if calls != 2 {
-		t.Fatalf("expected one retry for generated GET, got %d calls", calls)
+	if calls != 1 {
+		t.Fatalf("expected one generated GET, got %d calls", calls)
 	}
 }
 
@@ -243,10 +229,7 @@ func TestDataMultipartInitUsesCanonicalUploadId(t *testing.T) {
 			Header:     header,
 		}, nil
 	})
-	// InitMultipartUpload returns (uploadID string, respGuid string, err error)
-	// Wait, I updated the service methods.
-	// c.data.InitMultipartUpload(ctx, guid, filename, bucket) -> (string, string, error)
-	uploadID, respGuid, err := c.data.InitMultipartUpload(context.Background(), "g1", "", "")
+	uploadID, respGuid, err := c.data.InitMultipartUploadWithMetadata(context.Background(), "g1", "", "", common.FileMetadata{})
 	if err != nil {
 		t.Fatalf("MultipartInit failed: %v", err)
 	}
@@ -267,6 +250,10 @@ func TestParseBaseURL(t *testing.T) {
 		{name: "empty uses default", input: "", want: defaultAddress},
 		{name: "missing scheme", input: "example.test:8080", want: "http://example.test:8080"},
 		{name: "trim trailing slash", input: "https://example.test/root/", want: "https://example.test/root"},
+		{name: "preserve prefixed path", input: "https://example.test/root/api/", want: "https://example.test/root/api"},
+		{name: "reject query", input: "https://example.test/root?tenant=one", wantErr: true},
+		{name: "reject fragment", input: "https://example.test/root#fragment", wantErr: true},
+		{name: "reject query and fragment", input: "https://example.test/root?tenant=one#fragment", wantErr: true},
 		{name: "invalid address", input: "http://", wantErr: true},
 	}
 
@@ -286,6 +273,41 @@ func TestParseBaseURL(t *testing.T) {
 				t.Fatalf("parseBaseURL(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestNewClientPreservesPrefixedServiceBase(t *testing.T) {
+	t.Parallel()
+
+	c, err := NewClient(&Config{Address: "https://example.test/root/api/", HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"records":[]}`)), Header: http.Header{"Content-Type": []string{"application/json"}}, Request: r}, nil
+	})}})
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+	if got := c.Address(); got != "https://example.test/root/api" {
+		t.Fatalf("client address = %q, want %q", got, "https://example.test/root/api")
+	}
+	generated, ok := c.InternalAPI().ClientInterface.(*internalapi.Client)
+	if !ok {
+		t.Fatalf("unexpected generated client type %T", c.InternalAPI().ClientInterface)
+	}
+	if generated.Server != "https://example.test/root/api/" {
+		t.Fatalf("generated service base = %q, want %q", generated.Server, "https://example.test/root/api/")
+	}
+}
+
+func TestNewClientRejectsBaseURLQueryOrFragment(t *testing.T) {
+	t.Parallel()
+
+	for _, address := range []string{
+		"https://example.test/root?tenant=one",
+		"https://example.test/root#fragment",
+		"https://example.test/root?tenant=one#fragment",
+	} {
+		if _, err := New(address); err == nil {
+			t.Fatalf("New(%q) succeeded, want constructor error", address)
+		}
 	}
 }
 
@@ -337,6 +359,9 @@ func TestNewClientNilConfigAndFallbackHelpers(t *testing.T) {
 	}
 	if c.Address() != defaultAddress {
 		t.Fatalf("unexpected default address: %q", c.Address())
+	}
+	if c.HTTPClient().Timeout != 10*time.Minute {
+		t.Fatalf("unexpected default timeout: %v", c.HTTPClient().Timeout)
 	}
 
 	bare := &Client{}

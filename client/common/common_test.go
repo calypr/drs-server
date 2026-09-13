@@ -4,52 +4,9 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func TestToJSONReader(t *testing.T) {
-	t.Parallel()
-
-	reader, err := ToJSONReader(map[string]string{"hello": "world"})
-	if err != nil {
-		t.Fatalf("ToJSONReader returned error: %v", err)
-	}
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatalf("ReadAll returned error: %v", err)
-	}
-	if got := strings.TrimSpace(string(body)); got != `{"hello":"world"}` {
-		t.Fatalf("unexpected JSON body: %s", got)
-	}
-}
-
-func TestParseRootPathAndGetAbsolutePath(t *testing.T) {
-	t.Parallel()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("UserHomeDir returned error: %v", err)
-	}
-
-	expanded, err := ParseRootPath("~/syfon-test")
-	if err != nil {
-		t.Fatalf("ParseRootPath returned error: %v", err)
-	}
-	if expanded != filepath.Join(home, "syfon-test") {
-		t.Fatalf("unexpected expanded path: %q", expanded)
-	}
-
-	abs, err := GetAbsolutePath(".")
-	if err != nil {
-		t.Fatalf("GetAbsolutePath returned error: %v", err)
-	}
-	if !filepath.IsAbs(abs) {
-		t.Fatalf("expected absolute path, got %q", abs)
-	}
-}
 
 func TestResponseBodyError(t *testing.T) {
 	t.Parallel()
@@ -86,7 +43,17 @@ func TestIsCloudPresignedURL(t *testing.T) {
 		{name: "aws v4", url: "https://example.test?X-Amz-Signature=abc", want: true},
 		{name: "gcs", url: "https://example.test?X-Goog-Signature=abc", want: true},
 		{name: "legacy", url: "https://example.test?AWSAccessKeyId=abc&Expires=1", want: true},
+		{name: "legacy signature and expiry", url: "https://example.test?Signature=abc&Expires=1", want: true},
+		{name: "legacy gcs", url: "https://storage.googleapis.com/bucket/object?GoogleAccessId=abc&Expires=1", want: true},
+		{name: "azure sas version", url: "https://blob.example.test/c/object?sv=2024-01-01&sig=abc%2Fdef", want: true},
+		{name: "azure sas expiry", url: "https://blob.example.test/c/object?se=2030-01-01&sig=abc%3D", want: true},
 		{name: "plain", url: "https://example.test/file.txt", want: false},
+		{name: "expiry alone", url: "https://example.test/file.txt?Expires=1", want: false},
+		{name: "expiry text in value", url: "https://example.test/file.txt?note=Expires%3D1", want: false},
+		{name: "signature alone", url: "https://example.test/file.txt?Signature=abc", want: false},
+		{name: "arbitrary azure signature", url: "https://example.test/file.txt?sig=abc", want: false},
+		{name: "empty aws signature", url: "https://example.test/file.txt?X-Amz-Signature=", want: false},
+		{name: "malformed query escape", url: "https://example.test/file.txt?X-Amz-Signature=%zz", want: false},
 	}
 
 	for _, tc := range tests {

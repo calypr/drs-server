@@ -2,17 +2,16 @@ package: metricsapi
 generate:
   client: true
   models: true
-  fiber-server: true
+  fiber-v3-server: true
   strict-server: true
+compatibility:
+  sort-handler-registrations: true
 import-mapping:
   ./error.openapi.yaml: github.com/calypr/syfon/apigen/errorapi
 output-options:
   skip-prune: false
+  skip-enum-validate: true
+  skip-response-body-getters: true
+  skip-client-response-content-type: true
   user-templates:
     client-with-responses.tmpl: apigen/templates/client-with-responses.tmpl
-    imports.tmpl: apigen/templates/imports.tmpl
-    fiber/fiber-handler.tmpl: apigen/templates/fiber/fiber-handler.tmpl
-    fiber/fiber-interface.tmpl: apigen/templates/fiber/fiber-interface.tmpl
-    fiber/fiber-middleware.tmpl: apigen/templates/fiber/fiber-middleware.tmpl
-    strict/strict-fiber.tmpl: apigen/templates/strict/strict-fiber.tmpl
-    strict/strict-fiber-interface.tmpl: apigen/templates/strict/strict-fiber-interface.tmpl

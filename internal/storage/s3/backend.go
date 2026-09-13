@@ -3,7 +3,6 @@ package s3
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -24,14 +24,45 @@ const defaultExpiry = 15 * time.Minute
 // remains keyed by the lookup bucket string, matching the previous signer.
 // Request-scoped policy caches stay above this package.
 type backend struct {
-	credentials storage.CredentialLookup
-	cache       sync.Map // bucket string -> *clients
-	limiter     *probeLimiter
+	cache   sync.Map // bucket string -> *clients
+	cacheMu sync.Mutex
+	entries map[string]*cacheEntry
+	limiter *probeLimiter
 }
 
 type clients struct {
 	client    s3Client
 	presigner s3Presigner
+}
+
+type cacheEntry struct {
+	clients    *clients
+	credential credentialIdentity
+}
+
+type credentialIdentity struct {
+	present  bool
+	provider string
+	bucket   string
+	region   string
+	access   string
+	secret   string
+	endpoint string
+}
+
+func credentialIdentityOf(cred *buckets.Credential) credentialIdentity {
+	if cred == nil {
+		return credentialIdentity{}
+	}
+	return credentialIdentity{
+		present:  true,
+		provider: cred.Provider,
+		bucket:   cred.Bucket,
+		region:   cred.Region,
+		access:   cred.AccessKey,
+		secret:   cred.SecretKey,
+		endpoint: cred.Endpoint,
+	}
 }
 
 type s3Client interface {
@@ -50,38 +81,70 @@ type s3Presigner interface {
 }
 
 // New constructs the S3 registration expected by storage.NewManager.
-func New(credentials storage.CredentialLookup) storage.Registration {
+func New() storage.Registration {
 	return storage.NewRegistration(address.S3Provider, &backend{
-		credentials: credentials,
-		limiter:     newProbeLimiterFromEnv(),
+		limiter: newProbeLimiterFromEnv(),
 	})
 }
 
-func newBackend(credentials storage.CredentialLookup) *backend {
-	return &backend{credentials: credentials, limiter: newProbeLimiterFromEnv()}
-}
-
 func (s *backend) InvalidateBucket(bucket string) {
-	bucket = strings.TrimSpace(bucket)
+	bucket = strings.ToLower(strings.TrimSpace(bucket))
 	if bucket == "" {
 		return
 	}
-	s.cache.Delete(bucket)
+	s.cacheMu.Lock()
+	if s.entries == nil {
+		s.entries = make(map[string]*cacheEntry)
+	}
+	delete(s.entries, bucket)
+	s.cache.Range(func(key, _ any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == bucket {
+			s.cache.Delete(key)
+		}
+		return true
+	})
+	s.cacheMu.Unlock()
 }
 
-func (s *backend) getClients(ctx context.Context, bucket string) (*clients, error) {
-	if value, ok := s.cache.Load(bucket); ok {
-		return value.(*clients), nil
+func (s *backend) getClients(ctx context.Context, binding storage.ProviderBinding) (*clients, error) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	cacheKey := strings.ToLower(strings.TrimSpace(binding.LookupKey))
+	if cacheKey == "" {
+		cacheKey = strings.ToLower(strings.TrimSpace(binding.PhysicalBucket))
 	}
-	if s.credentials == nil {
-		return nil, fmt.Errorf("credentials lookup is required")
+	if s.entries == nil {
+		s.entries = make(map[string]*cacheEntry)
 	}
-	cred, err := s.credentials.GetS3Credential(ctx, bucket)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials for bucket %s: %w", bucket, err)
+	credential := credentialIdentityOf(binding.Credential)
+	if current := s.entries[cacheKey]; current != nil {
+		if current.credential == credential {
+			return current.clients, nil
+		}
+		delete(s.entries, cacheKey)
+		s.cache.Delete(cacheKey)
 	}
+	if value, ok := s.cache.Load(cacheKey); ok {
+		cached := value.(*clients)
+		s.entries[cacheKey] = &cacheEntry{clients: cached, credential: credential}
+		return cached, nil
+	}
+	var cached *clients
+	s.cache.Range(func(key, value any) bool {
+		if strings.ToLower(strings.TrimSpace(fmt.Sprint(key))) == cacheKey {
+			cached, _ = value.(*clients)
+			return false
+		}
+		return true
+	})
+	if cached != nil {
+		s.entries[cacheKey] = &cacheEntry{clients: cached, credential: credential}
+		s.cache.Store(cacheKey, cached)
+		return cached, nil
+	}
+	cred := binding.Credential
 	if cred == nil {
-		return nil, fmt.Errorf("credentials not found for bucket %s", bucket)
+		return nil, fmt.Errorf("credentials not found for bucket %s", binding.PhysicalBucket)
 	}
 
 	cfg, err := awsconfig.LoadDefaultConfig(ctx,
@@ -110,13 +173,14 @@ func (s *backend) getClients(ctx context.Context, bucket string) (*clients, erro
 		}
 	})
 	result := &clients{client: client, presigner: awss3.NewPresignClient(client)}
-	s.cache.Store(bucket, result)
+	s.entries[cacheKey] = &cacheEntry{clients: result, credential: credential}
+	s.cache.Store(cacheKey, result)
 	return result, nil
 }
 
-func expiry(options storage.AccessOptions) time.Duration {
-	if options.ExpiresIn > 0 {
-		return options.ExpiresIn
+func expiry(expiresIn time.Duration) time.Duration {
+	if expiresIn > 0 {
+		return expiresIn
 	}
 	return defaultExpiry
 }
@@ -127,8 +191,4 @@ func responseContentDisposition(name string) *string {
 		return nil
 	}
 	return aws.String(disposition)
-}
-
-func methodIsPut(options storage.AccessOptions) bool {
-	return options.Method == http.MethodPut
 }

@@ -98,16 +98,16 @@ func testFakeGCSStorageProvider(t *testing.T) {
 	lookup := credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
 		return &buckets.Credential{Bucket: bucket, Provider: "gcs", Endpoint: endpoint}, nil
 	})
-	manager, err := storage.NewManager(lookup, gcs.New(lookup))
+	manager, err := storage.NewManager(lookup, gcs.New())
 	if err != nil {
 		t.Fatalf("create GCS storage manager: %v", err)
 	}
 
 	const object = "smoke/object.txt"
 	payload := []byte("fake-gcs-server-storage-mvp")
-	upload, err := manager.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{Location: "s3://" + bucket + "/" + object},
-		Options: storage.AccessOptions{Method: http.MethodPut},
+	upload, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + bucket + "/" + object},
+		Method: http.MethodPut,
 	})
 	if err != nil {
 		t.Fatalf("sign fake-gcs upload URL: %v", err)
@@ -116,8 +116,8 @@ func testFakeGCSStorageProvider(t *testing.T) {
 		t.Fatalf("upload fake-gcs object: %v", err)
 	}
 
-	download, err := manager.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{Location: "s3://" + bucket + "/" + object},
+	download, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + bucket + "/" + object},
 	})
 	if err != nil {
 		t.Fatalf("sign fake-gcs download URL: %v", err)
@@ -191,15 +191,15 @@ func testAzuriteStorageProvider(t *testing.T) {
 			Endpoint:  endpoint,
 		}, nil
 	})
-	manager, err := storage.NewManager(lookup, azure.New(lookup))
+	manager, err := storage.NewManager(lookup, azure.New())
 	if err != nil {
 		t.Fatalf("create Azure storage manager: %v", err)
 	}
 
 	payload := []byte("azurite-storage-mvp")
-	upload, err := manager.Access(ctx, storage.AccessRequest{
-		Target:  storage.AccessTarget{Location: "s3://" + containerName + "/" + object},
-		Options: storage.AccessOptions{Method: http.MethodPut},
+	upload, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + containerName + "/" + object},
+		Method: http.MethodPut,
 	})
 	if err != nil {
 		t.Fatalf("sign Azurite upload URL: %v", err)
@@ -208,8 +208,8 @@ func testAzuriteStorageProvider(t *testing.T) {
 		t.Fatalf("upload Azurite object: %v", err)
 	}
 
-	download, err := manager.Access(ctx, storage.AccessRequest{
-		Target: storage.AccessTarget{Location: "s3://" + containerName + "/" + object},
+	download, err := manager.Sign(ctx, storage.SignRequest{
+		Target: storage.Target{OriginalURL: "s3://" + containerName + "/" + object},
 	})
 	if err != nil {
 		t.Fatalf("sign Azurite download URL: %v", err)

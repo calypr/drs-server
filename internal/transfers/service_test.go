@@ -4,43 +4,60 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 type accessFake struct {
-	requests []storage.AccessRequest
-	result   storage.Access
-	err      error
+	requests    []storage.SignRequest
+	partRequest storage.MultipartPartRequest
+	result      storage.SignedAccess
+	err         error
 }
 
-func (f *accessFake) Access(_ context.Context, request storage.AccessRequest) (storage.Access, error) {
+func (f *accessFake) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
 	f.requests = append(f.requests, request)
 	return f.result, f.err
 }
 
+func (f *accessFake) BeginMultipart(context.Context, storage.BeginMultipartRequest) (storage.UploadID, error) {
+	return "upload", nil
+}
+func (f *accessFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
+	f.partRequest = request
+	return f.result, f.err
+}
+func (f *accessFake) CompleteMultipart(context.Context, storage.CompleteMultipartRequest) error {
+	return nil
+}
+
 type multipartFake struct {
-	beginTarget storage.ObjectTarget
+	beginTarget storage.Target
 	partRequest storage.MultipartPartRequest
 	complete    storage.CompleteMultipartRequest
 	beginID     storage.UploadID
-	partAccess  storage.Access
+	partAccess  storage.SignedAccess
 	beginErr    error
 	partErr     error
 	completeErr error
 }
 
-func (f *multipartFake) BeginMultipart(_ context.Context, target storage.ObjectTarget) (storage.UploadID, error) {
-	f.beginTarget = target
+func (f *multipartFake) Sign(_ context.Context, _ storage.SignRequest) (storage.SignedAccess, error) {
+	return storage.SignedAccess{}, nil
+}
+
+func (f *multipartFake) BeginMultipart(_ context.Context, request storage.BeginMultipartRequest) (storage.UploadID, error) {
+	f.beginTarget = request.Target
 	return f.beginID, f.beginErr
 }
 
-func (f *multipartFake) AccessMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.Access, error) {
+func (f *multipartFake) SignMultipartPart(_ context.Context, request storage.MultipartPartRequest) (storage.SignedAccess, error) {
 	f.partRequest = request
 	return f.partAccess, f.partErr
 }
@@ -59,14 +76,6 @@ func (f scopeFake) LookupBucketScope(_ context.Context, organization, project st
 	return scope, ok, nil
 }
 
-type credentialFake struct {
-	credentials []buckets.Credential
-}
-
-func (f credentialFake) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
-	return f.credentials, nil
-}
-
 type eventFake struct {
 	events []usage.Event
 	err    error
@@ -77,19 +86,185 @@ func (f *eventFake) RecordTransferAttributionEvents(_ context.Context, events []
 	return f.err
 }
 
-func testRecord() *objects.Record {
+func testRecord() *drs.DrsObject {
 	sha := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	accessID := "s3"
 	url := "s3://legacy/object"
-	methods := []objects.AccessMethod{{AccessId: &accessID, Type: "s3", AccessUrl: &objects.AccessURL{Url: url}}}
+	methods := []drs.AccessMethod{{AccessId: &accessID, Type: "s3", AccessUrl: &drs.AccessURL{Url: url}}}
 	resources := []string{"/organization/org/project/project"}
-	return &objects.Record{
+	return &drs.DrsObject{
 		Id:               "record-1",
 		Size:             42,
-		Checksums:        []objects.Checksum{{Type: "sha256", Checksum: sha}},
+		Checksums:        []drs.Checksum{{Type: "sha256", Checksum: sha}},
 		AccessMethods:    &methods,
 		ControlledAccess: &resources,
-		Authorizations:   map[string][]string{"org": {"project"}},
+	}
+}
+
+type downloadObjectFake struct {
+	object *drs.DrsObject
+}
+
+func (f downloadObjectFake) GetObject(context.Context, string, string) (*drs.DrsObject, error) {
+	return f.object, nil
+}
+
+func (downloadObjectFake) GetObjectsByChecksums(context.Context, []string, string) (map[string][]drs.DrsObject, error) {
+	return nil, nil
+}
+
+type downloadAccountingFake struct {
+	calls     []string
+	objectIDs []string
+}
+
+func (f *downloadAccountingFake) RecordFileUpload(context.Context, string) error {
+	return nil
+}
+
+func (f *downloadAccountingFake) RecordFileDownload(_ context.Context, objectID string) error {
+	f.calls = append(f.calls, "counter")
+	f.objectIDs = append(f.objectIDs, objectID)
+	return nil
+}
+
+func (f *downloadAccountingFake) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
+	f.calls = append(f.calls, "event")
+	return nil
+}
+
+func TestDownloadWithoutOptionalAccountingStillSigns(t *testing.T) {
+	access := &accessFake{result: storage.SignedAccess{Location: "signed-download"}}
+	service := NewService(Dependencies{
+		Objects: downloadObjectFake{object: testRecord()},
+		Storage: access,
+	})
+
+	result, err := service.Download(context.Background(), DownloadRequest{
+		ObjectID:   "record-1",
+		Accounting: AccountingDownloadBeforeEvent,
+	})
+	if err != nil {
+		t.Fatalf("Download() with no optional accounting recorder failed: %v", err)
+	}
+	if result.URL != "signed-download" {
+		t.Fatalf("Download() URL = %q, want signed-download", result.URL)
+	}
+}
+
+func TestSigningExpiryUsesConfiguredDefaultAcrossOperations(t *testing.T) {
+	const configured = 37 * time.Second
+	for _, test := range []struct {
+		name string
+		call func(*Service, *accessFake) error
+		get  func(*accessFake) time.Duration
+	}{
+		{
+			name: "download",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "upload",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.UploadURL(context.Background(), UploadRequest{ObjectID: "record-1"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "drs access",
+			call: func(service *Service, fake *accessFake) error {
+				_, err := service.IssueAccess(context.Background(), AccessLookupRequest{ObjectID: "record-1", AccessID: "s3"})
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.requests[0].ExpiresIn },
+		},
+		{
+			name: "multipart part",
+			call: func(service *Service, fake *accessFake) error {
+				result, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}})
+				if err != nil {
+					return err
+				}
+				_, err = service.SignMultipartPart(context.Background(), result.UploadID, 1)
+				return err
+			},
+			get: func(fake *accessFake) time.Duration { return fake.partRequest.ExpiresIn },
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			storage := &accessFake{result: storage.SignedAccess{Location: "signed"}}
+			service := NewService(Dependencies{
+				Objects:              downloadObjectFake{object: testRecord()},
+				Storage:              storage,
+				Events:               &eventFake{},
+				DefaultSigningExpiry: configured,
+			})
+			if err := test.call(service, storage); err != nil {
+				t.Fatalf("operation failed: %v", err)
+			}
+			if got := test.get(storage); got != configured {
+				t.Fatalf("expiry = %s, want configured %s", got, configured)
+			}
+		})
+	}
+}
+
+func TestSigningExpiryDefaultsAndExplicitRequestOverride(t *testing.T) {
+	storage := &accessFake{result: storage.SignedAccess{Location: "signed"}}
+	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: storage})
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1"}); err != nil {
+		t.Fatalf("default download failed: %v", err)
+	}
+	if got, want := storage.requests[0].ExpiresIn, 15*time.Minute; got != want {
+		t.Fatalf("default expiry = %s, want %s", got, want)
+	}
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1", ExpiresIn: 41 * time.Second}); err != nil {
+		t.Fatalf("explicit download failed: %v", err)
+	}
+	if got, want := storage.requests[1].ExpiresIn, 41*time.Second; got != want {
+		t.Fatalf("explicit expiry = %s, want %s", got, want)
+	}
+}
+
+func TestDownloadAccountingPreservesConfiguredRecorderOrder(t *testing.T) {
+	accounting := &downloadAccountingFake{}
+	service := NewService(Dependencies{
+		Objects:      downloadObjectFake{object: testRecord()},
+		Storage:      &accessFake{result: storage.SignedAccess{Location: "signed-download"}},
+		FileCounters: accounting,
+		Events:       accounting,
+	})
+
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "record-1", Accounting: AccountingDownloadBeforeEvent}); err != nil {
+		t.Fatalf("Download() failed with configured accounting: %v", err)
+	}
+	if got, want := accounting.calls, []string{"counter", "event"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting call order = %v, want %v", got, want)
+	}
+	if got, want := accounting.objectIDs, []string{"record-1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting object IDs = %v, want resolved IDs %v", got, want)
+	}
+}
+
+func TestDownloadAccountingUsesResolvedObjectIDForAlias(t *testing.T) {
+	accounting := &downloadAccountingFake{}
+	service := NewService(Dependencies{
+		Objects:      downloadObjectFake{object: testRecord()},
+		Storage:      &accessFake{result: storage.SignedAccess{Location: "signed-download"}},
+		FileCounters: accounting,
+		Events:       accounting,
+	})
+
+	if _, err := service.Download(context.Background(), DownloadRequest{ObjectID: "submitted-alias", Accounting: AccountingDownloadBeforeEvent}); err != nil {
+		t.Fatalf("Download() failed: %v", err)
+	}
+	if got, want := accounting.objectIDs, []string{"record-1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("accounting object IDs = %v, want resolved IDs %v", got, want)
 	}
 }
 
@@ -107,49 +282,30 @@ func TestResolveCanonicalStorageTargetComposesScopesAndPrefixes(t *testing.T) {
 	}
 }
 
-func TestSignObjectURLRepairsLegacyPhysicalURLBeforeDelegating(t *testing.T) {
-	accessPort := &accessFake{result: storage.Access{Location: "signed"}}
-	service := NewService(Dependencies{
-		Access: accessPort,
-		Scopes: scopeFake{scopes: map[string]buckets.Scope{
-			"org|project": {Organization: "org", ProjectID: "project", Bucket: "physical", PathPrefix: "legacy"},
-		}},
-		Credentials: credentialFake{},
-	})
-	got, err := service.SignObjectURL(context.Background(), testRecord(), "s3://legacy/object", storage.AccessOptions{})
-	if err != nil {
-		t.Fatalf("SignObjectURL() error = %v", err)
-	}
-	if got != "signed" || len(accessPort.requests) != 1 {
-		t.Fatalf("unexpected signed result or calls: got=%q requests=%+v", got, accessPort.requests)
-	}
-	request := accessPort.requests[0]
-	if request.Target.AccessID != "physical" || request.Target.Location != "s3://physical/legacy/object" {
-		t.Fatalf("unexpected storage request: %+v", request)
-	}
-}
-
 func TestMultipartDelegationPreservesOpaqueIDAndPartOrder(t *testing.T) {
-	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.Access{Location: "part-signed"}}
-	service := NewService(Dependencies{Multipart: port})
+	port := &multipartFake{beginID: "provider/upload/id", partAccess: storage.SignedAccess{Location: "part-signed"}}
+	service := NewService(Dependencies{Objects: downloadObjectFake{object: testRecord()}, Storage: port})
 	ctx := context.Background()
-	id, err := service.InitMultipartUpload(ctx, "bucket", "key")
-	if err != nil || id != "provider/upload/id" {
-		t.Fatalf("InitMultipartUpload()=(%q,%v)", id, err)
+	target := storage.Target{PhysicalBucket: "bucket", LookupKey: "bucket", Key: "key", LookupCandidates: []string{"bucket"}}
+	guid := "opaque-guid"
+	result, err := service.BeginMultipart(ctx, MultipartInitRequest{Target: &target, GUID: &guid})
+	if err != nil || result.UploadID != "provider/upload/id" {
+		t.Fatalf("BeginMultipart()=(%+v,%v)", result, err)
 	}
-	part, err := service.SignMultipartPart(ctx, "bucket", "key", id, 7)
+	part, err := service.SignMultipartPart(ctx, result.UploadID, 7)
 	if err != nil || part != "part-signed" {
 		t.Fatalf("SignMultipartPart()=(%q,%v)", part, err)
 	}
-	parts := []storage.CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
-	if err := service.CompleteMultipartUpload(ctx, "bucket", "key", id, parts); err != nil {
+	parts := []CompletedPart{{PartNumber: 7, ETag: "seven"}, {PartNumber: 2, ETag: "two"}}
+	providerParts := []storage.CompletedPart{{PartNumber: 2, ETag: "two"}, {PartNumber: 7, ETag: "seven"}}
+	if _, err := service.CompleteMultipart(ctx, result.UploadID, parts); err != nil {
 		t.Fatalf("CompleteMultipartUpload() error = %v", err)
 	}
-	if port.partRequest.UploadID != storage.UploadID(id) || port.partRequest.PartNumber != 7 {
+	if port.partRequest.UploadID != storage.UploadID(result.UploadID) || port.partRequest.PartNumber != 7 {
 		t.Fatalf("unexpected part request: %+v", port.partRequest)
 	}
-	if !reflect.DeepEqual(port.complete.Parts, parts) {
-		t.Fatalf("multipart parts reordered: got=%+v want=%+v", port.complete.Parts, parts)
+	if !reflect.DeepEqual(port.complete.Parts, providerParts) {
+		t.Fatalf("multipart parts = %+v, want canonical order %+v", port.complete.Parts, providerParts)
 	}
 }
 
@@ -182,10 +338,7 @@ func TestEventFromObjectPreservesContextAndRangeProjection(t *testing.T) {
 
 func TestUnconfiguredWorkflowsReturnConfigurationErrors(t *testing.T) {
 	service := NewService(Dependencies{})
-	if _, err := service.SignURL(context.Background(), "s3://bucket/key", storage.AccessOptions{}); err == nil {
-		t.Fatal("SignURL() unexpectedly succeeded without access port")
-	}
-	if _, err := service.InitMultipartUpload(context.Background(), "bucket", "key"); err == nil {
-		t.Fatal("InitMultipartUpload() unexpectedly succeeded without multipart port")
+	if _, err := service.BeginMultipart(context.Background(), MultipartInitRequest{Target: &storage.Target{PhysicalBucket: "bucket", Key: "key"}}); err == nil {
+		t.Fatal("BeginMultipart() unexpectedly succeeded without multipart port")
 	}
 }

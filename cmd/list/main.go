@@ -8,8 +8,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/common"
 	syfonclient "github.com/calypr/syfon/client/services"
-	"github.com/calypr/syfon/client/transfer/upload"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
 )
@@ -75,7 +75,7 @@ var Cmd = &cobra.Command{
 			if rec.Project != nil {
 				project = strings.TrimSpace(*rec.Project)
 			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", name, org, project, upload.FormatSize(size), did)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", name, org, project, common.FormatSize(size), did)
 		}
 		return tw.Flush()
 	},

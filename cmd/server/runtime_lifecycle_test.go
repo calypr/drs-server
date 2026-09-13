@@ -1,0 +1,218 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/calypr/syfon/internal/config"
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/gofiber/fiber/v3"
+	"github.com/spf13/cobra"
+)
+
+func TestServerRuntimeCloseClosesSQLiteDatabaseIdempotently(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	rt, err := buildServerRuntime(context.Background(), &config.Config{
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+		Auth:     config.AuthConfig{Mode: config.AuthModeLocal},
+	}, slog.Default())
+	if err != nil {
+		t.Fatalf("build runtime: %v", err)
+	}
+	database := rt.database
+	if database == nil || database.DB() == nil {
+		t.Fatal("runtime did not retain its database")
+	}
+	if err := database.DB().Ping(); err != nil {
+		t.Fatalf("ping before close: %v", err)
+	}
+
+	if err := rt.Close(context.Background()); err != nil {
+		t.Fatalf("close runtime: %v", err)
+	}
+	if err := database.DB().Ping(); err == nil {
+		t.Fatal("expected retained database to reject Ping after runtime close")
+	}
+	if err := rt.Close(context.Background()); err != nil {
+		t.Fatalf("second close runtime: %v", err)
+	}
+}
+
+func TestProductionRuntimeRejectsInvalidAuthenticationPlugin(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authn-plugin")
+	runtime, err := buildServerRuntime(context.Background(), &config.Config{
+		Profile:  config.ProfileProduction,
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+		Auth:     config.AuthConfig{Mode: config.AuthModeLocal, Basic: config.BasicAuthConfig{Username: "user", Password: "pass"}, PluginPaths: config.PluginPaths{Authn: missingPlugin}},
+	}, slog.Default())
+	if runtime != nil {
+		t.Fatalf("production runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authentication plugin") {
+		t.Fatalf("production runtime error = %v, want authentication plugin failure", err)
+	}
+}
+
+func TestFailedRuntimeConstructionClosesSQLiteDatabase(t *testing.T) {
+	lsof, err := exec.LookPath("lsof")
+	if err != nil {
+		t.Skip("lsof is unavailable")
+	}
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	databasePath := filepath.Join(t.TempDir(), "failed-runtime.db")
+	cfg := &config.Config{
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: databasePath}},
+		BucketScopes: []config.BucketScopeConfig{{
+			Organization: "org",
+			ProjectID:    "project",
+			Bucket:       "missing",
+		}},
+	}
+	runtime, err := buildServerRuntime(context.Background(), cfg, slog.Default())
+	if err == nil || runtime != nil {
+		t.Fatalf("buildServerRuntime() = (%v, %v), want nil runtime and error", runtime, err)
+	}
+	openFiles, err := exec.Command(lsof, "-p", strconv.Itoa(os.Getpid()), "-Fn").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(openFiles), databasePath) {
+		t.Fatalf("database remains open after failed runtime construction: %s", databasePath)
+	}
+}
+
+func TestConfiguredCredentialSaveFailureStopsRuntimeConstruction(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	t.Setenv(credentialcipher.CredentialKeyManagerEnv, "")
+	t.Setenv(credentialcipher.CredentialKMSKeyIDEnv, "")
+
+	for _, test := range []struct {
+		name   string
+		scopes []config.BucketScopeConfig
+	}{
+		{name: "without dependent scope"},
+		{name: "with dependent scope", scopes: []config.BucketScopeConfig{{
+			Organization: "org",
+			ProjectID:    "project",
+			CredentialID: "second",
+			Bucket:       "shared-bucket",
+		}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+				Auth:     config.AuthConfig{Mode: config.AuthModeLocal},
+				Buckets: []config.BucketConfig{
+					{CredentialID: "first", Bucket: "shared-bucket", Provider: "s3", Region: "us-east-1", AccessKey: "first-access", SecretKey: "first-secret"},
+					{CredentialID: "second", Bucket: "shared-bucket", Provider: "s3", Region: "us-east-1", AccessKey: "second-access", SecretKey: "second-secret"},
+				},
+				BucketScopes: test.scopes,
+			}
+			runtime, err := buildServerRuntime(context.Background(), cfg, slog.Default())
+			if err == nil || runtime != nil {
+				t.Fatalf("buildServerRuntime() = (%v, %v), want nil runtime and error", runtime, err)
+			}
+			if !strings.Contains(err.Error(), "buckets[1]") || !strings.Contains(err.Error(), "shared-bucket") {
+				t.Fatalf("startup error does not identify configured bucket: %v", err)
+			}
+		})
+	}
+}
+
+func TestConfiguredBucketRejectsUnavailableSelectedKeyManager(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	t.Setenv(credentialcipher.CredentialKeyManagerEnv, "unavailable-kms")
+	t.Setenv(credentialcipher.CredentialKMSKeyIDEnv, "")
+
+	runtime, err := buildServerRuntime(context.Background(), &config.Config{
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+		Auth:     config.AuthConfig{Mode: config.AuthModeLocal},
+		Buckets: []config.BucketConfig{{
+			CredentialID: "configured",
+			Bucket:       "configured-bucket",
+			Provider:     "s3",
+			Region:       "us-east-1",
+			AccessKey:    "access",
+			SecretKey:    "secret",
+		}},
+	}, slog.Default())
+	if err == nil || runtime != nil {
+		t.Fatalf("buildServerRuntime() = (%v, %v), want nil runtime and error", runtime, err)
+	}
+	if !strings.Contains(err.Error(), `credential key manager "unavailable-kms" is not registered`) {
+		t.Fatalf("startup error does not identify selected key manager: %v", err)
+	}
+}
+
+func TestRuntimeCloseStopsOwnedListener(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := make(chan struct{})
+	runtime := &serverRuntime{
+		app:      fiber.New(),
+		listener: &firstAcceptListener{Listener: listener, ready: ready},
+	}
+	serveResult := make(chan error, 1)
+	go func() { serveResult <- runtime.app.Listener(runtime.listener) }()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Fiber did not enter its serving loop")
+	}
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := runtime.Close(shutdownContext); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	select {
+	case err := <-serveResult:
+		if err != nil && !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("Listener() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Fiber listener did not stop")
+	}
+	if err := runtime.Close(context.Background()); err != nil {
+		t.Fatalf("second Close() error = %v", err)
+	}
+}
+
+func TestServeWithCancelledContextStartsAndStops(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "cancelled-command.db")
+	t.Setenv("DRS_PORT", "0")
+	t.Setenv("DRS_DB_SQLITE_FILE", databasePath)
+	t.Setenv("DRS_AUTH_MODE", "local")
+	t.Setenv("DRS_BASIC_AUTH_USER", "user")
+	t.Setenv("DRS_BASIC_AUTH_PASSWORD", "pass")
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, strings.Repeat("a", 64))
+	previousConfigFile := configFile
+	configFile = ""
+	t.Cleanup(func() { configFile = previousConfigFile })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	command := &cobra.Command{}
+	command.SetContext(ctx)
+	result := make(chan error, 1)
+	go func() { result <- Cmd.RunE(command, nil) }()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("serve with cancelled context: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not stop after context cancellation")
+	}
+}

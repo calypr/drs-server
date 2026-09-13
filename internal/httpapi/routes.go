@@ -1,20 +1,15 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"io"
+	"strings"
+
 	generated "github.com/calypr/syfon/apigen/drs"
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/httpapi/apidocs"
-	httpbuckets "github.com/calypr/syfon/internal/httpapi/buckets"
-	httpdrs "github.com/calypr/syfon/internal/httpapi/drs"
-	"github.com/calypr/syfon/internal/httpapi/lfs"
-	"github.com/calypr/syfon/internal/httpapi/maintenance"
-	"github.com/calypr/syfon/internal/httpapi/metrics"
-	"github.com/calypr/syfon/internal/httpapi/middleware"
-	"github.com/calypr/syfon/internal/httpapi/records"
-	httptransfers "github.com/calypr/syfon/internal/httpapi/transfers"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
-	"github.com/calypr/syfon/internal/objects/scoperepair"
+	"github.com/calypr/syfon/internal/objects"
 	projectstorage "github.com/calypr/syfon/internal/projects/storage"
 	"github.com/calypr/syfon/internal/transfers"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
@@ -22,36 +17,62 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-const RouteHealthz = "/healthz"
+const (
+	RouteHealthz = "/healthz"
+	RouteLivez   = "/livez"
+	RouteReadyz  = "/readyz"
+)
 
 type Dependencies struct {
-	ServiceInfo      generated.Service
-	Objects          *objectrecords.Service
-	Transfers        *transfers.Service
-	LFSPending       transferlfs.PendingStore
-	UsageIngest      usage.Ingestor
-	UsageReports     usage.Reporter
-	Buckets          *buckets.Service
-	ProjectInspector *projectstorage.Inspector
-	ProjectCleanup   *projectstorage.ProjectCleanup
-	ScopeRepair      *scoperepair.Service
-	Authorization    *middleware.AuthzMiddleware
-	RequestIDs       *middleware.RequestIDMiddleware
+	ServiceInfo    generated.N200ServiceInfo
+	Objects        *objects.Service
+	Transfers      *transfers.Service
+	LFS            *transferlfs.Service
+	UsageIngest    usage.Ingestor
+	UsageReports   usage.Reporter
+	Buckets        *buckets.Service
+	ProjectStorage *projectstorage.Service
+	Authorization  fiber.Handler
+	RequestIDs     fiber.Handler
+	Health         *Health
 }
 
 type Options struct {
-	Docs        bool
-	GA4GH       bool
-	Metrics     bool
-	Internal    bool
-	LFS         bool
-	LFSProtocol lfs.Options
+	Docs                 bool
+	GA4GH                bool
+	Metrics              bool
+	Internal             bool
+	LFS                  bool
+	LFSProtocol          LFSOptions
+	MaxBulkRequestLength int
 }
+
+type internalServer struct {
+	objects        *objects.Service
+	transfers      *transfers.Service
+	projectStorage *projectstorage.Service
+	buckets        *buckets.Service
+}
+
+func valuePointer[T any](value T) *T { return &value }
+
+func generatedString[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+var _ internalapi.ServerInterface = (*internalServer)(nil)
 
 func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	app.Get(RouteHealthz, func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
+	if deps.Health != nil {
+		app.Get(RouteLivez, deps.Health.live)
+		app.Get(RouteReadyz, deps.Health.ready)
+	}
 
 	if !options.Docs && !options.GA4GH && !options.Metrics && !options.Internal && !options.LFS {
 		return
@@ -60,10 +81,10 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	api := app.Group("/")
 	var middlewares []any
 	if deps.RequestIDs != nil {
-		middlewares = append(middlewares, deps.RequestIDs.FiberMiddleware())
+		middlewares = append(middlewares, deps.RequestIDs)
 	}
 	if deps.Authorization != nil {
-		middlewares = append(middlewares, deps.Authorization.FiberMiddleware())
+		middlewares = append(middlewares, deps.Authorization)
 	}
 	if len(middlewares) > 0 {
 		api.Use(middlewares...)
@@ -73,39 +94,35 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		apidocs.RegisterSwaggerRoutes(api)
 	}
 	if options.GA4GH {
-		httpdrs.RegisterDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo)
+		registerDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo, options.MaxBulkRequestLength)
 	}
 	if options.Metrics {
-		metrics.RegisterMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
+		registerMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)
 	}
 	if options.Internal {
-		internalapi.RegisterHandlers(api, newInternalServer(deps))
-		maintenance.RegisterUndocumentedRoutes(api, deps.ScopeRepair, deps.ProjectInspector, deps.ProjectCleanup)
-		httpbuckets.RegisterRoutes(api, deps.Buckets, maintenance.ProjectCleanupHandler(deps.ProjectCleanup))
+		server := &internalServer{
+			objects:        deps.Objects,
+			transfers:      deps.Transfers,
+			projectStorage: deps.ProjectStorage,
+			buckets:        deps.Buckets,
+		}
+		internalapi.RegisterHandlers(api, server)
+		registerBucketRoutes(api, deps.Buckets, deps.ProjectStorage)
 	}
 	if options.LFS {
-		lfs.RegisterLFSRoutes(api, lfs.Dependencies{
-			ObjectService:   deps.Objects,
-			TransferService: deps.Transfers,
-			PendingStore:    deps.LFSPending,
-			FileCounters:    deps.UsageIngest,
-			Credentials:     deps.Buckets,
-		}, options.LFSProtocol)
+		registerLFSRoutes(api, deps.LFS, options.LFSProtocol)
 	}
 }
 
-type internalServer struct {
-	*records.RecordsServer
-	*httptransfers.TransfersServer
-	*maintenance.MaintenanceServer
-}
-
-var _ internalapi.ServerInterface = (*internalServer)(nil)
-
-func newInternalServer(deps Dependencies) *internalServer {
-	return &internalServer{
-		RecordsServer:     records.NewRecordsServer(deps.Objects),
-		TransfersServer:   httptransfers.NewTransfersServer(deps.Objects, deps.Transfers, deps.UsageIngest),
-		MaintenanceServer: maintenance.NewMaintenanceServer(deps.ProjectInspector, deps.Buckets),
+func decodeStrictJSON(body []byte, dst any) error {
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
 	}
+	var extra any
+	if err := dec.Decode(&extra); err == nil {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }

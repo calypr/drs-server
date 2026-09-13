@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/calypr/syfon/apigen/internalapi"
 	syclient "github.com/calypr/syfon/client"
-	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/client/services"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/cobra"
@@ -224,8 +222,6 @@ func testIndexService() *services.IndexService {
 					JSON200:      &resp,
 				}, nil
 			},
-		},
-		stubRequester{
 			listResponse: func(start string) (internalapi.ListRecordsResponse, error) {
 				if resp, ok := listPages[start]; ok {
 					return resp, nil
@@ -238,7 +234,8 @@ func testIndexService() *services.IndexService {
 
 type stubInternalClient struct {
 	internalapi.ClientWithResponsesInterface
-	getResponse func(id string) (*internalapi.InternalGetResponse, error)
+	getResponse  func(id string) (*internalapi.InternalGetResponse, error)
+	listResponse func(start string) (internalapi.ListRecordsResponse, error)
 }
 
 func (s stubInternalClient) InternalGetWithResponse(ctx context.Context, id string, reqEditors ...internalapi.RequestEditorFn) (*internalapi.InternalGetResponse, error) {
@@ -248,34 +245,17 @@ func (s stubInternalClient) InternalGetWithResponse(ctx context.Context, id stri
 	return s.getResponse(id)
 }
 
-type stubRequester struct {
-	listResponse func(start string) (internalapi.ListRecordsResponse, error)
-}
-
-func (s stubRequester) Do(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-	if method != http.MethodGet || path != "/index" {
-		return fmt.Errorf("unexpected request: %s %s", method, path)
-	}
-	builder := &request.RequestBuilder{Url: path, Headers: map[string]string{}}
-	for _, opt := range opts {
-		opt(builder)
-	}
+func (s stubInternalClient) InternalListWithResponse(ctx context.Context, params *internalapi.InternalListParams, reqEditors ...internalapi.RequestEditorFn) (*internalapi.InternalListResp, error) {
 	start := ""
-	if strings.Contains(builder.Url, "?") {
-		values, err := url.ParseQuery(strings.TrimPrefix(strings.SplitN(builder.Url, "?", 2)[1], "?"))
-		if err != nil {
-			return err
-		}
-		start = values.Get("start")
+	if params != nil && params.Start != nil {
+		start = *params.Start
 	}
 	resp, err := s.listResponse(start)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	target, ok := out.(*internalapi.ListRecordsResponse)
-	if !ok {
-		return fmt.Errorf("unexpected response target %T", out)
-	}
-	*target = resp
-	return nil
+	return &internalapi.InternalListResp{
+		HTTPResponse: &http.Response{StatusCode: http.StatusOK},
+		JSON200:      &resp,
+	}, nil
 }

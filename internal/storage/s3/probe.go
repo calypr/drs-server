@@ -22,7 +22,7 @@ const (
 	maxProbeWorkers        = 8
 )
 
-func (s *backend) Probe(ctx context.Context, targets []storage.ProbeTarget) []storage.ProbeResult {
+func (s *backend) Probe(ctx context.Context, binding storage.ProviderBinding, targets []storage.ProbeTarget) []storage.ProbeResult {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -42,7 +42,7 @@ func (s *backend) Probe(ctx context.Context, targets []storage.ProbeTarget) []st
 		go func() {
 			defer wait.Done()
 			for index := range work {
-				results[index].Metadata, results[index].Err = s.probeOne(ctx, targets[index].Target)
+				results[index].Metadata, results[index].Err = s.probeOne(ctx, binding, targets[index].Target)
 			}
 		}()
 	}
@@ -54,12 +54,12 @@ func (s *backend) Probe(ctx context.Context, targets []storage.ProbeTarget) []st
 	return results
 }
 
-func (s *backend) probeOne(ctx context.Context, target storage.ObjectTarget) (storage.ObjectMetadata, error) {
-	clients, err := s.getClients(ctx, target.Bucket)
+func (s *backend) probeOne(ctx context.Context, binding storage.ProviderBinding, target storage.Target) (storage.ObjectMetadata, error) {
+	clients, err := s.getClients(ctx, binding)
 	if err != nil {
 		return storage.ObjectMetadata{}, providerError(storage.ErrorProvider, "probe", err)
 	}
-	output, err := s.headWithRetry(ctx, clients.client, target.Bucket, target.Key)
+	output, err := s.headWithRetry(ctx, clients.client, target.PhysicalBucket, target.Key)
 	if err != nil {
 		return storage.ObjectMetadata{}, classifyHeadError(target, err)
 	}
@@ -94,10 +94,10 @@ type s3HeadClient interface {
 	HeadObject(context.Context, *awss3.HeadObjectInput, ...func(*awss3.Options)) (*awss3.HeadObjectOutput, error)
 }
 
-func metadataFromHead(target storage.ObjectTarget, output *awss3.HeadObjectOutput) storage.ObjectMetadata {
+func metadataFromHead(target storage.Target, output *awss3.HeadObjectOutput) storage.ObjectMetadata {
 	metadata := storage.ObjectMetadata{
 		Provider: address.S3Provider,
-		Bucket:   target.Bucket,
+		Bucket:   target.PhysicalBucket,
 		Key:      target.Key,
 		Path:     path.Base(target.Key),
 	}
@@ -114,19 +114,19 @@ func metadataFromHead(target storage.ObjectTarget, output *awss3.HeadObjectOutpu
 	return metadata
 }
 
-func classifyHeadError(target storage.ObjectTarget, err error) error {
+func classifyHeadError(target storage.Target, err error) error {
 	var apiErr smithy.APIError
 	if errors.As(err, &apiErr) {
 		switch strings.ToLower(strings.TrimSpace(apiErr.ErrorCode())) {
 		case "forbidden", "accessdenied", "permissiondenied":
-			return providerError(storage.ErrorUnavailable, "probe", fmt.Errorf("provider rejected object probe for s3://%s/%s; mapped bucket target may be missing or inaccessible: %w", target.Bucket, target.Key, err))
+			return providerError(storage.ErrorUnavailable, "probe", fmt.Errorf("provider rejected object probe for s3://%s/%s; mapped bucket target may be missing or inaccessible: %w", target.PhysicalBucket, target.Key, err))
 		case "notfound", "nosuchkey":
-			return providerError(storage.ErrorNotFound, "probe", fmt.Errorf("provider could not find s3://%s/%s: %w", target.Bucket, target.Key, err))
+			return providerError(storage.ErrorNotFound, "probe", fmt.Errorf("provider could not find s3://%s/%s: %w", target.PhysicalBucket, target.Key, err))
 		case "nosuchbucket":
-			return providerError(storage.ErrorUnavailable, "probe", fmt.Errorf("provider could not find bucket %q: %w", target.Bucket, err))
+			return providerError(storage.ErrorUnavailable, "probe", fmt.Errorf("provider could not find bucket %q: %w", target.PhysicalBucket, err))
 		}
 	}
-	return providerError(storage.ErrorProvider, "probe", fmt.Errorf("inspect s3 object %s/%s: %w", target.Bucket, target.Key, err))
+	return providerError(storage.ErrorProvider, "probe", fmt.Errorf("inspect s3 object %s/%s: %w", target.PhysicalBucket, target.Key, err))
 }
 
 func providerError(kind storage.ErrorKind, capability string, cause error) error {

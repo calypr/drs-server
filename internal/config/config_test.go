@@ -33,14 +33,14 @@ func TestLoadConfig_MinimalValid(t *testing.T) {
 	if cfg.Database.Sqlite == nil {
 		t.Fatal("expected sqlite config")
 	}
-	if cfg.LFS.MaxBatchObjects != DefaultLFSMaxBatchObjects {
-		t.Fatalf("expected default lfs.max_batch_objects=%d, got %d", DefaultLFSMaxBatchObjects, cfg.LFS.MaxBatchObjects)
+	if cfg.LFS.MaxBatchObjects != defaultLFSMaxBatchObjects {
+		t.Fatalf("expected default lfs.max_batch_objects=%d, got %d", defaultLFSMaxBatchObjects, cfg.LFS.MaxBatchObjects)
 	}
-	if cfg.LFS.MaxBatchBodyBytes != DefaultLFSMaxBatchBodyBytes {
-		t.Fatalf("expected default lfs.max_batch_body_bytes=%d, got %d", DefaultLFSMaxBatchBodyBytes, cfg.LFS.MaxBatchBodyBytes)
+	if cfg.LFS.MaxBatchBodyBytes != defaultLFSMaxBatchBodyBytes {
+		t.Fatalf("expected default lfs.max_batch_body_bytes=%d, got %d", defaultLFSMaxBatchBodyBytes, cfg.LFS.MaxBatchBodyBytes)
 	}
-	if cfg.LFS.RequestLimitPerMinute != DefaultLFSRequestLimitPerMinute {
-		t.Fatalf("expected default lfs.request_limit_per_minute=%d, got %d", DefaultLFSRequestLimitPerMinute, cfg.LFS.RequestLimitPerMinute)
+	if cfg.LFS.RequestLimitPerMinute != defaultLFSRequestLimitPerMinute {
+		t.Fatalf("expected default lfs.request_limit_per_minute=%d, got %d", defaultLFSRequestLimitPerMinute, cfg.LFS.RequestLimitPerMinute)
 	}
 	if !cfg.Routes.Ga4gh || !cfg.Routes.Internal || !cfg.Routes.LFS || !cfg.Routes.Metrics || !cfg.Routes.Docs {
 		t.Fatalf("expected route modules to default enabled, got %+v", cfg.Routes)
@@ -72,6 +72,36 @@ func TestLoadConfig_EnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_SigningExpiryFromFileAndEnvironment(t *testing.T) {
+	content := `
+auth:
+  mode: local
+  allow_unauthenticated: true
+database:
+  sqlite:
+    file: ":memory:"
+signing:
+  default_expiry_seconds: 60
+`
+	t.Setenv("DRS_SIGNING_DEFAULT_EXPIRY_SECONDS", "")
+	cfg, err := LoadConfig(writeConfigTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig file signing expiry failed: %v", err)
+	}
+	if cfg.Signing.DefaultExpirySeconds != 60 {
+		t.Fatalf("file signing expiry = %d, want 60", cfg.Signing.DefaultExpirySeconds)
+	}
+
+	t.Setenv("DRS_SIGNING_DEFAULT_EXPIRY_SECONDS", "31")
+	cfg, err = LoadConfig(writeConfigTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig environment signing expiry failed: %v", err)
+	}
+	if cfg.Signing.DefaultExpirySeconds != 31 {
+		t.Fatalf("environment signing expiry = %d, want 31", cfg.Signing.DefaultExpirySeconds)
+	}
+}
+
 func TestLoadConfig_CredentialEncryptionConfig(t *testing.T) {
 	content := `
 auth:
@@ -86,19 +116,9 @@ credential_encryption:
   local_key_file: ".syfon-credential-kek"
   master_key: "ee605db033f6992534def23f9594ffaa58142f8bd9b7ee8ae3de199aed435d97"
 `
-	tmpfile, err := os.CreateTemp("", "config-credential-encryption-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -130,7 +150,7 @@ func TestCredentialEncryptionConfigMarshalJSONRedactsMasterKey(t *testing.T) {
 }
 
 func TestLoadConfig_LocalAuthzCSV(t *testing.T) {
-	t.Cleanup(func() { os.Unsetenv("DRS_LOCAL_AUTHZ_CSV") })
+	t.Setenv("DRS_LOCAL_AUTHZ_CSV", "")
 	content := `
 auth:
   mode: local
@@ -139,28 +159,191 @@ database:
   sqlite:
     file: "test.db"
 `
-	tmpfile, err := os.CreateTemp("", "config-local-authz-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 	if cfg.Auth.LocalAuthzCSV != "/tmp/local-authz.csv" {
 		t.Fatalf("expected local authz csv path, got %q", cfg.Auth.LocalAuthzCSV)
 	}
-	if got := os.Getenv("DRS_LOCAL_AUTHZ_CSV"); got != "/tmp/local-authz.csv" {
-		t.Fatalf("expected DRS_LOCAL_AUTHZ_CSV to be set, got %q", got)
+	if got := os.Getenv("DRS_LOCAL_AUTHZ_CSV"); got != "" {
+		t.Fatalf("LoadConfig must not export DRS_LOCAL_AUTHZ_CSV, got %q", got)
 	}
+}
+
+func TestLoadConfig_AuthPrecedenceAndNoExport(t *testing.T) {
+	t.Setenv("DRS_AUTH_MODE", "local")
+	t.Setenv("DRS_BASIC_AUTH_USER", "env-user")
+	t.Setenv("DRS_BASIC_AUTH_PASSWORD", "env-pass")
+	t.Setenv("DRS_LOCAL_AUTHZ_CSV", "env.csv")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
+	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "false")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "/env-resource")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", "env-method")
+	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", "/env/authz")
+	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", "/env/authn")
+	t.Setenv("DRS_FENCE_URL", "https://env-fence.example")
+	t.Setenv("DRS_DB_SQLITE_FILE", ":memory:")
+
+	content := `
+auth:
+  mode: gen3
+  basic:
+    username: file-user
+    password: file-pass
+  local_authz_csv: file.csv
+  mock:
+    enabled: true
+    require_auth_header: true
+    resources: ["/file-resource"]
+    methods: ["file-method"]
+  plugin_paths:
+    authz: /file/authz
+    authn: /file/authn
+  fence_url: https://file-fence.example
+database:
+  sqlite:
+    file: ":memory:"
+`
+	cfg, err := LoadConfig(writeConfigTestFile(t, content))
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Auth.Mode != AuthModeLocal {
+		t.Fatalf("mode = %q, want environment override local", cfg.Auth.Mode)
+	}
+	if cfg.Auth.Basic.Username != "env-user" || cfg.Auth.Basic.Password != "env-pass" {
+		t.Fatalf("basic credentials did not retain environment precedence: %+v", cfg.Auth.Basic)
+	}
+	if cfg.Auth.LocalAuthzCSV != "env.csv" {
+		t.Fatalf("local CSV = %q, want env.csv", cfg.Auth.LocalAuthzCSV)
+	}
+	if !cfg.Auth.Mock.Enabled || !cfg.Auth.Mock.RequireAuthHeader || strings.Join(cfg.Auth.Mock.Resources, ",") != "/file-resource" || strings.Join(cfg.Auth.Mock.Methods, ",") != "file-method" {
+		t.Fatalf("config mock values did not win: %+v", cfg.Auth.Mock)
+	}
+	if cfg.Auth.PluginPaths.Authz != "/file/authz" || cfg.Auth.PluginPaths.Authn != "/file/authn" || cfg.Auth.FenceURL != "https://file-fence.example" {
+		t.Fatalf("config plugin/fence values did not win: %+v fence=%q", cfg.Auth.PluginPaths, cfg.Auth.FenceURL)
+	}
+	wantEnv := map[string]string{
+		"DRS_AUTH_MOCK_ENABLED":             "false",
+		"DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER": "false",
+		"DRS_AUTH_MOCK_RESOURCES":           "/env-resource",
+		"DRS_AUTH_MOCK_METHODS":             "env-method",
+		"DRS_LOCAL_AUTHZ_CSV":               "env.csv",
+		"SYFON_AUTHZ_PLUGIN_PATH":           "/env/authz",
+		"SYFON_AUTHN_PLUGIN_PATH":           "/env/authn",
+		"DRS_FENCE_URL":                     "https://env-fence.example",
+	}
+	for key, want := range wantEnv {
+		if got := os.Getenv(key); got != want {
+			t.Errorf("LoadConfig changed %s: got %q want %q", key, got, want)
+		}
+	}
+}
+
+func TestLoadConfig_InheritedAuthValuesStayTyped(t *testing.T) {
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "yes")
+	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "on")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", " /inherited-resource, , /second ")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", " read, ,write ")
+	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", "/inherited/authz")
+	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", "/inherited/authn")
+	t.Setenv("DRS_FENCE_URL", "https://inherited-fence.example")
+	t.Setenv("DRS_DB_HOST", "localhost")
+	t.Setenv("DRS_DB_DATABASE", "testdb")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if !cfg.Auth.Mock.Enabled || !cfg.Auth.Mock.RequireAuthHeader {
+		t.Fatalf("inherited mock booleans not resolved: %+v", cfg.Auth.Mock)
+	}
+	if got := strings.Join(cfg.Auth.Mock.Resources, ","); got != "/inherited-resource,/second" {
+		t.Fatalf("resources = %q", got)
+	}
+	if got := strings.Join(cfg.Auth.Mock.Methods, ","); got != "read,write" {
+		t.Fatalf("methods = %q", got)
+	}
+	if cfg.Auth.PluginPaths.Authz != "/inherited/authz" || cfg.Auth.PluginPaths.Authn != "/inherited/authn" || cfg.Auth.FenceURL != "https://inherited-fence.example" {
+		t.Fatalf("inherited paths/fence not resolved: %+v fence=%q", cfg.Auth.PluginPaths, cfg.Auth.FenceURL)
+	}
+}
+
+func TestLoadConfig_ConfigOnlyMockDoesNotAffectSQLiteEligibility(t *testing.T) {
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "")
+	content := `
+auth:
+  mode: gen3
+  mock:
+    enabled: true
+database:
+  sqlite:
+    file: ":memory:"
+`
+	_, err := LoadConfig(writeConfigTestFile(t, content))
+	if err == nil || !strings.Contains(err.Error(), `auth.mode "gen3" requires postgres database`) {
+		t.Fatalf("expected inherited-mock validation failure, got %v", err)
+	}
+}
+
+func TestLoadConfig_DoesNotRetainAuthFromPreviousLoad(t *testing.T) {
+	for _, key := range []string{"DRS_AUTH_MOCK_ENABLED", "DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "DRS_AUTH_MOCK_RESOURCES", "DRS_AUTH_MOCK_METHODS", "SYFON_AUTHZ_PLUGIN_PATH", "SYFON_AUTHN_PLUGIN_PATH", "DRS_FENCE_URL"} {
+		t.Setenv(key, "")
+	}
+	first := writeConfigTestFile(t, `
+auth:
+  mode: local
+  allow_unauthenticated: true
+  fence_url: https://first-fence.example
+  mock:
+    enabled: true
+    resources: ["/first"]
+database:
+  sqlite:
+    file: ":memory:"
+`)
+	second := writeConfigTestFile(t, `
+auth:
+  mode: local
+  allow_unauthenticated: true
+database:
+  sqlite:
+    file: ":memory:"
+`)
+	if _, err := LoadConfig(first); err != nil {
+		t.Fatalf("first LoadConfig failed: %v", err)
+	}
+	cfg, err := LoadConfig(second)
+	if err != nil {
+		t.Fatalf("second LoadConfig failed: %v", err)
+	}
+	if cfg.Auth.Mock.Enabled || cfg.Auth.FenceURL != "" || cfg.Auth.PluginPaths.Authz != "" || cfg.Auth.PluginPaths.Authn != "" {
+		t.Fatalf("second config retained first auth values: %+v", cfg.Auth)
+	}
+}
+
+func writeConfigTestFile(t *testing.T, content string) string {
+	t.Helper()
+	return writeConfigTestFileWithExtension(t, content, ".yaml")
+}
+
+func writeConfigTestFileWithExtension(t *testing.T, content, extension string) string {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "config-*"+extension)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return file.Name()
 }
 
 func TestLoadConfig_BucketScopes(t *testing.T) {
@@ -185,19 +368,9 @@ bucket_scopes:
     organization_sub_path: organizations/calypr
     project_sub_path: projects/upload
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scopes-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -240,19 +413,9 @@ buckets:
       - organization: root_only
         org_path: roots/root_only
 `
-	tmpfile, err := os.CreateTemp("", "config-buckets-resources-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	cfg, err := LoadConfig(tmpfile.Name())
+	cfg, err := LoadConfig(tmpfile)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
@@ -290,19 +453,9 @@ bucket_scopes:
     bucket: other
     path: s3://calypr/project
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scope-mismatch-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected bucket/path mismatch error")
 	}
@@ -324,19 +477,9 @@ bucket_scopes:
     project_id: training
     path: s3://calypr/calypr/faliper
 `
-	tmpfile, err := os.CreateTemp("", "config-bucket-scope-path-org-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected path-like organization error")
 	}
@@ -363,12 +506,9 @@ func TestLoadConfig_PostgresEnv(t *testing.T) {
 		t.Errorf("expected host myhost, got %s", cfg.Database.Postgres.Host)
 	}
 
-	// Sqlite should be nil if postgres env vars are set (per my logic in config.go)
-	// Wait, let's verify if my logic actually nils it out or if the validation fails.
 }
 
 func TestLoadConfig_MutualExclusivity(t *testing.T) {
-	// Creating a temp yaml file with both
 	content := `
 database:
   sqlite:
@@ -376,18 +516,9 @@ database:
   postgres:
     host: "localhost"
 `
-	tmpfile, err := os.CreateTemp("", "config*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
+	tmpfile := writeConfigTestFile(t, content)
 
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	tmpfile.Close()
-
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Error("expected error when both databases are specified, got nil")
 	}
@@ -427,6 +558,85 @@ func TestLoadConfig_InvalidDBPortEnv(t *testing.T) {
 
 	if _, err := LoadConfig(""); err == nil {
 		t.Fatal("expected invalid DRS_DB_PORT to return error")
+	}
+}
+
+func TestLoadConfig_PartialPostgresEnvRequiresSelector(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+
+	for _, name := range []string{"DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(name, "configured")
+			_, err := LoadConfig("")
+			if err == nil {
+				t.Fatalf("LoadConfig(%s) succeeded without a PostgreSQL selector", name)
+			}
+			if !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "DRS_DB_HOST") || !strings.Contains(err.Error(), "DRS_DB_DATABASE") {
+				t.Fatalf("error = %v, want variable and selector guidance", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_PartialPostgresEnvIsIgnoredForSQLite(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_DB_SQLITE_FILE", ":memory:")
+	t.Setenv("DRS_AUTH_MODE", "local")
+	t.Setenv("DRS_ALLOW_UNAUTHENTICATED_LOCAL", "true")
+
+	for _, test := range []struct {
+		name  string
+		env   string
+		value string
+	}{
+		{name: "port", env: "DRS_DB_PORT", value: "not-a-number"},
+		{name: "user", env: "DRS_DB_USER", value: "ignored-user"},
+		{name: "password", env: "DRS_DB_PASSWORD", value: "ignored-password"},
+		{name: "sslmode", env: "DRS_DB_SSLMODE", value: "ignored-sslmode"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(test.env, test.value)
+			cfg, err := LoadConfig("")
+			if err != nil {
+				t.Fatalf("LoadConfig failed with SQLite and %s: %v", test.env, err)
+			}
+			if cfg.Database.Sqlite == nil || cfg.Database.Sqlite.File != ":memory:" {
+				t.Fatalf("SQLite configuration changed: %+v", cfg.Database)
+			}
+			if cfg.Database.Postgres != nil {
+				t.Fatalf("unexpected PostgreSQL configuration: %+v", cfg.Database.Postgres)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_PostgresEnvAppliesAllFieldsAfterSelection(t *testing.T) {
+	for _, name := range []string{"DRS_DB_HOST", "DRS_DB_DATABASE", "DRS_DB_SQLITE_FILE", "DRS_DB_PORT", "DRS_DB_USER", "DRS_DB_PASSWORD", "DRS_DB_SSLMODE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DRS_DB_HOST", "db.example")
+	t.Setenv("DRS_DB_DATABASE", "syfon")
+	t.Setenv("DRS_DB_PORT", "5433")
+	t.Setenv("DRS_DB_USER", "syfon-user")
+	t.Setenv("DRS_DB_PASSWORD", "syfon-password")
+	t.Setenv("DRS_DB_SSLMODE", "verify-full")
+	t.Setenv("DRS_AUTH_MODE", "gen3")
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Database.Postgres == nil {
+		t.Fatal("expected PostgreSQL configuration")
+	}
+	want := PostgresConfig{Host: "db.example", Port: 5433, User: "syfon-user", Password: "syfon-password", Database: "syfon", SSLMode: "verify-full"}
+	if *cfg.Database.Postgres != want {
+		t.Fatalf("PostgreSQL configuration = %+v, want %+v", *cfg.Database.Postgres, want)
 	}
 }
 
@@ -490,77 +700,14 @@ s3_credentials:
     secret_key: "test-secret"
 `, tc.bucket)
 
-			tmpfile, err := os.CreateTemp("", "config-invalid-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
+			tmpfile := writeConfigTestFile(t, content)
 
-			_, err = LoadConfig(tmpfile.Name())
+			_, err := LoadConfig(tmpfile)
 			if err == nil {
 				t.Fatalf("expected error for invalid bucket %q, got nil", tc.bucket)
 			}
 			if !strings.Contains(err.Error(), tc.errContains) {
 				t.Errorf("bucket %q: expected error containing %q, got: %v", tc.bucket, tc.errContains, err)
-			}
-		})
-	}
-}
-
-func TestLoadConfig_NonS3ProviderBucketNames(t *testing.T) {
-	cases := []struct {
-		provider string
-		bucket   string
-		want     string
-	}{
-		{"gcs", "my.gcs.bucket", "gcs"},
-		{"gs", "my_bucket", "gcs"},
-		{"azure", "my-azure-bucket", "azure"},
-		{"azblob", "my-azure-bucket", "azure"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.provider+"/"+tc.bucket, func(t *testing.T) {
-			content := fmt.Sprintf(`
-auth:
-  mode: local
-  allow_unauthenticated: true
-database:
-  sqlite:
-    file: "test.db"
-s3_credentials:
-  - bucket: %q
-    provider: %q
-`, tc.bucket, tc.provider)
-
-			tmpfile, err := os.CreateTemp("", "config-non-s3-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			cfg, err := LoadConfig(tmpfile.Name())
-			if err != nil {
-				t.Fatalf("provider=%q bucket=%q: expected no error, got: %v", tc.provider, tc.bucket, err)
-			}
-			if len(cfg.S3Credentials) != 1 {
-				t.Fatalf("provider=%q bucket=%q: expected one credential, got %d", tc.provider, tc.bucket, len(cfg.S3Credentials))
-			}
-			if cfg.S3Credentials[0].Provider != tc.want {
-				t.Fatalf("provider=%q bucket=%q: expected normalized provider %q, got %q", tc.provider, tc.bucket, tc.want, cfg.S3Credentials[0].Provider)
 			}
 		})
 	}
@@ -579,19 +726,9 @@ s3_credentials:
     provider: "bogus"
 `
 
-	tmpfile, err := os.CreateTemp("", "config-unsupported-provider-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	_, err = LoadConfig(tmpfile.Name())
+	_, err := LoadConfig(tmpfile)
 	if err == nil {
 		t.Fatal("expected error for unsupported provider bogus")
 	}
@@ -622,6 +759,12 @@ func TestLoadConfig_BucketProviderValidationRegression(t *testing.T) {
 			wantProvider: "azure",
 		},
 		{
+			name:         "gcs alias accepts underscore",
+			provider:     "gs",
+			bucket:       "my_bucket",
+			wantProvider: "gcs",
+		},
+		{
 			name:         "file provider accepted",
 			provider:     "file",
 			bucket:       "local-bucket",
@@ -641,6 +784,20 @@ func TestLoadConfig_BucketProviderValidationRegression(t *testing.T) {
 			wantErr:      true,
 			errSubstring: "invalid",
 		},
+		{
+			name:         "gcs reserved prefix rejected",
+			provider:     "gcs",
+			bucket:       "goog-bucket",
+			wantErr:      true,
+			errSubstring: "cannot begin with \"goog\"",
+		},
+		{
+			name:         "azure consecutive hyphens rejected",
+			provider:     "azure",
+			bucket:       "my--bucket",
+			wantErr:      true,
+			errSubstring: "consecutive hyphens",
+		},
 	}
 
 	for _, tc := range cases {
@@ -658,19 +815,9 @@ s3_credentials:
     provider: %q
 `, tc.bucket, tc.provider)
 
-			tmpfile, err := os.CreateTemp("", "config-bucket-regression-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
+			tmpfile := writeConfigTestFile(t, content)
 
-			cfg, err := LoadConfig(tmpfile.Name())
+			cfg, err := LoadConfig(tmpfile)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for provider=%q bucket=%q", tc.provider, tc.bucket)
@@ -689,55 +836,6 @@ s3_credentials:
 			}
 			if cfg.S3Credentials[0].Provider != tc.wantProvider {
 				t.Fatalf("expected normalized provider %q, got %q", tc.wantProvider, cfg.S3Credentials[0].Provider)
-			}
-		})
-	}
-}
-
-func TestLoadConfig_InvalidNonS3BucketNames(t *testing.T) {
-	cases := []struct {
-		provider    string
-		bucket      string
-		errContains string
-	}{
-		{"gcs", "192.168.1.1", "cannot be an IP address"},
-		{"gcs", "goog-bucket", "cannot begin with \"goog\""},
-		{"azure", "my.azure.bucket", "invalid"},
-		{"azure", "my--bucket", "consecutive hyphens"},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.provider+"/"+tc.bucket, func(t *testing.T) {
-			content := fmt.Sprintf(`
-auth:
-  mode: local
-database:
-  sqlite:
-    file: "test.db"
-s3_credentials:
-  - bucket: %q
-    provider: %q
-`, tc.bucket, tc.provider)
-
-			tmpfile, err := os.CreateTemp("", "config-invalid-non-s3-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			_, err = LoadConfig(tmpfile.Name())
-			if err == nil {
-				t.Fatalf("expected error for provider=%q bucket=%q, got nil", tc.provider, tc.bucket)
-			}
-			if !strings.Contains(err.Error(), tc.errContains) {
-				t.Fatalf("provider=%q bucket=%q: expected error containing %q, got %v", tc.provider, tc.bucket, tc.errContains, err)
 			}
 		})
 	}
@@ -769,20 +867,9 @@ s3_credentials:
     secret_key: "test-secret"
 `, bucket)
 
-			tmpfile, err := os.CreateTemp("", "config-valid-bucket-*.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(tmpfile.Name())
+			tmpfile := writeConfigTestFile(t, content)
 
-			if _, err := tmpfile.Write([]byte(content)); err != nil {
-				t.Fatal(err)
-			}
-			if err := tmpfile.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			if _, err := LoadConfig(tmpfile.Name()); err != nil {
+			if _, err := LoadConfig(tmpfile); err != nil {
 				t.Fatalf("expected valid bucket %q to pass validation, got error: %v", bucket, err)
 			}
 		})
@@ -806,19 +893,9 @@ s3_credentials:
     secret_key: "test-secret"
 `
 
-	tmpfile, err := os.CreateTemp("", "config-s3-compatible-bucket-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	if _, err := tmpfile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		t.Fatal(err)
-	}
+	tmpfile := writeConfigTestFile(t, content)
 
-	if _, err := LoadConfig(tmpfile.Name()); err != nil {
+	if _, err := LoadConfig(tmpfile); err != nil {
 		t.Fatalf("expected custom-endpoint s3 bucket to pass validation, got error: %v", err)
 	}
 }

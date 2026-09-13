@@ -1,20 +1,14 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -22,22 +16,16 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const (
-	dockerE2EEnvVar          = "SYFON_E2E_DOCKER"
-	dockerE2EMinioImage      = "minio/minio:RELEASE.2025-03-12T18-04-18Z"
-	dockerE2EMinioBucket     = "syfon-e2e-bucket"
-	dockerE2EMinioRegion     = "us-east-1"
-	dockerE2EMinioAccessKey  = "minioadmin"
-	dockerE2EMinioSecretKey  = "minioadmin123"
-	dockerE2ECredentialKey   = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
-	dockerE2EServerReadyWait = 20 * time.Second
-	dockerE2EBasicUser       = "drs-user"
-	dockerE2EBasicPass       = "drs-pass"
+	dockerE2EMinioImage     = "quay.io/minio/minio:RELEASE.2025-03-12T18-04-18Z"
+	dockerE2EMinioBucket    = "syfon-e2e-bucket"
+	dockerE2EMinioRegion    = "us-east-1"
+	dockerE2EMinioAccessKey = "minioadmin"
+	dockerE2EMinioSecretKey = "minioadmin123"
 )
 
 type minioContainer struct {
@@ -48,14 +36,6 @@ type minioContainer struct {
 	accessKey string
 	secretKey string
 	s3Client  *s3.Client
-}
-
-type syfonServerProcess struct {
-	url       string
-	cmd       *exec.Cmd
-	waitErrCh <-chan error
-	stdout    *bytes.Buffer
-	stderr    *bytes.Buffer
 }
 
 func TestSyfonDockerMinIOE2E(t *testing.T) {
@@ -251,129 +231,7 @@ func startSyfonServerProcess(t *testing.T, minioEnv *minioContainer) *syfonServe
 	port := reserveTCPPort(t)
 	dbPath := filepath.Join(t.TempDir(), "docker-minio-e2e.db")
 	configPath := writeSyfonDockerConfig(t, port, dbPath, minioEnv)
-	serverURL := fmt.Sprintf("http://%s:%s@127.0.0.1:%d", dockerE2EBasicUser, dockerE2EBasicPass, port)
-	readyURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	cmd := exec.Command(binaryPath, "serve", "--config", configPath)
-	cmd.Dir = rootDir
-	cmd.Env = append(os.Environ(), credentialcipher.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatalf("stderr pipe: %v", err)
-	}
-
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	// Multi-writer to keep buffers for error reporting and stream to T.Log for live feedback.
-	go streamToTestLog(t, "[SERVER STDOUT]", stdoutPipe, stdoutBuf)
-	go streamToTestLog(t, "[SERVER STDERR]", stderrPipe, stderrBuf)
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start syfon server: %v", err)
-	}
-
-	waitErrCh := make(chan error, 1)
-	go func() {
-		waitErrCh <- cmd.Wait()
-	}()
-
-	if err := waitForServerReady(readyURL, waitErrCh, dockerE2EServerReadyWait); err != nil {
-		logServerProcessOutput(t, readyURL, stdoutBuf, stderrBuf)
-		stopSyfonServerProcess(t, &syfonServerProcess{cmd: cmd, waitErrCh: waitErrCh, stdout: stdoutBuf, stderr: stderrBuf})
-		t.Fatalf("wait for server ready: %v", err)
-	}
-
-	return &syfonServerProcess{
-		url:       serverURL,
-		cmd:       cmd,
-		waitErrCh: waitErrCh,
-		stdout:    stdoutBuf,
-		stderr:    stderrBuf,
-	}
-}
-
-func stopSyfonServerProcess(t *testing.T, server *syfonServerProcess) {
-	t.Helper()
-	if server == nil || server.cmd == nil || server.cmd.Process == nil {
-		return
-	}
-	if server.cmd.ProcessState != nil {
-		return
-	}
-
-	_ = syscall.Kill(-server.cmd.Process.Pid, syscall.SIGINT)
-	select {
-	case <-server.waitErrCh:
-		return
-	case <-time.After(5 * time.Second):
-	}
-
-	_ = server.cmd.Process.Kill()
-	select {
-	case <-server.waitErrCh:
-	case <-time.After(5 * time.Second):
-		logServerProcessOutput(t, server.url, server.stdout, server.stderr)
-		t.Fatalf("server process did not exit cleanly")
-	}
-}
-
-func waitForServerReady(baseURL string, waitErrCh <-chan error, timeout time.Duration) error {
-	client := &http.Client{Timeout: 1 * time.Second}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	const requiredConsecutiveSuccesses = 2
-	successes := 0
-	interval := 100 * time.Millisecond
-
-	for {
-		select {
-		case err := <-waitErrCh:
-			return fmt.Errorf("server exited before ready: %w", err)
-		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for /healthz after %s", timeout)
-		default:
-		}
-
-		resp, err := client.Get(baseURL + "/healthz")
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				successes++
-				if successes >= requiredConsecutiveSuccesses {
-					return nil
-				}
-			} else {
-				successes = 0
-			}
-		} else {
-			successes = 0
-		}
-
-		timer := time.NewTimer(interval)
-		select {
-		case err := <-waitErrCh:
-			timer.Stop()
-			return fmt.Errorf("server exited before ready: %w", err)
-		case <-ctx.Done():
-			timer.Stop()
-			return fmt.Errorf("timed out waiting for /healthz after %s", timeout)
-		case <-timer.C:
-		}
-		if interval < time.Second {
-			interval *= 2
-			if interval > time.Second {
-				interval = time.Second
-			}
-		}
-	}
+	return startSyfonServerProcessWithBinary(t, binaryPath, configPath, nil)
 }
 
 func writeSyfonDockerConfig(t *testing.T, port int, dbPath string, minioEnv *minioContainer) string {
@@ -391,70 +249,6 @@ func writeSyfonDockerConfig(t *testing.T, port int, dbPath string, minioEnv *min
 		Organization: "syfon",
 		ProjectID:    "e2e",
 	})
-}
-
-func buildSyfonBinary(t *testing.T, rootDir string) string {
-	t.Helper()
-
-	binaryPath := filepath.Join(t.TempDir(), "syfon-docker-e2e")
-	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
-	cmd.Dir = rootDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build syfon binary: %v\n%s", err, string(out))
-	}
-	return binaryPath
-}
-
-func reserveTCPPort(t *testing.T) int {
-	t.Helper()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve tcp port: %v", err)
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working directory: %v", err)
-	}
-
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not find go.mod root from %s", dir)
-		}
-		dir = parent
-	}
-}
-
-func logServerProcessOutput(t *testing.T, serverURL string, stdoutBuf, stderrBuf *bytes.Buffer) {
-	t.Helper()
-	if stdoutBuf != nil {
-		t.Logf("server %s stdout:\n%s", serverURL, stdoutBuf.String())
-	}
-	if stderrBuf != nil {
-		t.Logf("server %s stderr:\n%s", serverURL, stderrBuf.String())
-	}
-}
-
-func streamToTestLog(t *testing.T, prefix string, r io.Reader, buf *bytes.Buffer) {
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := scanner.Text()
-		t.Logf("%s %s", prefix, line)
-		if buf != nil {
-			buf.WriteString(line + "\n")
-		}
-	}
 }
 
 func isDockerUnavailable(err error) bool {

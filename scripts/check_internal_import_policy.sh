@@ -28,6 +28,85 @@ is_shared_error_contract() {
 	[[ "$1" == github.com/calypr/syfon/apigen/errorapi ]]
 }
 
+# Generated API packages combine wire models with clients and server bindings.
+# Each allowed edge therefore names the model selectors that its owner uses.
+generated_model_symbols() {
+	case "$1 -> $2" in
+		"github.com/calypr/syfon/internal/objects -> github.com/calypr/syfon/apigen/drs")
+			echo "AccessMethod AccessMethodUpdate Checksum DrsObject DrsObjectCandidate"
+		;;
+		"github.com/calypr/syfon/internal/persistence/store -> github.com/calypr/syfon/apigen/drs")
+			echo "AccessMethod AccessMethodType AccessURL Checksum DrsObject"
+		;;
+		"github.com/calypr/syfon/internal/projects/storage -> github.com/calypr/syfon/apigen/drs")
+			echo "AccessMethod AccessMethodTypeS3 AccessURL Checksum DrsObject"
+		;;
+		"github.com/calypr/syfon/internal/transfers -> github.com/calypr/syfon/apigen/drs")
+			echo "AccessMethod DrsObject"
+		;;
+		"github.com/calypr/syfon/internal/transfers/lfs -> github.com/calypr/syfon/apigen/drs")
+			echo "AccessMethod AccessMethodType AccessURL Checksum DrsObject DrsObjectCandidate"
+		;;
+		"github.com/calypr/syfon/internal/usage -> github.com/calypr/syfon/apigen/metricsapi"|\
+		"github.com/calypr/syfon/internal/persistence/store -> github.com/calypr/syfon/apigen/metricsapi")
+			echo "FileUsage FileUsageSummary ProviderTransferDirection ProviderTransferEvent ProviderTransferReconciliationStatus TransferAttributionBreakdown TransferAttributionSummary"
+		;;
+		"github.com/calypr/syfon/internal/persistence/store -> github.com/calypr/syfon/apigen/lfsapi"|\
+		"github.com/calypr/syfon/internal/transfers/lfs -> github.com/calypr/syfon/apigen/lfsapi")
+			echo "AccessMethod AccessMethodAccessUrl Checksum DrsObjectCandidate"
+		;;
+		"github.com/calypr/syfon/internal/projects/storage -> github.com/calypr/syfon/apigen/internalapi")
+			echo "InternalDeleteProjectBucketObjectsItem InternalInspectObjectBulkItem InternalInspectObjectRequest InternalInspectObjectResponse InternalInspectProjectBucketItem InternalInspectProjectBucketResponse InternalInspectProjectBucketSummary ProjectCleanupResponse ScopeRepairApplyResult ScopeRepairFinding ScopeRepairObjectReport ScopeRepairOptions ScopeRepairReport"
+		;;
+		*)
+			return 1
+		;;
+	esac
+}
+
+is_canonical_generated_model() {
+	generated_model_symbols "$1" "$2" >/dev/null 2>&1
+}
+
+check_generated_model_usage() {
+	local pkg="$1"
+	local dep="$2"
+	local package_dir="${3:-${repo_root}/${pkg#github.com/calypr/syfon/}}"
+	local allowed_symbols
+	local usage
+	local kind
+	local location
+	local selector
+	local symbol
+	local imported=0
+
+	allowed_symbols=" $(generated_model_symbols "${pkg}" "${dep}") "
+	if ! usage="$(GOWORK=off go run ./scripts/internal-import-policy "${package_dir}" "${dep}")"; then
+		violations+=("${pkg} -> ${dep} (generated usage inspection failed)")
+		return 0
+	fi
+	while IFS=$'\t' read -r kind location selector; do
+		[[ -z "${kind}" ]] && continue
+		case "${kind}" in
+			IMPORT)
+				imported=1
+				case "${selector}" in
+					.|_) violations+=("${pkg} -> ${dep} (generated ${selector} import at ${location})") ;;
+				esac
+				;;
+			SELECTOR)
+				symbol="${selector#*.}"
+				if [[ "${allowed_symbols}" != *" ${symbol} "* ]]; then
+					violations+=("${pkg} -> ${dep}.${symbol} (${location})")
+				fi
+				;;
+		esac
+	done <<<"${usage}"
+	if (( ! imported )); then
+		violations+=("${pkg} -> ${dep} (generated import not found)")
+	fi
+}
+
 is_sql_dependency() {
 	case "$1" in
 		github.com/mattn/go-sqlite3|github.com/lib/pq|github.com/jackc/pgx*)
@@ -93,19 +172,14 @@ check_edge() {
 		github.com/calypr/syfon/internal/requestid)
 			if ! is_standard_library_dependency "$dep"; then forbidden=1; fi
 		;;
-		github.com/calypr/syfon/internal/httpapi/records)
-			case "$dep" in
-				github.com/calypr/syfon/internal/httpapi/drs) forbidden=1 ;;
-			esac
-		;;
 		github.com/calypr/syfon/internal/objects|github.com/calypr/syfon/internal/objects/*)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*) forbidden=1 ;;
 			esac
 			if [[ "$pkg" == github.com/calypr/syfon/internal/objects ]]; then
 				case "$dep" in
-					github.com/calypr/syfon/internal/objects/*|github.com/calypr/syfon/internal/access|github.com/calypr/syfon/internal/access/*) forbidden=1 ;;
+					github.com/calypr/syfon/internal/objects/*) forbidden=1 ;;
 				esac
 			fi
 		;;
@@ -136,7 +210,7 @@ check_edge() {
 			esac
 		;;
 		github.com/calypr/syfon/internal/transfers|github.com/calypr/syfon/internal/transfers/*)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*) forbidden=1 ;;
 			esac
@@ -147,13 +221,13 @@ check_edge() {
 			fi
 		;;
 		github.com/calypr/syfon/internal/usage)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/transfers) forbidden=1 ;;
 			esac
 		;;
 		github.com/calypr/syfon/internal/projects/storage)
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_sql_dependency "$dep" || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/persistence*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/maintenance/*) forbidden=1 ;;
 			esac
@@ -167,8 +241,9 @@ check_edge() {
 		github.com/calypr/syfon/internal/persistence/*)
 			# Dialect adapters own their SQL driver imports. Cloud SDKs remain
 			# forbidden here.
-			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep") || is_cloud_dependency "$dep"; then forbidden=1; fi
+			if (is_generated_or_http "$dep" && ! is_shared_error_contract "$dep" && ! is_canonical_generated_model "$pkg" "$dep") || is_cloud_dependency "$dep"; then forbidden=1; fi
 			case "$dep" in
+				github.com/calypr/syfon/internal/persistence/store) ;;
 				github.com/calypr/syfon/internal/persistence/credentialcipher) ;;
 				github.com/calypr/syfon/internal/api*|github.com/calypr/syfon/internal/httpapi*|github.com/calypr/syfon/internal/core*|github.com/calypr/syfon/internal/db*|github.com/calypr/syfon/internal/models*|github.com/calypr/syfon/internal/common*|github.com/calypr/syfon/internal/persistence/*) forbidden=1 ;;
 			esac
@@ -205,10 +280,35 @@ expect_forbidden() {
 	fi
 }
 
+expect_allowed_generated_usage() {
+	local pkg="$1"
+	local dep="$2"
+	local package_dir="$3"
+	violations=()
+	check_generated_model_usage "${pkg}" "${dep}" "${package_dir}"
+	if ((${#violations[@]} != 0)); then
+		printf 'self-test expected generated model fixture to pass but found: %s\n' "${violations[*]}" >&2
+		return 1
+	fi
+}
+
+expect_forbidden_generated_usage() {
+	local pkg="$1"
+	local dep="$2"
+	local package_dir="$3"
+	violations=()
+	check_generated_model_usage "${pkg}" "${dep}" "${package_dir}"
+	if ((${#violations[@]} == 0)); then
+		printf 'self-test expected generated transport fixture to fail: %s -> %s\n' "${pkg}" "${dep}" >&2
+		return 1
+	fi
+}
+
 run_self_tests() {
 	expect_forbidden github.com/calypr/syfon/client/services github.com/calypr/syfon/common
 	expect_allowed github.com/calypr/syfon/internal/storage/s3 github.com/aws/aws-sdk-go-v2/aws
 	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/mattn/go-sqlite3
+	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/calypr/syfon/internal/persistence/store
 	expect_allowed github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/storage/address
 	expect_allowed github.com/calypr/syfon/internal/storage/address net/url
 	expect_allowed github.com/calypr/syfon/cmd/server github.com/calypr/syfon/internal/persistence/credentialcipher
@@ -227,27 +327,31 @@ run_self_tests() {
 	expect_allowed github.com/calypr/syfon/internal/objects/scoperepair github.com/calypr/syfon/internal/objects
 	expect_allowed github.com/calypr/syfon/internal/persistence/sqlite github.com/calypr/syfon/internal/objects
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/mattn/go-sqlite3
-	expect_allowed github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/objects
-	expect_allowed github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/access
-	expect_allowed github.com/calypr/syfon/internal/httpapi/records github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/access
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/mattn/go-sqlite3
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/aws/aws-sdk-go-v2/aws
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/httpapi/records
-	expect_forbidden github.com/calypr/syfon/internal/objects/records github.com/calypr/syfon/internal/persistence/sqlite
-	expect_forbidden github.com/calypr/syfon/internal/buckets github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/objects/records
-	expect_forbidden github.com/calypr/syfon/internal/storage/s3 github.com/calypr/syfon/internal/objects/records
+	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/access
+	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/objects/scoperepair
 	expect_forbidden github.com/calypr/syfon/internal/storage github.com/calypr/syfon/internal/storage/s3
 	expect_forbidden github.com/calypr/syfon/internal/storage/address github.com/google/uuid
 	expect_forbidden github.com/calypr/syfon/internal/buckets github.com/calypr/syfon/internal/storage
 	expect_forbidden github.com/calypr/syfon/internal/usage github.com/calypr/syfon/internal/transfers
 	expect_allowed github.com/calypr/syfon/internal/requestid context
 	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/errorapi
-	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
-	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi/middleware
-	expect_forbidden github.com/calypr/syfon/internal/httpapi/records github.com/calypr/syfon/internal/httpapi/drs
+	expect_allowed github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/drs
+	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/apigen/metricsapi
+	expect_allowed github.com/calypr/syfon/internal/usage github.com/calypr/syfon/apigen/metricsapi
+	expect_forbidden github.com/calypr/syfon/internal/usage github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/projects/storage github.com/calypr/syfon/apigen/internalapi
+	expect_allowed github.com/calypr/syfon/internal/projects/storage github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/lfsapi
+	expect_allowed github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/metricsapi
+	expect_allowed github.com/calypr/syfon/internal/transfers github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/transfers/lfs github.com/calypr/syfon/apigen/drs
+	expect_allowed github.com/calypr/syfon/internal/transfers/lfs github.com/calypr/syfon/apigen/lfsapi
+	expect_allowed_generated_usage github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/drs "${repo_root}/scripts/internal-import-policy/testdata/allowed-alias"
+	expect_forbidden_generated_usage github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/drs "${repo_root}/scripts/internal-import-policy/testdata/transport-alias"
+	expect_forbidden_generated_usage github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/drs "${repo_root}/scripts/internal-import-policy/testdata/dot-import"
+	expect_forbidden_generated_usage github.com/calypr/syfon/internal/persistence/store github.com/calypr/syfon/apigen/drs "${repo_root}/scripts/internal-import-policy/testdata/blank-import"
+	expect_forbidden github.com/calypr/syfon/internal/requestid github.com/calypr/syfon/internal/httpapi
 	expect_forbidden github.com/calypr/syfon/internal/objects github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/internal/arbitrary github.com/calypr/syfon/internal/testsupport/sqlite
 	expect_forbidden github.com/calypr/syfon/cmd/server github.com/calypr/syfon/internal/testsupport/sqlite
@@ -272,6 +376,9 @@ while IFS=$'\t' read -r pkg imports; do
 	[[ -z "${pkg}" ]] && continue
 	for dep in ${imports}; do
 		check_edge "${pkg}" "${dep}"
+		if is_canonical_generated_model "${pkg}" "${dep}"; then
+			check_generated_model_usage "${pkg}" "${dep}"
+		fi
 	done
 done <<<"${import_listing}"
 

@@ -2,10 +2,12 @@ package transfers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/calypr/syfon/apigen/drs"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
-	"github.com/calypr/syfon/internal/objects"
 	"github.com/calypr/syfon/internal/requestid"
 	"github.com/calypr/syfon/internal/usage"
 )
@@ -63,7 +65,11 @@ func TestScopeForAccessUsesOnlyOneCanonicalResource(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			obj := &objects.Record{Authorizations: test.authorizations}
+			obj := &drs.DrsObject{}
+			if test.authorizations != nil {
+				controlled := clientaccess.AuthzMapToControlledAccess(test.authorizations)
+				obj.ControlledAccess = &controlled
+			}
 			if test.controlled != nil {
 				obj.ControlledAccess = &test.controlled
 			}
@@ -76,7 +82,7 @@ func TestScopeForAccessUsesOnlyOneCanonicalResource(t *testing.T) {
 }
 
 func TestScopeForAccessHonorsValidExplicitScopeOnly(t *testing.T) {
-	obj := &objects.Record{ControlledAccess: &[]string{
+	obj := &drs.DrsObject{ControlledAccess: &[]string{
 		"/organization/org/project/project",
 		"/organization/org/project/other",
 	}}
@@ -114,7 +120,7 @@ func TestScopeForAccessHonorsValidExplicitScopeOnly(t *testing.T) {
 }
 
 func TestEventFromObjectFixedRequestIdentityHasStableScopedIDs(t *testing.T) {
-	obj := &objects.Record{
+	obj := &drs.DrsObject{
 		Id:               "object-1",
 		Size:             42,
 		ControlledAccess: &[]string{"/organization/org/project/project"},
@@ -140,8 +146,34 @@ func TestEventFromObjectFixedRequestIdentityHasStableScopedIDs(t *testing.T) {
 	}
 }
 
+func TestEventFromObjectUsesCanonicalSHA256ForAttributionIdentity(t *testing.T) {
+	const canonical = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	ctx := requestid.WithRequestID(context.Background(), "canonical-sha-request")
+	request := AccessRequest{
+		Object: &drs.DrsObject{
+			Id:        "object-1",
+			Checksums: []drs.Checksum{{Type: "SHA-256", Checksum: " SHA256:" + strings.ToUpper(canonical) + " "}},
+		},
+		AccessID:   "s3",
+		StorageURL: "s3://bucket/object-1",
+	}
+
+	event := eventFromObject(ctx, request)
+	if event.SHA256 != canonical {
+		t.Fatalf("event SHA256 = %q, want %q", event.SHA256, canonical)
+	}
+	canonicalRequest := request
+	canonicalObject := *request.Object
+	canonicalObject.Checksums = []drs.Checksum{{Type: "sha256", Checksum: canonical}}
+	canonicalRequest.Object = &canonicalObject
+	want := eventFromObject(ctx, canonicalRequest)
+	if event.EventID != want.EventID || event.AccessGrantID != want.AccessGrantID {
+		t.Fatalf("equivalent SHA forms produced different IDs: got=%+v want=%+v", event, want)
+	}
+}
+
 func TestEventFromObjectRejectsExplicitScopeWithoutOperationAuthorization(t *testing.T) {
-	obj := &objects.Record{ControlledAccess: &[]string{
+	obj := &drs.DrsObject{ControlledAccess: &[]string{
 		"/organization/org/project/authorized",
 		"/organization/org/project/other",
 	}}

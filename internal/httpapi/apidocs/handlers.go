@@ -3,9 +3,19 @@ package apidocs
 import (
 	"fmt"
 	"log"
+	"strings"
 
-	"github.com/calypr/syfon/internal/httpapi/middleware"
 	"github.com/gofiber/fiber/v3"
+)
+
+const (
+	RouteSwaggerUI    = "/index/swagger"
+	RouteSwaggerUIAlt = "/index/swagger/"
+	RouteOpenAPISpec  = "/index/openapi.yaml"
+	RouteLFSSpec      = "/index/openapi-lfs.yaml"
+	RouteBucketSpec   = "/index/openapi-bucket.yaml"
+	RouteInternalSpec = "/index/openapi-internal.yaml"
+	RouteErrorSpec    = "/index/error.openapi.yaml"
 )
 
 const swaggerUIHTML = `<!doctype html>
@@ -43,7 +53,7 @@ func handleSwaggerUI(c fiber.Ctx) error {
 func handleOpenAPISpec(c fiber.Ctx) error {
 	merged, err := buildMergedOpenAPISpec()
 	if err != nil {
-		return sendInternalServerError(c, "OpenAPI spec file not found: "+err.Error())
+		return fmt.Errorf("OpenAPI spec file not found: %w", err)
 	}
 	c.Set("Content-Type", "application/yaml")
 	if err := c.Send(merged); err != nil {
@@ -53,58 +63,27 @@ func handleOpenAPISpec(c fiber.Ctx) error {
 	return nil
 }
 
-func handleLFSOpenAPISpec(c fiber.Ctx) error {
-	specBytes, err := loadSpecBytesByName("lfs.openapi.yaml")
-	if err != nil {
-		return sendInternalServerError(c, "LFS OpenAPI spec file not found: "+err.Error())
+func handleNamedOpenAPISpec(name, label string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		specBytes, err := loadSpecBytesByName(name)
+		if err != nil {
+			return fmt.Errorf("%s OpenAPI spec file not found: %w", label, err)
+		}
+		c.Set("Content-Type", "application/yaml")
+		if err := c.Send(specBytes); err != nil {
+			log.Printf("write %s openapi spec response: %v", strings.ToLower(label), err)
+			return err
+		}
+		return nil
 	}
-	c.Set("Content-Type", "application/yaml")
-	if err := c.Send(specBytes); err != nil {
-		log.Printf("write lfs openapi spec response: %v", err)
-		return err
-	}
-	return nil
 }
 
-func handleBucketOpenAPISpec(c fiber.Ctx) error {
-	specBytes, err := loadSpecBytesByName("bucket.openapi.yaml")
-	if err != nil {
-		return sendInternalServerError(c, "Bucket OpenAPI spec file not found: "+err.Error())
-	}
-	c.Set("Content-Type", "application/yaml")
-	if err := c.Send(specBytes); err != nil {
-		log.Printf("write bucket openapi spec response: %v", err)
-		return err
-	}
-	return nil
-}
-
-func handleInternalOpenAPISpec(c fiber.Ctx) error {
-	specBytes, err := loadSpecBytesByName("internal.openapi.yaml")
-	if err != nil {
-		return sendInternalServerError(c, "Internal OpenAPI spec file not found: "+err.Error())
-	}
-	c.Set("Content-Type", "application/yaml")
-	if err := c.Send(specBytes); err != nil {
-		log.Printf("write internal openapi spec response: %v", err)
-		return err
-	}
-	return nil
-}
-
-func handleErrorOpenAPISpec(c fiber.Ctx) error {
-	specBytes, err := loadSpecBytesByName("error.openapi.yaml")
-	if err != nil {
-		return sendInternalServerError(c, "Error OpenAPI spec file not found: "+err.Error())
-	}
-	c.Set("Content-Type", "application/yaml")
-	if err := c.Send(specBytes); err != nil {
-		log.Printf("write error openapi spec response: %v", err)
-		return err
-	}
-	return nil
-}
-
-func sendInternalServerError(c fiber.Ctx, message string) error {
-	return middleware.HandleError(c, fmt.Errorf("%s", message))
+func RegisterSwaggerRoutes(router fiber.Router) {
+	router.Get(RouteSwaggerUI, handleSwaggerUI)
+	router.Get(RouteSwaggerUIAlt, handleSwaggerUI)
+	router.Get(RouteOpenAPISpec, handleOpenAPISpec)
+	router.Get(RouteLFSSpec, handleNamedOpenAPISpec("lfs.openapi.yaml", "LFS"))
+	router.Get(RouteBucketSpec, handleNamedOpenAPISpec("bucket.openapi.yaml", "Bucket"))
+	router.Get(RouteInternalSpec, handleNamedOpenAPISpec("internal.openapi.yaml", "Internal"))
+	router.Get(RouteErrorSpec, handleNamedOpenAPISpec("error.openapi.yaml", "Error"))
 }

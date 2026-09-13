@@ -1,0 +1,47 @@
+overlay: 1.0.0
+info:
+  title: Syfon DRS generator overlay
+  version: 0.0.0
+actions:
+  - target: $.components.schemas.AccessMethod.properties.access_url
+    update:
+      $ref: '#/components/schemas/AccessURL'
+  - target: $.components.schemas.AccessMethod.properties.authorizations
+    update:
+      $ref: '#/components/schemas/Authorizations'
+  - target: $.components.schemas
+    update:
+      AccessMethodUpdate:
+        type: object
+        required:
+          - object_id
+          - access_methods
+        properties:
+          object_id:
+            type: string
+          access_methods:
+            type: array
+            minItems: 1
+            items:
+              $ref: '#/components/schemas/AccessMethod'
+  - target: $.components.schemas.BulkAccessMethodUpdateRequest.properties.updates.items
+    update:
+      $ref: '#/components/schemas/AccessMethodUpdate'
+  # Keep the public generated bulk request fields as slices. The published
+  # source schema is intentionally nullable and permits an omitted ID list;
+  # code generation still needs the long-standing field shape.
+  - target: $.components.requestBodies.BulkObjectBody.content.application/json.schema
+    update:
+      required:
+        - bulk_object_ids
+  - target: $.components.schemas.DrsObject
+    update:
+      properties:
+        did:
+          type: string
+          description: Runtime identity extension emitted by Syfon.
+        name_aliases:
+          type: array
+          items:
+            type: string
+          description: Runtime name aliases stored by Syfon.

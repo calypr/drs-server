@@ -25,7 +25,7 @@ type credentialEnvelopeV2 struct {
 	Ciphertext string `json:"c"`
 }
 
-func EncryptCredentialField(ctx context.Context, plaintext string) (string, error) {
+func (c *Cipher) EncryptField(ctx context.Context, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
@@ -33,7 +33,7 @@ func EncryptCredentialField(ctx context.Context, plaintext string) (string, erro
 		return plaintext, nil
 	}
 
-	manager, err := resolveCredentialKeyManager(configuredCredentialKeyManagerName())
+	manager, err := c.manager()
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +67,7 @@ func EncryptCredentialField(ctx context.Context, plaintext string) (string, erro
 	return credentialCipherPrefixV2 + base64.RawStdEncoding.EncodeToString(b), nil
 }
 
-func DecryptCredentialField(ctx context.Context, value string) (string, error) {
+func (c *Cipher) DecryptField(ctx context.Context, value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
@@ -76,14 +76,14 @@ func DecryptCredentialField(ctx context.Context, value string) (string, error) {
 	}
 
 	if strings.HasPrefix(value, credentialCipherPrefixV2) {
-		return decryptCredentialFieldV2(ctx, value)
+		return c.decryptFieldV2(ctx, value)
 	}
 
 	// Backward compatibility for legacy v1 ciphertexts.
-	return decryptCredentialFieldV1(value)
+	return c.decryptFieldV1(value)
 }
 
-func decryptCredentialFieldV2(ctx context.Context, value string) (string, error) {
+func (c *Cipher) decryptFieldV2(ctx context.Context, value string) (string, error) {
 	payloadB64 := strings.TrimPrefix(value, credentialCipherPrefixV2)
 	payload, err := base64.RawStdEncoding.DecodeString(payloadB64)
 	if err != nil {
@@ -127,7 +127,7 @@ func decryptCredentialFieldV2(ctx context.Context, value string) (string, error)
 	return string(plaintext), nil
 }
 
-func decryptCredentialFieldV1(value string) (string, error) {
+func (c *Cipher) decryptFieldV1(value string) (string, error) {
 	key, err := credentialMasterKey()
 	if err != nil {
 		return "", err

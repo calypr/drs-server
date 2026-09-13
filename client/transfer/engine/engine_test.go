@@ -46,12 +46,30 @@ type fakeBackend struct {
 	completedUploadID  string
 	completedParts     []transfer.MultipartPart
 	completeErr        error
+	abortErr           error
+	abortedUploadID    string
 	uploadChunkSize    int
 	uploadChunkDelay   time.Duration
 	uploadDone         func()
 	partChunkSize      int
 	partChunkDelay     time.Duration
 	completeGate       <-chan struct{}
+}
+
+type metadataMultipartBackend struct {
+	*fakeBackend
+	guid     string
+	filename string
+	bucket   string
+	metadata common.FileMetadata
+}
+
+func (f *metadataMultipartBackend) InitMultipartUploadWithMetadata(_ context.Context, guid, filename, bucket string, metadata common.FileMetadata) (string, string, error) {
+	f.guid = guid
+	f.filename = filename
+	f.bucket = bucket
+	f.metadata = metadata
+	return "upload-with-metadata", filename, nil
 }
 
 func (f *fakeBackend) Name() string { return "fake-backend" }
@@ -168,6 +186,13 @@ func (f *fakeBackend) MultipartComplete(ctx context.Context, key string, uploadI
 	return f.completeErr
 }
 
+func (f *fakeBackend) MultipartAbort(_ context.Context, uploadID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.abortedUploadID = uploadID
+	return f.abortErr
+}
+
 func (f *fakeBackend) Delete(ctx context.Context, guid string) error { return nil }
 
 func readAllChunked(r io.Reader, chunkSize int, delay time.Duration) ([]byte, error) {
@@ -232,7 +257,7 @@ func TestChunkHelpers(t *testing.T) {
 	}
 
 	stale := filepath.Join(cache, "syfon", "multipart", "stale.json")
-	if err := os.WriteFile(stale, []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(stale, []byte(`{"phase":"uploading","upload_id":"stale"}`), 0o644); err != nil {
 		t.Fatalf("write stale checkpoint: %v", err)
 	}
 	old := time.Now().Add(-25 * time.Hour)
@@ -242,8 +267,8 @@ func TestChunkHelpers(t *testing.T) {
 	if _, err := CheckpointPath("/tmp/other.bin", "guid-2"); err != nil {
 		t.Fatalf("CheckpointPath cleanup call returned error: %v", err)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("expected stale checkpoint cleanup, stat err=%v", err)
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale checkpoint containing a provider upload ID was removed: %v", err)
 	}
 }
 
@@ -266,7 +291,7 @@ func TestGenericUploaderUploadSingle(t *testing.T) {
 		return nil
 	})
 
-	err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-1", ObjectKey: "object-1"}, true)
+	err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-1", ObjectKey: "object-1"})
 	if err != nil {
 		t.Fatalf("Upload returned error: %v", err)
 	}
@@ -306,7 +331,7 @@ func TestGenericUploaderUploadSingleZeroByteStillEmitsCompletion(t *testing.T) {
 		return nil
 	})
 
-	if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-empty", ObjectKey: "object-empty"}, true); err != nil {
+	if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-empty", ObjectKey: "object-empty"}); err != nil {
 		t.Fatalf("Upload returned error: %v", err)
 	}
 	if len(events) == 0 {
@@ -336,7 +361,7 @@ func TestGenericUploaderUploadSinglePropagatesFinalizeCallbackError(t *testing.T
 		return wantErr
 	})
 
-	err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-small", ObjectKey: "object-small"}, true)
+	err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-small", ObjectKey: "object-small"})
 	if err == nil {
 		t.Fatal("expected finalize callback error")
 	}
@@ -372,7 +397,7 @@ func TestGenericUploaderMultipartAndState(t *testing.T) {
 		return nil
 	})
 
-	err = uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", ForceMultipart: true}, true)
+	err = uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", ForceMultipart: true})
 	if err != nil {
 		t.Fatalf("Upload returned error: %v", err)
 	}
@@ -412,7 +437,7 @@ func TestGenericUploaderMultipartAndState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, FileModUnixNano: info.ModTime().UnixNano(), UploadID: "upload-123", ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
+	state := &uploaderResumeState{SourcePath: file, GUID: "guid-large", ObjectKey: "object-large", FileSize: 101 * common.MB, FileModUnixNano: info.ModTime().UnixNano(), UploadID: "upload-123", RoutingFingerprint: uploadRoutingFingerprint(common.FileMetadata{}), Phase: uploadCheckpointUploading, ChunkSize: 10 * common.MB, Completed: map[int]string{1: "etag-1"}}
 	uploader.saveState(checkpointPath, state)
 	loaded, ok := uploader.loadState(checkpointPath)
 	if !ok || !reflect.DeepEqual(loaded, state) {
@@ -427,6 +452,30 @@ func TestGenericUploaderMultipartAndState(t *testing.T) {
 	}
 	if uploader.matches(nil, transfer.TransferRequest{}, info, 10*common.MB) {
 		t.Fatal("nil state should not match")
+	}
+}
+
+func TestUploaderInitializesMultipartWithMetadata(t *testing.T) {
+	t.Setenv("DATA_CLIENT_CACHE_DIR", t.TempDir())
+	path := filepath.Join(t.TempDir(), "source")
+	if err := os.WriteFile(path, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backend := &metadataMultipartBackend{fakeBackend: &fakeBackend{}}
+	uploader := &GenericUploader{Backend: backend}
+	req := transfer.TransferRequest{
+		SourcePath:     path,
+		ObjectKey:      "object-key",
+		GUID:           "object-id",
+		Bucket:         "bucket-a",
+		Metadata:       common.FileMetadata{Metadata: map[string]any{"content-type": "text/plain"}},
+		ForceMultipart: true,
+	}
+	if err := uploader.Upload(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if backend.guid != req.GUID || backend.filename != req.ObjectKey || backend.bucket != req.Bucket || !reflect.DeepEqual(backend.metadata, req.Metadata) {
+		t.Fatalf("multipart metadata changed: %+v", backend)
 	}
 }
 
@@ -459,7 +508,7 @@ func TestGenericUploaderUploadSingleDelaysTerminalProgressUntilSuccess(t *testin
 		return nil
 	})
 
-	if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-slow-single", ObjectKey: "object-slow-single"}, true); err != nil {
+	if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: file, GUID: "guid-slow-single", ObjectKey: "object-slow-single"}); err != nil {
 		t.Fatalf("Upload returned error: %v", err)
 	}
 
@@ -539,7 +588,7 @@ func TestGenericUploaderMultipartStreamsProgressAndCompletesAfterFinalize(t *tes
 			GUID:           "guid-slow-multipart",
 			ObjectKey:      "object-slow-multipart",
 			ForceMultipart: true,
-		}, true)
+		})
 	}()
 
 	select {
@@ -625,7 +674,7 @@ func TestGenericUploaderMultipartRetryDoesNotOvercountProgress(t *testing.T) {
 		GUID:           "guid-retry-multipart",
 		ObjectKey:      "object-retry-multipart",
 		ForceMultipart: true,
-	}, true); err != nil {
+	}); err != nil {
 		t.Fatalf("Upload returned error: %v", err)
 	}
 
@@ -643,7 +692,7 @@ func TestGenericDownloaderDownloadSingleVariants(t *testing.T) {
 
 	t.Run("resume range download", func(t *testing.T) {
 		backend := &fakeBackend{data: []byte("hello world"), meta: &transfer.ObjectMetadata{Size: 11}}
-		d := &GenericDownloader{Source: backend, RetryStrategy: zeroRetryStrategy{}}
+		d := &downloader{Source: backend, RetryStrategy: zeroRetryStrategy{}}
 		dst := filepath.Join(t.TempDir(), "resume.bin")
 		if err := os.WriteFile(dst, []byte("hello "), 0o644); err != nil {
 			t.Fatalf("WriteFile returned error: %v", err)
@@ -677,7 +726,7 @@ func TestGenericDownloaderDownloadSingleVariants(t *testing.T) {
 
 	t.Run("range ignored restarts from zero", func(t *testing.T) {
 		backend := &fakeBackend{data: []byte("abcdef"), rangeIgnoredOnce: true}
-		d := &GenericDownloader{Source: backend}
+		d := &downloader{Source: backend}
 		dst := filepath.Join(t.TempDir(), "ignored.bin")
 		if err := os.WriteFile(dst, []byte("abc"), 0o644); err != nil {
 			t.Fatalf("WriteFile returned error: %v", err)
@@ -697,7 +746,7 @@ func TestGenericDownloaderDownloadSingleVariants(t *testing.T) {
 
 	t.Run("already complete returns early", func(t *testing.T) {
 		backend := &fakeBackend{data: []byte("abc")}
-		d := &GenericDownloader{Source: backend}
+		d := &downloader{Source: backend}
 		dst := filepath.Join(t.TempDir(), "done.bin")
 		if err := os.WriteFile(dst, []byte("abc"), 0o644); err != nil {
 			t.Fatalf("WriteFile returned error: %v", err)
@@ -713,7 +762,7 @@ func TestGenericDownloaderDownloadSingleVariants(t *testing.T) {
 
 	t.Run("short download returns error", func(t *testing.T) {
 		backend := &fakeBackend{data: []byte("abc")}
-		d := &GenericDownloader{Source: backend}
+		d := &downloader{Source: backend}
 		err := d.downloadSingle(context.Background(), "guid-4", filepath.Join(t.TempDir(), "short.bin"), 5)
 		if err == nil || !strings.Contains(err.Error(), "short download") {
 			t.Fatalf("expected short download error, got %v", err)
@@ -728,9 +777,9 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 	content = content[:2*common.MB+123]
 	backend := &fakeBackend{
 		data: content,
-		meta: &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: true, Provider: "http"},
+		meta: &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: true},
 	}
-	d := &GenericDownloader{Source: backend}
+	d := &downloader{Source: backend}
 	dst := filepath.Join(t.TempDir(), "parallel.bin")
 
 	var eventsMu sync.Mutex
@@ -743,7 +792,7 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 		return nil
 	})
 
-	if err := d.Download(ctx, "guid-p", dst, 3, 1*common.MB, 1*common.MB); err != nil {
+	if err := d.download(ctx, "guid-p", dst, 3, 1*common.MB, 1*common.MB); err != nil {
 		t.Fatalf("Download returned error: %v", err)
 	}
 	got, err := os.ReadFile(dst)
@@ -766,9 +815,9 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 	}
 
 	backend2 := &fakeBackend{data: []byte("single"), meta: &transfer.ObjectMetadata{Size: 6, AcceptRanges: true}}
-	d2 := &GenericDownloader{Source: backend2}
+	d2 := &downloader{Source: backend2}
 	dst2 := filepath.Join(t.TempDir(), "single.bin")
-	if err := d2.Download(context.Background(), "guid-s", dst2, 4, 1*common.MB, 1*common.MB); err != nil {
+	if err := d2.download(context.Background(), "guid-s", dst2, 4, 1*common.MB, 1*common.MB); err != nil {
 		t.Fatalf("Download returned error: %v", err)
 	}
 	if len(backend2.rangeCalls) != 0 {
@@ -776,8 +825,8 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 	}
 
 	backend3 := &fakeBackend{data: []byte("norange"), meta: &transfer.ObjectMetadata{Size: 7, AcceptRanges: false}}
-	d3 := &GenericDownloader{Source: backend3}
-	if err := d3.Download(context.Background(), "guid-nr", filepath.Join(t.TempDir(), "norange.bin"), 2, 1*common.MB, 0); err != nil {
+	d3 := &downloader{Source: backend3}
+	if err := d3.download(context.Background(), "guid-nr", filepath.Join(t.TempDir(), "norange.bin"), 2, 1*common.MB, 0); err != nil {
 		t.Fatalf("Download returned error: %v", err)
 	}
 	if len(backend3.rangeCalls) != 0 {
@@ -788,13 +837,13 @@ func TestGenericDownloaderDownloadAndParallel(t *testing.T) {
 		backend := &fakeBackend{
 			data:     content,
 			rangeErr: fmt.Errorf("boom"),
-			meta:     &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: true, Provider: "http"},
+			meta:     &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: true},
 		}
-		d := &GenericDownloader{Source: backend}
+		d := &downloader{Source: backend}
 		dst := filepath.Join(t.TempDir(), "failed-parallel.bin")
 		ctx := context.Background()
 
-		err := d.Download(ctx, "guid-fail", dst, 2, 1*common.MB, 1*common.MB)
+		err := d.download(ctx, "guid-fail", dst, 2, 1*common.MB, 1*common.MB)
 		if err == nil || !strings.Contains(err.Error(), "range download") {
 			t.Fatalf("expected range download error, got %v", err)
 		}
@@ -812,9 +861,9 @@ func TestGenericDownloaderSingleDownloadStreamsProgress(t *testing.T) {
 	content = content[:2*common.MB+123]
 	backend := &fakeBackend{
 		data: content,
-		meta: &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: false, Provider: "http"},
+		meta: &transfer.ObjectMetadata{Size: int64(len(content)), AcceptRanges: false},
 	}
-	d := &GenericDownloader{Source: backend}
+	d := &downloader{Source: backend}
 	dst := filepath.Join(t.TempDir(), "single-progress.bin")
 
 	var events []common.ProgressEvent
@@ -824,7 +873,7 @@ func TestGenericDownloaderSingleDownloadStreamsProgress(t *testing.T) {
 		return nil
 	})
 
-	if err := d.Download(ctx, "guid-single", dst, 2, 1*common.MB, 5*common.GB); err != nil {
+	if err := d.download(ctx, "guid-single", dst, 2, 1*common.MB, 5*common.GB); err != nil {
 		t.Fatalf("Download returned error: %v", err)
 	}
 	if len(events) < 2 {
@@ -848,7 +897,7 @@ func TestMultipartUploadRejectsStaleCheckpoint(t *testing.T) {
 				t.Fatal(err)
 			}
 			req := transfer.TransferRequest{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", ForceMultipart: true}
-			state := &uploaderResumeState{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", FileSize: info.Size(), FileModUnixNano: info.ModTime().UnixNano(), ChunkSize: OptimalChunkSize(info.Size()), UploadID: "old-session", Completed: map[int]string{1: "old-etag"}}
+			state := &uploaderResumeState{SourcePath: source, GUID: "id", ObjectKey: "key", Bucket: "bucket", FileSize: info.Size(), FileModUnixNano: info.ModTime().UnixNano(), ChunkSize: OptimalChunkSize(info.Size()), UploadID: "old-session", RoutingFingerprint: uploadRoutingFingerprint(common.FileMetadata{}), Phase: uploadCheckpointUploading, Completed: map[int]string{1: "old-etag"}}
 			switch mismatch {
 			case "bucket":
 				state.Bucket = "another-bucket"
@@ -867,7 +916,7 @@ func TestMultipartUploadRejectsStaleCheckpoint(t *testing.T) {
 			if err := uploader.saveState(checkpoint, state); err != nil {
 				t.Fatal(err)
 			}
-			if err := uploader.Upload(context.Background(), req, false); err != nil {
+			if err := uploader.Upload(context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
 			if mismatch == "matching" {

@@ -5,24 +5,35 @@ import (
 	"net/http"
 
 	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/client/apierror"
 	"github.com/calypr/syfon/client/logs"
 	"github.com/calypr/syfon/client/request"
 )
 
 type DataService struct {
-	gen       internalapi.ClientWithResponsesInterface
-	requestor request.Requester
-	logger    *logs.Gen3Logger
-	drs       *DRSService
+	gen        internalapi.ClientWithResponsesInterface
+	httpClient request.HTTPDoer
+	serverURL  string
+	logger     *logs.Gen3Logger
+	drs        *DRSService
 }
 
-func NewDataService(gen internalapi.ClientWithResponsesInterface, r request.Requester, l *logs.Gen3Logger, drs *DRSService) *DataService {
-	return &DataService{
-		gen:       gen,
-		requestor: r,
-		logger:    l,
-		drs:       drs,
+func NewDataService(gen internalapi.ClientWithResponsesInterface, client request.HTTPDoer, l *logs.Gen3Logger, drs *DRSService) *DataService {
+	service := &DataService{
+		gen:        gen,
+		httpClient: client,
+		logger:     l,
+		drs:        drs,
 	}
+	if generated, ok := gen.(*internalapi.ClientWithResponses); ok {
+		if raw, ok := generated.ClientInterface.(*internalapi.Client); ok {
+			service.serverURL = raw.Server
+			if service.httpClient == nil {
+				service.httpClient = raw.Client
+			}
+		}
+	}
+	return service
 }
 
 func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalUploadBlankRequest) (internalapi.InternalUploadBlankOutput, error) {
@@ -31,32 +42,18 @@ func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalU
 		return internalapi.InternalUploadBlankOutput{}, err
 	}
 	if resp.JSON201 == nil {
-		return internalapi.InternalUploadBlankOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalUploadBlankOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON201, nil
 }
 
-func (d *DataService) UploadURL(ctx context.Context, req UploadURLRequest) (internalapi.InternalSignedURL, error) {
-	params := &internalapi.InternalUploadURLParams{}
-	if req.Key != "" {
-		params.Key = &req.Key
-	}
-	if req.ExpiresIn > 0 {
-		expires := int32(req.ExpiresIn)
-		params.ExpiresIn = &expires
-	}
-	if req.Organization != "" {
-		params.Organization = &req.Organization
-	}
-	if req.Project != "" {
-		params.Project = &req.Project
-	}
-	resp, err := d.gen.InternalUploadURLWithResponse(ctx, req.FileID, params)
+func (d *DataService) UploadURL(ctx context.Context, fileID string, params *internalapi.InternalUploadURLParams) (internalapi.InternalSignedURL, error) {
+	resp, err := d.gen.InternalUploadURLWithResponse(ctx, fileID, params)
 	if err != nil {
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalSignedURL{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -67,7 +64,7 @@ func (d *DataService) UploadBulk(ctx context.Context, req internalapi.InternalUp
 		return internalapi.InternalUploadBulkOutput{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalUploadBulkOutput{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalUploadBulkOutput{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -85,7 +82,7 @@ func (d *DataService) DownloadURL(ctx context.Context, did string, expiresIn int
 		return internalapi.InternalSignedURL{}, err
 	}
 	if resp.JSON200 == nil {
-		return internalapi.InternalSignedURL{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return internalapi.InternalSignedURL{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -96,7 +93,7 @@ func (d *DataService) DeleteFile(ctx context.Context, guid string) (string, erro
 		return "", err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return "", apiResponseError(resp.HTTPResponse, resp.Body)
+		return "", apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return guid, nil
 }

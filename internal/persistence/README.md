@@ -4,17 +4,18 @@
 
 ## Package layout
 
+- `store/` implements shared queries, mutations, and transactions through the backend's SQL dialect.
 - `sqlite/` implements the contracts with SQLite. `sqlite.NewSqliteDB` initializes and upgrades the runtime schema before it returns.
 - `postgres/` implements the contracts with PostgreSQL. `postgres.NewPostgresDB` initializes and upgrades the runtime schema before it returns.
 - `postgres/object_schema.sql` contains the object tables and indexes embedded by the PostgreSQL implementation.
 - `sqlite/scripts/` contains the manual SQLite bootstrap helper.
 - `postgres/scripts/` contains PostgreSQL maintenance SQL.
 
-Consumer packages own their narrow ports in `objects`, `buckets`, `transfers`, and `usage`. Both adapters implement those ports, and `cmd/server` explicitly composes the selected concrete backend. There is no shared database aggregate interface.
+Consumer packages own their ports in `objects`, `buckets`, `transfers`, and `usage`. Both backend constructors return `*store.Store`, which implements those ports. `cmd/server` selects the backend. There is no shared database aggregate interface.
 
 ## Object and access tables
 
-Both runtime backends store the following object data. SQLite creates these tables in `internal/persistence/sqlite/sqlite.go:initSchema`. PostgreSQL creates the object tables from `internal/persistence/postgres/object_schema.sql`.
+Both runtime backends store the following object data. SQLite creates these tables in `internal/persistence/sqlite/dialect.go:sqliteSchemaBootstrap.initSchema`. PostgreSQL creates the object tables from `internal/persistence/postgres/object_schema.sql`.
 
 ### `drs_object`
 
@@ -23,7 +24,7 @@ One row stores the metadata for a canonical object record.
 - `id` is the text primary key.
 - `size`, `created_time`, `updated_time`, `name`, `version`, and `description` store object metadata.
 
-Core uses the canonical SHA-256 checksum to group and resolve content. The record ID remains the persisted primary key. `drs_object_alias` maps an alias ID, such as an older UUID, to that canonical record.
+The `objects` package uses the canonical SHA-256 checksum to group and resolve content. The record ID remains the persisted primary key. `drs_object_alias` maps an alias ID, such as an older UUID, to that canonical record.
 
 ### `drs_object_checksum`
 
@@ -42,12 +43,15 @@ This table stores the provider locations for an object.
 - `object_id` references `drs_object.id`.
 - `url` stores a location such as `s3://bucket/key`.
 - `type` stores the provider type, such as `s3`.
+- `access_method_json` stores the complete DRS access method, including `access_id`, URL headers, authorizations, availability, cloud, and region.
+
+The runtime keeps `url` and `type` as indexed columns for location queries. It adds `access_method_json` to existing databases at startup. If the payload is missing, reads hydrate the method from the indexed columns and generate a stable access ID.
 
 Organization and project columns do not belong to this table. Scoped authorization uses `drs_object_controlled_access`.
 
 ### `drs_object_controlled_access`
 
-Each row associates an object with an Arborist-compatible resource path in `resource`. Core builds a path from an organization and project with `common.ResourcePath`. API and authz code use the stored resource values when they evaluate access.
+Each row associates an object with an Arborist-compatible resource path in `resource`. The shared persistence store builds a path from an organization and project with `access.ResourcePath` in `client/access`. The `objects` and authorization packages use the stored resource values when they evaluate access.
 
 ### `drs_object_read_policy`
 
@@ -77,6 +81,10 @@ The `(organization, project_id)` pair is the primary key. Each row maps a projec
 
 This table stores pending LFS metadata by `oid`, with creation and expiry timestamps. The LFS implementation consumes entries atomically when it verifies an upload.
 
+### `multipart_upload_session`
+
+This table stores the frozen storage target, authorization intent, completion claim, parts fingerprint, and completed location for multipart uploads. Shared state lets any server replica sign later parts and makes identical completion retries return the original result without dispatching the provider again.
+
 ### `object_usage` and `object_usage_event`
 
 `object_usage` stores upload and download counters and their last-event timestamps. `object_usage_event` stores the event history used by usage reporting.
@@ -89,12 +97,12 @@ These tables store issued-access records, access grant aggregates, and provider 
 
 The application initializes its schema when it creates a database:
 
-- `sqlite.NewSqliteDB` opens the configured SQLite file, enables its connection settings, calls `initSchema`, and runs compatibility upgrades before returning.
-- `postgres.NewPostgresDB` opens and pings PostgreSQL, loads `object_schema.sql`, then runs the credential, bucket-scope, LFS, usage, and transfer schema initializers.
+- `sqlite.NewSqliteDB` opens the configured SQLite file, enables its connection settings, delegates to `sqlite/dialect.go` for `initSchema`, and runs compatibility upgrades before returning.
+- `postgres.NewPostgresDB` opens and pings PostgreSQL, loads `object_schema.sql`, then runs the credential, bucket-scope, LFS, multipart, usage, and transfer schema initializers.
 
-The SQLite runtime schema includes `drs_object`, the access and policy tables, aliases, credentials and scopes, LFS pending metadata, usage tables, transfer attribution tables, access grants, provider transfer events, indexes, and credential uniqueness triggers. Runtime initialization also handles older databases. It adds missing columns, migrates old credential identity shape, removes retired object columns, removes the retired browse index, and backfills access grants.
+The SQLite runtime schema includes `drs_object`, the access and policy tables, aliases, credentials and scopes, LFS pending metadata, multipart sessions, usage tables, transfer attribution tables, access grants, provider transfer events, indexes, and credential uniqueness triggers. Runtime initialization also handles older databases. It adds missing columns, including `access_method_json`, migrates old credential identity shape, removes retired object columns, removes the retired browse index, and backfills access grants.
 
-The PostgreSQL runtime schema has the same logical table groups. Its object DDL lives in `postgres/object_schema.sql`. The remaining DDL and compatibility statements live in `postgres/postgres.go`.
+The PostgreSQL runtime schema has the same logical table groups. Its object DDL lives in `postgres/object_schema.sql`. The remaining DDL and compatibility statements live in `postgres/dialect.go`.
 
 ## Standalone SQLite script
 

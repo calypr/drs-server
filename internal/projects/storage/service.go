@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/buckets"
@@ -24,58 +26,59 @@ const (
 	listFallbackObjectLimit = 5000
 )
 
-type Inspector struct {
-	scopes      ScopeReader
-	credentials CredentialReader
-	visibility  VisibilityReader
-	inventory   InventoryPort
-	probe       ProbePort
-	physical    PhysicalScopeReader
+// InspectionMode controls the amount of inventory returned by
+// InspectProjectStorage.
+type InspectionMode string
+
+const (
+	ModeItems   InspectionMode = "items"
+	ModeExists  InspectionMode = "exists"
+	ModeSummary InspectionMode = "summary"
+)
+
+type InspectionOptions struct {
+	Mode        InspectionMode
+	IncludeHead bool
+	PathPrefix  string
 }
 
-type ProjectCleanup struct {
-	inspector      *Inspector
+type Service struct {
+	resolver       ScopeResolver
+	credentials    CredentialReader
+	visibility     VisibilityReader
+	records        RecordRepairer
+	inventory      InventoryPort
+	probe          ProbePort
 	delete         DeletePort
 	cleanupObjects ObjectScopeDeleter
 	cleanupScopes  ScopeCatalog
 }
 
-type Service struct {
-	*Inspector
-	*ProjectCleanup
-}
-
 func NewService(deps Dependencies) *Service {
-	inspector := &Inspector{
-		scopes:      deps.Scopes,
-		credentials: deps.Credentials,
-		visibility:  deps.Visibility,
-		inventory:   deps.Inventory,
-		probe:       deps.Probe,
-		physical:    deps.Physical,
-	}
 	return &Service{
-		Inspector: inspector,
-		ProjectCleanup: &ProjectCleanup{
-			inspector:      inspector,
-			delete:         deps.Delete,
-			cleanupObjects: deps.CleanupObjects,
-			cleanupScopes:  deps.CleanupScopes,
-		},
+		resolver:       deps.ScopeResolver,
+		credentials:    deps.Credentials,
+		visibility:     deps.Visibility,
+		records:        deps.Records,
+		inventory:      deps.Providers.Inventory,
+		probe:          deps.Providers.Probe,
+		delete:         deps.Providers.Delete,
+		cleanupObjects: deps.ObjectCleanup,
+		cleanupScopes:  deps.ScopeCatalog,
 	}
 }
 
 // InspectProjectStorage inventories the S3 target selected by the project's
 // configured scope.
-func (s *Inspector) InspectProjectStorage(ctx context.Context, organization, project string, options InspectionOptions) (*InspectionResult, error) {
+func (s *Service) InspectProjectStorage(ctx context.Context, organization, project string, options InspectionOptions) (*internalapi.InternalInspectProjectBucketResponse, error) {
 	ctx = withRequestCache(ctx)
 	target, err := s.resolveScope(ctx, organization, project, readMethod)
 	if err != nil {
 		return nil, err
 	}
-	target = target.withPathPrefix(options.PathPrefix)
+	target = withPathPrefix(target, options.PathPrefix)
 	mode := normalizeMode(options.Mode)
-	listOptions := InventoryOptions{IncludeHead: options.IncludeHead}
+	listOptions := inventoryOptions{IncludeHead: options.IncludeHead}
 	if mode == ModeExists {
 		listOptions.MaxKeys = 1
 	}
@@ -94,54 +97,50 @@ func (s *Inspector) InspectProjectStorage(ctx context.Context, organization, pro
 	summary := summarize(normalized, target, mode)
 	summary.InventoryComplete = complete
 	summary.InventoryWarning = warning
+	for index := range normalized {
+		normalized[index].InventoryComplete = complete
+	}
 	if mode != ModeItems {
-		normalized = []StorageObject{}
+		normalized = []internalapi.InternalInspectProjectBucketItem{}
 	}
-	return &InspectionResult{Summary: summary, Items: normalized}, nil
+	return &internalapi.InternalInspectProjectBucketResponse{Summary: &summary, Items: normalized}, nil
 }
 
-func (s *Inspector) ListObjects(ctx context.Context, organization, project string, includeHead bool) ([]StorageObject, error) {
-	result, err := s.InspectProjectStorage(ctx, organization, project, InspectionOptions{Mode: ModeItems, IncludeHead: includeHead})
-	if err != nil {
-		return nil, err
-	}
-	return result.Items, nil
+type inventoryOptions struct {
+	IncludeHead bool
+	ExactPrefix bool
+	MaxKeys     int32
 }
 
-func (s *Inspector) ResolvePathPrefix(ctx context.Context, organization, project, requestPrefix string) (string, error) {
-	target, err := s.resolveScope(withRequestCache(ctx), organization, project, readMethod)
-	if err != nil {
-		return "", err
-	}
-	return strings.Trim(strings.TrimSpace(target.withPathPrefix(requestPrefix).Prefix), "/"), nil
-}
-
-func (s *Inspector) inventoryObjects(ctx context.Context, bucket, prefix string, options InventoryOptions) ([]StorageObject, error) {
+func (s *Service) inventoryObjects(ctx context.Context, bucket, prefix string, options inventoryOptions) ([]internalapi.InternalInspectProjectBucketItem, error) {
 	if s.inventory == nil {
 		return nil, &Error{Kind: ErrorUnsupported, Message: "storage inventory is not configured"}
 	}
 	result, err := s.inventory.Inventory(ctx, storage.InventoryRequest{
-		Target:      storage.PrefixTarget{Bucket: bucket, Prefix: prefix},
+		Target:      storage.Target{Provider: address.S3Provider, PhysicalBucket: bucket, LookupKey: bucket, LookupCandidates: []string{bucket}},
+		Prefix:      prefix,
 		IncludeHead: options.IncludeHead,
 		ExactPrefix: options.ExactPrefix,
 		MaxKeys:     options.MaxKeys,
 	})
-	items := make([]StorageObject, 0, len(result.Items))
+	items := make([]internalapi.InternalInspectProjectBucketItem, 0, len(result.Items))
 	for _, metadata := range result.Items {
 		key := strings.Trim(strings.TrimSpace(metadata.Key), "/")
 		if key == "" {
 			continue
 		}
-		item := StorageObject{
-			ObjectURL:   address.BucketToURL(bucket, key),
-			Provider:    strings.TrimSpace(metadata.Provider),
-			Bucket:      strings.TrimSpace(metadata.Bucket),
-			Key:         key,
-			Path:        strings.TrimSpace(metadata.Path),
-			SizeBytes:   metadata.SizeBytes,
-			MetaSHA256:  strings.TrimSpace(metadata.MetaSHA256),
-			ETag:        strings.TrimSpace(metadata.ETag),
-			LastModTime: metadata.LastModified,
+		item := internalapi.InternalInspectProjectBucketItem{
+			ObjectUrl:  address.BucketToURL(bucket, key),
+			Provider:   strings.TrimSpace(metadata.Provider),
+			Bucket:     strings.TrimSpace(metadata.Bucket),
+			Key:        key,
+			Path:       strings.TrimSpace(metadata.Path),
+			SizeBytes:  metadata.SizeBytes,
+			MetaSha256: strings.TrimSpace(metadata.MetaSHA256),
+			Etag:       strings.TrimSpace(metadata.ETag),
+		}
+		if !metadata.LastModified.IsZero() {
+			item.LastModified = metadata.LastModified.Format(time.RFC3339)
 		}
 		if item.Provider == "" {
 			item.Provider = address.S3Provider
@@ -172,15 +171,7 @@ func normalizeMode(mode InspectionMode) InspectionMode {
 	}
 }
 
-type scopeTarget struct {
-	Provider   string
-	Bucket     string
-	Prefix     string
-	prefixes   []string
-	Credential buckets.Credential
-}
-
-func (target scopeTarget) withPathPrefix(requestPrefix string) scopeTarget {
+func withPathPrefix(target buckets.StorageScope, requestPrefix string) buckets.StorageScope {
 	trimmed := strings.Trim(strings.TrimSpace(requestPrefix), "/")
 	if trimmed == "" {
 		return target
@@ -193,98 +184,65 @@ func (target scopeTarget) withPathPrefix(requestPrefix string) scopeTarget {
 	return target
 }
 
-func (s *Inspector) resolveScope(ctx context.Context, organization, project, method string) (scopeTarget, error) {
+func (s *Service) resolveScope(ctx context.Context, organization, project, method string) (buckets.StorageScope, error) {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: "organization is required"}
+		return buckets.StorageScope{}, &Error{Kind: ErrorInvalidInput, Message: "organization is required"}
 	}
 	resource, err := clientaccess.ResourcePath(organization, project)
 	if err != nil {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: err.Error()}
+		return buckets.StorageScope{}, &Error{Kind: ErrorInvalidInput, Message: err.Error()}
 	}
 	if access.IsAuthzEnforced(ctx) && !access.HasMethodAccess(ctx, method, []string{resource}) {
-		return scopeTarget{}, &access.AuthorizationError{Method: method, Resources: []string{resource}}
+		return buckets.StorageScope{}, &access.AuthorizationError{Method: method, Resources: []string{resource}}
 	}
-	if s.scopes == nil {
-		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope reader is not configured"}
+	if s.resolver == nil {
+		return buckets.StorageScope{}, &Error{Kind: ErrorUnsupported, Message: "bucket scope resolver is not configured"}
 	}
-	scopes := make([]buckets.Scope, 0, 2)
-	if scope, found, lookupErr := s.scopes.LookupBucketScope(ctx, organization, ""); lookupErr != nil {
-		return scopeTarget{}, lookupErr
-	} else if found {
-		scopes = append(scopes, scope)
-	}
-	if project != "" {
-		if scope, found, lookupErr := s.scopes.LookupBucketScope(ctx, organization, project); lookupErr != nil {
-			return scopeTarget{}, lookupErr
-		} else if found {
-			scopes = append(scopes, scope)
-		}
-	}
-	if len(scopes) == 0 {
-		if project != "" {
-			return scopeTarget{}, &Error{Kind: ErrorScopeNotFound, Message: fmt.Sprintf("no bucket scope configured for organization %q project %q", organization, project)}
-		}
-		return scopeTarget{}, &Error{Kind: ErrorScopeNotFound, Message: fmt.Sprintf("no bucket scope configured for organization %q", organization)}
-	}
-	bucket := ""
-	for _, scope := range scopes {
-		if candidate := strings.TrimSpace(scope.Bucket); candidate != "" {
-			bucket = candidate
-		}
-	}
-	if bucket == "" {
-		return scopeTarget{}, &Error{Kind: ErrorInvalidInput, Message: fmt.Sprintf("unable to resolve scoped storage bucket for organization %q project %q", organization, project)}
-	}
-	credential, err := s.credentialForBucket(ctx, bucket)
+	resolved, err := s.resolver.ResolveStorageScope(ctx, organization, project)
 	if err != nil {
-		return scopeTarget{}, err
+		return buckets.StorageScope{}, mapScopeResolutionError(err)
 	}
-	if address.NormalizeProvider(credential.Provider, address.S3Provider) != address.S3Provider {
-		return scopeTarget{}, &Error{Kind: ErrorUnsupported, Message: fmt.Sprintf("provider %q is not supported for scoped bucket listing", credential.Provider)}
-	}
-	prefixes := normalizedPrefixes(scopes)
-	return scopeTarget{
-		Provider:   address.S3Provider,
-		Bucket:     bucket,
-		Prefix:     strings.Join(prefixes, "/"),
-		prefixes:   prefixes,
-		Credential: *credential,
-	}, nil
+	resolved.Prefixes = append([]string(nil), resolved.Prefixes...)
+	return resolved, nil
 }
 
-func normalizedPrefixes(scopes []buckets.Scope) []string {
-	prefixes := make([]string, 0, len(scopes))
-	for _, scope := range scopes {
-		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-		if prefix == "" {
-			continue
-		}
-		if len(prefixes) == 0 {
-			prefixes = append(prefixes, prefix)
-			continue
-		}
-		last := prefixes[len(prefixes)-1]
-		switch {
-		case prefix == last:
-		case strings.HasPrefix(prefix, last+"/"):
-			prefixes[len(prefixes)-1] = prefix
-		case strings.HasPrefix(last, prefix+"/"):
-		default:
-			prefixes = append(prefixes, prefix)
-		}
+func mapScopeResolutionError(err error) error {
+	if err == nil {
+		return nil
 	}
-	return prefixes
+	var resolutionErr *buckets.StorageScopeError
+	if !errors.As(err, &resolutionErr) {
+		if errors.Is(err, errorapi.ErrProjectScopeNotFound) {
+			return &Error{Kind: ErrorScopeNotFound, Message: err.Error(), Cause: err}
+		}
+		if errors.Is(err, errorapi.ErrStorageCredentialMissing) {
+			return &Error{Kind: ErrorCredentialMissing, Message: err.Error(), Cause: err}
+		}
+		return err
+	}
+	switch resolutionErr.Kind {
+	case buckets.StorageScopeInvalidInput:
+		return &Error{Kind: ErrorInvalidInput, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeNotFound:
+		return &Error{Kind: ErrorScopeNotFound, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeCredentialMissing:
+		return &Error{Kind: ErrorCredentialMissing, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	case buckets.StorageScopeUnsupported:
+		return &Error{Kind: ErrorUnsupported, Message: resolutionErr.Message, Cause: resolutionErr.Cause}
+	default:
+		return err
+	}
 }
 
-func normalizeObjects(items []StorageObject, target scopeTarget) []StorageObject {
-	out := make([]StorageObject, 0, len(items))
+func normalizeObjects(items []internalapi.InternalInspectProjectBucketItem, target buckets.StorageScope) []internalapi.InternalInspectProjectBucketItem {
+	out := make([]internalapi.InternalInspectProjectBucketItem, 0, len(items))
 	for _, item := range items {
 		item.Provider = address.S3Provider
 		item.Bucket = target.Bucket
 		item.Key = strings.Trim(strings.TrimSpace(item.Key), "/")
-		item.ObjectURL = address.BucketToURL(target.Bucket, item.Key)
+		item.ObjectUrl = address.BucketToURL(target.Bucket, item.Key)
 		if strings.TrimSpace(item.Path) == "" {
 			item.Path = path.Base(item.Key)
 		}
@@ -294,16 +252,16 @@ func normalizeObjects(items []StorageObject, target scopeTarget) []StorageObject
 	return out
 }
 
-func summarize(items []StorageObject, target scopeTarget, mode InspectionMode) Summary {
-	result := Summary{
+func summarize(items []internalapi.InternalInspectProjectBucketItem, target buckets.StorageScope, mode InspectionMode) internalapi.InternalInspectProjectBucketSummary {
+	result := internalapi.InternalInspectProjectBucketSummary{
 		Provider:          target.Provider,
 		Bucket:            target.Bucket,
 		Prefix:            strings.Trim(strings.TrimSpace(target.Prefix), "/"),
-		ObjectURL:         address.BucketToURL(target.Bucket, strings.Trim(strings.TrimSpace(target.Prefix), "/")),
+		ObjectUrl:         address.BucketToURL(target.Bucket, strings.Trim(strings.TrimSpace(target.Prefix), "/")),
 		Exists:            len(items) > 0,
 		ObjectCount:       len(items),
-		ComputedAt:        time.Now().UTC(),
-		Mode:              mode,
+		ComputedAt:        time.Now().UTC().Format(time.RFC3339),
+		Mode:              string(mode),
 		InventoryComplete: true,
 	}
 	for _, item := range items {
@@ -409,7 +367,7 @@ func storageErrorMessage(kind ErrorKind, capability, bucket, key string) string 
 	}
 }
 
-func (s *Inspector) credentialForBucket(ctx context.Context, bucket string) (*buckets.Credential, error) {
+func (s *Service) credentialForBucket(ctx context.Context, bucket string) (*buckets.Credential, error) {
 	bucket = strings.TrimSpace(bucket)
 	if bucket == "" {
 		return nil, &Error{Kind: ErrorInvalidInput, Message: "bucket is required"}
@@ -446,7 +404,7 @@ func (s *Inspector) credentialForBucket(ctx context.Context, bucket string) (*bu
 	return nil, err
 }
 
-func (s *Inspector) visibleBuckets(ctx context.Context) (map[string]buckets.VisibleBucket, error) {
+func (s *Service) visibleBuckets(ctx context.Context) (map[string]buckets.VisibleBucket, error) {
 	if cache := cacheFromContext(ctx); cache != nil {
 		if visible, err, ok := cache.visible(); ok {
 			return visible, err
@@ -460,4 +418,25 @@ func (s *Inspector) visibleBuckets(ctx context.Context) (map[string]buckets.Visi
 	visible, err := s.visibility.ListVisibleBuckets(ctx)
 	cacheVisible(ctx, visible, err)
 	return cloneVisible(visible), err
+}
+
+func visibleBucketContains(ctx context.Context, visible map[string]buckets.VisibleBucket, bucket, credentialID string) bool {
+	restricted := restrictedBucketVisibility(ctx)
+	for key, entry := range visible {
+		if restricted && len(entry.Programs) == 0 {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(entry.Credential.Bucket), bucket) ||
+			strings.EqualFold(strings.TrimSpace(key), credentialID) ||
+			strings.EqualFold(strings.TrimSpace(entry.Credential.CredentialID), credentialID) {
+			return true
+		}
+	}
+	return false
+}
+
+func restrictedBucketVisibility(ctx context.Context) bool {
+	return access.IsAuthzEnforced(ctx) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/programs"}) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/data_file"})
 }

@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -25,6 +26,64 @@ func TestSessionCloneDeepCopy(t *testing.T) {
 	}
 	if !s.Privileges["/programs/a/projects/p1"]["read"] {
 		t.Fatalf("expected original privileges unchanged")
+	}
+}
+
+func TestSessionClaimsCloneSupportedNestedShapes(t *testing.T) {
+	opaque := &struct{ Value string }{Value: "opaque"}
+	claims := map[string]interface{}{
+		"json": map[string]interface{}{
+			"items": []interface{}{map[string]interface{}{"name": "before"}},
+		},
+		"resources": []string{"/organization/org"},
+		"privileges": map[string]map[string]bool{
+			"/organization/org": {"read": true},
+		},
+		"labels": map[string]string{"kind": "source"},
+		"scopes": map[string][]string{"org": {"project"}},
+		"opaque": opaque,
+	}
+
+	session := NewSession("gen3")
+	session.SetClaims(claims)
+	setClaims := session.Claims
+	setClaims["json"].(map[string]interface{})["items"].([]interface{})[0].(map[string]interface{})["name"] = "set"
+	setClaims["resources"].([]string)[0] = "/organization/changed"
+	setClaims["privileges"].(map[string]map[string]bool)["/organization/org"]["read"] = false
+	setClaims["labels"].(map[string]string)["kind"] = "changed"
+	setClaims["scopes"].(map[string][]string)["org"][0] = "changed"
+	if got := claims["json"].(map[string]interface{})["items"].([]interface{})[0].(map[string]interface{})["name"]; got != "before" {
+		t.Fatalf("SetClaims aliased nested JSON value: %v", got)
+	}
+	if got := claims["resources"].([]string)[0]; got != "/organization/org" {
+		t.Fatalf("SetClaims aliased string slice: %q", got)
+	}
+	if !claims["privileges"].(map[string]map[string]bool)["/organization/org"]["read"] {
+		t.Fatal("SetClaims aliased local privilege map")
+	}
+	if got := claims["labels"].(map[string]string)["kind"]; got != "source" {
+		t.Fatalf("SetClaims aliased string map: %q", got)
+	}
+	if got := claims["scopes"].(map[string][]string)["org"][0]; got != "project" {
+		t.Fatalf("SetClaims aliased string-slice map: %q", got)
+	}
+	if session.Claims["opaque"] != opaque {
+		t.Fatal("unsupported opaque claim type was unexpectedly coerced")
+	}
+
+	clone := session.Clone()
+	clone.Claims["json"].(map[string]interface{})["items"].([]interface{})[0].(map[string]interface{})["name"] = "clone"
+	if got := session.Claims["json"].(map[string]interface{})["items"].([]interface{})[0].(map[string]interface{})["name"]; got != "set" {
+		t.Fatalf("Clone aliased nested JSON value: %v", got)
+	}
+
+	fromContext := FromContext(WithSession(context.Background(), session))
+	fromContext.Claims["privileges"].(map[string]map[string]bool)["/organization/org"]["read"] = true
+	if got := session.Claims["privileges"].(map[string]map[string]bool)["/organization/org"]["read"]; got != false {
+		t.Fatal("FromContext aliased local privilege map")
+	}
+	if !reflect.DeepEqual(fromContext.Claims["resources"], []string{"/organization/changed"}) {
+		t.Fatalf("unexpected cloned resource claim: %#v", fromContext.Claims["resources"])
 	}
 }
 

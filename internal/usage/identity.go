@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/calypr/syfon/internal/objects"
 )
 
 func GrantID(event Event) string {
 	parts := []string{
 		event.ObjectID,
-		event.SHA256,
+		canonicalSHA256ForIdentity(event.SHA256),
 		event.Organization,
 		event.Project,
 		event.AccessID,
@@ -32,7 +34,7 @@ func EventID(event Event) string {
 		event.Direction,
 		event.RequestID,
 		event.ObjectID,
-		event.SHA256,
+		canonicalSHA256ForIdentity(event.SHA256),
 		event.Organization,
 		event.Project,
 		event.AccessID,
@@ -52,6 +54,13 @@ func EventID(event Event) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])
+}
+
+func canonicalSHA256ForIdentity(raw string) string {
+	if canonical := objects.NormalizeOID(raw); canonical != "" {
+		return canonical
+	}
+	return strings.TrimSpace(raw)
 }
 
 func rangeValue(value *int64) int64 {

@@ -51,11 +51,17 @@ func AuthzListToMap(paths []string) map[string][]string {
 		if org == "" {
 			continue
 		}
-		if _, ok := result[org]; !ok {
+		if project == "" {
 			result[org] = []string{}
+			continue
 		}
-		if project != "" {
-			result[org] = append(result[org], project)
+		projects, ok := result[org]
+		if !ok {
+			result[org] = []string{project}
+			continue
+		}
+		if len(projects) > 0 {
+			result[org] = append(projects, project)
 		}
 	}
 	if len(result) == 0 {
@@ -102,18 +108,32 @@ func NormalizeAccessResource(raw string) string {
 	}
 	path = "/" + strings.Trim(path, "/")
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) >= 2 && (parts[0] == "program" || parts[0] == "programs" || parts[0] == "organization" || parts[0] == "organizations") {
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+
+	if parts[0] == "programs" && len(parts) == 1 {
+		return "/programs"
+	}
+	if parts[0] == "program" || parts[0] == "programs" || parts[0] == "organization" || parts[0] == "organizations" {
+		if len(parts) != 2 && len(parts) != 4 {
+			return ""
+		}
 		org := strings.TrimSpace(parts[1])
 		if org == "" {
 			return ""
 		}
-		if len(parts) >= 4 && (parts[2] == "project" || parts[2] == "projects") {
-			project := strings.TrimSpace(parts[3])
-			if project != "" {
-				return "/organization/" + org + "/project/" + project
-			}
+		if len(parts) == 2 {
+			return "/organization/" + org
 		}
-		return "/organization/" + org
+		if parts[2] != "project" && parts[2] != "projects" {
+			return ""
+		}
+		project := strings.TrimSpace(parts[3])
+		if project == "" {
+			return ""
+		}
+		return "/organization/" + org + "/project/" + project
 	}
 	return raw
 }

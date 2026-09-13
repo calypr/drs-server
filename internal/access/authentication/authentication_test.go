@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	conf "github.com/calypr/syfon/client/config"
-	"github.com/calypr/syfon/client/request"
 	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/plugin"
 )
 
@@ -53,13 +56,13 @@ func TestBuiltInAuthenticationPlugins(t *testing.T) {
 	})
 }
 
-func TestLoadMockAuthConfigFromEnv(t *testing.T) {
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "true")
-	t.Setenv("DRS_AUTH_MOCK_RESOURCES", " /data_file, /programs/demo ")
-	t.Setenv("DRS_AUTH_MOCK_METHODS", "read, create")
-	t.Setenv("DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER", "yes")
-
-	got := loadMockAuthConfigFromEnv()
+func TestNormalizeMockAuth(t *testing.T) {
+	got := normalizeMockAuth(config.MockAuthConfig{
+		Enabled:           true,
+		RequireAuthHeader: true,
+		Resources:         []string{" /data_file", "", "/programs/demo "},
+		Methods:           []string{"read", "", " create "},
+	})
 	if !got.Enabled || !got.RequireAuthHeader {
 		t.Fatalf("unexpected mock auth flags: %+v", got)
 	}
@@ -69,6 +72,13 @@ func TestLoadMockAuthConfigFromEnv(t *testing.T) {
 	if len(got.Methods) != 2 || got.Methods[0] != "read" || got.Methods[1] != "create" {
 		t.Fatalf("unexpected mock methods: %v", got.Methods)
 	}
+	defaults := normalizeMockAuth(config.MockAuthConfig{Enabled: true})
+	if len(defaults.Resources) != 1 || defaults.Resources[0] != "/data_file" || len(defaults.Methods) != 1 || defaults.Methods[0] != "*" {
+		t.Fatalf("unexpected mock defaults: %+v", defaults)
+	}
+	if got := normalizeMockAuth(config.MockAuthConfig{RequireAuthHeader: true}); got.Enabled || got.RequireAuthHeader || len(got.Resources) != 0 || len(got.Methods) != 0 {
+		t.Fatalf("disabled mock should normalize to zero config: %+v", got)
+	}
 }
 
 func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
@@ -77,9 +87,13 @@ func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
 	t.Setenv("SYFON_AUTHN_PLUGIN_PATH", missingPlugin)
 	t.Setenv("SYFON_AUTHZ_PLUGIN_PATH", missingPlugin)
 	t.Setenv("DRS_LOCAL_AUTHZ_CSV", missingCSV)
-	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
 
-	runtime := NewRuntime(slog.Default(), "local", "user", "pass")
+	runtime := NewRuntime(slog.Default(), config.AuthConfig{
+		Mode:          config.AuthModeLocal,
+		Basic:         config.BasicAuthConfig{Username: "user", Password: "pass"},
+		LocalAuthzCSV: missingCSV,
+		PluginPaths:   config.PluginPaths{Authn: missingPlugin, Authz: missingPlugin},
+	})
 	if runtime.authorization != nil {
 		t.Fatalf("expected failed authorization plugin startup to be swallowed")
 	}
@@ -89,6 +103,102 @@ func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
 	if runtime.localAuthzError == nil {
 		t.Fatalf("expected local CSV startup error to remain available to request wiring")
 	}
+}
+
+func TestNewRuntimeStrictRejectsInvalidAuthorizationPlugin(t *testing.T) {
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authz-plugin")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		PluginPaths: config.PluginPaths{Authz: missingPlugin},
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authorization plugin") {
+		t.Fatalf("strict runtime error = %v, want authorization plugin failure", err)
+	}
+}
+
+func TestNewRuntimeStrictRejectsInvalidAuthenticationPlugin(t *testing.T) {
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authn-plugin")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		PluginPaths: config.PluginPaths{Authn: missingPlugin},
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authentication plugin") {
+		t.Fatalf("strict runtime error = %v, want authentication plugin failure", err)
+	}
+}
+
+func TestNewRuntimeStrictRejectsInvalidLocalAuthorizationCSV(t *testing.T) {
+	missingCSV := filepath.Join(t.TempDir(), "missing-authz.csv")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		Mode:          config.AuthModeLocal,
+		LocalAuthzCSV: missingCSV,
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "local authz csv") {
+		t.Fatalf("strict runtime error = %v, want local authz csv failure", err)
+	}
+}
+
+func TestPluginEnvironmentPreservesUnrelatedKeysAndAvoidsDefaults(t *testing.T) {
+	t.Setenv("PATH", "/test/path")
+	t.Setenv("SYFON_UNRELATED_PLUGIN_SETTING", "keep-me")
+	t.Setenv("DRS_AUTH_MOCK_ENABLED", "false")
+	t.Setenv("DRS_AUTH_MOCK_RESOURCES", "inherited-resource")
+	t.Setenv("DRS_AUTH_MOCK_METHODS", "inherited-method")
+	child := pluginEnvironment(config.AuthConfig{
+		Mock: config.MockAuthConfig{
+			Enabled:   true,
+			Resources: []string{"/configured-resource"},
+		},
+		FenceURL: "https://fence.example",
+	})
+	if got := environmentValue(child, "PATH"); got != "/test/path" {
+		t.Fatalf("PATH = %q, want inherited value", got)
+	}
+	if got := environmentValue(child, "SYFON_UNRELATED_PLUGIN_SETTING"); got != "keep-me" {
+		t.Fatalf("unrelated plugin setting = %q, want keep-me", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_ENABLED"); got != "true" {
+		t.Fatalf("mock enabled = %q, want true", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_RESOURCES"); got != "/configured-resource" {
+		t.Fatalf("mock resources = %q, want configured value", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_METHODS"); got != "inherited-method" {
+		t.Fatalf("mock methods = %q, want inherited value", got)
+	}
+	if got := environmentValue(child, "DRS_FENCE_URL"); got != "https://fence.example" {
+		t.Fatalf("fence = %q, want configured value", got)
+	}
+	if got := environmentValue(child, "DRS_AUTH_MOCK_REQUIRE_AUTH_HEADER"); got != "" {
+		t.Fatalf("unexpected runtime default for require header: %q", got)
+	}
+	for _, key := range documentedAuthEnvironmentKeys {
+		count := 0
+		for _, entry := range child {
+			if strings.HasPrefix(entry, key+"=") {
+				count++
+			}
+		}
+		if count > 1 {
+			t.Fatalf("%s appears %d times in child environment", key, count)
+		}
+	}
+}
+
+func environmentValue(env []string, key string) string {
+	for _, entry := range env {
+		if strings.HasPrefix(entry, key+"=") {
+			return strings.TrimPrefix(entry, key+"=")
+		}
+	}
+	return ""
 }
 
 type recordingAuthenticationPlugin struct {
@@ -126,10 +236,10 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 		logger:         slog.Default(),
 		authentication: authn,
 		authorization:  authz,
-		tokenResolver:  newTokenAuthResolver(slog.Default()),
+		tokenResolver:  newTokenAuthResolver(slog.Default(), ""),
 	}
 
-	result := runtime.Evaluate(EvaluationRequest{
+	result := runtime.Evaluate(access.EvaluationRequest{
 		Context:    context.Background(),
 		RequestID:  "request-id",
 		Mode:       "gen3",
@@ -137,7 +247,7 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 		Method:     "GET",
 		Path:       "/objects/object-id",
 	})
-	if result.Decision != DecisionContinue {
+	if result.Decision != access.DecisionContinue {
 		t.Fatalf("expected evaluator to continue, got %v", result.Decision)
 	}
 	if authn.input == nil || authn.input.RequestID != "request-id" {
@@ -151,8 +261,8 @@ func TestRuntimeEvaluatorPassesRequestIDToPlugins(t *testing.T) {
 func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 	t.Run("missing csv is an internal error", func(t *testing.T) {
 		runtime := &Runtime{localAuthzError: errors.New("csv failed")}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionInternalError {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionInternalError {
 			t.Fatalf("expected internal error, got %v", result.Decision)
 		}
 	})
@@ -163,8 +273,8 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				output: &plugin.AuthenticationOutput{Authenticated: false},
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionUnauthorized || !result.BasicChallenge {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionUnauthorized || !result.BasicChallenge {
 			t.Fatalf("expected challenged unauthorized result, got %+v", result)
 		}
 	})
@@ -179,8 +289,8 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				return []string{"/data"}, map[string]map[string]bool{"/data": {"read": true}}, true
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionContinue || result.Session.Source != access.SourceLocalCSV || len(result.Session.Resources) != 1 {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionContinue || result.Session.Source != access.SourceLocalCSV || len(result.Session.Resources) != 1 {
 			t.Fatalf("expected csv authorization, got %+v", result)
 		}
 	})
@@ -192,28 +302,28 @@ func TestRuntimeEvaluatorLocalDecisions(t *testing.T) {
 				return nil, nil, false
 			},
 		}
-		result := runtime.Evaluate(EvaluationRequest{Mode: "local"})
-		if result.Decision != DecisionForbidden {
+		result := runtime.Evaluate(access.EvaluationRequest{Mode: "local"})
+		if result.Decision != access.DecisionForbidden {
 			t.Fatalf("expected forbidden result, got %+v", result)
 		}
 	})
 }
 
 func TestRuntimeEvaluatorMockDecisions(t *testing.T) {
-	runtime := &Runtime{mock: mockConfig{
+	runtime := &Runtime{mock: config.MockAuthConfig{
 		Enabled:           true,
 		RequireAuthHeader: true,
 		Resources:         []string{"/data"},
 		Methods:           []string{"read"},
 	}}
-	withoutHeader := runtime.Evaluate(EvaluationRequest{Mode: "gen3"})
-	if withoutHeader.Decision != DecisionContinue || len(withoutHeader.Session.Resources) != 0 {
+	withoutHeader := runtime.Evaluate(access.EvaluationRequest{Mode: "gen3"})
+	if withoutHeader.Decision != access.DecisionContinue || len(withoutHeader.Session.Resources) != 0 {
 		t.Fatalf("expected unauthenticated mock request to continue without privileges: %+v", withoutHeader)
 	}
 
 	runtime.mock.RequireAuthHeader = false
-	withMock := runtime.Evaluate(EvaluationRequest{Mode: "gen3"})
-	if withMock.Decision != DecisionContinue || withMock.Session.Source != access.SourceGen3Mock || !withMock.Session.Privileges["/data"]["read"] {
+	withMock := runtime.Evaluate(access.EvaluationRequest{Mode: "gen3"})
+	if withMock.Decision != access.DecisionContinue || withMock.Session.Source != access.SourceGen3Mock || !withMock.Session.Privileges["/data"]["read"] {
 		t.Fatalf("expected mock privileges, got %+v", withMock)
 	}
 }
@@ -229,14 +339,14 @@ func TestRuntimeEvaluatorAuthorizationDecisions(t *testing.T) {
 				authentication: &recordingAuthenticationPlugin{},
 				authorization:  authz,
 			}
-			result := runtime.Evaluate(EvaluationRequest{
+			result := runtime.Evaluate(access.EvaluationRequest{
 				Context:    context.Background(),
 				Mode:       "gen3",
 				AuthHeader: "Bearer token",
 			})
-			want := DecisionUnauthorized
+			want := access.DecisionUnauthorized
 			if name == "authorization denied" {
-				want = DecisionForbidden
+				want = access.DecisionForbidden
 			}
 			if result.Decision != want {
 				t.Fatalf("expected %v, got %+v", want, result)
@@ -254,7 +364,7 @@ func (*nilOutputAuthenticationPlugin) Authenticate(context.Context, *plugin.Auth
 func TestRuntimeNilPluginOutputPreservesPanic(t *testing.T) {
 	if os.Getenv("SYFON_NIL_AUTH_OUTPUT_CHILD") == "1" {
 		runtime := &Runtime{logger: slog.Default(), authentication: &nilOutputAuthenticationPlugin{}}
-		runtime.Evaluate(EvaluationRequest{
+		runtime.Evaluate(access.EvaluationRequest{
 			Context:    context.Background(),
 			Mode:       "gen3",
 			AuthHeader: "Bearer token",
@@ -355,18 +465,18 @@ func TestTokenHelpersAndResolver(t *testing.T) {
 		t.Fatalf("unexpected extracted privileges: resources=%v privileges=%v", resources, privileges)
 	}
 
-	resolver := newTokenAuthResolver(nil)
+	resolver := newTokenAuthResolver(nil, "")
 	if result := resolver.Resolve(context.Background(), "invalid"); !result.Negative {
 		t.Fatalf("expected invalid token resolution to be negative: %+v", result)
 	}
 
 	fake := &fakeRequester{response: map[string]any{"authz": map[string]any{"/data": []any{map[string]any{"service": "drs", "method": "read"}}}}}
-	got, err := fetchPrivileges(context.Background(), fake, &conf.Credential{})
+	got, err := fetchPrivileges(context.Background(), fake, "https://example.test")
 	if err != nil || got["/data"] == nil {
 		t.Fatalf("expected fetched privileges: got=%v err=%v", got, err)
 	}
 	fake.err = errors.New("request failed")
-	if _, err := fetchPrivileges(context.Background(), fake, &conf.Credential{}); err == nil {
+	if _, err := fetchPrivileges(context.Background(), fake, "https://example.test"); err == nil {
 		t.Fatalf("expected requester error")
 	}
 }
@@ -376,12 +486,15 @@ type fakeRequester struct {
 	err      error
 }
 
-func (f *fakeRequester) Do(_ context.Context, _ string, _ string, _ any, out any, _ ...request.RequestOption) error {
+func (f *fakeRequester) Do(req *http.Request) (*http.Response, error) {
 	if f.err != nil {
-		return f.err
+		return nil, f.err
 	}
-	*out.(*map[string]any) = f.response
-	return nil
+	body, err := json.Marshal(f.response)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body)), Header: make(http.Header), Request: req}, nil
 }
 
 type rpcTestService struct{}

@@ -152,10 +152,38 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run PostgreSQL-backed metadata overwrite test
+      - name: Run PostgreSQL integration tests
         env:
           SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
-        run: CGO_ENABLED=1 go test ./internal/persistence/postgres -run '^TestPostgresBulkOverwriteObjects$' -count=1 -v
+        run: CGO_ENABLED=1 go test ./internal/persistence/postgres -run '^TestPostgres' -count=1 -v
+
+      - name: Run shared persistence query characterization
+        env:
+          SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
+        run: CGO_ENABLED=1 go test ./internal/persistence/store -run '^TestQueryConstructionCharacterization' -count=1 -v
+
+      - name: Run real server PostgreSQL composition tests
+        env:
+          SYFON_TEST_POSTGRES_DSN: host=127.0.0.1 port=5432 user=postgres password=postgres dbname=syfon_test sslmode=disable
+        run: CGO_ENABLED=1 go test ./cmd -run '^TestSyfonPostgresComposition' -count=1 -v
+
+  race:
+    name: Stateful race detector
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify-generated
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run focused race tests
+        run: make test-race
 
   coverage:
     name: Root and client coverage
@@ -179,8 +207,7 @@ jobs:
         run: make coverage
 
       - name: Run client coverage
-        run: |
-          COVERAGE_SCOPE=client ./scripts/run_coverage.sh
+        run: make coverage-client
 
       - name: Upload root coverage to Codecov (OIDC)
         if: github.actor != 'nektos/act'
@@ -191,7 +218,7 @@ jobs:
           CODECOV_SLUG: calypr/syfon
         with:
           use_oidc: true
-          files: coverage/coverage.out
+          files: coverage/coverage.out,coverage/cross-package.out,coverage/cross-domain.out
           flags: root
           disable_search: true
           verbose: true
@@ -205,7 +232,7 @@ jobs:
           CODECOV_SLUG: calypr/syfon
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage/coverage.out
+          files: coverage/coverage.out,coverage/cross-package.out,coverage/cross-domain.out
           flags: root
           disable_search: true
           verbose: true
@@ -246,6 +273,9 @@ jobs:
           name: coverage-${{ github.run_id }}
           path: |
             coverage/coverage.out
+            coverage/cross-package.out
+            coverage/cross-domain.out
+            coverage/combined.out
             coverage/coverage.txt
             coverage/coverage.html
             client/coverage/coverage.out
@@ -421,6 +451,7 @@ jobs:
       - verify-generated
       - test
       - postgres-integration
+      - race
       - coverage
       - static-checks
       - integration-test

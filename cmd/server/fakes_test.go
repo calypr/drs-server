@@ -6,28 +6,33 @@ import (
 	"strings"
 	"time"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/apigen/metricsapi"
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
-	objectrecords "github.com/calypr/syfon/internal/objects/records"
 	transferlfs "github.com/calypr/syfon/internal/transfers/lfs"
 	"github.com/calypr/syfon/internal/usage"
 )
 
 type serverObjectStore struct {
-	records map[string]*objects.Record
+	records map[string]*drs.DrsObject
 	aliases map[string]string
 }
 
-func newServerObjectStore(records map[string]*objects.Record) *serverObjectStore {
-	store := &serverObjectStore{records: make(map[string]*objects.Record), aliases: make(map[string]string)}
+func newServerObjectStore(records map[string]*drs.DrsObject) *serverObjectStore {
+	store := &serverObjectStore{records: make(map[string]*drs.DrsObject), aliases: make(map[string]string)}
 	for id, record := range records {
 		store.records[id] = cloneServerRecord(record)
 	}
 	return store
 }
 
-func (s *serverObjectStore) GetObject(_ context.Context, id string) (*objects.Record, error) {
+func (s *serverObjectStore) GetObject(_ context.Context, id string) (*drs.DrsObject, error) {
+	if _, found := s.records[id]; !found {
+		id = s.aliases[id]
+	}
 	record, ok := s.records[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
@@ -35,8 +40,8 @@ func (s *serverObjectStore) GetObject(_ context.Context, id string) (*objects.Re
 	return cloneServerRecord(record), nil
 }
 
-func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0, len(ids))
+func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]drs.DrsObject, error) {
+	result := make([]drs.DrsObject, 0, len(ids))
 	for _, id := range ids {
 		if record, ok := s.records[id]; ok {
 			result = append(result, *cloneServerRecord(record))
@@ -45,19 +50,23 @@ func (s *serverObjectStore) GetBulkObjects(_ context.Context, ids []string) ([]o
 	return result, nil
 }
 
+func (s *serverObjectStore) GetPublicReadByIDs(_ context.Context, _ []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
 func (s *serverObjectStore) DeleteObject(_ context.Context, id string) error {
 	delete(s.records, id)
 	return nil
 }
 
-func (s *serverObjectStore) CreateObject(_ context.Context, record *objects.Record) error {
+func (s *serverObjectStore) CreateObject(_ context.Context, record *drs.DrsObject) error {
 	if record == nil {
 		return fmt.Errorf("record is required")
 	}
 	if s.records == nil {
-		s.records = make(map[string]*objects.Record)
+		s.records = make(map[string]*drs.DrsObject)
 	}
-	s.records[string(record.Id)] = cloneServerRecord(record)
+	s.records[record.Id] = cloneServerRecord(record)
 	return nil
 }
 
@@ -70,7 +79,7 @@ func (s *serverObjectStore) BulkDeleteObjects(ctx context.Context, ids []string)
 	return nil
 }
 
-func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []objects.Record) error {
+func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []drs.DrsObject) error {
 	for i := range records {
 		if err := s.CreateObject(ctx, &records[i]); err != nil {
 			return err
@@ -79,22 +88,36 @@ func (s *serverObjectStore) RegisterObjects(ctx context.Context, records []objec
 	return nil
 }
 
-func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []objects.Record) error {
-	s.records = make(map[string]*objects.Record, len(records))
+func (s *serverObjectStore) RepairCanonicalDuplicates(_ context.Context, repairs []objects.CanonicalRepair) error {
+	for _, repair := range repairs {
+		if _, ok := s.records[repair.Canonical.Id]; !ok {
+			return fmt.Errorf("%w: canonical object not found", errorapi.ErrNotFound)
+		}
+		for _, duplicateID := range repair.DuplicateIDs {
+			delete(s.records, duplicateID)
+			s.aliases[duplicateID] = repair.Canonical.Id
+		}
+		s.records[repair.Canonical.Id] = cloneServerRecord(&repair.Canonical)
+	}
+	return nil
+}
+
+func (s *serverObjectStore) ReplaceObjects(ctx context.Context, records []drs.DrsObject) error {
+	s.records = make(map[string]*drs.DrsObject, len(records))
 	return s.RegisterObjects(ctx, records)
 }
 
-func (s *serverObjectStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []objects.AccessMethod) error {
+func (s *serverObjectStore) UpdateObjectAccessMethods(_ context.Context, id string, methods []drs.AccessMethod) error {
 	record, ok := s.records[id]
 	if !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
 	}
-	copyMethods := append([]objects.AccessMethod(nil), methods...)
+	copyMethods := append([]drs.AccessMethod(nil), methods...)
 	record.AccessMethods = &copyMethods
 	return nil
 }
 
-func (s *serverObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]objects.AccessMethod) error {
+func (s *serverObjectStore) BulkUpdateAccessMethods(ctx context.Context, updates map[string][]drs.AccessMethod) error {
 	for id, methods := range updates {
 		if err := s.UpdateObjectAccessMethods(ctx, id, methods); err != nil {
 			return err
@@ -142,11 +165,6 @@ func (s *serverObjectStore) RemoveObjectControlledAccessBulk(ctx context.Context
 	return count, nil
 }
 
-func (s *serverObjectStore) DeleteObjectAlias(_ context.Context, aliasID string) error {
-	delete(s.aliases, aliasID)
-	return nil
-}
-
 func (s *serverObjectStore) CreateObjectAlias(_ context.Context, aliasID, canonicalID string) error {
 	if _, ok := s.records[canonicalID]; !ok {
 		return fmt.Errorf("%w: object not found", errorapi.ErrNotFound)
@@ -166,19 +184,19 @@ func (s *serverObjectStore) ResolveObjectAlias(_ context.Context, aliasID string
 	return canonicalID, nil
 }
 
-func (s *serverObjectStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]objects.Record, error) {
-	result := make([]objects.Record, 0)
+func (s *serverObjectStore) GetObjectsByChecksum(_ context.Context, checksum string) ([]drs.DrsObject, error) {
+	result := make([]drs.DrsObject, 0)
 	checksum = strings.TrimSpace(checksum)
 	for id, record := range s.records {
-		if id == checksum || string(record.Id) == checksum || serverRecordHasChecksum(record, checksum) {
+		if id == checksum || record.Id == checksum || serverRecordHasChecksum(record, checksum) {
 			result = append(result, *cloneServerRecord(record))
 		}
 	}
 	return result, nil
 }
 
-func (s *serverObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]objects.Record, error) {
-	result := make(map[string][]objects.Record, len(checksums))
+func (s *serverObjectStore) GetObjectsByChecksums(ctx context.Context, checksums []string) (map[string][]drs.DrsObject, error) {
+	result := make(map[string][]drs.DrsObject, len(checksums))
 	for _, checksum := range checksums {
 		matches, err := s.GetObjectsByChecksum(ctx, checksum)
 		if err != nil {
@@ -198,7 +216,7 @@ func (s *serverObjectStore) ListScopedObjectIDsByChecksums(ctx context.Context, 
 		}
 		for _, record := range matches {
 			if serverRecordInScope(&record, organization, project) {
-				result[checksum] = append(result[checksum], string(record.Id))
+				result[checksum] = append(result[checksum], record.Id)
 			}
 		}
 	}
@@ -239,7 +257,54 @@ func (s *serverObjectStore) ListObjectIDsByResources(_ context.Context, resource
 	return result, nil
 }
 
-func serverRecordHasChecksum(record *objects.Record, checksum string) bool {
+func (s *serverObjectStore) ListObjectIDsPageByScope(ctx context.Context, organization, project, startAfter string, limit, offset int) ([]string, error) {
+	ids, err := s.ListObjectIDsByScope(ctx, organization, project)
+	return pageServerIDs(ids, startAfter, limit, offset), err
+}
+
+func (s *serverObjectStore) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
+	ids := make([]string, 0)
+	for id, record := range s.records {
+		if organization != "" && !serverRecordInScope(record, organization, project) {
+			continue
+		}
+		if !serverRecordHasURL(record, objectURL) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return pageServerIDs(ids, startAfter, limit, offset), nil
+}
+
+func serverRecordHasURL(record *drs.DrsObject, wanted string) bool {
+	if record == nil || record.AccessMethods == nil {
+		return false
+	}
+	for _, method := range *record.AccessMethods {
+		if method.AccessUrl != nil && strings.TrimSpace(method.AccessUrl.Url) == strings.TrimSpace(wanted) {
+			return true
+		}
+	}
+	return false
+}
+
+func pageServerIDs(ids []string, startAfter string, limit, offset int) []string {
+	start := 0
+	for start < len(ids) && ids[start] <= startAfter {
+		start++
+	}
+	start += offset
+	if start > len(ids) {
+		start = len(ids)
+	}
+	end := len(ids)
+	if limit >= 0 && start+limit < end {
+		end = start + limit
+	}
+	return append([]string(nil), ids[start:end]...)
+}
+
+func serverRecordHasChecksum(record *drs.DrsObject, checksum string) bool {
 	for _, candidate := range record.Checksums {
 		if strings.EqualFold(strings.TrimSpace(candidate.Checksum), checksum) {
 			return true
@@ -248,13 +313,13 @@ func serverRecordHasChecksum(record *objects.Record, checksum string) bool {
 	return false
 }
 
-func serverRecordInScope(record *objects.Record, organization, project string) bool {
+func serverRecordInScope(record *drs.DrsObject, organization, project string) bool {
 	organization = strings.TrimSpace(organization)
 	project = strings.TrimSpace(project)
 	if organization == "" {
 		return true
 	}
-	for resource, projects := range record.Authorizations {
+	for resource, projects := range clientaccess.ControlledAccessToAuthzMap(objects.AccessResources(record)) {
 		if strings.TrimSpace(resource) != organization {
 			continue
 		}
@@ -275,43 +340,29 @@ func serverRecordInScope(record *objects.Record, organization, project string) b
 	return false
 }
 
-func cloneServerRecord(record *objects.Record) *objects.Record {
+func cloneServerRecord(record *drs.DrsObject) *drs.DrsObject {
 	if record == nil {
 		return nil
 	}
 	copyRecord := *record
-	copyRecord.Checksums = append([]objects.Checksum(nil), record.Checksums...)
+	copyRecord.Checksums = append([]drs.Checksum(nil), record.Checksums...)
 	if record.AccessMethods != nil {
-		methods := append([]objects.AccessMethod(nil), (*record.AccessMethods)...)
+		methods := append([]drs.AccessMethod(nil), (*record.AccessMethods)...)
 		copyRecord.AccessMethods = &methods
 	}
 	if record.ControlledAccess != nil {
 		controlled := append([]string(nil), (*record.ControlledAccess)...)
 		copyRecord.ControlledAccess = &controlled
 	}
-	if record.Authorizations != nil {
-		copyRecord.Authorizations = make(map[string][]string, len(record.Authorizations))
-		for resource, projects := range record.Authorizations {
-			copyRecord.Authorizations[resource] = append([]string(nil), projects...)
-		}
-	}
 	return &copyRecord
 }
 
 var (
-	_ objectrecords.RecordReader          = (*serverObjectStore)(nil)
-	_ objectrecords.RecordWriter          = (*serverObjectStore)(nil)
-	_ objectrecords.AccessMethodWriter    = (*serverObjectStore)(nil)
-	_ objectrecords.AccessPolicyWriter    = (*serverObjectStore)(nil)
-	_ objectrecords.AliasStore            = (*serverObjectStore)(nil)
-	_ objectrecords.ContentReader         = (*serverObjectStore)(nil)
-	_ objectrecords.ChecksumScopeQuery    = (*serverObjectStore)(nil)
-	_ objectrecords.ScopeQuery            = (*serverObjectStore)(nil)
-	_ objectrecords.OptionalResourceQuery = (*serverObjectStore)(nil)
+	_ objects.ObjectStore = (*serverObjectStore)(nil)
 )
 
 type serverTestDependencies struct {
-	objects       objectrecords.Dependencies
+	objects       objects.ObjectStore
 	bucketService *buckets.Service
 	usageIngest   usage.Ingestor
 	usageReports  usage.ReportStore
@@ -319,25 +370,26 @@ type serverTestDependencies struct {
 }
 
 func mockServerDependencies(objectStore *serverObjectStore, bucketStore *serverBucketStore) serverTestDependencies {
-	objectDependencies := objectrecords.Dependencies{
-		Reader: objectStore, Writer: objectStore, AccessMethods: objectStore,
-		AccessPolicy: objectStore, Aliases: objectStore, Content: objectStore,
-		ChecksumScope: objectStore, Scope: objectStore, Resources: objectStore,
-	}
 	bucketService, err := buckets.NewService(buckets.Dependencies{
 		Credentials: bucketStore, CredentialAdmin: bucketStore, Scopes: bucketStore,
-		Fallback: newBucketVisibilityFallback(objectDependencies.Scope, objectDependencies.Reader),
+		Visibility: serverVisibilityQuery{},
 	}, nil)
 	if err != nil {
 		panic(err)
 	}
 	return serverTestDependencies{
-		objects:       objectDependencies,
+		objects:       objectStore,
 		bucketService: bucketService,
 		usageIngest:   serverUsageStore{},
 		usageReports:  serverUsageStore{},
 		pending:       serverPendingStore{},
 	}
+}
+
+type serverVisibilityQuery struct{}
+
+func (serverVisibilityQuery) ListBucketVisibilityRows(context.Context, []string, bool, bool) ([]buckets.VisibilityRow, error) {
+	return nil, nil
 }
 
 type serverBucketStore struct {
@@ -377,6 +429,26 @@ func (s *serverBucketStore) SaveS3Credential(_ context.Context, credential *buck
 	}
 	s.credentials[key] = *credential
 	return nil
+}
+
+func (s *serverBucketStore) SaveBucketConfiguration(ctx context.Context, configuration buckets.BucketConfiguration) error {
+	if err := s.SaveS3Credential(ctx, &configuration.Credential); err != nil {
+		return err
+	}
+	return s.CreateBucketScope(ctx, &buckets.Scope{
+		Organization: configuration.Organization,
+		ProjectID:    configuration.ProjectID,
+		CredentialID: configuration.Credential.CredentialID,
+		Bucket:       configuration.Credential.Bucket,
+		PathPrefix:   configuration.PathPrefix,
+	})
+}
+
+func (s *serverBucketStore) DeleteBucketScopeConfiguration(ctx context.Context, scope buckets.Scope) ([]string, error) {
+	if err := s.DeleteBucketScope(ctx, scope.Organization, scope.ProjectID, scope.CredentialID, scope.PathPrefix); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (s *serverBucketStore) DeleteS3Credential(_ context.Context, id string) error {
@@ -435,26 +507,41 @@ func (serverUsageStore) RecordFileDownload(context.Context, string) error { retu
 func (serverUsageStore) RecordTransferAttributionEvents(context.Context, []usage.Event) error {
 	return nil
 }
-func (serverUsageStore) RecordProviderTransferEvents(context.Context, []usage.ProviderEvent) error {
+func (serverUsageStore) RecordProviderTransferEvents(context.Context, []metricsapi.ProviderTransferEvent) error {
 	return nil
 }
-func (serverUsageStore) GetFileUsage(context.Context, string) (*usage.FileUsage, error) {
+func (serverUsageStore) GetFileUsage(context.Context, string) (*metricsapi.FileUsage, error) {
 	return nil, fmt.Errorf("%w: file usage not found", errorapi.ErrNotFound)
 }
-func (serverUsageStore) ListFileUsageByObjectIDs(context.Context, []string) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsageByObjectIDs(context.Context, []string) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) ListFileUsage(context.Context, int, int, *time.Time) ([]usage.FileUsage, error) {
-	return []usage.FileUsage{}, nil
+func (serverUsageStore) ListFileUsage(context.Context, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) GetFileUsageSummary(context.Context, *time.Time) (usage.FileUsageSummary, error) {
-	return usage.FileUsageSummary{}, nil
+func (serverUsageStore) GetFileUsageSummary(context.Context, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
 }
-func (serverUsageStore) GetTransferAttributionSummary(context.Context, usage.Filter) (usage.Summary, error) {
-	return usage.Summary{}, nil
+func (serverUsageStore) ListFileUsagePageByScope(context.Context, string, string, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
 }
-func (serverUsageStore) GetTransferAttributionBreakdown(context.Context, usage.Filter, string) ([]usage.Breakdown, error) {
-	return []usage.Breakdown{}, nil
+func (serverUsageStore) ListFileUsagePageByResources(context.Context, []string, bool, int, int, *time.Time) ([]metricsapi.FileUsage, error) {
+	return []metricsapi.FileUsage{}, nil
+}
+func (serverUsageStore) GetFileUsageSummaryByScope(context.Context, string, string, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
+}
+func (serverUsageStore) GetFileUsageSummaryByResources(context.Context, []string, bool, *time.Time) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
+}
+func (serverUsageStore) GetProjectRecordSummaryByScope(context.Context, string, string) (metricsapi.FileUsageSummary, error) {
+	return metricsapi.FileUsageSummary{}, nil
+}
+func (serverUsageStore) QueryTransferSummary(context.Context, usage.Filter, []string) (metricsapi.TransferAttributionSummary, error) {
+	return metricsapi.TransferAttributionSummary{}, nil
+}
+func (serverUsageStore) QueryTransferBreakdown(context.Context, usage.Filter, string, []string) ([]metricsapi.TransferAttributionBreakdown, error) {
+	return []metricsapi.TransferAttributionBreakdown{}, nil
 }
 
 var (
@@ -470,8 +557,8 @@ func (serverPendingStore) SavePendingMetadata(context.Context, []transferlfs.Pen
 func (serverPendingStore) GetPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
 	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
 }
-func (serverPendingStore) PopPendingMetadata(context.Context, string) (*transferlfs.PendingMetadata, error) {
-	return nil, fmt.Errorf("%w: pending metadata not found", errorapi.ErrNotFound)
+func (serverPendingStore) ConsumePendingMetadata(context.Context, transferlfs.PendingMetadata) (bool, error) {
+	return true, nil
 }
 
 var _ transferlfs.PendingStore = serverPendingStore{}

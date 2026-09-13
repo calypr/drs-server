@@ -657,7 +657,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternalProjectScopesResponse'
+                $ref: '#/components/schemas/InternalInspectProjectScopesResponse'
         '400':
           description: Validation error
           content:
@@ -692,14 +692,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InternalProjectScopesRequest'
+              $ref: '#/components/schemas/InternalInspectProjectScopesRequest'
       responses:
         '200':
           description: Project bucket scopes
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternalProjectScopesResponse'
+                $ref: '#/components/schemas/InternalInspectProjectScopesResponse'
         '400':
           description: Validation error
           content:
@@ -735,14 +735,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InternalProjectBucketInventoryRequest'
+              $ref: '#/components/schemas/InternalInspectProjectBucketRequest'
       responses:
         '200':
           description: Project bucket inventory
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternalProjectBucketInventoryResponse'
+                $ref: '#/components/schemas/InternalInspectProjectBucketResponse'
         '400':
           description: Validation error
           content:
@@ -769,6 +769,332 @@ paths:
                 $ref: '#/components/schemas/APIError'
         '409':
           description: Bucket inventory unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/repair/project-scope/audit:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalScopeRepairAudit
+      description: Audit project scope storage and report repair findings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScopeRepairOptions'
+      responses:
+        '200':
+          description: Scope repair audit report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeRepairReport'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/repair/project-scope/apply:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalScopeRepairApply
+      description: Apply safe project scope repairs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScopeRepairOptions'
+      responses:
+        '200':
+          description: Scope repair result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeRepairApplyResult'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalInspectObject
+      description: Inspect one object in project storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalInspectObjectRequest'
+      responses:
+        '200':
+          description: Object inspection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalInspectObjectResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '404':
+          description: Object not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect/bulk:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalInspectObjectBulk
+      description: Inspect multiple objects in project storage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalInspectObjectsBulkRequest'
+      responses:
+        '200':
+          description: Object inspection results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalInspectObjectBulkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect/bulk-list:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalInspectObjectBulkList
+      description: Validate multiple object inventory records.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalInspectObjectsBulkRequest'
+      responses:
+        '200':
+          description: Object validation results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalInspectObjectBulkResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect/project-bucket:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalInspectProjectBucket
+      description: Inspect objects in a project bucket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalInspectProjectBucketRequest'
+      responses:
+        '200':
+          description: Project bucket inspection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalInspectProjectBucketResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '404':
+          description: Bucket scope not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect/project-records:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalInspectProjectRecords
+      description: Inspect records for a project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalInspectProjectRecordsRequest'
+      responses:
+        '200':
+          description: Project record inspection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalInspectProjectRecordsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/inspect/project-bucket/delete:
+    post:
+      tags:
+        - internal-maintenance
+      operationId: internalDeleteProjectBucketObjects
+      description: Delete selected project bucket objects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalDeleteProjectBucketObjectsRequest'
+      responses:
+        '200':
+          description: Project bucket deletion results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalDeleteProjectBucketObjectsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -1164,6 +1490,48 @@ paths:
       responses:
         '200':
           description: Upload completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalMultipartCompleteOutput'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+  /data/multipart/abort:
+    post:
+      tags:
+        - internal-data
+      operationId: internalMultipartAbort
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalMultipartAbortRequest'
+      responses:
+        '204':
+          description: Upload aborted
         '400':
           description: Validation error
           content:
@@ -1378,48 +1746,212 @@ components:
       properties:
         url:
           type: string
-    InternalProjectBucketInventoryRequest:
+    InternalInspectProjectScopesRequest:
       type: object
       properties:
         organization:
           type: string
+          x-go-type-skip-optional-pointer: true
         project:
           type: string
-        path_prefix:
-          type: string
-    InternalProjectBucketInventoryResponse:
+          x-go-type-skip-optional-pointer: true
+    InternalInspectProjectScopesResponse:
       type: object
+      required:
+        - items
       properties:
-        summary:
-          $ref: '#/components/schemas/InternalProjectBucketInventorySummary'
         items:
           type: array
           items:
-            $ref: '#/components/schemas/InternalProjectBucketInventoryItem'
-    InternalProjectBucketInventorySummary:
+            $ref: '#/components/schemas/InternalInspectProjectScopeItem'
+    InternalInspectProjectScopeItem:
       type: object
+      required:
+        - bucket
+        - organization
       properties:
-        provider:
-          type: string
         bucket:
           type: string
-        prefix:
+        organization:
           type: string
+        project_id:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        path:
+          type: string
+          x-go-type-skip-optional-pointer: true
+    ScopeRepairOptions:
+      type: object
+      required:
+        - Organization
+        - Project
+        - CheckStorage
+        - Format
+        - Limit
+        - PageSize
+      properties:
+        Organization:
+          type: string
+        Project:
+          type: string
+        CheckStorage:
+          type: boolean
+        Format:
+          type: string
+        Limit:
+          type: integer
+        PageSize:
+          type: integer
+    ScopeRepairFinding:
+      type: object
+      required:
+        - kind
+        - severity
+        - object_id
+        - auto_fixable
+      properties:
+        kind:
+          type: string
+        severity:
+          type: string
+        object_id:
+          type: string
+        sha256:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        current_access_urls:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
+        proposed_canonical_url:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        message:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        auto_fixable:
+          type: boolean
+    ScopeRepairObjectReport:
+      type: object
+      required:
+        - object_id
+        - auto_fixable
+      properties:
+        object_id:
+          type: string
+        sha256:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        current_access_urls:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
+        proposed_canonical_url:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        auto_fixable:
+          type: boolean
+        findings:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            $ref: '#/components/schemas/ScopeRepairFinding'
+    ScopeRepairReport:
+      type: object
+      required:
+        - scanned
+      properties:
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        scanned:
+          type: integer
+        objects:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            $ref: '#/components/schemas/ScopeRepairObjectReport'
+    ScopeRepairApplyResult:
+      type: object
+      required:
+        - report
+        - mutated
+        - skipped
+        - auto_fixable
+      properties:
+        report:
+          $ref: '#/components/schemas/ScopeRepairReport'
+        mutated:
+          type: integer
+        skipped:
+          type: integer
+        auto_fixable:
+          type: integer
+    InternalInspectObjectRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        key:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        scheme:
+          type: string
+          x-go-type-skip-optional-pointer: true
         object_url:
           type: string
-        exists:
-          type: boolean
-        object_count:
-          type: integer
-        total_bytes:
+          x-go-type-skip-optional-pointer: true
+        expected_size_bytes:
           type: integer
           format: int64
-        computed_at:
+        expected_sha256:
           type: string
-        mode:
+          x-go-type-skip-optional-pointer: true
+        expected_name:
           type: string
-    InternalProjectBucketInventoryItem:
+          x-go-type-skip-optional-pointer: true
+    InternalInspectObjectsBulkRequest:
       type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalInspectObjectRequest'
+    InternalInspectObjectResponse:
+      type: object
+      required:
+        - object_url
+        - provider
+        - bucket
+        - key
+        - path
+        - size_bytes
       properties:
         object_url:
           type: string
@@ -1436,38 +1968,298 @@ components:
           format: int64
         meta_sha256:
           type: string
+          x-go-type-skip-optional-pointer: true
         etag:
           type: string
+          x-go-type-skip-optional-pointer: true
         last_modified:
           type: string
-    InternalProjectScopesRequest:
+          x-go-type-skip-optional-pointer: true
+    InternalInspectObjectBulkResponse:
       type: object
       required:
-        - organization
-        - project
-      properties:
-        organization:
-          type: string
-        project:
-          type: string
-    InternalProjectScopesResponse:
-      type: object
+        - items
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/InternalProjectScopeItem'
-    InternalProjectScopeItem:
+            $ref: '#/components/schemas/InternalInspectObjectBulkItem'
+    InternalInspectObjectBulkItem:
       type: object
+      required:
+        - exists
+        - status
+        - validation_status
       properties:
+        id:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        object_url:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        provider:
+          type: string
+          x-go-type-skip-optional-pointer: true
         bucket:
           type: string
+          x-go-type-skip-optional-pointer: true
+        key:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        path:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        exists:
+          type: boolean
+        status:
+          type: string
+        error:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        error_kind:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        size_bytes:
+          type: integer
+          format: int64
+        meta_sha256:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        etag:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        last_modified:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        validation_status:
+          type: string
+        size_match:
+          type: boolean
+        name_match:
+          type: boolean
+        sha256_match:
+          type: boolean
+        validation_mismatches:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
+    InternalInspectProjectBucketRequest:
+      type: object
+      properties:
         organization:
           type: string
-        project_id:
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        include_head:
+          type: boolean
+          x-go-type-skip-optional-pointer: true
+        mode:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        path_prefix:
+          type: string
+          x-go-type-skip-optional-pointer: true
+    InternalInspectProjectBucketResponse:
+      type: object
+      required:
+        - items
+      properties:
+        summary:
+          $ref: '#/components/schemas/InternalInspectProjectBucketSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalInspectProjectBucketItem'
+    InternalInspectProjectBucketSummary:
+      type: object
+      required:
+        - provider
+        - bucket
+        - exists
+        - object_count
+        - total_bytes
+        - computed_at
+        - mode
+        - inventory_complete
+      properties:
+        provider:
+          type: string
+        bucket:
+          type: string
+        prefix:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        object_url:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        exists:
+          type: boolean
+        object_count:
+          type: integer
+        total_bytes:
+          type: integer
+          format: int64
+        computed_at:
+          type: string
+        mode:
+          type: string
+        inventory_complete:
+          type: boolean
+        inventory_warning:
+          type: string
+          x-go-type-skip-optional-pointer: true
+    InternalInspectProjectBucketItem:
+      type: object
+      required:
+        - object_url
+        - provider
+        - bucket
+        - key
+        - path
+        - size_bytes
+      properties:
+        object_url:
+          type: string
+        provider:
+          type: string
+        bucket:
+          type: string
+        key:
           type: string
         path:
           type: string
+        size_bytes:
+          type: integer
+          format: int64
+        meta_sha256:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        etag:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        last_modified:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        inventory_complete:
+          type: boolean
+          x-go-type-skip-optional-pointer: true
+    InternalInspectProjectRecordsRequest:
+      type: object
+      properties:
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        path_prefix:
+          type: string
+          x-go-type-skip-optional-pointer: true
+    InternalInspectProjectRecordsResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalInspectProjectRecordItem'
+    InternalInspectProjectRecordItem:
+      type: object
+      required:
+        - object_id
+        - checksum
+        - organization
+        - project
+        - size
+        - access_urls
+        - access_methods
+      properties:
+        object_id:
+          type: string
+        name:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        checksum:
+          type: string
+        organization:
+          type: string
+        project:
+          type: string
+        size:
+          type: integer
+          format: int64
+        created_time:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        updated_time:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        access_urls:
+          type: array
+          items:
+            type: string
+        access_methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalProjectAccessMethod'
+    InternalProjectAccessMethod:
+      type: object
+      properties:
+        access_id:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        type:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        url:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        headers:
+          type: array
+          x-go-type-skip-optional-pointer: true
+          items:
+            type: string
+    InternalDeleteProjectBucketObjectsRequest:
+      type: object
+      required:
+        - object_urls
+      properties:
+        organization:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        project:
+          type: string
+          x-go-type-skip-optional-pointer: true
+        object_urls:
+          type: array
+          items:
+            type: string
+    InternalDeleteProjectBucketObjectsResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalDeleteProjectBucketObjectsItem'
+    InternalDeleteProjectBucketObjectsItem:
+      type: object
+      required:
+        - object_url
+        - status
+      properties:
+        object_url:
+          type: string
+        status:
+          type: string
+        error:
+          type: string
+          x-go-type-skip-optional-pointer: true
     InternalUploadBlankRequest:
       type: object
       properties:
@@ -1587,6 +2379,14 @@ components:
           format: int32
         ETag:
           type: string
+    InternalMultipartCompleteOutput:
+      type: object
+      required:
+        - object_url
+      properties:
+        object_url:
+          type: string
+          description: Canonical location of the object completed by this upload session.
     InternalMultipartCompleteRequest:
       type: object
       required:
@@ -1604,3 +2404,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InternalMultipartPart'
+    InternalMultipartAbortRequest:
+      type: object
+      required:
+        - uploadId
+      properties:
+        uploadId:
+          type: string

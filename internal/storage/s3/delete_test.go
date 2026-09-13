@@ -15,7 +15,8 @@ import (
 func TestDeleteSingleUsesDeleteObject(t *testing.T) {
 	client := &fakeClient{}
 	provider := cachedBackend(client, &fakePresigner{})
-	if err := provider.Delete(context.Background(), []storage.PhysicalTarget{{Bucket: "bucket", Key: "object"}}); err != nil {
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	if err := provider.Delete(context.Background(), binding, []storage.PhysicalTarget{{PhysicalBucket: "bucket", Key: "object"}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(client.deleteInputs) != 1 || len(client.deleteObjects) != 0 {
@@ -34,13 +35,14 @@ func TestDeleteSortsDeduplicatesAndChunksAt1000(t *testing.T) {
 	provider := cachedBackend(client, &fakePresigner{})
 	targets := make([]storage.PhysicalTarget, 0, 1003)
 	for index := 1002; index >= 0; index-- {
-		targets = append(targets, storage.PhysicalTarget{Bucket: "bucket", Key: fmt.Sprintf("key-%04d", index)})
+		targets = append(targets, storage.PhysicalTarget{PhysicalBucket: "bucket", Key: fmt.Sprintf("key-%04d", index)})
 	}
 	targets = append(targets,
-		storage.PhysicalTarget{Bucket: "bucket", Key: "key-0001"},
-		storage.PhysicalTarget{Bucket: "bucket", Key: "key-1000"},
+		storage.PhysicalTarget{PhysicalBucket: "bucket", Key: "key-0001"},
+		storage.PhysicalTarget{PhysicalBucket: "bucket", Key: "key-1000"},
 	)
-	if err := provider.Delete(context.Background(), targets); err != nil {
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	if err := provider.Delete(context.Background(), binding, targets); err != nil {
 		t.Fatal(err)
 	}
 	if len(client.deleteObjects) != 2 {
@@ -78,7 +80,8 @@ func TestDeleteFormatsAtMostFivePartialErrors(t *testing.T) {
 		{Key: aws.String("six"), Code: aws.String("Other"), Message: aws.String("ignored after five")},
 	}}}
 	provider := cachedBackend(client, &fakePresigner{})
-	err := provider.Delete(context.Background(), []storage.PhysicalTarget{{Bucket: "bucket", Key: "a"}, {Bucket: "bucket", Key: "b"}})
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	err := provider.Delete(context.Background(), binding, []storage.PhysicalTarget{{PhysicalBucket: "bucket", Key: "a"}, {PhysicalBucket: "bucket", Key: "b"}})
 	if err == nil {
 		t.Fatal("expected partial delete error")
 	}

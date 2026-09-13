@@ -2,6 +2,7 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,8 +10,11 @@ import (
 	"strings"
 
 	drsapi "github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/client/common"
+	clienthash "github.com/calypr/syfon/client/hash"
 	"github.com/calypr/syfon/client/transfer"
+	"github.com/calypr/syfon/client/transfer/engine"
 
 	clientaccess "github.com/calypr/syfon/client/access"
 )
@@ -19,6 +23,17 @@ type MetadataClient interface {
 	GetObject(ctx context.Context, objectID string) (drsapi.DrsObject, error)
 	RegisterObjects(ctx context.Context, req drsapi.RegisterObjectsJSONRequestBody) (drsapi.N201ObjectsCreated, error)
 	UpdateObjectAccessMethods(ctx context.Context, objectID string, accessMethods []drsapi.AccessMethod) (drsapi.DrsObject, error)
+}
+
+func Upload(ctx context.Context, backend transfer.MultipartBackend, sourcePath, objectKey, guid, bucket string, metadata common.FileMetadata, _ bool, forceMultipart bool) error {
+	return (&engine.GenericUploader{Backend: backend}).Upload(ctx, transfer.TransferRequest{
+		SourcePath:     sourcePath,
+		ObjectKey:      objectKey,
+		GUID:           guid,
+		Bucket:         bucket,
+		Metadata:       metadata,
+		ForceMultipart: forceMultipart,
+	})
 }
 
 // RegisterFile orchestrates the full registration and upload flow:
@@ -48,11 +63,8 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 	// 2. Determine upload filename/key
 	// Content-Addressable Storage (CAS): We prioritize the SHA256 hash as the storage key.
 	uploadFilename := filepath.Base(filePath)
-	for _, c := range drsObject.Checksums {
-		if strings.ToLower(c.Type) == "sha256" {
-			uploadFilename = c.Checksum
-			break
-		}
+	if sha256 := clienthash.ConvertDrsChecksumsToHashInfo(drsObject.Checksums).SHA256; sha256 != "" {
+		uploadFilename = sha256
 	}
 
 	if drsObject.AccessMethods != nil && len(*drsObject.AccessMethods) > 0 {
@@ -91,15 +103,24 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 		if err != nil {
 			return nil, fmt.Errorf("failed to get upload URL: %w", err)
 		}
-		if err := UploadSingle(ctx, resolvedUploadBackend{Uploader: bk, url: uploadURL}, bk.Logger(), filePath, uploadFilename, storageID, bucketName, metadata, false); err != nil {
+		uploader := engine.GenericUploader{Backend: resolvedUploadBackend{UploadBackend: bk, url: uploadURL}}
+		if err := uploader.Upload(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata}); err != nil {
 			return nil, fmt.Errorf("upload failed: %w", err)
 		}
 		canonicalInput = uploadURL
 	} else {
-		if err := Upload(ctx, bk, filePath, uploadFilename, storageID, bucketName, metadata, false, true); err != nil {
+		uploader := engine.GenericUploader{Backend: bk}
+		canonicalInput, err = uploader.UploadWithLocation(ctx, transfer.TransferRequest{SourcePath: filePath, ObjectKey: uploadFilename, GUID: storageID, Bucket: bucketName, Metadata: metadata, ForceMultipart: true})
+		if err != nil {
 			return nil, fmt.Errorf("multipart upload failed: %w", err)
 		}
-		canonicalInput = "s3://" + strings.Trim(strings.TrimSpace(bucketName), "/") + "/" + strings.Trim(strings.TrimSpace(uploadFilename), "/")
+		if strings.TrimSpace(canonicalInput) == "" {
+			// Older servers and custom backends may not return a completion location.
+			canonicalInput, err = bk.ResolveUploadURL(ctx, storageID, uploadFilename, metadata, bucketName)
+			if err != nil {
+				return nil, fmt.Errorf("resolve completed multipart location: %w", err)
+			}
+		}
 	}
 
 	// 4. Finalize registration with a concrete access location.
@@ -113,6 +134,9 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 
 	current, getErr := dc.GetObject(ctx, drsObject.Id)
 	if getErr != nil {
+		if !errors.Is(getErr, errorapi.ErrNotFound) {
+			return nil, fmt.Errorf("failed to look up existing object: %w", getErr)
+		}
 		current = *drsObject
 	}
 	controlledAccess := drsObject.ControlledAccess
@@ -127,11 +151,8 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 	pType := u.Scheme
 
 	am := drsapi.AccessMethod{
-		Type: drsapi.AccessMethodType(pType),
-		AccessUrl: &struct {
-			Headers *[]string `json:"headers,omitempty"`
-			Url     string    `json:"url"`
-		}{Url: canonical},
+		Type:      drsapi.AccessMethodType(pType),
+		AccessUrl: &drsapi.AccessURL{Url: canonical},
 	}
 
 	found := false
@@ -197,12 +218,13 @@ func RegisterFile(ctx context.Context, bk UploadBackend, dc MetadataClient, drsO
 }
 
 type UploadBackend interface {
-	transfer.Uploader
 	transfer.MultipartBackend
+	ResolveUploadURL(ctx context.Context, guid, filename string, metadata common.FileMetadata, bucket string) (string, error)
+	CanonicalObjectURL(signedURL, bucketHint, fallbackDID string) (string, error)
 }
 
 type resolvedUploadBackend struct {
-	transfer.Uploader
+	UploadBackend
 	url string
 }
 

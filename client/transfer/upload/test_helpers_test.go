@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/client/common"
 	"github.com/calypr/syfon/client/transfer"
 )
@@ -29,7 +28,6 @@ type uploaderStub struct {
 	}
 }
 
-func (u *uploaderStub) Name() string                    { return "uploader-stub" }
 func (u *uploaderStub) Logger() transfer.TransferLogger { return transfer.NoOpLogger{} }
 
 func (u *uploaderStub) ResolveUploadURL(ctx context.Context, guid string, filename string, metadata common.FileMetadata, bucket string) (string, error) {
@@ -68,35 +66,8 @@ func (u *uploaderStub) MultipartComplete(context.Context, string, string, []tran
 	return nil
 }
 
-func (u *uploaderStub) InitMultipartUpload(context.Context, string, string, string) (string, string, error) {
-	return "", "", nil
-}
-func (u *uploaderStub) GetMultipartUploadURL(context.Context, string, string, int32, string) (string, error) {
-	return "", nil
-}
-func (u *uploaderStub) CompleteMultipartUpload(context.Context, string, string, []internalapi.InternalMultipartPart, string) error {
-	return nil
-}
-func (u *uploaderStub) UploadPart(context.Context, string, io.Reader, int64) (string, error) {
-	return "", nil
-}
-func (u *uploaderStub) DeleteFile(context.Context, string) (string, error) { return "", nil }
 func (u *uploaderStub) CanonicalObjectURL(signedURL, bucketHint, fallbackDID string) (string, error) {
 	return signedURL, nil
-}
-
-type spyLogger struct {
-	transfer.NoOpLogger
-	succeeded []string
-	failed    []string
-}
-
-func (s *spyLogger) Succeeded(filePath, guid string) {
-	s.succeeded = append(s.succeeded, filePath+"|"+guid)
-}
-
-func (s *spyLogger) Failed(filePath, filename string, metadata common.FileMetadata, guid string, retryCount int, multipart bool) {
-	s.failed = append(s.failed, filePath+"|"+filename+"|"+guid)
 }
 
 func createTempFileWithData(t *testing.T, data string) *os.File {

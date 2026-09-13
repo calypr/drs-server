@@ -11,24 +11,20 @@ type CredentialReader interface {
 // CredentialAdmin owns credential creation and deletion.
 type CredentialAdmin interface {
 	SaveS3Credential(ctx context.Context, cred *Credential) error
+	SaveBucketConfiguration(ctx context.Context, configuration BucketConfiguration) error
+	DeleteBucketScopeConfiguration(ctx context.Context, scope Scope) ([]string, error)
 	DeleteS3Credential(ctx context.Context, bucket string) error
 }
 
 // ScopeStore owns bucket-scope lifecycle and lookup.
 type ScopeStore interface {
 	CreateBucketScope(ctx context.Context, scope *Scope) error
-	DeleteBucketScope(ctx context.Context, organization, projectID, credentialID, pathPrefix string) error
 	GetBucketScope(ctx context.Context, organization, projectID string) (*Scope, error)
 	ListBucketScopes(ctx context.Context) ([]Scope, error)
 }
 
-// VisibilityQuery is an optional object-projection optimization for bucket
-// visibility. The bucket service supplies the object-scan fallback.
+// VisibilityQuery supplies the object projection used to resolve bucket
+// visibility.
 type VisibilityQuery interface {
 	ListBucketVisibilityRows(ctx context.Context, resources []string, includeUnscoped, restrictToResources bool) ([]VisibilityRow, error)
 }
-
-// VisibilityFallback supplies the object-derived visibility projection when a
-// persistence adapter does not provide VisibilityQuery. The composition layer
-// owns object scanning and read-policy filtering before returning these rows.
-type VisibilityFallback func(context.Context) ([]VisibilityRow, error)

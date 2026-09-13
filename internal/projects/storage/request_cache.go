@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
 	"github.com/calypr/syfon/internal/buckets"
 )
 
@@ -16,7 +17,7 @@ type requestCache struct {
 	visibleLoaded bool
 	visibleValue  map[string]buckets.VisibleBucket
 	visibleErr    error
-	probes        map[string]ProbeResult
+	probes        map[string]internalapi.InternalInspectObjectBulkItem
 }
 
 type credentialEntry struct {
@@ -28,7 +29,7 @@ func withRequestCache(ctx context.Context) context.Context {
 	if cacheFromContext(ctx) != nil {
 		return ctx
 	}
-	return context.WithValue(ctx, requestCacheKey{}, &requestCache{credentials: make(map[string]credentialEntry), probes: make(map[string]ProbeResult)})
+	return context.WithValue(ctx, requestCacheKey{}, &requestCache{credentials: make(map[string]credentialEntry), probes: make(map[string]internalapi.InternalInspectObjectBulkItem)})
 }
 
 func cacheFromContext(ctx context.Context) *requestCache {
@@ -94,7 +95,7 @@ func cloneVisible(input map[string]buckets.VisibleBucket) map[string]buckets.Vis
 	return output
 }
 
-func (cache *requestCache) probe(key string) (ProbeResult, bool) {
+func (cache *requestCache) probe(key string) (internalapi.InternalInspectObjectBulkItem, bool) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	result, ok := cache.probes[key]
@@ -102,7 +103,7 @@ func (cache *requestCache) probe(key string) (ProbeResult, bool) {
 	return result, ok
 }
 
-func (cache *requestCache) setProbe(key string, result ProbeResult) {
+func (cache *requestCache) setProbe(key string, result internalapi.InternalInspectObjectBulkItem) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	result.ValidationMismatches = append([]string(nil), result.ValidationMismatches...)

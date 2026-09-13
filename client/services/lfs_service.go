@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/calypr/syfon/apigen/lfsapi"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 type LFSService struct {
@@ -25,7 +26,7 @@ func (s *LFSService) Batch(ctx context.Context, op lfsapi.BatchRequestOperation,
 		return nil, err
 	}
 	if resp.ApplicationvndGitLfsJSON200 == nil {
-		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
+		return nil, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return resp.ApplicationvndGitLfsJSON200, nil
 }
@@ -41,7 +42,7 @@ func (s *LFSService) StageMetadata(ctx context.Context, candidates []lfsapi.DrsO
 		return 0, err
 	}
 	if resp.JSON200 == nil {
-		return 0, apiResponseError(resp.HTTPResponse, resp.Body)
+		return 0, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return resp.JSON200.Staged, nil
 }
@@ -57,7 +58,7 @@ func (s *LFSService) Verify(ctx context.Context, oid string, size int64) error {
 		return err
 	}
 	if resp.StatusCode() != 200 {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }

@@ -22,9 +22,9 @@ func (i *storageInvalidator) InvalidateBucket(bucket string) {
 
 func newStorageManager(credentials storage.CredentialLookup, fileRoot string, logger *slog.Logger) (*storage.Manager, error) {
 	registrations := []storage.Registration{
-		storages3.New(credentials),
-		storagegcs.New(credentials),
-		storageazure.New(credentials),
+		storages3.New(),
+		storagegcs.New(),
+		storageazure.New(),
 	}
 	fileRegistration, err := storagefile.New(fileRoot)
 	if err != nil {

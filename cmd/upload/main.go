@@ -94,7 +94,7 @@ var Cmd = &cobra.Command{
 			if mintErr != nil {
 				return mintErr
 			}
-			did = string(minted)
+			did = minted
 		}
 
 		am := drsapi.AccessMethod{Type: "s3"}

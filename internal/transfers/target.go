@@ -8,16 +8,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/objects"
+	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
 // CanonicalStorageTargetRequest describes the object-backed target selection
 // used by upload signing and by repairable logical download URLs.
 type CanonicalStorageTargetRequest struct {
-	Object         *objects.Record
+	Object         *drs.DrsObject
 	AccessURL      string
 	Bucket         string
 	Key            string
@@ -31,6 +33,58 @@ type CanonicalStorageTarget struct {
 	Bucket string
 	Key    string
 	URL    string
+}
+
+func (s *Service) resolveDownloadTarget(ctx context.Context, obj *drs.DrsObject, sourceURL string) (storage.Target, error) {
+	canonical, err := s.ResolveCanonicalStorageTarget(ctx, CanonicalStorageTargetRequest{Object: obj, AccessURL: sourceURL})
+	if err != nil {
+		return storage.Target{}, err
+	}
+	return storageTargetFromCanonical(sourceURL, canonical), nil
+}
+
+func storageTargetFromCanonical(original string, canonical CanonicalStorageTarget) storage.Target {
+	target := storage.Target{OriginalURL: strings.TrimSpace(original), CanonicalURL: strings.TrimSpace(canonical.URL), PhysicalBucket: strings.TrimSpace(canonical.Bucket), Key: strings.Trim(strings.TrimSpace(canonical.Key), "/")}
+	if target.OriginalURL == "" {
+		target.OriginalURL = target.CanonicalURL
+	}
+	parsed, err := address.ParseLocation(target.CanonicalURL)
+	if err == nil {
+		target.Provider = parsed.Provider
+		if target.PhysicalBucket == "" {
+			target.PhysicalBucket = parsed.Bucket
+		}
+		if target.Key == "" {
+			target.Key = parsed.Key
+		}
+		target.Path = parsed.Path
+	}
+	if target.Provider == "" {
+		parsed, _ = address.ParseLocation(target.OriginalURL)
+		target.Provider = parsed.Provider
+		target.Path = parsed.Path
+		if target.PhysicalBucket == "" {
+			target.PhysicalBucket = parsed.Bucket
+		}
+		if target.Key == "" {
+			target.Key = parsed.Key
+		}
+	}
+	if bucket := strings.TrimSpace(target.PhysicalBucket); bucket != "" {
+		target.LookupCandidates = []string{bucket}
+	}
+	if target.LookupKey == "" && len(target.LookupCandidates) > 0 {
+		target.LookupKey = target.LookupCandidates[0]
+	}
+	return target
+}
+
+func (s *Service) resolveScopedTarget(ctx context.Context, organization, project, key string) (storage.Target, error) {
+	canonical, err := s.ResolveScopedUploadTarget(ctx, organization, project, key)
+	if err != nil {
+		return storage.Target{}, err
+	}
+	return storageTargetFromCanonical(canonical.URL, canonical), nil
 }
 
 // ResolveCanonicalStorageTarget selects the physical target for an object.
@@ -61,15 +115,15 @@ func (s *Service) ResolveCanonicalStorageTarget(ctx context.Context, req Canonic
 			}
 		}
 		if targetBucket == "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage bucket for object %s", string(obj.Id))
+			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage bucket for object %s", obj.Id)
 		}
 		targetKey := canonicalObjectKey(obj, req.Key, existingKey, req.PreferChecksum)
-		if existingOK && strings.EqualFold(strings.TrimSpace(existingBucket), targetBucket) && len(normalizedScopePrefixes(scopes)) == 0 && strings.TrimSpace(existingKey) != "" {
+		if existingOK && strings.EqualFold(strings.TrimSpace(existingBucket), targetBucket) && len(buckets.NormalizedStoragePrefixes(scopes)) == 0 && strings.TrimSpace(existingKey) != "" {
 			targetKey = existingKey
 		}
 		targetKey = normalizeScopedStorageKey(targetKey, scopes)
 		if strings.TrimSpace(targetKey) == "" {
-			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage key for object %s", string(obj.Id))
+			return CanonicalStorageTarget{}, fmt.Errorf("unable to resolve scoped storage key for object %s", obj.Id)
 		}
 		return newCanonicalStorageTarget(targetBucket, targetKey), nil
 	}
@@ -137,7 +191,7 @@ func (s *Service) ResolveScopedUploadTarget(ctx context.Context, organization, p
 	return newCanonicalStorageTarget(bucket, key), nil
 }
 
-func (s *Service) bucketScopesForObject(ctx context.Context, obj *objects.Record) ([]buckets.Scope, error) {
+func (s *Service) bucketScopesForObject(ctx context.Context, obj *drs.DrsObject) ([]buckets.Scope, error) {
 	if obj == nil || s.scopes == nil {
 		return nil, nil
 	}
@@ -183,7 +237,7 @@ func (s *Service) bucketScopesForObject(ctx context.Context, obj *objects.Record
 	return scopes, nil
 }
 
-func canonicalObjectKey(obj *objects.Record, explicitKey, existingKey string, preferChecksum bool) string {
+func canonicalObjectKey(obj *drs.DrsObject, explicitKey, existingKey string, preferChecksum bool) string {
 	explicitKey = strings.Trim(strings.TrimSpace(explicitKey), "/")
 	if explicitKey != "" {
 		return explicitKey
@@ -208,7 +262,7 @@ func canonicalObjectKey(obj *objects.Record, explicitKey, existingKey string, pr
 			return checksum
 		}
 	}
-	return strings.Trim(strings.TrimSpace(string(obj.Id)), "/")
+	return strings.Trim(strings.TrimSpace(obj.Id), "/")
 }
 
 func newCanonicalStorageTarget(bucket, key string) CanonicalStorageTarget {
@@ -217,7 +271,7 @@ func newCanonicalStorageTarget(bucket, key string) CanonicalStorageTarget {
 	return CanonicalStorageTarget{Bucket: bucket, Key: key, URL: address.BucketToURL(bucket, key)}
 }
 
-func firstSupportedAccessURL(obj *objects.Record) string {
+func firstSupportedAccessURL(obj *drs.DrsObject) string {
 	if obj == nil || obj.AccessMethods == nil {
 		return ""
 	}
@@ -247,10 +301,10 @@ func parseS3Location(accessURL string) (bucket, key string, ok bool) {
 
 func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	key = strings.Trim(strings.TrimSpace(key), "/")
-	prefixes := normalizedScopePrefixes(scopes)
+	prefixes := buckets.NormalizedStoragePrefixes(scopes)
 	remainder := key
 	for _, prefix := range prefixes {
-		remainder = trimLeadingStoragePrefix(remainder, prefix)
+		remainder = address.TrimLeadingStoragePrefix(remainder, prefix)
 	}
 	composedPrefix := strings.Join(prefixes, "/")
 	switch {
@@ -261,47 +315,6 @@ func normalizeScopedStorageKey(key string, scopes []buckets.Scope) string {
 	default:
 		return path.Join(composedPrefix, remainder)
 	}
-}
-
-func normalizedScopePrefixes(scopes []buckets.Scope) []string {
-	prefixes := make([]string, 0, len(scopes))
-	for _, scope := range scopes {
-		prefix := strings.Trim(strings.TrimSpace(scope.PathPrefix), "/")
-		if prefix == "" {
-			continue
-		}
-		if len(prefixes) == 0 {
-			prefixes = append(prefixes, prefix)
-			continue
-		}
-		last := prefixes[len(prefixes)-1]
-		switch {
-		case prefix == last:
-			continue
-		case strings.HasPrefix(prefix, last+"/"):
-			prefixes[len(prefixes)-1] = prefix
-		case strings.HasPrefix(last, prefix+"/"):
-			continue
-		default:
-			prefixes = append(prefixes, prefix)
-		}
-	}
-	return prefixes
-}
-
-func trimLeadingStoragePrefix(key, prefix string) string {
-	key = strings.Trim(strings.TrimSpace(key), "/")
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	if key == "" || prefix == "" {
-		return key
-	}
-	if key == prefix {
-		return ""
-	}
-	if strings.HasPrefix(key, prefix+"/") {
-		return strings.TrimPrefix(key, prefix+"/")
-	}
-	return key
 }
 
 func parseResourceScope(resource string) (organization, project string, ok bool) {

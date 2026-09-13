@@ -125,7 +125,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("unexpected upload blank request: %+v", lastUploadBlank)
 	}
 
-	if _, err := service.UploadURL(ctx, UploadURLRequest{FileID: "file-1", Key: "name.txt", ExpiresIn: 60, Organization: "org-a", Project: "proj-a"}); err != nil {
+	expires := int32(60)
+	if _, err := service.UploadURL(ctx, "file-1", &internalapi.InternalUploadURLParams{Key: ptrString("name.txt"), ExpiresIn: &expires, Organization: ptrString("org-a"), Project: ptrString("proj-a")}); err != nil {
 		t.Fatalf("UploadURL returned error: %v", err)
 	}
 	if uploadURLQuery.Get("organization") != "org-a" || uploadURLQuery.Get("project") != "proj-a" || uploadURLQuery.Get("key") != "name.txt" || uploadURLQuery.Get("expires_in") != "60" {
@@ -136,7 +137,7 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if _, err := service.ResolveUploadURL(ctx, "missing-upload-url", "name.txt", scopedMetadata, "ignored-bucket"); err == nil || !strings.Contains(err.Error(), "response missing URL") {
 		t.Fatalf("expected missing upload URL error, got %v", err)
 	}
-	if _, err := service.UploadURL(ctx, UploadURLRequest{FileID: "upload-error"}); err == nil {
+	if _, err := service.UploadURL(ctx, "upload-error", nil); err == nil {
 		t.Fatal("expected upload URL error on non-200 status")
 	}
 
@@ -167,9 +168,9 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("expected org/project upload routing and no bucket query, got %v", uploadURLQuery)
 	}
 
-	uploadID, guid, err := service.InitMultipartUpload(ctx, "guid-a", "name.txt", "bucket-a")
+	uploadID, guid, err := service.InitMultipartUploadWithMetadata(ctx, "guid-a", "name.txt", "bucket-a", common.FileMetadata{})
 	if err != nil || uploadID != "upload-id" || guid != "multipart-guid" {
-		t.Fatalf("InitMultipartUpload returned uploadID=%q guid=%q err=%v", uploadID, guid, err)
+		t.Fatalf("InitMultipartUploadWithMetadata returned uploadID=%q guid=%q err=%v", uploadID, guid, err)
 	}
 	if lastMultipartInit.Guid == nil || *lastMultipartInit.Guid != "guid-a" || lastMultipartInit.Key == nil || *lastMultipartInit.Key != "name.txt" {
 		t.Fatalf("unexpected multipart init request: %+v", lastMultipartInit)
@@ -188,17 +189,12 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("expected scoped multipart init request, got %+v", lastMultipartInit)
 	}
 
-	partURL, err := service.GetMultipartUploadURL(ctx, "guid-a", "upload-id", 3, "bucket-a")
-	if err != nil || partURL != "https://parts.example/upload" {
-		t.Fatalf("GetMultipartUploadURL returned url=%q err=%v", partURL, err)
-	}
-	if lastMultipartUpload.Key != "guid-a" || lastMultipartUpload.UploadId != "upload-id" || lastMultipartUpload.PartNumber != 3 {
-		t.Fatalf("unexpected multipart upload request: %+v", lastMultipartUpload)
-	}
-
 	etag, err := service.MultipartPart(ctx, "guid-a", "upload-id", 3, bytes.NewReader([]byte("chunk-data")))
 	if err != nil || etag != "etag-1" {
 		t.Fatalf("MultipartPart returned etag=%q err=%v", etag, err)
+	}
+	if lastMultipartUpload.Key != "guid-a" || lastMultipartUpload.UploadId != "upload-id" || lastMultipartUpload.PartNumber != 3 {
+		t.Fatalf("unexpected multipart upload request: %+v", lastMultipartUpload)
 	}
 	if requester.method != http.MethodPut || string(requester.body) != "chunk-data" {
 		t.Fatalf("unexpected upload request captured: method=%s body=%q", requester.method, requester.body)
@@ -209,11 +205,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if err != nil || etag != "etag-1" {
 		t.Fatalf("MultipartPart with sized body returned etag=%q err=%v", etag, err)
 	}
-	if requester.rawBody != sizedBody {
-		t.Fatalf("expected multipart upload to stream original body, got %T", requester.rawBody)
-	}
-	if requester.builder.PartSize != int64(len("chunk-two")) {
-		t.Fatalf("expected multipart upload content length %d, got %d", len("chunk-two"), requester.builder.PartSize)
+	if requester.request.ContentLength != int64(len("chunk-two")) {
+		t.Fatalf("expected multipart upload content length %d, got %d", len("chunk-two"), requester.request.ContentLength)
 	}
 
 	parts := []transfer.MultipartPart{{PartNumber: 2, ETag: "etag-2"}, {PartNumber: 1, ETag: "etag-1"}}
@@ -223,10 +216,6 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if len(lastMultipartDone.Parts) != 2 || lastMultipartDone.Parts[0].PartNumber != 2 || lastMultipartDone.Parts[1].ETag != "etag-1" {
 		t.Fatalf("unexpected multipart completion payload: %+v", lastMultipartDone)
 	}
-	if err := service.CompleteMultipartUpload(ctx, "guid-a", "upload-id", []internalapi.InternalMultipartPart{{PartNumber: 1, ETag: "etag-1"}}, "bucket-a"); err != nil {
-		t.Fatalf("CompleteMultipartUpload returned error: %v", err)
-	}
-
 	if _, err := service.MultipartInit(ctx, "guid-a"); err != nil {
 		t.Fatalf("MultipartInit returned error: %v", err)
 	}
@@ -242,7 +231,7 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	}
 
 	md, err := service.Stat(ctx, "file-2")
-	if err != nil || md.Provider != "http" || md.MD5 != "" || !md.AcceptRanges {
+	if err != nil || !md.AcceptRanges {
 		t.Fatalf("Stat returned md=%+v err=%v", md, err)
 	}
 
@@ -252,8 +241,8 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	if err != nil || resp.StatusCode != http.StatusPartialContent {
 		t.Fatalf("Download returned resp=%v err=%v", resp, err)
 	}
-	if transferRequester.builder.Headers["Range"] != "bytes=3-8" {
-		t.Fatalf("expected range header, got %+v", transferRequester.builder.Headers)
+	if transferRequester.request.Header.Get("Range") != "bytes=3-8" {
+		t.Fatalf("expected range header, got %s", transferRequester.request.Header.Get("Range"))
 	}
 
 	reader, err := transferService.GetReader(ctx, "https://download.example/file-3")
@@ -282,14 +271,35 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 		t.Fatalf("unexpected range payload %q", rangeData)
 	}
 
-	if service.Name() != "syfon-data-service" {
-		t.Fatalf("unexpected service name %q", service.Name())
-	}
 	if service.Logger() == nil {
 		t.Fatal("expected logger")
 	}
-	if err := service.Validate(ctx, "bucket-a"); err != nil {
-		t.Fatalf("Validate returned error: %v", err)
+}
+
+func TestDataServiceMultipartAbortUsesAdditiveInternalRoute(t *testing.T) {
+	var uploadID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/data/multipart/abort" {
+			http.NotFound(w, r)
+			return
+		}
+		var request struct {
+			UploadID string `json:"uploadId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		uploadID = request.UploadID
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	service := NewDataService(mustInternalClient(t, server.URL), server.Client(), discardLogger(), nil)
+	if err := service.MultipartAbort(context.Background(), "provider-upload"); err != nil {
+		t.Fatalf("MultipartAbort failed: %v", err)
+	}
+	if uploadID != "provider-upload" {
+		t.Fatalf("upload ID = %q, want provider-upload", uploadID)
 	}
 }
 
@@ -307,17 +317,40 @@ func TestDataServiceMultipartInitPreservesServerMessage(t *testing.T) {
 	defer server.Close()
 
 	service := NewDataService(mustInternalClient(t, server.URL), &recordingRequester{}, discardLogger(), nil)
-	_, _, err := service.InitMultipartUpload(context.Background(), "", "", "")
+	_, _, err := service.InitMultipartUploadWithMetadata(context.Background(), "", "", "", common.FileMetadata{})
 	if err == nil || !strings.Contains(err.Error(), "checksum-only multipart init requires an explicit guid or a project-scoped object id") {
 		t.Fatalf("expected preserved multipart init error message, got %v", err)
 	}
 }
 
-func TestGetWriterRejectsWithoutCreatingAnUpload(t *testing.T) {
-	t.Parallel()
-	service := NewDataService(nil, nil, nil, nil)
-	writer, err := service.GetWriter(context.Background(), "id")
-	if err == nil || writer != nil {
-		t.Fatalf("expected unsupported writer, got %v, %v", writer, err)
+func TestDataServiceCanonicalObjectURL(t *testing.T) {
+	d := &DataService{}
+	tests := []struct {
+		name       string
+		signedURL  string
+		bucketHint string
+		fallback   string
+		want       string
+	}{
+		{name: "gcs https signed url", signedURL: "https://storage.googleapis.com/gcs-bucket/path/to/object.bin?X-Goog-Signature=abc", bucketHint: "gcs-bucket", fallback: "did:1", want: "s3://gcs-bucket/path/to/object.bin"},
+		{name: "azure https signed url", signedURL: "https://acct.blob.core.windows.net/az-container/path/to/object.bin?sig=abc", bucketHint: "az-container", fallback: "did:2", want: "s3://az-container/path/to/object.bin"},
+		{name: "gcs scheme", signedURL: "gs://gcs-bucket/path/to/object.bin", fallback: "did:3", want: "gs://gcs-bucket/path/to/object.bin"},
+		{name: "azure scheme", signedURL: "azblob://az-container/path/to/object.bin", fallback: "did:4", want: "azblob://az-container/path/to/object.bin"},
+		{name: "gcs json upload", signedURL: "http://localhost:4443/upload/storage/v1/b/test-bucket/o?uploadType=media&name=objects%2Fthing.txt", fallback: "did:5", want: "s3://test-bucket/objects/thing.txt"},
+		{name: "gcs json upload overrides hint", signedURL: "http://localhost:4443/upload/storage/v1/b/test-bucket/o?uploadType=media&name=objects%2Fthing.txt", bucketHint: "upload", fallback: "did:6", want: "s3://test-bucket/objects/thing.txt"},
+		{name: "azure signed url", signedURL: "https://acct.blob.core.windows.net/az-container/path/to/object.bin?sig=abc&sr=b&sv=2021-08-06", fallback: "did:7", want: "s3://az-container/path/to/object.bin"},
+		{name: "azurite signed url", signedURL: "http://localhost:10000/devstoreaccount1/az-container/path/to/object.bin?sig=abc&sr=b&sv=2021-08-06", fallback: "did:8", want: "s3://az-container/path/to/object.bin"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.CanonicalObjectURL(tc.signedURL, tc.bucketHint, tc.fallback)
+			if err != nil {
+				t.Fatalf("CanonicalObjectURL returned error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("unexpected canonical URL: got %q want %q", got, tc.want)
+			}
+		})
 	}
 }

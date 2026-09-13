@@ -2,45 +2,51 @@ package buckets
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
+
+	"github.com/calypr/syfon/apigen/errorapi"
 )
 
 // SaveS3Credential persists a credential before invalidating every identity
 // alias that could key a provider signer.
 func (s *Service) SaveS3Credential(ctx context.Context, cred *Credential) error {
+	if err := s.credentialAdmin.SaveS3Credential(ctx, cred); err != nil {
+		return err
+	}
+	s.invalidateCredentialAliases(cred)
+	return nil
+}
+
+func (s *Service) invalidateCredentialAliases(cred *Credential) {
 	requestedID := ""
 	physicalBucket := ""
 	if cred != nil {
 		requestedID = s.credentialIDForCredential(*cred)
 		physicalBucket = strings.TrimSpace(cred.Bucket)
 	}
-	if err := s.credentialAdmin.SaveS3Credential(ctx, cred); err != nil {
-		return err
-	}
-
 	aliases := []string{requestedID, physicalBucket}
 	if cred != nil {
 		aliases = append(aliases, s.credentialIDForCredential(*cred), cred.CredentialID, cred.Bucket)
 	}
 	s.invalidateAliases(aliases...)
-	return nil
 }
 
 // DeleteS3Credential resolves aliases before mutation, then invalidates all
 // known aliases only after the repository confirms deletion.
 func (s *Service) DeleteS3Credential(ctx context.Context, bucket string) error {
 	requested := strings.TrimSpace(bucket)
-	var resolved *Credential
-	if cred, err := s.credentialReader.GetS3Credential(ctx, bucket); err == nil && cred != nil {
-		copy := *cred
-		resolved = &copy
-	}
-
-	if err := s.credentialAdmin.DeleteS3Credential(ctx, bucket); err != nil {
+	resolved, err := s.credentialReader.GetS3Credential(ctx, requested)
+	if err != nil && !errors.Is(err, errorapi.ErrStorageCredentialMissing) {
 		return err
 	}
-	s.scopeCache.clear()
+	return s.deleteS3Credential(ctx, requested, resolved)
+}
+
+func (s *Service) deleteS3Credential(ctx context.Context, requested string, resolved *Credential) error {
+	if err := s.credentialAdmin.DeleteS3Credential(ctx, requested); err != nil {
+		return err
+	}
 	aliases := []string{requested}
 	if resolved != nil {
 		aliases = append(aliases, resolved.CredentialID, resolved.Bucket)
@@ -72,23 +78,4 @@ func (s *Service) credentialIDForCredential(cred Credential) string {
 		return credentialID
 	}
 	return strings.TrimSpace(cred.Bucket)
-}
-
-func (s *Service) ResolveBucket(ctx context.Context, bucketName string) (string, error) {
-	creds, err := s.ListS3Credentials(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(creds) == 0 {
-		return "", fmt.Errorf("no buckets configured")
-	}
-	if bucketName == "" {
-		return creds[0].Bucket, nil
-	}
-	for _, cred := range creds {
-		if cred.Bucket == bucketName {
-			return cred.Bucket, nil
-		}
-	}
-	return "", fmt.Errorf("bucket %q not configured", bucketName)
 }

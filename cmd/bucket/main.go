@@ -1,13 +1,17 @@
 package bucket
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/calypr/syfon/apigen/bucketapi"
-	sybucket "github.com/calypr/syfon/client/bucket"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
 )
@@ -54,7 +58,7 @@ var addCmd = &cobra.Command{
 		if v := strings.TrimSpace(bucketEndpoint); v != "" {
 			payload.Endpoint = &v
 		}
-		if err := sybucket.ValidateBucket(cmd.Context(), payload); err != nil {
+		if err := validateBucket(cmd.Context(), payload); err != nil {
 			return fmt.Errorf("local bucket validation failed: %w", err)
 		}
 
@@ -68,6 +72,37 @@ var addCmd = &cobra.Command{
 		fmt.Fprintf(cmd.OutOrStdout(), "bucket credential configured: %s (provider=%s)\n", bucket, provider)
 		return nil
 	},
+}
+
+func validateBucket(ctx context.Context, req bucketapi.PutBucketRequest) error {
+	provider := "s3"
+	if req.Provider != nil {
+		provider = strings.ToLower(*req.Provider)
+	}
+	if provider != "s3" {
+		return nil
+	}
+
+	var opts []func(*config.LoadOptions) error
+	if req.Region != nil {
+		opts = append(opts, config.WithRegion(*req.Region))
+	}
+	if req.AccessKey != nil && req.SecretKey != nil {
+		opts = append(opts, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(*req.AccessKey, *req.SecretKey, "")))
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
+	if err != nil {
+		return fmt.Errorf("failed to load s3 config: %w", err)
+	}
+	s3Client := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		if req.Endpoint != nil {
+			options.BaseEndpoint = aws.String(*req.Endpoint)
+		}
+	})
+	if _, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(req.Bucket)}); err != nil {
+		return fmt.Errorf("s3 bucket validation failed for %s: %w", req.Bucket, err)
+	}
+	return nil
 }
 
 var addOrganizationCmd = &cobra.Command{

@@ -13,7 +13,6 @@ import (
 
 	syclient "github.com/calypr/syfon/client"
 	"github.com/calypr/syfon/client/request"
-	syfonclient "github.com/calypr/syfon/client/services"
 	"github.com/calypr/syfon/cmd/cliauth"
 	"github.com/spf13/cobra"
 )
@@ -62,7 +61,7 @@ var Cmd = &cobra.Command{
 	},
 }
 
-func readURLBytes(ctx context.Context, rawURL string, c syfonclient.SyfonClient) ([]byte, error) {
+func readURLBytes(ctx context.Context, rawURL string, c *syclient.Client) ([]byte, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return nil, fmt.Errorf("parse download url: %w", err)
@@ -80,11 +79,12 @@ func readURLBytes(ctx context.Context, rawURL string, c syfonclient.SyfonClient)
 		return data, nil
 	case "http", "https":
 		var resp *http.Response
-		concrete, ok := c.(*syclient.Client)
-		if !ok {
-			return nil, fmt.Errorf("client implementation does not support raw requests")
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create download request: %w", err)
 		}
-		err := concrete.Requestor().Do(ctx, http.MethodGet, rawURL, nil, &resp, request.WithSkipAuth(true))
+		request.SkipAuth(req)
+		resp, err = c.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("download request failed: %w", err)
 		}

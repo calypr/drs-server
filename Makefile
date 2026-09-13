@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := build
 OPENAPI ?= data-repository-service-schemas/openapi/data_repository_service.openapi.yaml
-OAPI_CODEGEN ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0
+OAPI_CODEGEN ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
 REDOCLY_IMAGE ?= redocly/cli:latest
 YQ_IMAGE ?= mikefarah/yq:latest
 MKDOCS_IMAGE ?= squidfunk/mkdocs-material:latest
@@ -94,17 +94,17 @@ gen-api:
 	@set -euo pipefail; \
 	mkdir -p apigen/errorapi apigen/drs apigen/lfsapi apigen/bucketapi apigen/metricsapi apigen/internalapi; \
 	echo "Generating the shared API error model..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_ERROR_CONFIG)" "$(ERROR_OPENAPI)" > apigen/errorapi/error.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_ERROR_CONFIG)" "$(ERROR_OPENAPI)" > apigen/errorapi/error.gen.go; \
 	echo "Generating combined DRS client and Fiber server bindings..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_DRS_CONFIG)" "$(OPENAPI_DIR)/openapi.yaml" > apigen/drs/drs.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_DRS_CONFIG)" "$(OPENAPI_DIR)/openapi.yaml" > apigen/drs/drs.gen.go; \
 	echo "Generating combined LFS client and Fiber server bindings..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_LFS_CONFIG)" "$(LFS_OPENAPI)" > apigen/lfsapi/lfs.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_LFS_CONFIG)" "$(LFS_OPENAPI)" > apigen/lfsapi/lfs.gen.go; \
 	echo "Generating combined bucket client and Fiber server bindings..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_BUCKET_CONFIG)" "$(BUCKET_OPENAPI)" > apigen/bucketapi/bucket.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_BUCKET_CONFIG)" "$(BUCKET_OPENAPI)" > apigen/bucketapi/bucket.gen.go; \
 	echo "Generating combined metrics client and Fiber server bindings..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_METRICS_CONFIG)" "$(METRICS_OPENAPI)" > apigen/metricsapi/metrics.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_METRICS_CONFIG)" "$(METRICS_OPENAPI)" > apigen/metricsapi/metrics.gen.go; \
 	echo "Generating combined internal client and Fiber server bindings..."; \
-	GOTOOLCHAIN=local $(OAPI_CODEGEN) -config "$(OAPI_INTERNAL_CONFIG)" "$(INTERNAL_OPENAPI)" > apigen/internalapi/internal.gen.go; \
+	$(OAPI_CODEGEN) -config "$(OAPI_INTERNAL_CONFIG)" "$(INTERNAL_OPENAPI)" > apigen/internalapi/internal.gen.go; \
 	echo "Generated API bindings into ./apigen/{errorapi,drs,lfsapi,bucketapi,metricsapi,internalapi}"
 
 .PHONY: test
@@ -115,6 +115,10 @@ test:
 test-modules:
 	./scripts/check-independent-modules.sh
 
+.PHONY: test-race
+test-race:
+	./scripts/run-race-tests.sh
+
 .PHONY: test-unit
 test-unit:
 	@PKGS=$$(go list ./... ./client/... ./apigen/... | grep -Ev '/cmd/server$$|/tests/endpoints$$'); \
@@ -122,11 +126,15 @@ test-unit:
 
 .PHONY: coverage
 coverage:
-	./scripts/run_coverage.sh
+	COVERAGE_MIN=75 ./scripts/run_coverage.sh
 
 .PHONY: coverage-meaningful
 coverage-meaningful:
-	COVERAGE_SCOPE=meaningful ./scripts/run_coverage.sh
+	COVERAGE_SCOPE=meaningful COVERAGE_MIN=75 ./scripts/run_coverage.sh
+
+.PHONY: coverage-client
+coverage-client:
+	COVERAGE_SCOPE=client COVERAGE_MIN=75 ./scripts/run_coverage.sh
 
 .PHONY: coverage-full
 coverage-full:

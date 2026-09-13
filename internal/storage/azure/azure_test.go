@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,19 +19,27 @@ import (
 
 type credentialLookupFunc func(context.Context, string) (*buckets.Credential, error)
 
+func (f credentialLookupFunc) GetS3Credential(ctx context.Context, bucket string) (*buckets.Credential, error) {
+	return f(ctx, bucket)
+}
+
 type recordingTransport struct {
-	status      int
-	header      http.Header
-	requests    int
-	requestHost string
-	requestPath string
-	body        []byte
+	status         int
+	header         http.Header
+	statuses       []int
+	headers        []http.Header
+	requests       int
+	requestHost    string
+	requestPath    string
+	requestHeaders http.Header
+	body           []byte
 }
 
 func (r *recordingTransport) Do(request *http.Request) (*http.Response, error) {
 	r.requests++
 	r.requestHost = request.URL.Host
 	r.requestPath = request.URL.Path
+	r.requestHeaders = request.Header.Clone()
 	if request.Body != nil {
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -40,11 +47,18 @@ func (r *recordingTransport) Do(request *http.Request) (*http.Response, error) {
 		}
 		r.body = body
 	}
+	responseIndex := r.requests - 1
 	status := r.status
+	if responseIndex < len(r.statuses) {
+		status = r.statuses[responseIndex]
+	}
 	if status == 0 {
 		status = http.StatusOK
 	}
 	header := r.header
+	if responseIndex < len(r.headers) {
+		header = r.headers[responseIndex]
+	}
 	if header == nil {
 		header = make(http.Header)
 	}
@@ -54,10 +68,6 @@ func (r *recordingTransport) Do(request *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(strings.NewReader("<BlockList/>")),
 		Request:    request,
 	}, nil
-}
-
-func (f credentialLookupFunc) GetS3Credential(ctx context.Context, bucket string) (*buckets.Credential, error) {
-	return f(ctx, bucket)
 }
 
 func azureCredential(endpoint string) *buckets.Credential {
@@ -71,12 +81,11 @@ func azureCredential(endpoint string) *buckets.Credential {
 }
 
 func TestAzureAccessSASPermissionsAndExpiry(t *testing.T) {
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return azureCredential("https://acct.blob.db.windows.net"), nil
-	})}
+	b := &backend{}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("https://acct.blob.db.windows.net")}
 
 	before := time.Now().UTC()
-	read, err := b.SignURL(context.Background(), storage.ObjectTarget{Bucket: "test-bucket", Key: "path with spaces/object.txt"}, storage.AccessOptions{})
+	read, err := b.Sign(context.Background(), binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "test-bucket", Key: "path with spaces/object.txt"}})
 	if err != nil {
 		t.Fatalf("SignURL returned error: %v", err)
 	}
@@ -92,10 +101,7 @@ func TestAzureAccessSASPermissionsAndExpiry(t *testing.T) {
 	}
 	assertSASWindow(t, readURL.Query(), before, 15*time.Minute)
 
-	put, err := b.SignURL(context.Background(), storage.ObjectTarget{Bucket: "test-bucket", Key: "object.txt"}, storage.AccessOptions{
-		ExpiresIn: 7 * time.Minute,
-		Method:    http.MethodPut,
-	})
+	put, err := b.Sign(context.Background(), binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "test-bucket", Key: "object.txt"}, ExpiresIn: 7 * time.Minute, Method: http.MethodPut})
 	if err != nil {
 		t.Fatalf("PUT SignURL returned error: %v", err)
 	}
@@ -107,40 +113,6 @@ func TestAzureAccessSASPermissionsAndExpiry(t *testing.T) {
 		t.Fatalf("PUT SAS permissions = %q, want acw", got)
 	}
 	assertSASWindow(t, putURL.Query(), before, 7*time.Minute)
-}
-
-func TestAzureCredentialLookupPort(t *testing.T) {
-	var _ storage.CredentialLookup = credentialLookupFunc(nil)
-
-	t.Run("accepts one-method lookup", func(t *testing.T) {
-		b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-			return azureCredential("https://acct.blob.db.windows.net"), nil
-		})}
-		if _, err := b.SignURL(context.Background(), storage.ObjectTarget{Bucket: "bucket", Key: "object"}, storage.AccessOptions{}); err != nil {
-			t.Fatalf("SignURL with one-method lookup failed: %v", err)
-		}
-	})
-
-	t.Run("preserves lookup error", func(t *testing.T) {
-		wantErr := errors.New("lookup failed")
-		b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-			return nil, wantErr
-		})}
-		_, err := b.SignURL(context.Background(), storage.ObjectTarget{Bucket: "bucket", Key: "object"}, storage.AccessOptions{})
-		if !errors.Is(err, wantErr) {
-			t.Fatalf("SignURL error = %v, want %v", err, wantErr)
-		}
-	})
-
-	t.Run("preserves nil credential error", func(t *testing.T) {
-		b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-			return nil, nil
-		})}
-		_, err := b.SignURL(context.Background(), storage.ObjectTarget{Bucket: "bucket", Key: "object"}, storage.AccessOptions{})
-		if err == nil || !strings.Contains(err.Error(), "credentials not found for bucket bucket") {
-			t.Fatalf("SignURL error = %v, want missing-credential error", err)
-		}
-	})
 }
 
 func TestAzureSASProtocolAndCredentialDerivation(t *testing.T) {
@@ -191,13 +163,10 @@ func assertSASWindow(t *testing.T, query url.Values, before time.Time, expiry ti
 }
 
 func TestAzureRangeAndDownloadFilenameArePreserved(t *testing.T) {
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return azureCredential("https://acct.blob.db.windows.net"), nil
-	})}
+	b := &backend{}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("https://acct.blob.db.windows.net")}
 
-	access, err := b.SignDownloadPart(context.Background(), storage.ObjectTarget{Bucket: "test-bucket", Key: "nested/object.txt"}, storage.ByteRange{Start: 4, End: 12}, storage.AccessOptions{
-		DownloadFilename: "chunk.txt",
-	})
+	access, err := b.Sign(context.Background(), binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "test-bucket", Key: "nested/object.txt"}, Range: &storage.ByteRange{Start: 4, End: 12}, DownloadFilename: "chunk.txt"})
 	if err != nil {
 		t.Fatalf("SignDownloadPart returned error: %v", err)
 	}
@@ -214,29 +183,26 @@ func TestAzureRangeAndDownloadFilenameArePreserved(t *testing.T) {
 }
 
 func TestAzureCacheInvalidationReloadsCredentialAndServiceURL(t *testing.T) {
-	var mu sync.Mutex
-	lookups := 0
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		mu.Lock()
-		lookups++
-		mu.Unlock()
-		return azureCredential("https://acct.blob.db.windows.net"), nil
-	})}
-	target := storage.ObjectTarget{Bucket: "test-bucket", Key: "object.txt"}
-	if _, err := b.SignURL(context.Background(), target, storage.AccessOptions{}); err != nil {
-		t.Fatalf("first SignURL returned error: %v", err)
+	b := &backend{}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("https://acct.blob.db.windows.net")}
+	first, err := b.getCreds(binding)
+	if err != nil {
+		t.Fatalf("first credential derivation returned error: %v", err)
 	}
-	if _, err := b.SignURL(context.Background(), target, storage.AccessOptions{}); err != nil {
-		t.Fatalf("cached SignURL returned error: %v", err)
+	second, err := b.getCreds(binding)
+	if err != nil {
+		t.Fatalf("cached credential derivation returned error: %v", err)
+	}
+	if first != second {
+		t.Fatal("credential cache did not return the same value")
 	}
 	b.InvalidateBucket(" test-bucket ")
-	if _, err := b.SignURL(context.Background(), target, storage.AccessOptions{}); err != nil {
-		t.Fatalf("post-invalidation SignURL returned error: %v", err)
+	third, err := b.getCreds(binding)
+	if err != nil {
+		t.Fatalf("post-invalidation credential derivation returned error: %v", err)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if lookups != 2 {
-		t.Fatalf("credential lookups = %d, want 2", lookups)
+	if third == first {
+		t.Fatal("invalidation did not evict cached credential")
 	}
 }
 
@@ -244,14 +210,15 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	var requestBody []byte
 	transport := &recordingTransport{status: http.StatusCreated, header: http.Header{"Content-Type": []string{"application/xml"}}}
 
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return azureCredential("http://azure.test"), nil
-	}), transport: transport}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
 	uploadID := storage.UploadID("upload-abc")
-	part, err := b.SignMultipartPart(context.Background(), storage.MultipartPartRequest{
-		Target:     storage.ObjectTarget{Bucket: "test-bucket", Key: "object.bin"},
+	before := time.Now().UTC()
+	part, err := b.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{
+		Target:     storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
 		UploadID:   uploadID,
 		PartNumber: 2,
+		ExpiresIn:  7 * time.Minute,
 	})
 	if err != nil {
 		t.Fatalf("SignMultipartPart returned error: %v", err)
@@ -263,6 +230,7 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	if got := partURL.Query().Get("comp"); got != "block" {
 		t.Fatalf("block comp query = %q, want block", got)
 	}
+	assertSASWindow(t, partURL.Query(), before, 7*time.Minute)
 	decodedBlockID, err := base64.StdEncoding.DecodeString(partURL.Query().Get("blockid"))
 	if err != nil {
 		t.Fatalf("decode block ID: %v", err)
@@ -271,8 +239,8 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 		t.Fatalf("block ID = %q, want %q", got, want)
 	}
 
-	err = b.CompleteMultipartUpload(context.Background(), storage.CompleteMultipartRequest{
-		Target:   storage.ObjectTarget{Bucket: "test-bucket", Key: "object.bin"},
+	err = b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:   storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
 		UploadID: uploadID,
 		Parts: []storage.CompletedPart{
 			{PartNumber: 3, ETag: "ignored-3"},
@@ -305,9 +273,54 @@ func TestAzureMultipartBlockIDAndCompletionOrder(t *testing.T) {
 	}
 }
 
+func TestAzureMultipartWritesCompletionMarker(t *testing.T) {
+	transport := &recordingTransport{
+		statuses: []int{http.StatusOK, http.StatusCreated},
+		headers:  []http.Header{{}, {"Content-Type": []string{"application/xml"}}},
+	}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
+	if err := b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	var got string
+	for key, values := range transport.requestHeaders {
+		if strings.EqualFold(key, "x-ms-meta-"+storage.MultipartCompletionMarkerMetadataKey) && len(values) > 0 {
+			got = values[0]
+		}
+	}
+	if got != "completion" {
+		t.Fatalf("completion metadata header = %q, headers=%#v, want completion", got, transport.requestHeaders)
+	}
+}
+
+func TestAzureCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
+	header := make(http.Header)
+	header.Set("x-ms-meta-"+storage.MultipartCompletionMarkerMetadataKey, "completion")
+	transport := &recordingTransport{status: http.StatusOK, header: header}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
+	if err := b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
+		UploadID:     "upload",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1}},
+	}); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if transport.requests != 1 {
+		t.Fatalf("provider requests = %d, want one marker read and no commit", transport.requests)
+	}
+}
+
 func TestAzureInitMultipartUploadReturnsUUID(t *testing.T) {
 	b := &backend{}
-	uploadID, err := b.InitMultipartUpload(context.Background(), storage.ObjectTarget{Bucket: "test-bucket", Key: "object.bin"})
+	uploadID, err := b.BeginMultipart(context.Background(), storage.ProviderBinding{}, storage.BeginMultipartRequest{Target: storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"}, CompletionID: "completion"})
 	if err != nil {
 		t.Fatalf("InitMultipartUpload returned error: %v", err)
 	}
@@ -318,12 +331,11 @@ func TestAzureInitMultipartUploadReturnsUUID(t *testing.T) {
 
 func TestAzureEmptyMultipartCompletionCallsProvider(t *testing.T) {
 	transport := &recordingTransport{status: http.StatusCreated, header: http.Header{"Content-Type": []string{"application/xml"}}}
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return azureCredential("http://azure.test"), nil
-	}), transport: transport}
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
 
-	err := b.CompleteMultipartUpload(context.Background(), storage.CompleteMultipartRequest{
-		Target:   storage.ObjectTarget{Bucket: "test-bucket", Key: "object.bin"},
+	err := b.CompleteMultipart(context.Background(), binding, storage.CompleteMultipartRequest{
+		Target:   storage.Target{PhysicalBucket: "test-bucket", Key: "object.bin"},
 		UploadID: "upload-empty",
 	})
 	if err != nil {
@@ -353,10 +365,9 @@ func TestAzureDeleteUsesHistoricalEndpointAndNotFoundIsIdempotent(t *testing.T) 
 
 	transport := &recordingTransport{status: http.StatusNotFound, header: http.Header{"X-Ms-Error-Code": []string{"BlobNotFound"}}}
 
-	b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return azureCredential(""), nil
-	}), transport: transport}
-	err := b.Delete(context.Background(), []storage.PhysicalTarget{{Provider: "azure", Bucket: "test-bucket", Key: "path/object.txt"}})
+	b := &backend{transport: transport}
+	binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("")}
+	err := b.Delete(context.Background(), binding, []storage.PhysicalTarget{{Provider: "azure", PhysicalBucket: "test-bucket", Key: "path/object.txt"}})
 	if err != nil {
 		t.Fatalf("Delete returned error for missing blob: %v", err)
 	}
@@ -387,10 +398,9 @@ func TestAzureDeleteNotFoundMapping(t *testing.T) {
 				header.Set("X-Ms-Error-Code", test.errorCode)
 			}
 			transport := &recordingTransport{status: http.StatusNotFound, header: header}
-			b := &backend{credentials: credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-				return azureCredential("http://azure.test"), nil
-			}), transport: transport}
-			err := b.Delete(context.Background(), []storage.PhysicalTarget{{Provider: "azure", Bucket: "test-bucket", Key: "object.txt"}})
+			b := &backend{transport: transport}
+			binding := storage.ProviderBinding{LookupKey: "test-bucket", PhysicalBucket: "test-bucket", Credential: azureCredential("http://azure.test")}
+			err := b.Delete(context.Background(), binding, []storage.PhysicalTarget{{Provider: "azure", PhysicalBucket: "test-bucket", Key: "object.txt"}})
 			if (err != nil) != test.wantError {
 				t.Fatalf("Delete error = %v, want error=%t", err, test.wantError)
 			}
@@ -402,16 +412,16 @@ func TestAzureRegistrationDoesNotClaimProbeOrInventory(t *testing.T) {
 	lookup := credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
 		return azureCredential("https://acct.blob.db.windows.net"), nil
 	})
-	manager, err := storage.NewManager(lookup, New(lookup))
+	manager, err := storage.NewManager(lookup, New())
 	if err != nil {
 		t.Fatalf("NewManager returned error: %v", err)
 	}
-	results := manager.Probe(context.Background(), []storage.ProbeTarget{{ID: "one", Target: storage.ObjectTarget{Bucket: "test-bucket", Key: "object"}}})
+	results := manager.Probe(context.Background(), []storage.ProbeTarget{{ID: "one", Target: storage.Target{PhysicalBucket: "test-bucket", Key: "object"}}})
 	var probeErr *storage.OperationError
 	if len(results) != 1 || !errors.As(results[0].Err, &probeErr) || probeErr.Kind != storage.ErrorUnsupported {
 		t.Fatalf("probe result = %#v, want unsupported operation error", results)
 	}
-	_, err = manager.Inventory(context.Background(), storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "test-bucket"}})
+	_, err = manager.Inventory(context.Background(), storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "test-bucket"}})
 	var inventoryErr *storage.OperationError
 	if !errors.As(err, &inventoryErr) || inventoryErr.Kind != storage.ErrorUnsupported {
 		t.Fatalf("inventory error = %v, want unsupported operation error", err)

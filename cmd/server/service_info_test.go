@@ -1,35 +1,92 @@
 package server
 
-import "testing"
+import (
+	"errors"
+	"testing"
 
-func TestServiceInfoForBackend(t *testing.T) {
-	tests := []struct {
-		name        string
-		sqlite      bool
-		description string
-	}{
-		{name: "sqlite", sqlite: true, description: "Calypr-backed DRS server (SQLite)"},
-		{name: "postgres", description: "Calypr-backed DRS server"},
+	"github.com/calypr/syfon/internal/config"
+	"github.com/calypr/syfon/internal/version"
+)
+
+func TestRetryProductionSchemaCheckOnlyRetriesTransientSchemaState(t *testing.T) {
+	for _, message := range []string{
+		"failed to ping database: connection refused",
+		"schema migration ledger is missing; run the cluster DB-init Job",
+		"required schema relation \"drs_object\" is missing",
+		"database schema is behind supported version 2",
+	} {
+		if !retryProductionSchemaCheck(errors.New(message)) {
+			t.Fatalf("retryProductionSchemaCheck(%q) = false, want true", message)
+		}
 	}
+	for _, message := range []string{
+		"database schema migration version 3 is newer than this binary",
+		"schema migration 1 checksum or name mismatch",
+		"schema migration ledger has a gap before version 2",
+	} {
+		if retryProductionSchemaCheck(errors.New(message)) {
+			t.Fatalf("retryProductionSchemaCheck(%q) = true, want false", message)
+		}
+	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			info := serviceInfoForBackend(tt.sqlite)
-			if info.Id != "drs-service-calypr" || info.Name != "Calypr DRS Server" || info.Version != "1.0.0" {
-				t.Fatalf("unexpected service identity: %+v", info)
-			}
-			if info.Type.Group != "org.ga4gh" || info.Type.Artifact != "drs" || info.Type.Version != "1.2.0" {
-				t.Fatalf("unexpected service type: %+v", info.Type)
-			}
-			if info.Description == nil || *info.Description != tt.description {
-				t.Fatalf("description = %v, want %q", info.Description, tt.description)
-			}
-			if info.Environment == nil || *info.Environment != "prod" {
-				t.Fatalf("environment = %v, want prod", info.Environment)
-			}
-			if info.CreatedAt == nil || info.UpdatedAt == nil {
-				t.Fatalf("timestamps must be populated: %+v", info)
-			}
-		})
+func TestServiceInfoUsesLinkerProvidedVersion(t *testing.T) {
+	original := version.Version
+	t.Cleanup(func() { version.Version = original })
+	version.Version = "v9.8.7-test"
+
+	info := serviceInfoForConfig(testServiceInfoConfig())
+	if info.Version != "v9.8.7-test" {
+		t.Fatalf("service version = %q, want linker-provided version", info.Version)
+	}
+	if info.Type.Version != "1.5.0" {
+		t.Fatalf("DRS type version = %q, want 1.5.0", info.Type.Version)
+	}
+}
+
+func testServiceInfoConfig() *config.Config {
+	return &config.Config{
+		Profile: config.ProfileDevelopment,
+		Service: config.ServiceConfig{
+			ID:              "drs-service-calypr",
+			Name:            "Calypr DRS Server",
+			Description:     "Calypr-backed DRS server",
+			Environment:     "dev",
+			Organization:    "Calypr",
+			OrganizationURL: "https://github.com/calypr/syfon",
+		},
+		DRS:    config.DRSConfig{MaxBulkRequestLength: 100},
+		Routes: config.RoutesConfig{Ga4gh: true},
+	}
+}
+
+func TestServiceInfoForConfigUsesCompositeIdentityAndAdvertisedLimit(t *testing.T) {
+	cfg := &config.Config{
+		Profile: config.ProfileProduction,
+		Service: config.ServiceConfig{
+			ID:               "org.example.drs",
+			Name:             "Example DRS",
+			Description:      "Example service",
+			Environment:      "prod",
+			Organization:     "Example Org",
+			OrganizationURL:  "https://example.org",
+			ContactURL:       "https://example.org/contact",
+			DocumentationURL: "https://example.org/docs",
+		},
+		DRS:    config.DRSConfig{MaxBulkRequestLength: 7},
+		Routes: config.RoutesConfig{Ga4gh: true},
+	}
+	info := serviceInfoForConfig(cfg)
+	if info.Id != "org.example.drs" || info.Type.Version != "1.5.0" || info.MaxBulkRequestLength != 7 {
+		t.Fatalf("unexpected service identity: %+v", info)
+	}
+	if info.Organization.Name != "Example Org" || info.Organization.Url != "https://example.org" {
+		t.Fatalf("unexpected organization: %+v", info.Organization)
+	}
+	if info.Drs == nil || info.Drs.MaxBulkRequestLength != 7 || info.Drs.ObjectRegistrationSupported == nil || !*info.Drs.ObjectRegistrationSupported {
+		t.Fatalf("unexpected DRS capabilities: %+v", info.Drs)
+	}
+	if info.Drs.ObjectCount != nil || info.Drs.TotalObjectSize != nil {
+		t.Fatal("service info fabricated object counts")
 	}
 }

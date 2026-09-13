@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	clientaccess "github.com/calypr/syfon/client/access"
 	"github.com/calypr/syfon/internal/access"
 	"github.com/calypr/syfon/internal/storage/address"
 )
@@ -14,8 +15,7 @@ import (
 const readMethod = "read"
 
 // ListVisibleBuckets assembles configured credentials, explicit scopes, and
-// object-derived rows. The optional query wins; the fallback is used only when
-// that optimization is absent.
+// object-derived rows supplied by persistence.
 func (s *Service) ListVisibleBuckets(ctx context.Context) (map[string]VisibleBucket, error) {
 	creds, err := s.ListS3Credentials(ctx)
 	if err != nil {
@@ -25,25 +25,15 @@ func (s *Service) ListVisibleBuckets(ctx context.Context) (map[string]VisibleBuc
 		return map[string]VisibleBucket{}, nil
 	}
 
-	var rows []VisibilityRow
-	filterExplicitScopes := access.IsAuthzEnforced(ctx)
-	if s.visibility != nil {
-		restrictToResources := access.IsAuthzEnforced(ctx) &&
-			!access.HasMethodAccess(ctx, readMethod, []string{"/programs"}) &&
-			!access.HasMethodAccess(ctx, readMethod, []string{"/data_file"})
-		filterExplicitScopes = restrictToResources
-		rows, err = s.visibility.ListBucketVisibilityRows(ctx, access.AuthorizedResources(ctx, readMethod), true, restrictToResources)
-	} else {
-		if s.fallback == nil {
-			return nil, errMissingVisibilitySource
-		}
-		rows, err = s.fallback(ctx)
-	}
+	restrictToResources := access.IsAuthzEnforced(ctx) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/programs"}) &&
+		!access.HasMethodAccess(ctx, readMethod, []string{"/data_file"})
+	rows, err := s.visibility.ListBucketVisibilityRows(ctx, access.AuthorizedResources(ctx, readMethod), true, restrictToResources)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.mergeVisibleRows(ctx, creds, rows, filterExplicitScopes)
+	return s.mergeVisibleRows(ctx, creds, rows, restrictToResources)
 }
 
 func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows []VisibilityRow, filterExplicitScopes bool) (map[string]VisibleBucket, error) {
@@ -66,7 +56,7 @@ func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows
 		if !exists {
 			continue
 		}
-		resource, resourceErr := access.ResourcePath(scope.Organization, scope.ProjectID)
+		resource, resourceErr := clientaccess.ResourcePath(scope.Organization, scope.ProjectID)
 		if resourceErr != nil || strings.TrimSpace(resource) == "" {
 			continue
 		}
@@ -107,23 +97,14 @@ func (s *Service) mergeVisibleRows(ctx context.Context, creds []Credential, rows
 	}
 
 	for credentialID, entry := range byCredential {
+		if filterExplicitScopes && len(entry.Programs) == 0 {
+			delete(byCredential, credentialID)
+			continue
+		}
 		sort.Strings(entry.Programs)
 		byCredential[credentialID] = entry
 	}
 	return byCredential, nil
-}
-
-// VisibleToCaller reports whether a caller's bucket or credential aliases are
-// represented in a visible bucket map.
-func VisibleToCaller(visible map[string]VisibleBucket, bucket, credentialID string) bool {
-	for key, entry := range visible {
-		if strings.EqualFold(strings.TrimSpace(entry.Credential.Bucket), bucket) ||
-			strings.EqualFold(strings.TrimSpace(key), credentialID) ||
-			strings.EqualFold(strings.TrimSpace(entry.Credential.CredentialID), credentialID) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) credentialIDForVisibilityRow(row VisibilityRow, creds []Credential) (string, bool) {

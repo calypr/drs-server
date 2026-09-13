@@ -9,7 +9,7 @@ import (
 )
 
 func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
-	db, err := NewSqliteDB(":memory:")
+	db, err := NewSqliteDB(":memory:", nil)
 	if err != nil {
 		t.Fatalf("failed to create db: %v", err)
 	}
@@ -32,19 +32,19 @@ func TestSqliteDB_RetainsEmptyScopeEventsOutsideProjectReports(t *testing.T) {
 		t.Fatalf("RecordTransferAttributionEvents failed: %v", err)
 	}
 
-	all, err := db.GetTransferAttributionSummary(ctx, usage.Filter{})
+	all, err := db.QueryTransferSummary(ctx, usage.Filter{}, nil)
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummary failed: %v", err)
 	}
-	if all.EventCount != 1 || all.BytesDownloaded != 42 {
+	if sqliteTestInt64Val(all.EventCount) != 1 || sqliteTestInt64Val(all.BytesDownloaded) != 42 {
 		t.Fatalf("empty-scope event was not retained: %+v", all)
 	}
 
-	project, err := db.GetTransferAttributionSummaryByResources(ctx, usage.Filter{}, []string{"/organization/org/project/project"})
+	project, err := db.QueryTransferSummary(ctx, usage.Filter{}, []string{"/organization/org/project/project"})
 	if err != nil {
 		t.Fatalf("GetTransferAttributionSummaryByResources failed: %v", err)
 	}
-	if project.EventCount != 0 || project.BytesDownloaded != 0 {
+	if sqliteTestInt64Val(project.EventCount) != 0 || sqliteTestInt64Val(project.BytesDownloaded) != 0 {
 		t.Fatalf("empty-scope event entered project report: %+v", project)
 	}
 }

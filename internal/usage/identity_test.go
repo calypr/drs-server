@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,6 +27,20 @@ func TestGrantIDUsesCanonicalFields(t *testing.T) {
 	event.StorageURL = "s3://bucket/other"
 	if got := GrantID(event); got == want {
 		t.Fatal("storage URL did not change grant ID")
+	}
+}
+
+func TestAttributionIDsCanonicalizeSHA256(t *testing.T) {
+	canonical := strings.Repeat("a", 64)
+	base := Event{EventType: TransferEventAccessIssued, RequestID: "request", SHA256: canonical}
+	legacyForm := base
+	legacyForm.SHA256 = " SHA256:" + strings.ToUpper(canonical) + " "
+
+	if GrantID(base) != GrantID(legacyForm) {
+		t.Fatal("equivalent SHA forms produced different grant IDs")
+	}
+	if EventID(base) != EventID(legacyForm) {
+		t.Fatal("equivalent SHA forms produced different event IDs")
 	}
 }
 

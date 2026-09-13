@@ -41,7 +41,7 @@ To use another DRS OpenAPI file, pass an absolute or repository-relative path:
 make gen OPENAPI=/path/to/data_repository_service.openapi.yaml
 ```
 
-The command bundles the DRS document into `apigen/openapi/openapi.yaml`, then writes combined client and Fiber server bindings under `apigen/{drs,lfsapi,bucketapi,metricsapi,internalapi}`. Each API uses one `oapi-codegen` config with models, client, Fiber server, and strict-server generation enabled. The services reference `apigen/openapi/error.openapi.yaml`, which generates the shared wire model in `apigen/errorapi`.
+The command bundles the DRS document into `apigen/openapi/openapi.yaml`, then writes combined client and Fiber v3 server bindings under `apigen/{drs,lfsapi,bucketapi,metricsapi,internalapi}`. Each API uses one `oapi-codegen` v2.8.0 config with models, client, native Fiber v3 server, and strict-server generation enabled. The services reference `apigen/openapi/error.openapi.yaml`, which generates the shared wire model in `apigen/errorapi`.
 
 Do not edit generated files by hand. Change an OpenAPI input or generator config, run `make gen`, and commit the input and generated output together.
 
@@ -51,7 +51,7 @@ Do not edit generated files by hand. Change an OpenAPI input or generator config
 | --- | --- | --- |
 | DRS endpoint or model | The schema submodule or the DRS overlay | `make gen` |
 | LFS, bucket, metrics, or internal shape | The matching file under `apigen/openapi` | `make gen` |
-| Generated naming or server template | The matching file under `apigen/codegen` or `apigen/templates` | `make gen` |
+| Generated naming or server template | The matching file under `apigen/codegen` | `make gen` |
 | Runtime route, middleware, or handler behavior | `internal/httpapi`, `internal/access`, or the owning domain package | No generation unless the contract also changes |
 
 When an operation changes its request or response shape, update the OpenAPI document first. When only runtime behavior changes, keep the generated contract unchanged.

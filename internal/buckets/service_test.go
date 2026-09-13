@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/calypr/syfon/apigen/errorapi"
+	"github.com/calypr/syfon/internal/access"
 )
 
 func TestNewServiceRequiresTheCompletePolicyGraph(t *testing.T) {
@@ -28,7 +29,7 @@ func TestNewServiceRequiresTheCompletePolicyGraph(t *testing.T) {
 		{name: "credential reader", deps: Dependencies{CredentialAdmin: credentialStore, Scopes: scopeStore, Visibility: visibility}, wantErr: "credential reader"},
 		{name: "credential admin", deps: Dependencies{Credentials: credentialStore, Scopes: scopeStore, Visibility: visibility}, wantErr: "credential admin"},
 		{name: "scope store", deps: Dependencies{Credentials: credentialStore, CredentialAdmin: credentialStore, Visibility: visibility}, wantErr: "scope store"},
-		{name: "visibility source", deps: Dependencies{Credentials: credentialStore, CredentialAdmin: credentialStore, Scopes: scopeStore}, wantErr: "visibility query or fallback"},
+		{name: "visibility source", deps: Dependencies{Credentials: credentialStore, CredentialAdmin: credentialStore, Scopes: scopeStore}, wantErr: "visibility query"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -43,45 +44,15 @@ func TestNewServiceRequiresTheCompletePolicyGraph(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("valid NewService()=(%v,%v)", service, err)
 	}
-	service, err = NewService(Dependencies{
-		Credentials:     credentialStore,
-		CredentialAdmin: credentialStore,
-		Scopes:          scopeStore,
-		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
-	}, nil)
-	if err != nil || service == nil {
-		t.Fatalf("fallback-only NewService()=(%v,%v)", service, err)
-	}
 }
 
 func TestNewServiceNilInvalidatorIsSafe(t *testing.T) {
-	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
+	service, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
 	if service == nil || service.signerCacheInvalidator != nil {
 		t.Fatalf("nil invalidator should be retained as a no-op, service=%v invalidator=%v", service, service.signerCacheInvalidator)
 	}
 	if err := service.SaveS3Credential(context.Background(), &Credential{Bucket: "bucket-a"}); err != nil {
 		t.Fatalf("SaveS3Credential with nil invalidator: %v", err)
-	}
-}
-
-func TestServiceDelegatesCredentialAndScopeReads(t *testing.T) {
-	credential := Credential{CredentialID: "id-a", Bucket: "bucket-a"}
-	service, credentials, scopes := newFakeService([]Credential{credential}, []Scope{{Organization: "org", ProjectID: "project"}}, &fakeVisibilityQuery{}, nil, nil)
-
-	gotCredentials, err := service.ListS3Credentials(context.Background())
-	if err != nil || len(gotCredentials) != 1 || gotCredentials[0] != credential {
-		t.Fatalf("ListS3Credentials()=(%v,%v)", gotCredentials, err)
-	}
-	gotCredential, err := service.GetS3Credential(context.Background(), "id-a")
-	if err != nil || gotCredential == nil || gotCredential.Bucket != "bucket-a" {
-		t.Fatalf("GetS3Credential()=(%v,%v)", gotCredential, err)
-	}
-	gotScopes, err := service.ListBucketScopes(context.Background())
-	if err != nil || len(gotScopes) != 1 {
-		t.Fatalf("ListBucketScopes()=(%v,%v)", gotScopes, err)
-	}
-	if credentials.listCalls != 1 || credentials.getCalls != 1 || scopes.listCalls != 1 {
-		t.Fatalf("unexpected delegation counts: credentials list=%d get=%d scopes list=%d", credentials.listCalls, credentials.getCalls, scopes.listCalls)
 	}
 }
 
@@ -97,7 +68,7 @@ func TestGetS3CredentialFallsBackToCaseInsensitiveAliases(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			service, credentials, _ := newFakeService([]Credential{tc.credential}, nil, &fakeVisibilityQuery{}, nil, nil)
+			service, credentials, _ := newFakeService([]Credential{tc.credential}, nil, &fakeVisibilityQuery{}, nil)
 
 			got, err := service.GetS3Credential(context.Background(), tc.requested)
 			if err != nil || got == nil || *got != tc.credential {
@@ -112,7 +83,7 @@ func TestGetS3CredentialFallsBackToCaseInsensitiveAliases(t *testing.T) {
 
 func TestGetS3CredentialPreservesExactSuccessAndAbsentError(t *testing.T) {
 	credential := Credential{CredentialID: "id-a", Bucket: "bucket-a"}
-	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil, nil)
+	service, credentials, _ := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil)
 
 	got, err := service.GetS3Credential(context.Background(), "id-a")
 	if err != nil || got == nil || *got != credential {
@@ -135,7 +106,7 @@ func TestGetS3CredentialReturnsMeaningfulListErrorAfterExactMiss(t *testing.T) {
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          &fakeScopeStore{},
-		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
+		Visibility:      &fakeVisibilityQuery{},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -157,7 +128,7 @@ func TestGetS3CredentialDoesNotTreatLegacyTextAsMissing(t *testing.T) {
 		Credentials:     credentials,
 		CredentialAdmin: credentials,
 		Scopes:          &fakeScopeStore{},
-		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
+		Visibility:      &fakeVisibilityQuery{},
 	}, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -172,54 +143,117 @@ func TestGetS3CredentialDoesNotTreatLegacyTextAsMissing(t *testing.T) {
 	}
 }
 
-func TestResolveBucketPreservesRepositoryOrderAndPhysicalMatching(t *testing.T) {
-	first := Credential{CredentialID: "id-first", Bucket: "first-bucket"}
-	second := Credential{CredentialID: "id-second", Bucket: "second-bucket"}
-	service, _, _ := newFakeService([]Credential{first, second}, nil, &fakeVisibilityQuery{}, nil, nil)
-
-	for _, tc := range []struct {
-		name      string
-		requested string
-		want      string
-	}{
-		{name: "empty uses first repository result", requested: "", want: "first-bucket"},
-		{name: "physical bucket", requested: "second-bucket", want: "second-bucket"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := service.ResolveBucket(context.Background(), tc.requested)
-			if err != nil || got != tc.want {
-				t.Fatalf("ResolveBucket(%q)=(%q,%v), want %q", tc.requested, got, err, tc.want)
-			}
-		})
+func TestPutPreservesCredentialReuseAndScopeBeforeCredentialOrder(t *testing.T) {
+	credential := Credential{
+		CredentialID: "credential-id",
+		Bucket:       "physical-bucket",
+		Provider:     "file",
+		Endpoint:     "/old-root",
 	}
-	if _, err := service.ResolveBucket(context.Background(), "id-second"); err == nil {
-		t.Fatal("ResolveBucket should match physical bucket names, not credential IDs")
+	service, credentials, scopes := newFakeService([]Credential{credential}, nil, &fakeVisibilityQuery{}, nil)
+	path := "s3://physical-bucket/project"
+	if err := service.Put(context.Background(), PutRequest{
+		Bucket:       "physical-bucket",
+		Organization: "org",
+		ProjectID:    "project",
+		Path:         &path,
+	}); err != nil {
+		t.Fatalf("Put scope-only update: %v", err)
 	}
-}
-
-func TestResolveBucketReportsEmptyAndUnknownBuckets(t *testing.T) {
-	empty, _, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil, nil)
-	if _, err := empty.ResolveBucket(context.Background(), ""); err == nil {
-		t.Fatal("empty repository should return an error")
+	if credentials.saveCalls != 0 {
+		t.Fatalf("scope-only update saved credential %d times", credentials.saveCalls)
 	}
-	service, _, _ := newFakeService([]Credential{{Bucket: "bucket-a"}}, nil, &fakeVisibilityQuery{}, nil, nil)
-	if _, err := service.ResolveBucket(context.Background(), "missing"); err == nil {
-		t.Fatal("unknown bucket should return an error")
+	if scopes.createCalls != 1 || scopes.lastCreated == nil {
+		t.Fatalf("scope-only update created scope calls=%d scope=%+v", scopes.createCalls, scopes.lastCreated)
+	}
+	if got := *scopes.lastCreated; got.CredentialID != credential.CredentialID || got.Bucket != credential.Bucket || got.PathPrefix != "project" {
+		t.Fatalf("scope-only scope=%+v, want credential reuse and normalized path", got)
 	}
 }
 
-func TestResolveBucketPropagatesRepositoryErrors(t *testing.T) {
-	credentialStore := &fakeCredentialStore{listErr: errors.New("database unavailable")}
-	service, err := NewService(Dependencies{
-		Credentials:     credentialStore,
-		CredentialAdmin: credentialStore,
-		Scopes:          &fakeScopeStore{},
-		Fallback:        func(context.Context) ([]VisibilityRow, error) { return nil, nil },
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
+func TestPutDerivesIdentityInheritsFieldsAndDoesNotSaveAfterScopeFailure(t *testing.T) {
+	service, credentials, _ := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
+	provider := "file"
+	endpoint := "/file-root"
+	if err := service.Put(context.Background(), PutRequest{Bucket: "new-bucket", Provider: &provider, Endpoint: &endpoint}); err != nil {
+		t.Fatalf("Put new credential: %v", err)
 	}
-	if _, err := service.ResolveBucket(context.Background(), ""); !errors.Is(err, credentialStore.listErr) {
-		t.Fatalf("ResolveBucket error=%v, want %v", err, credentialStore.listErr)
+	if credentials.lastSaved == nil {
+		t.Fatal("new credential was not saved")
+	}
+	wantID := DeriveCredentialID("new-bucket", "file", "", endpoint, "")
+	if credentials.lastSaved.CredentialID != wantID || credentials.lastSaved.Endpoint != endpoint {
+		t.Fatalf("saved credential=%+v, want derived ID %q and endpoint %q", *credentials.lastSaved, wantID, endpoint)
+	}
+
+	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
+	scopes.createErr = errors.New("scope write failed")
+	if err := service.Put(context.Background(), PutRequest{Bucket: "blocked-bucket", Provider: &provider, Endpoint: &endpoint, Organization: "org"}); !errors.Is(err, scopes.createErr) {
+		t.Fatalf("Put scope error=%v, want %v", err, scopes.createErr)
+	}
+	if credentials.saveCalls != 0 {
+		t.Fatalf("scope failure saved credential %d times", credentials.saveCalls)
+	}
+
+	service, credentials, _ = newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
+	provider = "s3"
+	if err := service.Put(context.Background(), PutRequest{Bucket: "s3-bucket", Provider: &provider}); err == nil {
+		t.Fatal("S3 credential without secrets unexpectedly succeeded")
+	}
+	if credentials.saveCalls != 0 {
+		t.Fatalf("invalid S3 credential saved %d times", credentials.saveCalls)
+	}
+}
+
+func TestPutDoesNotLeaveScopeWhenAtomicCredentialWriteFails(t *testing.T) {
+	saveErr := errors.New("credential write failed")
+	service, credentials, scopes := newFakeService(nil, nil, &fakeVisibilityQuery{}, nil)
+	credentials.saveErr = saveErr
+	provider := "file"
+	endpoint := t.TempDir()
+	err := service.Put(context.Background(), PutRequest{
+		Bucket:       "bucket-a",
+		Organization: "org",
+		Provider:     &provider,
+		Endpoint:     &endpoint,
+	})
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("Put error=%v, want %v", err, saveErr)
+	}
+	if len(scopes.scopes) != 0 {
+		t.Fatalf("failed atomic put left scopes=%+v", scopes.scopes)
+	}
+}
+
+func TestDeleteBucketAuthorizesMatchingPhysicalScope(t *testing.T) {
+	service, credentials, _ := newFakeService(
+		[]Credential{{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+		[]Scope{{Organization: "org", ProjectID: "project", Bucket: "physical-bucket"}},
+		&fakeVisibilityQuery{}, nil,
+	)
+	session := access.NewSession("gen3")
+	session.AuthHeaderPresent = true
+	session.SetAuthorizations(nil, map[string]map[string]bool{
+		"/organization/org/project/project": {"delete": true},
+	}, true)
+	ctx := access.WithSession(context.Background(), session)
+
+	if err := service.DeleteBucket(ctx, "physical-bucket"); err != nil {
+		t.Fatalf("DeleteBucket() error = %v", err)
+	}
+	if credentials.deleteCalls != 1 || credentials.lastDeleted != "physical-bucket" {
+		t.Fatalf("delete calls=%d bucket=%q, want one physical-bucket deletion", credentials.deleteCalls, credentials.lastDeleted)
+	}
+
+	service, credentials, _ = newFakeService(
+		[]Credential{{CredentialID: "credential-id", Bucket: "physical-bucket"}},
+		[]Scope{{Organization: "org", ProjectID: "project", Bucket: "physical-bucket"}},
+		&fakeVisibilityQuery{}, nil,
+	)
+	if err := service.DeleteBucket(ctx, "other-bucket"); !errors.Is(err, errorapi.ErrAccessDenied) {
+		t.Fatalf("DeleteBucket() error = %v, want access denied", err)
+	}
+	if credentials.deleteCalls != 0 {
+		t.Fatalf("unauthorized delete called credential store %d times", credentials.deleteCalls)
 	}
 }

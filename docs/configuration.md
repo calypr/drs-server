@@ -99,7 +99,11 @@ database:
     sslmode: require
 ```
 
-The fields map to `DRS_DB_HOST`, `DRS_DB_PORT`, `DRS_DB_USER`, `DRS_DB_PASSWORD`, `DRS_DB_DATABASE`, and `DRS_DB_SSLMODE`. Supplying `DRS_DB_HOST` or `DRS_DB_DATABASE` selects PostgreSQL when the file does not already define it. `auth.mode: gen3` requires PostgreSQL unless Gen3 mock auth is enabled.
+The fields map to `DRS_DB_HOST`, `DRS_DB_PORT`, `DRS_DB_USER`, `DRS_DB_PASSWORD`, `DRS_DB_DATABASE`, and `DRS_DB_SSLMODE`.
+
+`DRS_DB_HOST` or `DRS_DB_DATABASE` selects PostgreSQL when the file does not already define a backend. If no backend is selected, setting `DRS_DB_PORT`, `DRS_DB_USER`, `DRS_DB_PASSWORD`, or `DRS_DB_SSLMODE` alone returns an error. Set `DRS_DB_HOST` or `DRS_DB_DATABASE` to select PostgreSQL first.
+
+When SQLite is selected, non-selector PostgreSQL variables are ignored. This keeps shared process environments compatible. `auth.mode: gen3` requires PostgreSQL unless Gen3 mock auth is enabled.
 
 ## `auth`
 

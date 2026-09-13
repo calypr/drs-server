@@ -74,8 +74,3 @@ func (man *Manager) IsCredentialValid(profileConfig *Credential) (bool, error) {
 
 	return true, nil
 }
-
-func (man *Manager) IsValid(profileConfig *Credential) (bool, error) {
-	// Maintain backward compatibility by checking APIKey as before, but using the new helper
-	return man.IsTokenValid(profileConfig.APIKey)
-}

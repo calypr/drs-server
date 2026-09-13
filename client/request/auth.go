@@ -1,6 +1,7 @@
 package request
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,7 @@ type AuthMode string
 const (
 	AuthModeBasic  AuthMode = "basic"
 	AuthModeBearer AuthMode = "bearer"
+	SkipAuthHeader          = "X-Skip-Auth"
 )
 
 type accessTokenResponse struct {
@@ -29,6 +31,12 @@ type authRequestContextKey struct{}
 type authRequestContext struct {
 	skipAuth     bool
 	explicitAuth bool
+}
+
+func SkipAuth(req *http.Request) {
+	if req != nil {
+		req.Header.Set(SkipAuthHeader, "true")
+	}
 }
 
 func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
@@ -52,14 +60,13 @@ func (t *AuthTransport) NewAccessToken(ctx context.Context) error {
 	}
 
 	refreshClient := &http.Client{Transport: t.Base}
-	payload := map[string]string{"api_key": apiKey}
-	reader, err := common.ToJSONReader(payload)
+	payload, err := json.Marshal(map[string]string{"api_key": apiKey})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode token refresh request: %w", err)
 	}
 
 	refreshUrl := strings.TrimRight(apiEndpoint, "/") + common.DataAccessTokenEndpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refreshUrl, reader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refreshUrl, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
@@ -115,9 +122,9 @@ type AuthTransport struct {
 }
 
 func (t *AuthTransport) apply(req *http.Request) {
-	skipAuth := req.Header.Get("X-Skip-Auth") == "true"
+	skipAuth := req.Header.Get(SkipAuthHeader) == "true"
 	if skipAuth {
-		req.Header.Del("X-Skip-Auth")
+		req.Header.Del(SkipAuthHeader)
 		return
 	}
 	if req.Header.Get("Authorization") != "" {
@@ -148,7 +155,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	clone := req.Clone(req.Context())
 	clone = clone.WithContext(context.WithValue(clone.Context(), authRequestContextKey{}, authRequestContext{
-		skipAuth:     req.Header.Get("X-Skip-Auth") == "true",
+		skipAuth:     req.Header.Get(SkipAuthHeader) == "true",
 		explicitAuth: req.Header.Get("Authorization") != "",
 	}))
 	t.apply(clone)

@@ -2,58 +2,16 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	bucketapi "github.com/calypr/syfon/apigen/bucketapi"
 	lfsapi "github.com/calypr/syfon/apigen/lfsapi"
 	metricsapi "github.com/calypr/syfon/apigen/metricsapi"
-	"github.com/calypr/syfon/client/request"
 )
-
-type fakeRequester struct {
-	method       string
-	path         string
-	body         any
-	err          error
-	responseJSON []byte
-	builder      request.RequestBuilder
-}
-
-func (f *fakeRequester) Do(ctx context.Context, method, path string, body, out any, opts ...request.RequestOption) error {
-	f.method = method
-	f.path = path
-	f.body = body
-	f.builder = request.RequestBuilder{Method: method, Url: path, Headers: map[string]string{}}
-	for _, opt := range opts {
-		opt(&f.builder)
-	}
-	if outResp, ok := out.(**http.Response); ok {
-		resp := &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader("")),
-			Header:     make(http.Header),
-		}
-		*outResp = resp
-		return f.err
-	}
-	if err := f.decodeInto(out); err != nil {
-		return err
-	}
-	return f.err
-}
-
-func (f *fakeRequester) decodeInto(out any) error {
-	if out == nil || len(f.responseJSON) == 0 {
-		return nil
-	}
-	return json.Unmarshal(f.responseJSON, out)
-}
 
 type fakeBucketClient struct {
 	listResp          *bucketapi.ListBucketsResp
@@ -236,19 +194,6 @@ func (f *fakeLFSClient) LfsVerifyWithApplicationVndGitLfsPlusJSONBodyWithRespons
 	copy := body
 	f.verifyReq = &copy
 	return f.verifyResp, f.verifyErr
-}
-
-func TestHealthServicePing(t *testing.T) {
-	t.Parallel()
-
-	fake := &fakeRequester{}
-	service := NewHealthService(fake)
-	if err := service.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping returned error: %v", err)
-	}
-	if fake.method != http.MethodGet || fake.path != "/healthz" {
-		t.Fatalf("unexpected request: %s %s", fake.method, fake.path)
-	}
 }
 
 func TestBucketsService(t *testing.T) {
@@ -496,19 +441,14 @@ func TestMetricsService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("TransferSummary returned error: %v", err)
 		}
-		if got.EventCount != eventCount || got.AccessIssuedCount != accessIssuedCount || got.DownloadEventCount != downloadEventCount || got.UploadEventCount != uploadEventCount || got.BytesRequested != bytesRequested || got.BytesDownloaded != bytesDownloaded || got.BytesUploaded != bytesUploaded {
+		if got.EventCount == nil || *got.EventCount != eventCount || got.AccessIssuedCount == nil || *got.AccessIssuedCount != accessIssuedCount || got.DownloadEventCount == nil || *got.DownloadEventCount != downloadEventCount || got.UploadEventCount == nil || *got.UploadEventCount != uploadEventCount || got.BytesRequested == nil || *got.BytesRequested != bytesRequested || got.BytesDownloaded == nil || *got.BytesDownloaded != bytesDownloaded || got.BytesUploaded == nil || *got.BytesUploaded != bytesUploaded {
 			t.Fatalf("unexpected transfer summary: %+v", got)
 		}
-		if got.Freshness == nil || !got.Freshness.IsStale || len(got.Freshness.MissingBuckets) != 1 || got.Freshness.MissingBuckets[0] != missingBuckets[0] || !got.Freshness.LatestCompletedSync.Equal(latest) || !got.Freshness.RequiredFrom.Equal(requiredFrom) || !got.Freshness.RequiredTo.Equal(requiredTo) {
+		if got.Freshness == nil || got.Freshness.IsStale == nil || !*got.Freshness.IsStale || got.Freshness.MissingBuckets == nil || len(*got.Freshness.MissingBuckets) != 1 || (*got.Freshness.MissingBuckets)[0] != missingBuckets[0] || got.Freshness.LatestCompletedSync == nil || !got.Freshness.LatestCompletedSync.Equal(latest) || got.Freshness.RequiredFrom == nil || !got.Freshness.RequiredFrom.Equal(requiredFrom) || got.Freshness.RequiredTo == nil || !got.Freshness.RequiredTo.Equal(requiredTo) {
 			t.Fatalf("unexpected transfer freshness: %+v", got.Freshness)
 		}
 		if fake.transferSummaryParams == nil || string(*fake.transferSummaryParams.Organization) != "org" || string(*fake.transferSummaryParams.Project) != "project" || string(*fake.transferSummaryParams.Direction) != "download" || string(*fake.transferSummaryParams.ReconciliationStatus) != "matched" || !fake.transferSummaryParams.From.Equal(requiredFrom) || !fake.transferSummaryParams.To.Equal(requiredTo) || string(*fake.transferSummaryParams.Provider) != "provider-a" || string(*fake.transferSummaryParams.Bucket) != "bucket-a" || string(*fake.transferSummaryParams.Sha256) != "sha256" || string(*fake.transferSummaryParams.User) != "user@example.com" || !*fake.transferSummaryParams.AllowStale {
 			t.Fatalf("unexpected transfer summary params: %+v", fake.transferSummaryParams)
-		}
-
-		missingBuckets[0] = "changed"
-		if got.Freshness.MissingBuckets[0] != "provider-a" {
-			t.Fatalf("mapping retained generated slice alias: %+v", got.Freshness.MissingBuckets)
 		}
 	})
 
@@ -538,15 +478,15 @@ func TestMetricsService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("TransferBreakdown returned error: %v", err)
 		}
-		if got.GroupBy != "provider" || len(got.Data) != 2 {
+		if got.GroupBy == nil || string(*got.GroupBy) != "provider" || got.Data == nil || len(*got.Data) != 2 {
 			t.Fatalf("unexpected transfer breakdown: %+v", got)
 		}
-		row := got.Data[0]
-		if row.Key != key || row.Organization != organization || row.Provider != provider || row.EventCount != eventCount || row.BytesRequested != bytesRequested || row.BytesDownloaded != bytesDownloaded || row.BytesUploaded != bytesUploaded || !row.LastTransferTime.Equal(lastTransfer) {
+		row := (*got.Data)[0]
+		if row.Key == nil || *row.Key != key || row.Organization == nil || *row.Organization != organization || row.Provider == nil || *row.Provider != provider || row.EventCount == nil || *row.EventCount != eventCount || row.BytesRequested == nil || *row.BytesRequested != bytesRequested || row.BytesDownloaded == nil || *row.BytesDownloaded != bytesDownloaded || row.BytesUploaded == nil || *row.BytesUploaded != bytesUploaded || row.LastTransferTime == nil || !row.LastTransferTime.Equal(lastTransfer) {
 			t.Fatalf("unexpected transfer breakdown row: %+v", row)
 		}
-		if got.Data[1] != (TransferAttributionBreakdown{}) {
-			t.Fatalf("nil generated fields should map to zero DTO fields: %+v", got.Data[1])
+		if (*got.Data)[1] != (metricsapi.TransferAttributionBreakdown{}) {
+			t.Fatalf("unexpected empty generated row: %+v", (*got.Data)[1])
 		}
 		if fake.transferBreakdownParams == nil || fake.transferBreakdownParams.GroupBy == nil || string(*fake.transferBreakdownParams.GroupBy) != "provider" {
 			t.Fatalf("unexpected transfer breakdown params: %+v", fake.transferBreakdownParams)
@@ -612,6 +552,29 @@ func TestLFSService(t *testing.T) {
 		service = NewLFSService(&fakeLFSClient{verifyResp: &lfsapi.LfsVerifyResponse{HTTPResponse: &http.Response{StatusCode: http.StatusForbidden}}})
 		if err := service.Verify(context.Background(), "oid-1", 123); err == nil {
 			t.Fatal("expected verify failure")
+		}
+	})
+}
+
+func TestHealthService(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet || req.URL.Path != "/healthz" {
+				t.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
+		})}
+		if err := NewHealthService("https://example.test", client).Ping(context.Background()); err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("transport error", func(t *testing.T) {
+		client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("health check failed")
+		})}
+		if err := NewHealthService("https://example.test", client).Ping(context.Background()); err == nil {
+			t.Error("expected error, got nil")
 		}
 	})
 }

@@ -332,6 +332,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIError'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
         '500':
           description: Internal server error
           content:

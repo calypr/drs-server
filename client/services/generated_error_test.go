@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestGeneratedServicesPreserveMalformedErrorResponses(t *testing.T) {
 					return err
 				}},
 				{name: "index", call: func() error {
-					_, err := NewIndexService(internal, nil).Get(ctx, "missing")
+					_, err := NewIndexService(internal).Get(ctx, "missing")
 					return err
 				}},
 				{name: "buckets", call: func() error {
@@ -107,7 +108,7 @@ func TestGeneratedServicesPreserveMalformedErrorResponses(t *testing.T) {
 					return err
 				}},
 				{name: "drs", call: func() error {
-					_, err := NewDRSService(drsClient, nil).GetObject(ctx, "missing")
+					_, err := NewDRSService(drsClient).GetObject(ctx, "missing")
 					return err
 				}},
 				{name: "metrics", call: func() error {
@@ -141,5 +142,25 @@ func TestGeneratedServicesPreserveMalformedErrorResponses(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestAPIResponseErrorReturnsTypedContract(t *testing.T) {
+	req := &http.Request{Method: http.MethodGet, URL: &url.URL{Scheme: "https", Host: "example.test", Path: "/objects/missing"}}
+	resp := &http.Response{
+		StatusCode: http.StatusNotFound,
+		Header:     http.Header{"X-Request-Id": []string{"request-123"}},
+		Request:    req,
+	}
+	err := apierror.FromResponse(resp, []byte(`{"code":"not_found","status":404,"message":"Resource not found","request_id":"request-123"}`))
+	var apiErr *apierror.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *apierror.APIError, got %T", err)
+	}
+	if !errors.Is(err, errorapi.ErrNotFound) {
+		t.Fatalf("expected not-found sentinel, got %v", err)
+	}
+	if apiErr.Code != "not_found" || apiErr.Status != http.StatusNotFound || apiErr.Message != "Resource not found" || apiErr.RequestID != "request-123" {
+		t.Fatalf("unexpected API error: %+v", apiErr)
 	}
 }

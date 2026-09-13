@@ -1,0 +1,359 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/buckets"
+	"github.com/calypr/syfon/internal/objects"
+	providerstorage "github.com/calypr/syfon/internal/storage"
+	"github.com/calypr/syfon/internal/storage/address"
+)
+
+type fakeRepairRecords struct {
+	pages    [][]drs.DrsObject
+	queries  []repairQuery
+	ids      []string
+	updates  []drs.DrsObject
+	failNext bool
+	collapse []string
+}
+
+type repairQuery struct {
+	organization string
+	project      string
+	method       string
+	start        string
+	limit        int
+	offset       int
+}
+
+func (f *fakeRepairRecords) ListObjects(_ context.Context, query objects.RecordListQuery) ([]drs.DrsObject, error) {
+	f.queries = append(f.queries, repairQuery{organization: query.Scope.Organization, project: query.Scope.Project, method: query.RequiredMethod, start: query.StartAfter, limit: query.Limit, offset: query.Page * query.Limit})
+	index := len(f.queries) - 1
+	if index >= len(f.pages) {
+		return nil, nil
+	}
+	return f.pages[index], nil
+}
+
+func (f *fakeRepairRecords) ListPhysicalObjectsByScope(context.Context, string, string, string) ([]drs.DrsObject, error) {
+	return nil, nil
+}
+
+func (f *fakeRepairRecords) UpdateObjectMetadata(_ context.Context, id string, record drs.DrsObject, _ objects.Scope, _ *int64) (drs.DrsObject, error) {
+	f.ids = append(f.ids, id)
+	f.updates = append(f.updates, record)
+	if f.failNext {
+		f.failNext = false
+		return drs.DrsObject{}, errors.New("write failed")
+	}
+	return record, nil
+}
+
+func (f *fakeRepairRecords) CollapseProjectChecksumDuplicates(_ context.Context, organization, project string) (int, error) {
+	f.collapse = append(f.collapse, strings.TrimSpace(organization)+"/"+strings.TrimSpace(project))
+	return 0, nil
+}
+
+type fakeRepairBuckets struct {
+	credentials []buckets.Credential
+	scopes      map[string][]buckets.Scope
+	scopeCalls  *int
+	scopeErr    error
+}
+
+func (f fakeRepairBuckets) ListS3Credentials(context.Context) ([]buckets.Credential, error) {
+	return f.credentials, nil
+}
+
+func (f fakeRepairBuckets) ListBucketScopes(context.Context) ([]buckets.Scope, error) {
+	if f.scopeCalls != nil {
+		(*f.scopeCalls)++
+	}
+	if f.scopeErr != nil {
+		return nil, f.scopeErr
+	}
+	var result []buckets.Scope
+	for _, scopes := range f.scopes {
+		result = append(result, scopes...)
+	}
+	return result, nil
+}
+
+func (fakeRepairBuckets) DeleteBucketScope(context.Context, string, string, string, string) error {
+	return nil
+}
+
+func (f fakeRepairBuckets) GetS3Credential(_ context.Context, bucket string) (*buckets.Credential, error) {
+	for _, credential := range f.credentials {
+		if strings.EqualFold(strings.TrimSpace(bucket), strings.TrimSpace(credential.Bucket)) || strings.EqualFold(strings.TrimSpace(bucket), strings.TrimSpace(credential.CredentialID)) {
+			copy := credential
+			return &copy, nil
+		}
+	}
+	return nil, errors.New("credential not found")
+}
+
+func (f fakeRepairBuckets) ListVisibleBuckets(context.Context) (map[string]buckets.VisibleBucket, error) {
+	visible := make(map[string]buckets.VisibleBucket, len(f.credentials))
+	for _, credential := range f.credentials {
+		visible[credential.Bucket] = buckets.VisibleBucket{Credential: credential}
+	}
+	return visible, nil
+}
+
+type fakeRepairProbe struct {
+	missing       map[string]bool
+	calls         []string
+	providerError error
+}
+
+func (f *fakeRepairProbe) Probe(_ context.Context, targets []providerstorage.ProbeTarget) []providerstorage.ProbeResult {
+	if len(targets) == 0 {
+		return nil
+	}
+	target := targets[0].Target
+	objectURL := address.BucketToURL(target.PhysicalBucket, target.Key)
+	f.calls = append(f.calls, objectURL)
+	if f.providerError != nil {
+		return []providerstorage.ProbeResult{{Target: target, Err: f.providerError}}
+	}
+	if f.missing[objectURL] {
+		return []providerstorage.ProbeResult{{Target: target, Err: &providerstorage.OperationError{Kind: providerstorage.ErrorNotFound, Provider: "s3"}}}
+	}
+	return []providerstorage.ProbeResult{{Target: target, Metadata: providerstorage.ObjectMetadata{Provider: "s3", Bucket: target.PhysicalBucket, Key: target.Key}}}
+}
+
+func repairBuckets() fakeRepairBuckets {
+	return fakeRepairBuckets{
+		credentials: []buckets.Credential{
+			{CredentialID: "s3-credential", Bucket: "repair-bucket", Provider: "s3"},
+			{CredentialID: "gcs-credential", Bucket: "ignored-bucket", Provider: "gcs"},
+		},
+		scopes: map[string][]buckets.Scope{
+			"repair-bucket":  {{Organization: "org", ProjectID: "project", Bucket: "repair-bucket", PathPrefix: "prefix"}},
+			"ignored-bucket": {{Organization: "org", ProjectID: "project", Bucket: "ignored-bucket", PathPrefix: "wrong"}},
+		},
+	}
+}
+
+func newRepairTestService(records RecordRepairer, buckets fakeRepairBuckets, probe ProbePort) *Service {
+	return NewService(Dependencies{
+		Records:      records,
+		Credentials:  buckets,
+		Visibility:   buckets,
+		ScopeCatalog: buckets,
+		Providers:    Providers{Probe: probe},
+	})
+}
+
+func repairRecord(id, sha, accessURL string) drs.DrsObject {
+	resource := "/programs/org/projects/project"
+	controlled := []string{resource}
+	methods := []drs.AccessMethod{{Type: "s3", AccessUrl: &drs.AccessURL{Url: accessURL}}}
+	name := "file.txt"
+	return drs.DrsObject{Id: id, Checksums: []drs.Checksum{{Type: "sha256", Checksum: sha}}, ControlledAccess: &controlled, AccessMethods: &methods, Name: &name}
+}
+
+func TestRepairScopeTargetsReadCatalogOnceForMultipleS3Credentials(t *testing.T) {
+	scopeCalls := 0
+	bucketPorts := repairBuckets()
+	bucketPorts.credentials = append(bucketPorts.credentials, buckets.Credential{CredentialID: "s3-credential-2", Bucket: "second-repair-bucket", Provider: "s3"})
+	bucketPorts.scopeCalls = &scopeCalls
+	service := newRepairTestService(nil, bucketPorts, nil)
+
+	if _, err := service.loadScopeTargets(context.Background()); err != nil {
+		t.Fatalf("loadScopeTargets() error = %v", err)
+	}
+	if scopeCalls != 1 {
+		t.Fatalf("scope catalog calls = %d, want 1", scopeCalls)
+	}
+}
+
+func TestRepairScopeTargetsSkipCatalogWithoutUsableS3Credentials(t *testing.T) {
+	scopeCalls := 0
+	bucketPorts := fakeRepairBuckets{
+		credentials: []buckets.Credential{{CredentialID: "gcs-credential", Bucket: "ignored-bucket", Provider: "gcs"}},
+		scopeCalls:  &scopeCalls,
+		scopeErr:    errors.New("scope catalog should not be called"),
+	}
+	service := newRepairTestService(nil, bucketPorts, nil)
+
+	targets, err := service.loadScopeTargets(context.Background())
+	if err != nil {
+		t.Fatalf("loadScopeTargets() error = %v", err)
+	}
+	if len(targets) != 0 || scopeCalls != 0 {
+		t.Fatalf("targets = %v, scope catalog calls = %d, want empty and zero calls", targets, scopeCalls)
+	}
+}
+
+func TestRepairAuditUsesS3ScopeAndPreservesCanonicalReport(t *testing.T) {
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy")}, nil}}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: " org ", Project: " project ", PageSize: 1})
+	if err != nil {
+		t.Fatalf("audit() error = %v", err)
+	}
+	if report.Scanned != 1 || len(report.Objects) != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	object := report.Objects[0]
+	wantURL := "s3://repair-bucket/prefix/did-1/" + strings.Repeat("a", 64)
+	if object.ProposedCanonicalUrl != wantURL || object.Findings[0].Kind != FindingLegacyAccessURLRewritable || !object.AutoFixable {
+		t.Fatalf("object report = %+v", object)
+	}
+	if len(records.queries) != 2 || records.queries[1].start != "did-1" || records.queries[0].limit != 1 {
+		t.Fatalf("prepared queries = %+v", records.queries)
+	}
+}
+
+func TestRepairPreservesMethodsOutsideS3URLRepair(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	httpsHeaders := []string{"Authorization: preserved"}
+	accessID := "resolver"
+	methods := []drs.AccessMethod{
+		{Type: drs.AccessMethodTypeS3, AccessUrl: &drs.AccessURL{Url: "s3://repair-bucket/legacy"}},
+		{Type: drs.AccessMethodTypeHttps, AccessUrl: &drs.AccessURL{Url: "https://example.test/object", Headers: &httpsHeaders}},
+		{Type: drs.AccessMethodTypeGs, AccessUrl: &drs.AccessURL{Url: "gs://other-bucket/object"}},
+		{Type: drs.AccessMethodTypeHttps, AccessId: &accessID},
+	}
+	record := repairRecord("did-1", sha, "s3://repair-bucket/legacy")
+	record.AccessMethods = &methods
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	_, audited, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", PageSize: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audited) != 1 || audited[0].updated == nil || audited[0].updated.AccessMethods == nil {
+		t.Fatalf("updated records = %+v, want one repaired record", audited)
+	}
+	got := *audited[0].updated.AccessMethods
+	want := cloneAccessMethods(methods)
+	want[0].AccessUrl.Url = "s3://repair-bucket/prefix/did-1/" + sha
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("repaired access methods = %#v, want %#v", got, want)
+	}
+}
+
+func TestRepairApplyCollapsesBeforeAuditAndContinuesAfterWriteFailure(t *testing.T) {
+	records := &fakeRepairRecords{
+		pages: [][]drs.DrsObject{{
+			repairRecord("did-2", strings.Repeat("b", 64), "s3://repair-bucket/legacy-2"),
+			repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy-1"),
+		}, nil},
+		failNext: true,
+	}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	result, err := service.apply(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", PageSize: 10})
+	if err != nil {
+		t.Fatalf("apply() error = %v", err)
+	}
+	if len(records.collapse) != 1 || records.collapse[0] != "org/project" {
+		t.Fatalf("collapse calls = %v", records.collapse)
+	}
+	if result.AutoFixable != 2 || result.Skipped != 1 || result.Mutated != 1 {
+		t.Fatalf("apply counters = %+v", result)
+	}
+	if len(records.ids) != 2 || records.ids[0] != "did-1" || records.ids[1] != "did-2" {
+		t.Fatalf("writer order = %v", records.ids)
+	}
+}
+
+func TestRepairAuditStorageFindingsDistinguishNotFound(t *testing.T) {
+	record := repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/current")
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
+	probe := &fakeRepairProbe{missing: map[string]bool{"s3://repair-bucket/current": true}}
+	service := newRepairTestService(records, repairBuckets(), probe)
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})
+	if err != nil {
+		t.Fatalf("audit() error = %v", err)
+	}
+	if len(report.Objects) != 1 || len(report.Objects[0].Findings) < 2 {
+		t.Fatalf("storage report = %+v", report)
+	}
+	for _, finding := range report.Objects[0].Findings {
+		if finding.Kind == FindingStorageObjectMissing && finding.Severity == SeverityError {
+			return
+		}
+	}
+	t.Fatalf("storage findings = %+v", report.Objects[0].Findings)
+}
+
+func TestRepairAuditPathStyleStorageProbePreservesDirectoryName(t *testing.T) {
+	record := repairRecord("did-1", strings.Repeat("a", 64), "s3://repair-bucket/legacy")
+	name := "dir/file.bin"
+	record.Name = &name
+	canonical := "s3://repair-bucket/prefix/did-1/" + strings.Repeat("a", 64)
+	pathStyle := "s3://repair-bucket/prefix/dir/file.bin"
+	records := &fakeRepairRecords{pages: [][]drs.DrsObject{{record}}}
+	probe := &fakeRepairProbe{missing: map[string]bool{canonical: true}}
+	service := newRepairTestService(records, repairBuckets(), probe)
+	report, _, err := service.audit(context.Background(), internalapi.ScopeRepairOptions{Organization: "org", Project: "project", CheckStorage: true})
+	if err != nil {
+		t.Fatalf("audit() error = %v", err)
+	}
+	if len(report.Objects) != 1 || len(report.Objects[0].Findings) != 1 || report.Objects[0].Findings[0].ProposedCanonicalUrl != pathStyle {
+		t.Fatalf("report = %+v, want path-style URL %q", report, pathStyle)
+	}
+	for _, call := range probe.calls {
+		if call == pathStyle {
+			return
+		}
+	}
+	t.Fatalf("probe calls = %v, want %q", probe.calls, pathStyle)
+}
+
+func TestRepairApplyRequiresProjectScopeBeforeCallingPorts(t *testing.T) {
+	records := &fakeRepairRecords{}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	_, err := service.ApplyAuthorized(context.Background(), internalapi.ScopeRepairOptions{Organization: "org"})
+	if err == nil || len(records.collapse) != 0 || len(records.queries) != 0 {
+		t.Fatalf("ApplyAuthorized() validation err=%v collapse=%v queries=%v", err, records.collapse, records.queries)
+	}
+}
+
+func TestRepairAuthorizationHappensBeforePorts(t *testing.T) {
+	const resource = "/organization/org/project/project"
+
+	t.Run("denied read does not inspect or collapse", func(t *testing.T) {
+		records := &fakeRepairRecords{}
+		service := newRepairTestService(records, repairBuckets(), nil)
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
+		if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 || len(records.collapse) != 0 {
+			t.Fatalf("ApplyAuthorized() error=%v collapse=%v queries=%v", err, records.collapse, records.queries)
+		}
+	})
+
+	t.Run("read-only access does not update or collapse", func(t *testing.T) {
+		records := &fakeRepairRecords{}
+		service := newRepairTestService(records, repairBuckets(), nil)
+		_, err := service.ApplyAuthorized(repairAuthzContext(map[string]map[string]bool{resource: {"read": true}}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
+		if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 || len(records.collapse) != 0 {
+			t.Fatalf("ApplyAuthorized() error=%v collapse=%v queries=%v", err, records.collapse, records.queries)
+		}
+	})
+
+	records := &fakeRepairRecords{}
+	service := newRepairTestService(records, repairBuckets(), nil)
+	_, err := service.AuditAuthorized(repairAuthzContext(map[string]map[string]bool{}), internalapi.ScopeRepairOptions{Organization: "org", Project: "project"})
+	if !errors.Is(err, errorapi.ErrAccessDenied) || len(records.queries) != 0 {
+		t.Fatalf("AuditAuthorized() error=%v queries=%v", err, records.queries)
+	}
+}
+
+func repairAuthzContext(privileges map[string]map[string]bool) context.Context {
+	session := access.NewSession("local")
+	session.AuthzEnforced = true
+	session.SetAuthorizations(nil, privileges, true)
+	return access.WithSession(context.Background(), session)
+}

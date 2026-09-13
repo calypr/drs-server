@@ -3,38 +3,48 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
+	internalapi "github.com/calypr/syfon/apigen/internalapi"
+	"github.com/calypr/syfon/internal/access"
+	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/storage/address"
 )
 
 const deleteMethod = "delete"
 
+// ProjectCleanupResult reports the durable rows removed by one project cleanup.
+type ProjectCleanupResult struct {
+	Organization        string
+	ProjectID           string
+	DeletedObjects      int
+	DeletedBucketScopes int
+}
+
 // DeleteProjectObjects authorizes each URL against the resolved S3 scope,
 // deduplicates in first-seen order, and dispatches exact physical URLs one at
 // a time. This preserves per-item provider failures and retry ordering.
-func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization, project string, objectURLs []string) []DeleteResult {
+func (s *Service) DeleteProjectObjects(ctx context.Context, organization, project string, objectURLs []string) []internalapi.InternalDeleteProjectBucketObjectsItem {
 	ctx = withRequestCache(ctx)
 	unique := uniqueURLs(objectURLs)
 	if len(unique) == 0 {
-		return []DeleteResult{}
+		return []internalapi.InternalDeleteProjectBucketObjectsItem{}
 	}
-	target, err := s.inspector.resolveScope(ctx, organization, project, deleteMethod)
+	target, err := s.resolveScope(ctx, organization, project, deleteMethod)
 	if err != nil {
-		results := make([]DeleteResult, 0, len(unique))
+		results := make([]internalapi.InternalDeleteProjectBucketObjectsItem, 0, len(unique))
 		logStorageDiagnostic(ctx, err, "delete")
 		message := safeStorageErrorMessage(err, "delete")
 		for _, objectURL := range unique {
-			results = append(results, DeleteResult{ObjectURL: objectURL, Status: "error", Error: message})
+			results = append(results, internalapi.InternalDeleteProjectBucketObjectsItem{ObjectUrl: objectURL, Status: "error", Error: message})
 		}
 		return results
 	}
-	results := make([]DeleteResult, 0, len(unique))
+	results := make([]internalapi.InternalDeleteProjectBucketObjectsItem, 0, len(unique))
 	for _, objectURL := range unique {
-		result := DeleteResult{ObjectURL: objectURL, Status: "deleted"}
-		candidate, parseStatus, parseErr := parseDeleteURL(ctx, s.inspector, objectURL)
+		result := internalapi.InternalDeleteProjectBucketObjectsItem{ObjectUrl: objectURL, Status: "deleted"}
+		candidate, parseStatus, parseErr := parseDeleteURL(ctx, s, objectURL)
 		switch {
 		case parseErr != nil:
 			result.Status = "error"
@@ -61,11 +71,18 @@ func (s *ProjectCleanup) DeleteProjectObjects(ctx context.Context, organization,
 	return results
 }
 
-// DeleteProjectData performs the project cleanup sequence: catalog objects
-// are removed first, then matching bucket scopes are listed and deleted in
-// repository order. A scope count includes only successful deletions.
-func (s *ProjectCleanup) DeleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+// DeleteProjectDataAuthorized applies the maintenance write policy before
+// entering the trusted cleanup sequence.
+func (s *Service) DeleteProjectDataAuthorized(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
 	result := ProjectCleanupResult{Organization: strings.TrimSpace(organization), ProjectID: strings.TrimSpace(project)}
+	if err := access.AuthorizeScopeWrite(ctx, result.Organization, result.ProjectID, "delete", "update"); err != nil {
+		return result, err
+	}
+	return s.deleteProjectData(ctx, result.Organization, result.ProjectID)
+}
+
+func (s *Service) deleteProjectData(ctx context.Context, organization, project string) (ProjectCleanupResult, error) {
+	result := ProjectCleanupResult{Organization: organization, ProjectID: project}
 	if s.cleanupObjects == nil || s.cleanupScopes == nil {
 		return result, &Error{Kind: ErrorUnsupported, Message: "project cleanup dependencies are not configured"}
 	}
@@ -103,17 +120,17 @@ type deleteCandidate struct {
 	key      string
 }
 
-func parseDeleteURL(ctx context.Context, service *Inspector, raw string) (deleteCandidate, string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+func parseDeleteURL(ctx context.Context, service *Service, raw string) (deleteCandidate, string, error) {
+	parsed, err := address.ParseLocation(strings.TrimSpace(raw))
 	if err != nil {
 		return deleteCandidate{}, "", fmt.Errorf("parse access url %q: %w", raw, err)
 	}
-	provider := address.ProviderFromScheme(parsed.Scheme)
+	provider := parsed.Provider
 	if provider == "" {
 		return deleteCandidate{}, "invalid", nil
 	}
-	bucket := strings.TrimSpace(parsed.Host)
-	key := strings.Trim(strings.TrimSpace(parsed.Path), "/")
+	bucket := strings.TrimSpace(parsed.Bucket)
+	key := strings.Trim(strings.TrimSpace(parsed.Key), "/")
 	if bucket == "" || key == "" {
 		return deleteCandidate{}, "invalid", nil
 	}
@@ -127,7 +144,7 @@ func parseDeleteURL(ctx context.Context, service *Inspector, raw string) (delete
 	return deleteCandidate{provider: provider, bucket: bucket, key: key}, "valid", nil
 }
 
-func targetAllowed(candidate deleteCandidate, target scopeTarget) bool {
+func targetAllowed(candidate deleteCandidate, target buckets.StorageScope) bool {
 	if address.NormalizeProvider(candidate.provider, address.S3Provider) != address.S3Provider || !strings.EqualFold(candidate.bucket, target.Bucket) {
 		return false
 	}

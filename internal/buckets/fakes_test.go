@@ -3,7 +3,6 @@ package buckets
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/calypr/syfon/apigen/errorapi"
 )
@@ -17,13 +16,14 @@ type fakeCredentialStore struct {
 	saveErr     error
 	deleteErr   error
 
-	getCalls    int
-	listCalls   int
-	saveCalls   int
-	deleteCalls int
-	lastGet     string
-	lastSaved   *Credential
-	lastDeleted string
+	getCalls            int
+	listCalls           int
+	saveCalls           int
+	deleteCalls         int
+	lastGet             string
+	lastSaved           *Credential
+	lastDeleted         string
+	configurationScopes *fakeScopeStore
 }
 
 var _ CredentialReader = (*fakeCredentialStore)(nil)
@@ -68,6 +68,101 @@ func (f *fakeCredentialStore) SaveS3Credential(_ context.Context, credential *Cr
 		f.lastSaved = &copy
 	}
 	return nil
+}
+
+func (f *fakeCredentialStore) SaveBucketConfiguration(_ context.Context, configuration BucketConfiguration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.saveErr != nil {
+		return f.saveErr
+	}
+	if f.configurationScopes != nil {
+		f.configurationScopes.mu.Lock()
+		defer f.configurationScopes.mu.Unlock()
+		if f.configurationScopes.createErr != nil {
+			return f.configurationScopes.createErr
+		}
+	}
+	f.saveCalls++
+	copyCredential := configuration.Credential
+	f.lastSaved = &copyCredential
+	if f.configurationScopes != nil {
+		f.configurationScopes.createCalls++
+		copyScope := Scope{
+			Organization: configuration.Organization,
+			ProjectID:    configuration.ProjectID,
+			CredentialID: configuration.Credential.CredentialID,
+			Bucket:       configuration.Credential.Bucket,
+			PathPrefix:   configuration.PathPrefix,
+		}
+		f.configurationScopes.lastCreated = &copyScope
+		f.configurationScopes.scopes = append(f.configurationScopes.scopes, copyScope)
+	}
+	return nil
+}
+
+func (f *fakeCredentialStore) DeleteBucketScopeConfiguration(_ context.Context, target Scope) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.getErr != nil && f.getErr != errorapi.ErrStorageCredentialMissing {
+		return nil, f.getErr
+	}
+	if f.configurationScopes == nil {
+		return nil, errorapi.ErrBucketScopeNotFound
+	}
+	f.configurationScopes.mu.Lock()
+	defer f.configurationScopes.mu.Unlock()
+	if f.configurationScopes.listErr != nil {
+		return nil, f.configurationScopes.listErr
+	}
+	if f.configurationScopes.deleteErr != nil {
+		return nil, f.configurationScopes.deleteErr
+	}
+
+	requestedID := target.CredentialID
+	canonicalID, physicalBucket := requestedID, requestedID
+	foundCredential := false
+	for _, credential := range f.credentials {
+		if credential.CredentialID == requestedID || credential.Bucket == requestedID {
+			canonicalID, physicalBucket = credential.CredentialID, credential.Bucket
+			foundCredential = true
+			break
+		}
+	}
+	filtered := make([]Scope, 0, len(f.configurationScopes.scopes))
+	deleted := false
+	for _, scope := range f.configurationScopes.scopes {
+		matchesCredential := scope.CredentialID == requestedID || scope.CredentialID == canonicalID || scope.Bucket == requestedID || scope.Bucket == physicalBucket
+		matches := scope.Organization == target.Organization && scope.ProjectID == target.ProjectID && scope.PathPrefix == target.PathPrefix && matchesCredential
+		if matches && !deleted {
+			deleted = true
+			continue
+		}
+		filtered = append(filtered, scope)
+	}
+	if !deleted {
+		return nil, errorapi.ErrBucketScopeNotFound
+	}
+	deleteCredential := foundCredential
+	for _, scope := range filtered {
+		if scope.CredentialID == canonicalID || scope.Bucket == physicalBucket {
+			deleteCredential = false
+			break
+		}
+	}
+	if deleteCredential {
+		f.deleteCalls++
+		f.lastDeleted = canonicalID
+		if f.deleteErr != nil {
+			return nil, f.deleteErr
+		}
+	}
+	f.configurationScopes.deleteCalls++
+	f.configurationScopes.scopes = filtered
+	if !deleteCredential {
+		return nil, nil
+	}
+	return []string{requestedID, canonicalID, physicalBucket}, nil
 }
 
 func (f *fakeCredentialStore) DeleteS3Credential(_ context.Context, bucket string) error {
@@ -215,32 +310,15 @@ func (r *recordingInvalidator) snapshot() []string {
 	return append([]string(nil), r.aliases...)
 }
 
-type manualClock struct {
-	mu       sync.Mutex
-	nowValue int64
-}
-
-func (c *manualClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return time.Unix(0, c.nowValue)
-}
-
-func (c *manualClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	c.nowValue += d.Nanoseconds()
-	c.mu.Unlock()
-}
-
-func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, fallback VisibilityFallback, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
+func newFakeService(creds []Credential, scopes []Scope, visibility VisibilityQuery, invalidator cacheInvalidator) (*Service, *fakeCredentialStore, *fakeScopeStore) {
 	credentialStore := &fakeCredentialStore{credentials: append([]Credential(nil), creds...)}
 	scopeStore := &fakeScopeStore{scopes: append([]Scope(nil), scopes...)}
+	credentialStore.configurationScopes = scopeStore
 	service := newService(Dependencies{
 		Credentials:     credentialStore,
 		CredentialAdmin: credentialStore,
 		Scopes:          scopeStore,
 		Visibility:      visibility,
-		Fallback:        fallback,
-	}, invalidator, time.Minute, time.Now)
+	}, invalidator)
 	return service, credentialStore, scopeStore
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/calypr/syfon/apigen/bucketapi"
+	"github.com/calypr/syfon/client/apierror"
 )
 
 type BucketsService struct {
@@ -22,7 +23,7 @@ func (s *BucketsService) List(ctx context.Context) (bucketapi.BucketsResponse, e
 		return bucketapi.BucketsResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return bucketapi.BucketsResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return bucketapi.BucketsResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -33,7 +34,7 @@ func (s *BucketsService) Put(ctx context.Context, req bucketapi.PutBucketRequest
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -44,7 +45,7 @@ func (s *BucketsService) Delete(ctx context.Context, bucket string) error {
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -55,7 +56,7 @@ func (s *BucketsService) AddScope(ctx context.Context, bucket string, req bucket
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -74,7 +75,7 @@ func (s *BucketsService) DeleteScope(ctx context.Context, bucket, organization, 
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return apiResponseError(resp.HTTPResponse, resp.Body)
+		return apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return nil
 }
@@ -85,7 +86,7 @@ func (s *BucketsService) ListScopes(ctx context.Context, bucket string) ([]bucke
 		return nil, err
 	}
 	if resp.JSON200 == nil {
-		return nil, apiResponseError(resp.HTTPResponse, resp.Body)
+		return nil, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }
@@ -96,7 +97,7 @@ func (s *BucketsService) DeleteProjectData(ctx context.Context, organization, pr
 		return bucketapi.DeleteProjectDataResponse{}, err
 	}
 	if resp.JSON200 == nil {
-		return bucketapi.DeleteProjectDataResponse{}, apiResponseError(resp.HTTPResponse, resp.Body)
+		return bucketapi.DeleteProjectDataResponse{}, apierror.FromResponse(resp.HTTPResponse, resp.Body)
 	}
 	return *resp.JSON200, nil
 }

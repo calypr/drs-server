@@ -22,12 +22,20 @@ type Scope struct {
 	PathPrefix   string `db:"path_prefix"`
 }
 
+// BucketConfiguration is the persisted bucket aggregate. A credential and
+// its scope are required together when a bucket PUT changes both records.
+type BucketConfiguration struct {
+	Credential   Credential
+	Organization string
+	ProjectID    string
+	PathPrefix   string
+}
+
 // VisibilityRow is the minimum storage projection needed to build bucket
 // visibility responses without hydrating full objects.
 type VisibilityRow struct {
-	AccessURL  string
-	AccessType string
-	Resource   string
+	AccessURL string
+	Resource  string
 }
 
 // VisibleBucket is the credential and resource projection exposed to callers

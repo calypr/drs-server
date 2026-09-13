@@ -3,19 +3,31 @@ package config
 //go:generate mockgen -destination=../internal/testmocks/config_manager_mock.go -package=testmocks github.com/calypr/syfon/client/config ManagerInterface
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/calypr/syfon/client/common"
 	"gopkg.in/ini.v1"
 )
 
 var ErrProfileNotFound = fmt.Errorf("profile not found in config file")
+
+var (
+	createConfigTemp = os.CreateTemp
+	writeConfigTemp  = func(file *os.File, content []byte) (int, error) {
+		return file.Write(content)
+	}
+	closeConfigTemp = func(file *os.File) error {
+		return file.Close()
+	}
+	renameConfigFile = os.Rename
+)
 
 type Credential struct {
 	Profile            string
@@ -29,22 +41,19 @@ type Credential struct {
 	ProjectID          string
 }
 
-type CredentialReader interface {
-	Current() *Credential
-}
-
-type CredentialManager interface {
-	CredentialReader
-	Export(ctx context.Context, cred *Credential) error
-}
-
 type Manager struct {
 	Logger *slog.Logger
 }
 
-func NewConfigure(logs *slog.Logger) ManagerInterface {
+func NewConfigure(logs *slog.Logger) *Manager {
 	return &Manager{
 		Logger: logs,
+	}
+}
+
+func (man *Manager) logError(msg string, args ...any) {
+	if man != nil && man.Logger != nil {
+		man.Logger.Error(msg, args...)
 	}
 }
 
@@ -103,7 +112,7 @@ func (man *Manager) Load(profile string) (*Credential, error) {
 	configPath, err := man.configPath()
 	if err != nil {
 		errs := fmt.Errorf("error occurred when getting home directory: %s", err.Error())
-		man.Logger.Error(errs.Error())
+		man.logError(errs.Error())
 		return nil, errs
 	}
 
@@ -155,16 +164,20 @@ func (man *Manager) Save(profileConfig *Credential) error {
 			profileConfig: Credential object represents config of a profile
 			configPath: file path to config file
 	*/
+	if profileConfig == nil {
+		return errors.New("credential is nil")
+	}
+
 	configPath, err := man.configPath()
 	if err != nil {
 		errs := fmt.Errorf("error occurred when getting config path: %s", err.Error())
-		man.Logger.Error(errs.Error())
+		man.logError(errs.Error())
 		return errs
 	}
 	cfg, err := ini.Load(configPath)
 	if err != nil {
 		errs := fmt.Errorf("error occurred when loading config file: %s", err.Error())
-		man.Logger.Error(errs.Error())
+		man.logError(errs.Error())
 		return errs
 	}
 
@@ -194,11 +207,56 @@ func (man *Manager) Save(profileConfig *Credential) error {
 	section.Key("min_shepherd_version").SetValue(profileConfig.MinShepherdVersion)
 	section.Key("bucket").SetValue(profileConfig.Bucket)
 	section.Key("project_id").SetValue(profileConfig.ProjectID)
-	err = cfg.SaveTo(configPath)
+	var content bytes.Buffer
+	if _, err := cfg.WriteTo(&content); err != nil {
+		errs := fmt.Errorf("error occurred when saving config file: %s", err.Error())
+		man.logError(errs.Error())
+		return errs
+	}
+	err = saveConfigAtomically(configPath, content.Bytes())
 	if err != nil {
 		errs := fmt.Errorf("error occurred when saving config file: %s", err.Error())
-		man.Logger.Error(errs.Error())
-		return fmt.Errorf("error occurred when saving config file: %s", err.Error())
+		man.logError(errs.Error())
+		return errs
+	}
+	return nil
+}
+
+func saveConfigAtomically(configPath string, content []byte) (err error) {
+	temporary, err := createConfigTemp(filepath.Dir(configPath), ".gen3_client_config.ini-")
+	if err != nil {
+		return fmt.Errorf("create temporary config file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		_ = os.Remove(temporaryPath)
+	}()
+
+	if err := temporary.Chmod(0o600); err != nil {
+		closeErr := closeConfigTemp(temporary)
+		if closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+
+	bytesWritten, writeErr := writeConfigTemp(temporary, content)
+	if writeErr == nil && bytesWritten != len(content) {
+		writeErr = io.ErrShortWrite
+	}
+	closeErr := closeConfigTemp(temporary)
+	if writeErr != nil {
+		if closeErr != nil {
+			return errors.Join(writeErr, closeErr)
+		}
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+
+	if err := renameConfigFile(temporaryPath, configPath); err != nil {
+		return fmt.Errorf("replace config file: %w", err)
 	}
 	return nil
 }
@@ -232,18 +290,26 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 	var cred Credential
 
 	if filePath != "" {
-		fullPath, err := common.GetAbsolutePath(filePath)
+		resolvedPath := filePath
+		if strings.HasPrefix(resolvedPath, "~") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil, err
+			}
+			resolvedPath = homeDir + strings.TrimPrefix(resolvedPath, "~")
+		}
+		fullPath, err := filepath.Abs(resolvedPath)
 		if err != nil {
-			man.Logger.Error("error parsing credential file path: " + err.Error())
+			man.logError("error parsing credential file path: " + err.Error())
 			return nil, err
 		}
 
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				man.Logger.Error("File not found: " + fullPath)
+				man.logError("File not found: " + fullPath)
 			} else {
-				man.Logger.Error("error reading file: " + err.Error())
+				man.logError("error reading file: " + err.Error())
 			}
 			return nil, err
 		}
@@ -258,7 +324,7 @@ func (man *Manager) Import(filePath, fenceToken string) (*Credential, error) {
 		wire.APIKey.value = &cred.APIKey
 		if err := json.Unmarshal(content, &wire); err != nil {
 			errMsg := fmt.Errorf("cannot parse JSON credential file: %w", err)
-			man.Logger.Error(errMsg.Error())
+			man.logError(errMsg.Error())
 			return nil, errMsg
 		}
 	} else if fenceToken != "" {

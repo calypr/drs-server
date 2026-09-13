@@ -19,13 +19,13 @@ type markerDelete struct {
 
 type failingDeleteScopes struct{ err error }
 
-func (s failingDeleteScopes) LookupBucketScope(context.Context, string, string) (buckets.Scope, bool, error) {
-	return buckets.Scope{}, false, s.err
+func (s failingDeleteScopes) ResolveStorageScope(context.Context, string, string) (buckets.StorageScope, error) {
+	return buckets.StorageScope{}, s.err
 }
 
 func TestDeleteProjectObjectsRedactsScopeDatabaseFailure(t *testing.T) {
 	service, _ := projectService(&fakeInventory{}, &markerDelete{})
-	service.inspector.scopes = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
+	service.resolver = failingDeleteScopes{err: errors.New("PRIVATE_SCOPE_DATABASE_MARKER")}
 	ctx := requestid.WithRequestID(context.Background(), "scope-failure-request")
 	var logs bytes.Buffer
 	previous := slog.Default()
@@ -80,16 +80,16 @@ func TestDeleteProjectObjectsRedactsProviderCauseAndPreservesSiblingOrder(t *tes
 	if len(results) != 2 {
 		t.Fatalf("results = %+v, want two unique siblings", results)
 	}
-	if results[0].ObjectURL != "s3://bucket/prefix/project/good" || results[0].Status != "deleted" {
+	if results[0].ObjectUrl != "s3://bucket/prefix/project/good" || results[0].Status != "deleted" {
 		t.Fatalf("successful sibling = %+v", results[0])
 	}
-	if results[1].ObjectURL != "s3://bucket/prefix/project/bad" || results[1].Status != "error" {
+	if results[1].ObjectUrl != "s3://bucket/prefix/project/bad" || results[1].Status != "error" {
 		t.Fatalf("failed sibling = %+v", results[1])
 	}
 	if strings.Contains(results[1].Error, "PRIVATE_PROVIDER_DATABASE_MARKER") {
 		t.Fatalf("provider cause escaped deletion result: %+v", results[1])
 	}
-	if len(deletePort.locations) != 2 || deletePort.locations[0] != results[0].ObjectURL || deletePort.locations[1] != results[1].ObjectURL {
+	if len(deletePort.locations) != 2 || deletePort.locations[0] != results[0].ObjectUrl || deletePort.locations[1] != results[1].ObjectUrl {
 		t.Fatalf("delete order = %+v", deletePort.locations)
 	}
 	if count := strings.Count(logs.String(), "PRIVATE_PROVIDER_DATABASE_MARKER"); count != 1 {

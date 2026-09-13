@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 	"time"
 
@@ -18,7 +17,12 @@ import (
 	"github.com/calypr/syfon/internal/storage"
 )
 
+func newTestBackend() *backend {
+	return &backend{limiter: newProbeLimiterFromEnv()}
+}
+
 type fakeClient struct {
+	createInput   *awss3.CreateMultipartUploadInput
 	createOutput  *awss3.CreateMultipartUploadOutput
 	createErr     error
 	completeInput *awss3.CompleteMultipartUploadInput
@@ -35,7 +39,8 @@ type fakeClient struct {
 	deleteErr     error
 }
 
-func (f *fakeClient) CreateMultipartUpload(context.Context, *awss3.CreateMultipartUploadInput, ...func(*awss3.Options)) (*awss3.CreateMultipartUploadOutput, error) {
+func (f *fakeClient) CreateMultipartUpload(_ context.Context, input *awss3.CreateMultipartUploadInput, _ ...func(*awss3.Options)) (*awss3.CreateMultipartUploadOutput, error) {
+	f.createInput = input
 	return f.createOutput, f.createErr
 }
 
@@ -119,7 +124,7 @@ func (f *fakePresigner) PresignUploadPart(_ context.Context, input *awss3.Upload
 }
 
 func cachedBackend(client *fakeClient, presigner *fakePresigner) *backend {
-	provider := newBackend(nil)
+	provider := newTestBackend()
 	provider.cache.Store("bucket", &clients{client: client, presigner: presigner})
 	return provider
 }
@@ -129,8 +134,9 @@ func TestAccessPreservesS3MethodRangeExpiryAndDisposition(t *testing.T) {
 	presigner := &fakePresigner{getURL: "get", putURL: "put"}
 	provider := cachedBackend(client, presigner)
 	ctx := context.Background()
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
 
-	if got, err := provider.SignURL(ctx, storage.ObjectTarget{Bucket: "bucket", Key: "key"}, storage.AccessOptions{Method: "put", ExpiresIn: 7 * time.Minute, DownloadFilename: "dir/name.txt"}); err != nil || got.Location != "get" {
+	if got, err := provider.Sign(ctx, binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "bucket", Key: "key"}, Method: "put", ExpiresIn: 7 * time.Minute, DownloadFilename: "dir/name.txt"}); err != nil || got.Location != "get" {
 		t.Fatalf("lowercase put = %#v, %v; want GET URL", got, err)
 	}
 	if presigner.getInput == nil || aws.ToString(presigner.getInput.ResponseContentDisposition) == "" {
@@ -139,13 +145,13 @@ func TestAccessPreservesS3MethodRangeExpiryAndDisposition(t *testing.T) {
 	if presigner.getExpires != 7*time.Minute || aws.ToString(presigner.getInput.Bucket) != "bucket" || aws.ToString(presigner.getInput.Key) != "key" {
 		t.Fatalf("GET inputs = %#v expiry=%s", presigner.getInput, presigner.getExpires)
 	}
-	if got, err := provider.SignURL(ctx, storage.ObjectTarget{Bucket: "bucket", Key: "key"}, storage.AccessOptions{Method: http.MethodPut}); err != nil || got.Location != "put" {
+	if got, err := provider.Sign(ctx, binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "bucket", Key: "key"}, Method: http.MethodPut}); err != nil || got.Location != "put" {
 		t.Fatalf("PUT = %#v, %v", got, err)
 	}
 	if presigner.putExpires != defaultExpiry {
 		t.Fatalf("PUT expiry = %s, want %s", presigner.putExpires, defaultExpiry)
 	}
-	if _, err := provider.SignDownloadPart(ctx, storage.ObjectTarget{Bucket: "bucket", Key: "key"}, storage.ByteRange{Start: -2, End: 9}, storage.AccessOptions{DownloadFilename: "x"}); err != nil {
+	if _, err := provider.Sign(ctx, binding, storage.SignRequest{Target: storage.Target{PhysicalBucket: "bucket", Key: "key"}, Range: &storage.ByteRange{Start: -2, End: 9}, DownloadFilename: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := aws.ToString(presigner.getInput.Range); got != "bytes=-2-9" {
@@ -157,22 +163,66 @@ func TestMultipartPreservesOpaqueIDETagsAndCallerOrder(t *testing.T) {
 	client := &fakeClient{createOutput: &awss3.CreateMultipartUploadOutput{UploadId: aws.String("opaque")}}
 	presigner := &fakePresigner{partURL: "part"}
 	provider := cachedBackend(client, presigner)
-	target := storage.ObjectTarget{Bucket: "bucket", Key: "key"}
-	if got, err := provider.InitMultipartUpload(context.Background(), target); err != nil || got != "opaque" {
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	if got, err := provider.BeginMultipart(context.Background(), binding, storage.BeginMultipartRequest{Target: target, CompletionID: "completion"}); err != nil || got != "opaque" {
 		t.Fatalf("init = %q, %v", got, err)
 	}
-	if _, err := provider.SignMultipartPart(context.Background(), storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4}); err != nil {
+	if got := client.createInput.Metadata[storage.MultipartCompletionMarkerMetadataKey]; got != "completion" {
+		t.Fatalf("create metadata marker = %q, want completion", got)
+	}
+	if _, err := provider.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4}); err != nil {
 		t.Fatal(err)
+	}
+	if presigner.partExpires != defaultExpiry {
+		t.Fatalf("multipart default expiry = %s, want %s", presigner.partExpires, defaultExpiry)
+	}
+	if _, err := provider.SignMultipartPart(context.Background(), binding, storage.MultipartPartRequest{Target: target, UploadID: "opaque", PartNumber: 4, ExpiresIn: 7 * time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+	if presigner.partExpires != 7*time.Minute {
+		t.Fatalf("multipart configured expiry = %s, want %s", presigner.partExpires, 7*time.Minute)
 	}
 	if aws.ToInt32(presigner.partInput.PartNumber) != 4 || aws.ToString(presigner.partInput.UploadId) != "opaque" {
 		t.Fatalf("part input = %#v", presigner.partInput)
 	}
 	request := storage.CompleteMultipartRequest{Target: target, UploadID: "opaque", Parts: []storage.CompletedPart{{PartNumber: 4, ETag: "\"four\""}, {PartNumber: 1, ETag: "\"one\""}}}
-	if err := provider.CompleteMultipartUpload(context.Background(), request); err != nil {
+	if err := provider.CompleteMultipart(context.Background(), binding, request); err != nil {
 		t.Fatal(err)
 	}
 	if got := client.completeInput.MultipartUpload.Parts; len(got) != 2 || aws.ToInt32(got[0].PartNumber) != 4 || aws.ToString(got[0].ETag) != "\"four\"" || aws.ToInt32(got[1].PartNumber) != 1 {
 		t.Fatalf("completed parts = %#v", got)
+	}
+}
+
+func TestCompleteMultipartSkipsProviderWhenMarkerMatches(t *testing.T) {
+	client := &fakeClient{headOutput: &awss3.HeadObjectOutput{Metadata: map[string]string{
+		storage.MultipartCompletionMarkerMetadataKey: "completion",
+	}}}
+	provider := cachedBackend(client, &fakePresigner{})
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	request := storage.CompleteMultipartRequest{
+		Target:       storage.Target{PhysicalBucket: "bucket", Key: "key"},
+		UploadID:     "opaque",
+		CompletionID: "completion",
+		Parts:        []storage.CompletedPart{{PartNumber: 1, ETag: "etag"}},
+	}
+	if err := provider.CompleteMultipart(context.Background(), binding, request); err != nil {
+		t.Fatalf("CompleteMultipart returned error: %v", err)
+	}
+	if client.completeInput != nil {
+		t.Fatalf("provider finalize request = %#v, want no finalize after matching marker", client.completeInput)
+	}
+}
+
+func TestBeginMultipartRejectsMissingUploadID(t *testing.T) {
+	target := storage.Target{PhysicalBucket: "bucket", Key: "key"}
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	for _, output := range []*awss3.CreateMultipartUploadOutput{nil, {}} {
+		provider := cachedBackend(&fakeClient{createOutput: output}, &fakePresigner{})
+		if _, err := provider.BeginMultipart(context.Background(), binding, storage.BeginMultipartRequest{Target: target, CompletionID: "completion"}); err == nil {
+			t.Fatalf("BeginMultipart accepted output %#v", output)
+		}
 	}
 }
 
@@ -188,18 +238,19 @@ func TestProbeInventoryAndDeleteUseSDKFakes(t *testing.T) {
 		},
 	}
 	provider := cachedBackend(client, &fakePresigner{})
-	probe := provider.Probe(context.Background(), []storage.ProbeTarget{{ID: "first", Target: storage.ObjectTarget{Bucket: "bucket", Key: "x"}}})
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	probe := provider.Probe(context.Background(), binding, []storage.ProbeTarget{{ID: "first", Target: storage.Target{PhysicalBucket: "bucket", Key: "x"}}})
 	if len(probe) != 1 || probe[0].Err != nil || probe[0].Metadata.ETag != "etag" || probe[0].Metadata.SizeBytes != 12 || !probe[0].Metadata.LastModified.Equal(lastModified) {
 		t.Fatalf("probe = %#v", probe)
 	}
-	result, err := provider.Inventory(context.Background(), storage.InventoryRequest{Target: storage.PrefixTarget{Bucket: "bucket", Prefix: "prefix"}})
+	result, err := provider.Inventory(context.Background(), binding, storage.InventoryRequest{Target: storage.Target{PhysicalBucket: "bucket"}, Prefix: "prefix"})
 	if err != nil || !result.Complete || len(result.Items) != 2 || result.Items[0].Key != "prefix/b" || result.Items[1].Key != "prefix/a" {
 		t.Fatalf("inventory = %#v, %v", result, err)
 	}
 	if len(client.listInputs) != 4 || aws.ToString(client.listInputs[1].ContinuationToken) != "next" {
 		t.Fatalf("list calls = %d inputs=%#v", len(client.listInputs), client.listInputs)
 	}
-	if err := provider.Delete(context.Background(), []storage.PhysicalTarget{{Bucket: "bucket", Key: "z"}, {Bucket: "bucket", Key: "a"}, {Bucket: "bucket", Key: "z"}}); err != nil {
+	if err := provider.Delete(context.Background(), binding, []storage.PhysicalTarget{{PhysicalBucket: "bucket", Key: "z"}, {PhysicalBucket: "bucket", Key: "a"}, {PhysicalBucket: "bucket", Key: "z"}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(client.deleteObjects) != 1 || len(client.deleteObjects[0].Delete.Objects) != 2 || aws.ToString(client.deleteObjects[0].Delete.Objects[0].Key) != "a" || !aws.ToBool(client.deleteObjects[0].Delete.Quiet) {
@@ -209,7 +260,8 @@ func TestProbeInventoryAndDeleteUseSDKFakes(t *testing.T) {
 
 func TestProbeClassifiesProviderErrors(t *testing.T) {
 	provider := cachedBackend(&fakeClient{headErrs: []error{&smithy.GenericAPIError{Code: "NoSuchKey", Message: "gone"}}}, &fakePresigner{})
-	result := provider.Probe(context.Background(), []storage.ProbeTarget{{Target: storage.ObjectTarget{Bucket: "bucket", Key: "missing"}}})
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket"}
+	result := provider.Probe(context.Background(), binding, []storage.ProbeTarget{{Target: storage.Target{PhysicalBucket: "bucket", Key: "missing"}}})
 	var operation *storage.OperationError
 	if len(result) != 1 || !errors.As(result[0].Err, &operation) || operation.Kind != storage.ErrorNotFound || operation.Provider != "s3" {
 		t.Fatalf("probe error = %#v", result)
@@ -224,25 +276,16 @@ func TestTerminalReplayFingerprintPreservesTokenOmission(t *testing.T) {
 	}
 }
 
-func TestNewExposesStorageRegistration(t *testing.T) {
-	var lookup storage.CredentialLookup = credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) { return nil, nil })
-	registration := New(lookup)
-	if reflect.ValueOf(registration).IsZero() {
-		t.Fatal("empty registration")
-	}
-}
-
 func TestGetClientsNormalizesEndpointWhitespace(t *testing.T) {
-	provider := newBackend(credentialLookupFunc(func(context.Context, string) (*buckets.Credential, error) {
-		return &buckets.Credential{
-			Region:    "us-east-1",
-			AccessKey: "access",
-			SecretKey: "secret",
-			Endpoint:  "  localhost:9000  ",
-		}, nil
-	}))
+	provider := newTestBackend()
+	binding := storage.ProviderBinding{Provider: "s3", LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{
+		Region:    "us-east-1",
+		AccessKey: "access",
+		SecretKey: "secret",
+		Endpoint:  "  localhost:9000  ",
+	}}
 
-	result, err := provider.getClients(context.Background(), "bucket")
+	result, err := provider.getClients(context.Background(), binding)
 	if err != nil {
 		t.Fatalf("get clients: %v", err)
 	}
@@ -260,10 +303,4 @@ func TestGetClientsNormalizesEndpointWhitespace(t *testing.T) {
 	if !options.UsePathStyle {
 		t.Fatal("UsePathStyle = false, want true for custom endpoint")
 	}
-}
-
-type credentialLookupFunc func(context.Context, string) (*buckets.Credential, error)
-
-func (f credentialLookupFunc) GetS3Credential(ctx context.Context, bucket string) (*buckets.Credential, error) {
-	return f(ctx, bucket)
 }

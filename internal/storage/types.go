@@ -1,9 +1,43 @@
 package storage
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"path"
+	"strconv"
+	"strings"
+	"time"
 
-type AccessTarget struct {
-	AccessID string
+	"github.com/calypr/syfon/internal/buckets"
+)
+
+type Target struct {
+	Provider         string
+	LookupKey        string
+	PhysicalBucket   string
+	Key              string
+	Path             string
+	OriginalURL      string
+	CanonicalURL     string
+	LookupCandidates []string
+}
+
+type ProviderBinding struct {
+	Provider       string
+	LookupKey      string
+	PhysicalBucket string
+	Credential     *buckets.Credential
+}
+
+type SignRequest struct {
+	Target           Target
+	Method           string
+	ExpiresIn        time.Duration
+	DownloadFilename string
+	Range            *ByteRange
+}
+
+type SignedAccess struct {
 	Location string
 }
 
@@ -12,33 +46,40 @@ type ByteRange struct {
 	End   int64
 }
 
-type AccessOptions struct {
-	ExpiresIn        time.Duration
-	Method           string
-	DownloadFilename string
-}
-
-type AccessRequest struct {
-	Target  AccessTarget
-	Options AccessOptions
-	Range   *ByteRange
-}
-
-type Access struct {
-	Location string
-}
-
-type ObjectTarget struct {
-	Bucket string
-	Key    string
-}
-
-type PrefixTarget struct {
-	Bucket string
-	Prefix string
-}
-
 type UploadID string
+
+const MultipartCompletionMarkerMetadataKey = "syfon-multipart-id"
+
+var ErrMultipartCompletionIndeterminate = errors.New("multipart completion outcome is indeterminate")
+
+type BeginMultipartRequest struct {
+	Target       Target
+	CompletionID string
+}
+
+type AbortMultipartRequest struct {
+	Target       Target
+	UploadID     UploadID
+	CompletionID string
+}
+
+func MultipartPartObjectKey(key string, uploadID UploadID, partNumber int32) string {
+	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
+	return path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), cleanKey, "parts", strconv.Itoa(int(partNumber)))
+}
+
+func MultipartUploadPrefix(key string, uploadID UploadID) (string, error) {
+	id := strings.TrimSpace(string(uploadID))
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\\`) {
+		return "", fmt.Errorf("invalid multipart upload ID")
+	}
+	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
+	normalizedKey := path.Clean(cleanKey)
+	if cleanKey == "" || normalizedKey != cleanKey || normalizedKey == "." || normalizedKey == ".." || strings.HasPrefix(normalizedKey, "../") {
+		return "", fmt.Errorf("invalid multipart object key")
+	}
+	return path.Join(".syfon-multipart", id, normalizedKey) + "/", nil
+}
 
 type CompletedPart struct {
 	PartNumber int32
@@ -46,15 +87,17 @@ type CompletedPart struct {
 }
 
 type MultipartPartRequest struct {
-	Target     ObjectTarget
+	Target     Target
 	UploadID   UploadID
 	PartNumber int32
+	ExpiresIn  time.Duration
 }
 
 type CompleteMultipartRequest struct {
-	Target   ObjectTarget
-	UploadID UploadID
-	Parts    []CompletedPart
+	Target       Target
+	UploadID     UploadID
+	CompletionID string
+	Parts        []CompletedPart
 }
 
 type ObjectMetadata struct {
@@ -70,18 +113,19 @@ type ObjectMetadata struct {
 
 type ProbeTarget struct {
 	ID     string
-	Target ObjectTarget
+	Target Target
 }
 
 type ProbeResult struct {
 	ID       string
-	Target   ObjectTarget
+	Target   Target
 	Metadata ObjectMetadata
 	Err      error
 }
 
 type InventoryRequest struct {
-	Target      PrefixTarget
+	Target      Target
+	Prefix      string
 	IncludeHead bool
 	ExactPrefix bool
 	MaxKeys     int32
@@ -97,8 +141,9 @@ type DeleteTarget struct {
 }
 
 type PhysicalTarget struct {
-	Provider string
-	Bucket   string
-	Key      string
-	Path     string
+	Provider       string
+	LookupKey      string
+	PhysicalBucket string
+	Key            string
+	Path           string
 }

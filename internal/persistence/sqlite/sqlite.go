@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/calypr/syfon/internal/persistence/credentialcipher"
+	"github.com/calypr/syfon/internal/persistence/store"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type SqliteDB struct {
-	db *sql.DB
-}
-
-func NewSqliteDB(dsn string) (*SqliteDB, error) {
+func NewSqliteDB(dsn string, cipher store.CredentialCodec) (*store.Store, error) {
+	var err error
+	if cipher == nil {
+		cipher, err = credentialcipher.NewFromEnv()
+		if err != nil {
+			return nil, err
+		}
+	}
 	db, err := sql.Open("sqlite3", sqliteDSN(dsn))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -22,15 +27,15 @@ func NewSqliteDB(dsn string) (*SqliteDB, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	s := &SqliteDB{db: db}
-	if err := s.initSchema(); err != nil {
-		return nil, fmt.Errorf("failed to init schema: %w", err)
+	shared, err := store.Open(db, sqliteDialect{}, cipher)
+	if err != nil {
+		return nil, err
 	}
-
-	return s, nil
+	return shared, nil
 }
 
 func sqliteDSN(dsn string) string {
@@ -39,7 +44,7 @@ func sqliteDSN(dsn string) string {
 		if end < 0 {
 			end = len(dsn) - marker
 		}
-		return dsn[:marker] + "_txlock=immediate" + dsn[marker+end:]
+		dsn = dsn[:marker] + "_txlock=immediate" + dsn[marker+end:]
 	}
 	params := make([]string, 0, 2)
 	if !strings.Contains(dsn, "_foreign_keys=") {

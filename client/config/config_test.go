@@ -43,6 +43,13 @@ func TestManagerEnsureExistsSaveLoad(t *testing.T) {
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("expected config file to exist: %v", err)
 	}
+	configDir, err := os.Stat(filepath.Dir(configPath))
+	if err != nil {
+		t.Fatalf("stat config directory: %v", err)
+	}
+	if !configDir.IsDir() || configDir.Mode().Perm() != 0o700 {
+		t.Fatalf("config directory has mode=%v", configDir.Mode().Perm())
+	}
 
 	want := &Credential{
 		Profile:            "default",
@@ -132,6 +139,130 @@ func TestManagerSaveClearsEmptyCredentialKeys(t *testing.T) {
 	}
 }
 
+func TestManagerSaveAtomicallyReplacesWithRestrictiveMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	man := testManager()
+	if err := man.EnsureExists(); err != nil {
+		t.Fatalf("EnsureExists returned error: %v", err)
+	}
+
+	configPath := filepath.Join(home, ".gen3", "gen3_client_config.ini")
+	if err := os.Chmod(configPath, 0o644); err != nil {
+		t.Fatalf("Chmod returned error: %v", err)
+	}
+	cred := &Credential{Profile: "default", APIKey: "new-api-key", APIEndpoint: "https://example.org"}
+	if err := man.Save(cred); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("Stat returned error: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("saved config mode = %o, want 600", got)
+	}
+	got, err := man.Load("default")
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if got.APIKey != cred.APIKey || got.APIEndpoint != cred.APIEndpoint {
+		t.Fatalf("unexpected saved credential: got %+v want %+v", *got, *cred)
+	}
+}
+
+func TestManagerSavePreservesPreviousFileWhenWriteFails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	man := testManager()
+	if err := man.EnsureExists(); err != nil {
+		t.Fatalf("EnsureExists returned error: %v", err)
+	}
+	initial := &Credential{Profile: "default", APIKey: "old-api-key", APIEndpoint: "https://old.example"}
+	if err := man.Save(initial); err != nil {
+		t.Fatalf("initial Save returned error: %v", err)
+	}
+	configPath := filepath.Join(home, ".gen3", "gen3_client_config.ini")
+	want, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+
+	originalWrite := writeConfigTemp
+	t.Cleanup(func() { writeConfigTemp = originalWrite })
+	writeConfigTemp = func(*os.File, []byte) (int, error) {
+		return 0, errors.New("injected write failure")
+	}
+	if err := man.Save(&Credential{Profile: "default", APIKey: "new-api-key", APIEndpoint: "https://new.example"}); err == nil {
+		t.Fatal("expected injected write failure")
+	}
+	got, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile after failed Save returned error: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("failed Save changed previous config: got %q want %q", got, want)
+	}
+}
+
+func TestManagerSavePreservesPreviousFileWhenRenameFails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	man := testManager()
+	if err := man.EnsureExists(); err != nil {
+		t.Fatalf("EnsureExists returned error: %v", err)
+	}
+	initial := &Credential{Profile: "default", APIKey: "old-api-key", APIEndpoint: "https://old.example"}
+	if err := man.Save(initial); err != nil {
+		t.Fatalf("initial Save returned error: %v", err)
+	}
+	configPath := filepath.Join(home, ".gen3", "gen3_client_config.ini")
+	want, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+
+	originalRename := renameConfigFile
+	t.Cleanup(func() { renameConfigFile = originalRename })
+	renameConfigFile = func(string, string) error {
+		return errors.New("injected rename failure")
+	}
+	if err := man.Save(&Credential{Profile: "default", APIKey: "new-api-key", APIEndpoint: "https://new.example"}); err == nil {
+		t.Fatal("expected injected rename failure")
+	}
+	got, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile after failed Save returned error: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("failed Save changed previous config: got %q want %q", got, want)
+	}
+}
+
+func TestManagerNilBoundariesReturnErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	man := NewConfigure(nil)
+
+	missing := filepath.Join(home, "missing.json")
+	if _, err := man.Import(missing, ""); err == nil {
+		t.Fatal("expected missing credential file error")
+	}
+	bad := filepath.Join(home, "bad.json")
+	if err := os.WriteFile(bad, []byte("not-json"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	if _, err := man.Import(bad, ""); err == nil {
+		t.Fatal("expected malformed credential file error")
+	}
+	if _, err := (&Manager{}).Import("\x00", ""); err == nil {
+		t.Fatal("expected invalid credential path error")
+	}
+	if err := man.Save(nil); err == nil || !strings.Contains(err.Error(), "credential is nil") {
+		t.Fatalf("expected nil credential error, got %v", err)
+	}
+}
+
 func TestManagerLoadErrors(t *testing.T) {
 	t.Run("missing config file", func(t *testing.T) {
 		home := t.TempDir()
@@ -198,6 +329,21 @@ func TestManagerLoadErrors(t *testing.T) {
 }
 
 func TestManagerImport(t *testing.T) {
+	t.Run("expands home directory", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		if err := os.WriteFile(filepath.Join(home, "credential.json"), []byte(`{"key_id":"kid","api_key":"api"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cred, err := testManager().Import("~/credential.json", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cred.KeyID != "kid" || cred.APIKey != "api" {
+			t.Fatalf("unexpected imported credential: %+v", cred)
+		}
+	})
+
 	t.Run("imports credential file with normalized keys", func(t *testing.T) {
 		credFile := filepath.Join(t.TempDir(), "cred.json")
 		content := `{"key_id":"kid","api_key":"api","AccessToken":"tok","APIEndpoint":"https://example.org"}`
@@ -328,12 +474,6 @@ func TestManagerTokenAndCredentialValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy IsValid checks api key", func(t *testing.T) {
-		ok, err := man.IsValid(&Credential{APIKey: valid})
-		if !ok || err != nil {
-			t.Fatalf("expected IsValid success, got ok=%v err=%v", ok, err)
-		}
-	})
 }
 
 func TestImportPreservesCredentialValues(t *testing.T) {

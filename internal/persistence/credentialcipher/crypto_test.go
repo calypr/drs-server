@@ -9,19 +9,22 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/calypr/syfon/internal/buckets"
 )
 
-func TestEncryptDecryptCredentialField_RoundTrip(t *testing.T) {
+func TestEncryptDecryptField_RoundTrip(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=") // 32 bytes base64
+	cipher := newTestCipher(t)
 
-	ciphertext, err := EncryptCredentialField(context.Background(), "super-secret")
+	ciphertext, err := cipher.EncryptField(context.Background(), "super-secret")
 	if err != nil {
-		t.Fatalf("EncryptCredentialField returned error: %v", err)
+		t.Fatalf("EncryptField returned error: %v", err)
 	}
 	if ciphertext == "super-secret" {
 		t.Fatal("expected encrypted ciphertext, got plaintext")
@@ -30,18 +33,19 @@ func TestEncryptDecryptCredentialField_RoundTrip(t *testing.T) {
 		t.Fatalf("expected encrypted prefix, got %q", ciphertext)
 	}
 
-	plaintext, err := DecryptCredentialField(context.Background(), ciphertext)
+	plaintext, err := cipher.DecryptField(context.Background(), ciphertext)
 	if err != nil {
-		t.Fatalf("DecryptCredentialField returned error: %v", err)
+		t.Fatalf("DecryptField returned error: %v", err)
 	}
 	if plaintext != "super-secret" {
 		t.Fatalf("expected decrypted plaintext to match, got %q", plaintext)
 	}
 }
 
-func TestDecryptCredentialField_LegacyPlaintext(t *testing.T) {
+func TestDecryptField_LegacyPlaintext(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "")
-	plaintext, err := DecryptCredentialField(context.Background(), "legacy-plaintext")
+	cipher := newTestCipher(t)
+	plaintext, err := cipher.DecryptField(context.Background(), "legacy-plaintext")
 	if err != nil {
 		t.Fatalf("expected legacy plaintext support, got error: %v", err)
 	}
@@ -50,15 +54,16 @@ func TestDecryptCredentialField_LegacyPlaintext(t *testing.T) {
 	}
 }
 
-func TestDecryptCredentialField_MissingKeyForEncryptedData(t *testing.T) {
+func TestDecryptField_MissingKeyForEncryptedData(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-	encrypted, err := EncryptCredentialField(context.Background(), "abc")
+	cipher := newTestCipher(t)
+	encrypted, err := cipher.EncryptField(context.Background(), "abc")
 	if err != nil {
 		t.Fatalf("encrypt setup failed: %v", err)
 	}
 	t.Setenv(CredentialMasterKeyEnv, "")
 
-	_, err = DecryptCredentialField(context.Background(), encrypted)
+	_, err = cipher.DecryptField(context.Background(), encrypted)
 	if err == nil {
 		t.Fatal("expected error when decrypting encrypted data without key")
 	}
@@ -76,8 +81,32 @@ func TestCredentialMasterKeyAcceptsHexBeforeBase64(t *testing.T) {
 	}
 }
 
-func TestDecryptCredentialField_LegacyV1Ciphertext(t *testing.T) {
+func TestEnabledValidatesSelectedKeyManager(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(CredentialKeyManagerEnv, "not-registered")
+	t.Setenv(CredentialKMSKeyIDEnv, "")
+
+	cipher := newTestCipher(t)
+	if enabled, err := cipher.Enabled(); err == nil || enabled || !strings.Contains(err.Error(), `credential key manager "not-registered" is not registered`) {
+		t.Fatalf("Enabled() = (%v, %v), want selected-manager error", enabled, err)
+	}
+}
+
+func TestEnabledRejectsAWSKMSWithoutKeyID(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv(CredentialKeyManagerEnv, awsKMSKeyManagerName)
+	t.Setenv(CredentialKMSKeyIDEnv, "")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	cipher := newTestCipher(t)
+	if enabled, err := cipher.Enabled(); err == nil || enabled || !strings.Contains(err.Error(), CredentialKMSKeyIDEnv) {
+		t.Fatalf("Enabled() = (%v, %v), want missing KMS key ID error", enabled, err)
+	}
+}
+
+func TestDecryptField_LegacyV1Ciphertext(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	codec := newTestCipher(t)
 
 	key, err := credentialMasterKey()
 	if err != nil {
@@ -99,17 +128,18 @@ func TestDecryptCredentialField_LegacyV1Ciphertext(t *testing.T) {
 	payload := append(nonce, ciphertext...)
 	legacy := "enc:v1:" + base64.RawStdEncoding.EncodeToString(payload)
 
-	plaintext, err := DecryptCredentialField(context.Background(), legacy)
+	plaintext, err := codec.DecryptField(context.Background(), legacy)
 	if err != nil {
-		t.Fatalf("DecryptCredentialField returned error: %v", err)
+		t.Fatalf("DecryptField returned error: %v", err)
 	}
 	if plaintext != "legacy-secret" {
 		t.Fatalf("expected legacy plaintext, got %q", plaintext)
 	}
 }
 
-func TestPrepareAndParseS3CredentialForStorage(t *testing.T) {
+func TestPrepareAndParseCredential(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	cipher := newTestCipher(t)
 
 	cred := &buckets.Credential{
 		Bucket:    "b",
@@ -119,17 +149,17 @@ func TestPrepareAndParseS3CredentialForStorage(t *testing.T) {
 		SecretKey: "sk",
 		Endpoint:  "https://s3.example",
 	}
-	stored, err := PrepareS3CredentialForStorage(context.Background(), cred)
+	stored, err := cipher.Prepare(context.Background(), cred)
 	if err != nil {
-		t.Fatalf("PrepareS3CredentialForStorage returned error: %v", err)
+		t.Fatalf("Prepare returned error: %v", err)
 	}
 	if stored.AccessKey == "ak" || stored.SecretKey == "sk" {
 		t.Fatalf("expected encrypted values, got %+v", stored)
 	}
 
-	parsed, err := ParseS3CredentialFromStorage(context.Background(), stored)
+	parsed, err := cipher.Parse(context.Background(), stored)
 	if err != nil {
-		t.Fatalf("ParseS3CredentialFromStorage returned error: %v", err)
+		t.Fatalf("Parse returned error: %v", err)
 	}
 	if parsed.AccessKey != "ak" || parsed.SecretKey != "sk" {
 		t.Fatalf("expected decrypted values, got %+v", parsed)
@@ -168,14 +198,124 @@ func TestCredentialMasterKey_LocalKeyFile_DefaultPathFromSqlite(t *testing.T) {
 	}
 }
 
-func TestEncryptCredentialField_EnvelopeV2ContainsWrappedDEKAndMetadata(t *testing.T) {
+func TestCredentialMasterKey_LocalKeyFile_ConcurrentCreatorsConverge(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+
+	const creatorCount = 16
+	keys := make([][]byte, creatorCount)
+	errs := make([]error, creatorCount)
+	var ready sync.WaitGroup
+	var done sync.WaitGroup
+	start := make(chan struct{})
+	ready.Add(creatorCount)
+	done.Add(creatorCount)
+	for i := range keys {
+		go func(i int) {
+			defer done.Done()
+			ready.Done()
+			<-start
+			keys[i], errs[i] = loadOrCreateLocalCredentialKey()
+		}(i)
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("creator %d returned error: %v", i, err)
+		}
+		if len(keys[i]) != 32 {
+			t.Fatalf("creator %d returned %d-byte key, want 32", i, len(keys[i]))
+		}
+		if i > 0 && !bytes.Equal(keys[0], keys[i]) {
+			t.Fatalf("creator %d returned different key", i)
+		}
+	}
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatalf("stat published key: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("published key mode = %o, want 600", got)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read key directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(keyPath) {
+		t.Fatalf("key directory entries = %#v, want only %q", entries, filepath.Base(keyPath))
+	}
+}
+
+func TestCredentialMasterKey_LocalKeyFile_ExistingWinnerIsUnchanged(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+	winner := []byte("0123456789abcdef0123456789abcdef")
+	winnerEncoded := base64.StdEncoding.EncodeToString(winner) + "\n"
+	if err := os.WriteFile(keyPath, []byte(winnerEncoded), 0o600); err != nil {
+		t.Fatalf("write existing key: %v", err)
+	}
+
+	got, err := loadOrCreateLocalCredentialKey()
+	if err != nil {
+		t.Fatalf("load existing key: %v", err)
+	}
+	if !bytes.Equal(got, winner) {
+		t.Fatalf("loaded key = %x, want %x", got, winner)
+	}
+	contents, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("read existing key: %v", err)
+	}
+	if string(contents) != string(winnerEncoded) {
+		t.Fatalf("existing key contents changed to %q", contents)
+	}
+}
+
+func TestCredentialMasterKey_LocalKeyFile_MalformedWinnerIsUnchanged(t *testing.T) {
+	t.Setenv(CredentialMasterKeyEnv, "")
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "local-kek")
+	t.Setenv(CredentialLocalKeyFileEnv, keyPath)
+	malformed := []byte("not-a-key\n")
+	if err := os.WriteFile(keyPath, malformed, 0o600); err != nil {
+		t.Fatalf("write malformed key: %v", err)
+	}
+
+	if _, err := loadOrCreateLocalCredentialKey(); err == nil {
+		t.Fatal("load malformed key succeeded")
+	}
+	contents, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("read malformed key: %v", err)
+	}
+	if string(contents) != string(malformed) {
+		t.Fatalf("malformed key contents changed to %q", contents)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read key directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(keyPath) {
+		t.Fatalf("key directory entries = %#v, want only %q", entries, filepath.Base(keyPath))
+	}
+}
+
+func TestEncryptField_EnvelopeV2ContainsWrappedDEKAndMetadata(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv(CredentialKeyManagerEnv, "")
 	t.Setenv(CredentialKMSKeyIDEnv, "")
+	cipher := newTestCipher(t)
 
-	ciphertext, err := EncryptCredentialField(context.Background(), "metadata-check")
+	ciphertext, err := cipher.EncryptField(context.Background(), "metadata-check")
 	if err != nil {
-		t.Fatalf("EncryptCredentialField returned error: %v", err)
+		t.Fatalf("EncryptField returned error: %v", err)
 	}
 	if !strings.HasPrefix(ciphertext, "enc:v2:") {
 		t.Fatalf("expected enc:v2 payload, got %q", ciphertext)
@@ -201,29 +341,30 @@ func TestEncryptCredentialField_EnvelopeV2ContainsWrappedDEKAndMetadata(t *testi
 	}
 }
 
-func TestEncryptCredentialField_UsesRandomDEKPerRecord(t *testing.T) {
+func TestEncryptField_UsesRandomDEKPerRecord(t *testing.T) {
 	t.Setenv(CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv(CredentialKeyManagerEnv, "")
 	t.Setenv(CredentialKMSKeyIDEnv, "")
+	cipher := newTestCipher(t)
 
-	c1, err := EncryptCredentialField(context.Background(), "same-plaintext")
+	c1, err := cipher.EncryptField(context.Background(), "same-plaintext")
 	if err != nil {
-		t.Fatalf("EncryptCredentialField(1) error: %v", err)
+		t.Fatalf("EncryptField(1) error: %v", err)
 	}
-	c2, err := EncryptCredentialField(context.Background(), "same-plaintext")
+	c2, err := cipher.EncryptField(context.Background(), "same-plaintext")
 	if err != nil {
-		t.Fatalf("EncryptCredentialField(2) error: %v", err)
+		t.Fatalf("EncryptField(2) error: %v", err)
 	}
 	if c1 == c2 {
 		t.Fatal("expected different ciphertexts for same plaintext due random DEK/nonce")
 	}
-	p1, err := DecryptCredentialField(context.Background(), c1)
+	p1, err := cipher.DecryptField(context.Background(), c1)
 	if err != nil {
-		t.Fatalf("DecryptCredentialField(1) error: %v", err)
+		t.Fatalf("DecryptField(1) error: %v", err)
 	}
-	p2, err := DecryptCredentialField(context.Background(), c2)
+	p2, err := cipher.DecryptField(context.Background(), c2)
 	if err != nil {
-		t.Fatalf("DecryptCredentialField(2) error: %v", err)
+		t.Fatalf("DecryptField(2) error: %v", err)
 	}
 	if p1 != "same-plaintext" || p2 != "same-plaintext" {
 		t.Fatalf("unexpected decrypted plaintexts: %q %q", p1, p2)
@@ -238,13 +379,14 @@ func TestConfiguredCredentialKeyManagerName_AutoSelectsAWSWhenKMSKeySet(t *testi
 	}
 }
 
-func TestEncryptCredentialFieldPropagatesContextToKeyManager(t *testing.T) {
+func TestEncryptFieldPropagatesContextToKeyManager(t *testing.T) {
 	manager := &contextRecordingKeyManager{}
 	registerTestCredentialKeyManager(t, manager)
+	cipher := newTestCipher(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := EncryptCredentialField(ctx, "secret")
+	_, err := cipher.EncryptField(ctx, "secret")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected canceled context error, got %v", err)
 	}
@@ -253,9 +395,10 @@ func TestEncryptCredentialFieldPropagatesContextToKeyManager(t *testing.T) {
 	}
 }
 
-func TestDecryptCredentialFieldPropagatesContextToKeyManager(t *testing.T) {
+func TestDecryptFieldPropagatesContextToKeyManager(t *testing.T) {
 	manager := &contextRecordingKeyManager{}
 	registerTestCredentialKeyManager(t, manager)
+	cipher := newTestCipher(t)
 
 	payload, err := json.Marshal(credentialEnvelopeV2{Manager: "test"})
 	if err != nil {
@@ -264,13 +407,22 @@ func TestDecryptCredentialFieldPropagatesContextToKeyManager(t *testing.T) {
 	value := credentialCipherPrefixV2 + base64.RawStdEncoding.EncodeToString(payload)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = DecryptCredentialField(ctx, value)
+	_, err = cipher.DecryptField(ctx, value)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected canceled context error, got %v", err)
 	}
 	if manager.unwrapContext != ctx {
 		t.Fatal("expected canceled context to reach UnwrapDataKey")
 	}
+}
+
+func newTestCipher(t *testing.T) *Cipher {
+	t.Helper()
+	cipher, err := NewFromEnv()
+	if err != nil {
+		t.Fatalf("NewFromEnv: %v", err)
+	}
+	return cipher
 }
 
 func registerTestCredentialKeyManager(t *testing.T, manager CredentialKeyManager) {

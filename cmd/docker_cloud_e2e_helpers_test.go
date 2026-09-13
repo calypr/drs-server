@@ -7,16 +7,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/calypr/syfon/apigen/drs"
 	syclient "github.com/calypr/syfon/client"
-	"github.com/calypr/syfon/internal/persistence/credentialcipher"
 )
 
 type providerServerConfig struct {
@@ -41,84 +38,6 @@ type bucketCommandConfig struct {
 	Endpoint     string
 	Organization string
 	ProjectID    string
-}
-
-func startSyfonServerProcessWithConfigPath(t *testing.T, configPath string, extraEnv map[string]string) *syfonServerProcess {
-	t.Helper()
-
-	rootDir := findRepoRoot(t)
-	binaryPath := buildSyfonBinary(t, rootDir)
-	serverPort := extractPortFromConfig(t, configPath)
-	serverURL := fmt.Sprintf("http://%s:%s@127.0.0.1:%d", dockerE2EBasicUser, dockerE2EBasicPass, serverPort)
-	readyURL := fmt.Sprintf("http://127.0.0.1:%d", serverPort)
-
-	cmd := exec.Command(binaryPath, "serve", "--config", configPath)
-	cmd.Dir = rootDir
-	cmd.Env = append(os.Environ(), credentialcipher.CredentialMasterKeyEnv+"="+dockerE2ECredentialKey)
-	for key, val := range extraEnv {
-		cmd.Env = append(cmd.Env, key+"="+val)
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatalf("stderr pipe: %v", err)
-	}
-
-	stdoutBuf := &bytes.Buffer{}
-	stderrBuf := &bytes.Buffer{}
-
-	go streamToTestLog(t, "[SERVER STDOUT]", stdoutPipe, stdoutBuf)
-	go streamToTestLog(t, "[SERVER STDERR]", stderrPipe, stderrBuf)
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start syfon server: %v", err)
-	}
-
-	waitErrCh := make(chan error, 1)
-	go func() {
-		waitErrCh <- cmd.Wait()
-	}()
-
-	if err := waitForServerReady(readyURL, waitErrCh, dockerE2EServerReadyWait); err != nil {
-		logServerProcessOutput(t, readyURL, stdoutBuf, stderrBuf)
-		stopSyfonServerProcess(t, &syfonServerProcess{cmd: cmd, waitErrCh: waitErrCh, stdout: stdoutBuf, stderr: stderrBuf})
-		t.Fatalf("wait for server ready: %v", err)
-	}
-
-	return &syfonServerProcess{
-		url:       serverURL,
-		cmd:       cmd,
-		waitErrCh: waitErrCh,
-		stdout:    stdoutBuf,
-		stderr:    stderrBuf,
-	}
-}
-
-func extractPortFromConfig(t *testing.T, configPath string) int {
-	t.Helper()
-
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read config file %s: %v", configPath, err)
-	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "port:") {
-			value := strings.TrimSpace(strings.TrimPrefix(line, "port:"))
-			port, convErr := strconv.Atoi(value)
-			if convErr != nil {
-				t.Fatalf("parse port from %s: %v", configPath, convErr)
-			}
-			return port
-		}
-	}
-	t.Fatalf("port is missing in %s", configPath)
-	return 0
 }
 
 func writeProviderConfig(t *testing.T, content string) string {

@@ -1,17 +1,108 @@
 package objects
 
 import (
+	"context"
+	"sort"
+	"strings"
+
+	"github.com/calypr/syfon/apigen/drs"
+	"github.com/calypr/syfon/apigen/errorapi"
 	clientaccess "github.com/calypr/syfon/client/access"
+	"github.com/calypr/syfon/internal/access"
 )
 
-// AccessResources returns the normalized controlled-access resources attached
-// to a record.
-func AccessResources(obj *Record) []string {
-	if obj == nil {
+const maxDeniedAccessResources = 25
+
+func requireScopeMethod(ctx context.Context, organization, project, method string) error {
+	resource, err := clientaccess.ResourcePath(organization, project)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(resource) == "" {
+		return errorapi.ErrAccessDenied
+	}
+	if access.HasObjectMethodAccess(ctx, method, []string{resource}) {
 		return nil
 	}
-	if obj.ControlledAccess != nil {
-		return clientaccess.NormalizeAccessResources(*obj.ControlledAccess)
+	return errorapi.ErrAccessDenied
+}
+
+func requireAllObjectMethod(ctx context.Context, obj *drs.DrsObject, method string) error {
+	resources := AccessResources(obj)
+	if len(resources) == 0 {
+		if access.HasObjectMethodAccess(ctx, method, resources) {
+			return nil
+		}
+		return errorapi.ErrAccessDenied
 	}
-	return clientaccess.AuthzMapToList(obj.Authorizations)
+	if access.HasMethodAccess(ctx, method, resources) {
+		return nil
+	}
+	return errorapi.ErrAccessDenied
+}
+
+func hasObjectMethod(ctx context.Context, obj *drs.DrsObject, method string, publicRead map[string]bool) bool {
+	method = strings.TrimSpace(method)
+	if method == "" {
+		return true
+	}
+	if strings.EqualFold(method, objectMethodRead) && obj != nil {
+		if isPublic, known := publicRead[obj.Id]; known {
+			if isPublic {
+				return true
+			}
+			if len(AccessResources(obj)) == 0 {
+				return false
+			}
+		}
+	}
+	if access.HasMethodAccess(ctx, method, []string{"/programs"}) || access.HasMethodAccess(ctx, method, []string{"/data_file"}) {
+		return true
+	}
+	return access.HasObjectMethodAccess(ctx, method, AccessResources(obj))
+}
+
+func bulkObjectMethodError(ctx context.Context, objs []drs.DrsObject, method string, publicRead map[string]bool) error {
+	resources := make(map[string]struct{})
+	var firstDeniedID string
+	deniedRecords := 0
+	for i := range objs {
+		if hasObjectMethod(ctx, &objs[i], method, publicRead) {
+			continue
+		}
+		deniedRecords++
+		if firstDeniedID == "" {
+			firstDeniedID = objs[i].Id
+		}
+		for _, resource := range AccessResources(&objs[i]) {
+			if strings.TrimSpace(resource) == "" {
+				continue
+			}
+			resources[resource] = struct{}{}
+		}
+	}
+	if deniedRecords == 0 {
+		return nil
+	}
+
+	resourceList := make([]string, 0, len(resources))
+	for resource := range resources {
+		resourceList = append(resourceList, resource)
+	}
+	sort.Strings(resourceList)
+
+	truncated := 0
+	if len(resourceList) > maxDeniedAccessResources {
+		truncated = len(resourceList) - maxDeniedAccessResources
+		resourceList = resourceList[:maxDeniedAccessResources]
+	}
+
+	return &access.AuthorizationError{
+		Method:             method,
+		RecordID:           firstDeniedID,
+		Resources:          resourceList,
+		DeniedRecords:      deniedRecords,
+		TotalRecords:       len(objs),
+		TruncatedResources: truncated,
+	}
 }

@@ -21,72 +21,118 @@ import (
 // contract. GCS intentionally has no Probe or Inventory methods: those are
 // optional capabilities and are not implemented by this provider.
 type backend struct {
-	credentials storageports.CredentialLookup
-	cache       sync.Map // keyed by the lookup bucket string, stores *storage.Client
+	cache       sync.Map // keyed by canonical lookup bucket, stores *storage.Client
+	cacheMu     sync.Mutex
+	clients     map[string]*clientEntry
+	allClients  map[*clientEntry]struct{}
+	closed      bool
+	closeOnce   sync.Once
+	closeErr    error
+	closeErrors []error
+	activeCond  *sync.Cond
+}
+
+type clientEntry struct {
+	client     *storage.Client
+	credential credentialIdentity
+	users      int
+	retired    bool
+	closed     bool
+}
+
+type credentialIdentity struct {
+	present  bool
+	provider string
+	bucket   string
+	region   string
+	access   string
+	secret   string
+	endpoint string
+}
+
+func credentialIdentityOf(cred *buckets.Credential) credentialIdentity {
+	if cred == nil {
+		return credentialIdentity{}
+	}
+	return credentialIdentity{
+		present:  true,
+		provider: cred.Provider,
+		bucket:   cred.Bucket,
+		region:   cred.Region,
+		access:   cred.AccessKey,
+		secret:   cred.SecretKey,
+		endpoint: cred.Endpoint,
+	}
 }
 
 // New constructs the GCS provider registration.
-func New(credentials storageports.CredentialLookup) storageports.Registration {
-	return storageports.NewRegistration(address.GCSProvider, &backend{credentials: credentials})
+func New() storageports.Registration {
+	return storageports.NewRegistration(address.GCSProvider, &backend{})
 }
 
 func (b *backend) InvalidateBucket(bucket string) {
-	bucket = strings.TrimSpace(bucket)
+	bucket = canonicalCacheKey(bucket)
 	if bucket == "" {
 		return
 	}
-	b.cache.Delete(bucket)
+	b.cacheMu.Lock()
+	if b.clients == nil {
+		b.clients = make(map[string]*clientEntry)
+	}
+	if b.allClients == nil {
+		b.allClients = make(map[*clientEntry]struct{})
+	}
+	if current := b.clients[bucket]; current != nil {
+		current.retired = true
+		delete(b.clients, bucket)
+		if current.users == 0 {
+			b.closeEntryLocked(current)
+		}
+	}
+	b.cache.Range(func(key, _ any) bool {
+		if canonicalCacheKey(fmt.Sprint(key)) == bucket {
+			b.cache.Delete(key)
+		}
+		return true
+	})
+	b.cacheMu.Unlock()
 }
 
-func (b *backend) SignURL(ctx context.Context, target storageports.ObjectTarget, opts storageports.AccessOptions) (storageports.Access, error) {
-	cred, err := b.credential(ctx, target.Bucket)
+func canonicalCacheKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func (b *backend) Sign(ctx context.Context, binding storageports.ProviderBinding, request storageports.SignRequest) (storageports.SignedAccess, error) {
+	cred, err := b.credential(binding)
 	if err != nil {
-		return storageports.Access{}, err
+		return storageports.SignedAccess{}, err
 	}
 
 	expiry := 15 * time.Minute
-	if opts.ExpiresIn > 0 {
-		expiry = opts.ExpiresIn
+	if request.ExpiresIn > 0 {
+		expiry = request.ExpiresIn
 	}
 
 	method := http.MethodGet
-	if opts.Method != "" {
-		method = opts.Method
+	if request.Method != "" {
+		method = request.Method
 	}
 
-	location, err := b.signedURL(target.Bucket, target.Key, method, expiry, "", opts.DownloadFilename, cred)
-	if err != nil {
-		return storageports.Access{}, err
+	rangeValue := ""
+	if request.Range != nil {
+		rangeValue = fmt.Sprintf("bytes=%d-%d", request.Range.Start, request.Range.End)
 	}
-	return storageports.Access{Location: location}, nil
+	location, err := b.signedURL(request.Target.PhysicalBucket, request.Target.Key, method, expiry, rangeValue, request.DownloadFilename, cred)
+	if err != nil {
+		return storageports.SignedAccess{}, err
+	}
+	return storageports.SignedAccess{Location: location}, nil
 }
 
-func (b *backend) SignDownloadPart(ctx context.Context, target storageports.ObjectTarget, byteRange storageports.ByteRange, opts storageports.AccessOptions) (storageports.Access, error) {
-	cred, err := b.credential(ctx, target.Bucket)
-	if err != nil {
-		return storageports.Access{}, err
-	}
-
-	expiry := 15 * time.Minute
-	if opts.ExpiresIn > 0 {
-		expiry = opts.ExpiresIn
-	}
-
-	rangeValue := fmt.Sprintf("bytes=%d-%d", byteRange.Start, byteRange.End)
-	location, err := b.signedURL(target.Bucket, target.Key, http.MethodGet, expiry, rangeValue, opts.DownloadFilename, cred)
-	if err != nil {
-		return storageports.Access{}, err
-	}
-	return storageports.Access{Location: location}, nil
-}
-
-func (b *backend) credential(ctx context.Context, bucket string) (*buckets.Credential, error) {
-	cred, err := b.credentials.GetS3Credential(ctx, bucket)
-	if err != nil {
-		return nil, err
-	}
+func (b *backend) credential(binding storageports.ProviderBinding) (*buckets.Credential, error) {
+	cred := binding.Credential
 	if cred == nil {
-		return nil, fmt.Errorf("credentials not found for bucket %s", bucket)
+		return nil, fmt.Errorf("credentials not found for bucket %s", binding.PhysicalBucket)
 	}
 	return cred, nil
 }
