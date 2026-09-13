@@ -155,9 +155,18 @@ func (db *sqliteSchemaBootstrap) initSchema() error {
 			parts_fingerprint TEXT NOT NULL DEFAULT '',
 			completed_location TEXT NOT NULL DEFAULT '',
 			created_time TIMESTAMP NOT NULL,
-			updated_time TIMESTAMP NOT NULL
+			updated_time TIMESTAMP NOT NULL,
+			operation TEXT NOT NULL DEFAULT '',
+			completion_parts_json TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_multipart_upload_session_state_updated ON multipart_upload_session(state, updated_time)`,
+		`CREATE TABLE IF NOT EXISTS multipart_completion_receipt (
+			upload_id TEXT PRIMARY KEY,
+			authorization_json TEXT NOT NULL,
+			parts_fingerprint TEXT NOT NULL,
+			completed_location TEXT NOT NULL,
+			completed_time TIMESTAMP NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS object_usage (
 			object_id TEXT PRIMARY KEY,
 			upload_count INTEGER NOT NULL DEFAULT 0,
@@ -292,6 +301,16 @@ func (db *sqliteSchemaBootstrap) initSchema() error {
 		}
 	}
 	if _, err := db.db.Exec(`ALTER TABLE multipart_upload_session ADD COLUMN completion_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return err
+		}
+	}
+	if _, err := db.db.Exec(`ALTER TABLE multipart_upload_session ADD COLUMN operation TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+			return err
+		}
+	}
+	if _, err := db.db.Exec(`ALTER TABLE multipart_upload_session ADD COLUMN completion_parts_json TEXT NOT NULL DEFAULT ''`); err != nil {
 		if !strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
 			return err
 		}

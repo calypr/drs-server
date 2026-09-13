@@ -79,8 +79,14 @@ func (s *Service) BeginMultipart(ctx context.Context, req MultipartInitRequest) 
 		return MultipartInitResult{}, fmt.Errorf("storage provider returned an empty multipart upload ID")
 	}
 	now := s.now().UTC()
-	if err := s.multipartSessions.SaveMultipartSession(ctx, MultipartSession{UploadID: string(uploadID), CompletionID: completionID, Target: target, Authorization: authorization, State: MultipartStateActive, CreatedAt: now, UpdatedAt: now}); err != nil {
-		return MultipartInitResult{}, fmt.Errorf("persist multipart upload %s: %w", uploadID, err)
+	if err := s.multipartSessions.SaveMultipartSession(ctx, MultipartSession{UploadID: string(uploadID), CompletionID: completionID, Target: target, Authorization: authorization, State: MultipartStateActive, Operation: MultipartOperationNone, CreatedAt: now, UpdatedAt: now}); err != nil {
+		persistErr := fmt.Errorf("persist multipart upload %s: %w", uploadID, err)
+		if aborter, ok := s.storage.(MultipartAborter); ok {
+			if abortErr := aborter.AbortMultipart(ctx, storage.AbortMultipartRequest{Target: target, UploadID: uploadID, CompletionID: completionID}); abortErr != nil {
+				return MultipartInitResult{}, errors.Join(persistErr, fmt.Errorf("abort unpersisted multipart upload %s: %w", uploadID, abortErr))
+			}
+		}
+		return MultipartInitResult{}, persistErr
 	}
 	return MultipartInitResult{UploadID: string(uploadID), GUID: guid}, nil
 }
@@ -103,6 +109,11 @@ func (s *Service) SignMultipartPart(ctx context.Context, uploadID string, partNu
 	if err != nil {
 		return "", err
 	}
+	if toucher, ok := s.multipartSessions.(MultipartActivityStore); ok {
+		if err := toucher.TouchMultipartSession(ctx, uploadID, s.now().UTC()); err != nil {
+			return "", err
+		}
+	}
 	return signed.Location, nil
 }
 
@@ -111,14 +122,17 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	if err != nil {
 		return "", err
 	}
+	partsFingerprint := multipartPartsFingerprint(providerParts)
 	session, err := s.multipartSessions.GetMultipartSession(ctx, uploadID)
 	if err != nil {
+		if errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+			return s.replayCompletedMultipartReceipt(ctx, uploadID, partsFingerprint)
+		}
 		return "", err
 	}
 	if err := session.Authorization.Authorize(ctx); err != nil {
 		return "", err
 	}
-	partsFingerprint := multipartPartsFingerprint(providerParts)
 	if session.PartsFingerprint != "" && session.PartsFingerprint != partsFingerprint {
 		return "", fmt.Errorf("%w: multipart completion parts differ from the first completion request", errorapi.ErrConflict)
 	}
@@ -127,7 +141,12 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 	}
 	now := s.now().UTC()
 	token := uuid.NewString()
-	session, claimed, err := s.multipartSessions.ClaimMultipartCompletion(ctx, uploadID, token, partsFingerprint, now, now.Add(-multipartCompletionLease))
+	var claimed bool
+	if durable, ok := s.multipartSessions.(MultipartCompletionPartsClaimer); ok {
+		session, claimed, err = durable.ClaimMultipartCompletionWithParts(ctx, uploadID, token, partsFingerprint, completedPartsForSession(providerParts), now, now.Add(-multipartCompletionLease))
+	} else {
+		session, claimed, err = s.multipartSessions.ClaimMultipartCompletion(ctx, uploadID, token, partsFingerprint, now, now.Add(-multipartCompletionLease))
+	}
 	if err != nil {
 		return "", err
 	}
@@ -162,6 +181,130 @@ func (s *Service) CompleteMultipart(ctx context.Context, uploadID string, parts 
 		return "", fmt.Errorf("%w: multipart upload changed while completion was in progress", errorapi.ErrConflict)
 	}
 	return location, nil
+}
+
+func (s *Service) replayCompletedMultipartReceipt(ctx context.Context, uploadID, partsFingerprint string) (string, error) {
+	receipts, ok := s.multipartSessions.(MultipartCompletionReceiptStore)
+	if !ok {
+		return "", multipartNotFound(uploadID)
+	}
+	receipt, err := receipts.GetMultipartCompletionReceipt(ctx, uploadID)
+	if err != nil {
+		return "", err
+	}
+	if err := receipt.Authorization.Authorize(ctx); err != nil {
+		return "", err
+	}
+	if receipt.PartsFingerprint != partsFingerprint {
+		return "", fmt.Errorf("%w: multipart completion parts differ from the completed request", errorapi.ErrConflict)
+	}
+	return receipt.CompletedLocation, nil
+}
+
+func completedPartsForSession(parts []storage.CompletedPart) []CompletedPart {
+	result := make([]CompletedPart, len(parts))
+	for i, part := range parts {
+		result[i] = CompletedPart{ETag: part.ETag, PartNumber: part.PartNumber}
+	}
+	return result
+}
+
+// AbortMultipart is an additive, idempotent operation. Authorization is
+// evaluated before a durable abort lease is claimed, while the provider call
+// itself runs under the claimed session state.
+func (s *Service) AbortMultipart(ctx context.Context, uploadID string) error {
+	uploadID = strings.TrimSpace(uploadID)
+	if uploadID == "" {
+		return fmt.Errorf("%w: upload ID is required", errorapi.ErrInvalidInput)
+	}
+	session, err := s.multipartSessions.GetMultipartSession(ctx, uploadID)
+	if err != nil {
+		if errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+			return nil
+		}
+		return err
+	}
+	if err := session.Authorization.Authorize(ctx); err != nil {
+		return err
+	}
+	if session.State == MultipartStateCompleted {
+		return nil
+	}
+	claimer, ok := s.multipartSessions.(MultipartAbortStore)
+	if !ok {
+		return fmt.Errorf("multipart abort persistence is not configured")
+	}
+	aborter, ok := s.storage.(MultipartAborter)
+	if !ok {
+		return fmt.Errorf("multipart abort is not supported by the storage provider")
+	}
+	now := s.now().UTC()
+	token := uuid.NewString()
+	claimedSession, claimed, err := claimer.ClaimMultipartAbort(ctx, uploadID, token, now, now.Add(-multipartCompletionLease))
+	if err != nil {
+		if errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !claimed {
+		if claimedSession.State == MultipartStateCompleted {
+			return nil
+		}
+		return fmt.Errorf("%w: multipart upload operation is already in progress", errorapi.ErrConflict)
+	}
+	if err := aborter.AbortMultipart(ctx, storage.AbortMultipartRequest{Target: claimedSession.Target, UploadID: storage.UploadID(uploadID), CompletionID: claimedSession.CompletionID}); err != nil {
+		return err
+	}
+	finished, err := claimer.FinishMultipartAbort(ctx, uploadID, token, s.now().UTC())
+	if err != nil {
+		return fmt.Errorf("persist aborted multipart upload %s: %w", uploadID, err)
+	}
+	if !finished {
+		return fmt.Errorf("%w: multipart upload changed while abort was in progress", errorapi.ErrConflict)
+	}
+	return nil
+}
+
+func (s *Service) ReconcileMultipartSessions(ctx context.Context, inactiveTimeout, completedRetention time.Duration, batchSize int) error {
+	store, ok := s.multipartSessions.(MultipartReconcilerStore)
+	if !ok || batchSize <= 0 {
+		return nil
+	}
+	now := s.now().UTC()
+	sessions, err := store.ListMultipartSessionsForReconcile(ctx, now.Add(-inactiveTimeout), now.Add(-completedRetention), batchSize)
+	if err != nil {
+		return err
+	}
+	var reconcileErrors []error
+	for _, session := range sessions {
+		var operationErr error
+		switch {
+		case session.State == MultipartStateCompleted:
+			// Completed receipts are catalog state only. The provider object is
+			// already committed and must never be deleted by this sweep.
+			operationErr = nil
+		case session.Operation == MultipartOperationComplete && len(session.CompletionParts) > 0:
+			operationErr = s.replayMultipartCompletion(ctx, session)
+		case session.State == MultipartStateActive || session.Operation == MultipartOperationAbort:
+			operationErr = s.AbortMultipart(ctx, session.UploadID)
+		default:
+			continue
+		}
+		if operationErr != nil {
+			reconcileErrors = append(reconcileErrors, fmt.Errorf("reconcile multipart session %s: %w", session.UploadID, operationErr))
+		}
+	}
+	if err := store.CompactCompletedMultipartSessions(ctx, now.Add(-completedRetention), batchSize); err != nil {
+		reconcileErrors = append(reconcileErrors, err)
+	}
+	return errors.Join(reconcileErrors...)
+}
+
+func (s *Service) replayMultipartCompletion(ctx context.Context, session MultipartSession) error {
+	parts := append([]CompletedPart(nil), session.CompletionParts...)
+	_, err := s.CompleteMultipart(ctx, session.UploadID, parts)
+	return err
 }
 
 func multipartPartsFingerprint(parts []storage.CompletedPart) string {

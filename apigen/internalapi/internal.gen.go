@@ -260,6 +260,11 @@ type InternalInspectProjectScopesResponse struct {
 	Items []InternalInspectProjectScopeItem `json:"items"`
 }
 
+// InternalMultipartAbortRequest defines model for InternalMultipartAbortRequest.
+type InternalMultipartAbortRequest struct {
+	UploadId string `json:"uploadId"`
+}
+
 // InternalMultipartCompleteOutput defines model for InternalMultipartCompleteOutput.
 type InternalMultipartCompleteOutput struct {
 	// ObjectUrl Canonical location of the object completed by this upload session.
@@ -538,6 +543,9 @@ type InternalInspectProjectRecordsJSONRequestBody = InternalInspectProjectRecord
 
 // InternalInspectProjectScopesPostJSONRequestBody defines body for InternalInspectProjectScopesPost for application/json ContentType.
 type InternalInspectProjectScopesPostJSONRequestBody = InternalInspectProjectScopesRequest
+
+// InternalMultipartAbortJSONRequestBody defines body for InternalMultipartAbort for application/json ContentType.
+type InternalMultipartAbortJSONRequestBody = InternalMultipartAbortRequest
 
 // InternalMultipartCompleteJSONRequestBody defines body for InternalMultipartComplete for application/json ContentType.
 type InternalMultipartCompleteJSONRequestBody = InternalMultipartCompleteRequest
@@ -832,6 +840,14 @@ type ClientInterface interface {
 	//
 	// Compatibility request-body form of project scope listing.
 	InternalInspectProjectScopesPost(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalMultipartAbortWithBody performs a POST /data/multipart/abort (the `InternalMultipartAbort` operationId) request,
+	// with any type of body and a specified content type.
+	InternalMultipartAbortWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// InternalMultipartAbort performs a POST /data/multipart/abort (the `InternalMultipartAbort` operationId) request.
+	// Takes a body of the `application/json` content type.
+	InternalMultipartAbort(ctx context.Context, body InternalMultipartAbortJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// InternalMultipartCompleteWithBody performs a POST /data/multipart/complete (the `InternalMultipartComplete` operationId) request,
 	// with any type of body and a specified content type.
@@ -1288,6 +1304,34 @@ func (c *Client) InternalInspectProjectScopesPostWithBody(ctx context.Context, c
 // Compatibility request-body form of project scope listing.
 func (c *Client) InternalInspectProjectScopesPost(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewInternalInspectProjectScopesPostRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// InternalMultipartAbortWithBody performs a POST /data/multipart/abort (the `InternalMultipartAbort` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) InternalMultipartAbortWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalMultipartAbortRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// InternalMultipartAbort performs a POST /data/multipart/abort (the `InternalMultipartAbort` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) InternalMultipartAbort(ctx context.Context, body InternalMultipartAbortJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalMultipartAbortRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2352,6 +2396,46 @@ func NewInternalInspectProjectScopesPostRequestWithBody(server string, contentTy
 	}
 
 	operationPath := fmt.Sprintf("/data/inspect/project-scopes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewInternalMultipartAbortRequest calls the generic InternalMultipartAbort builder with application/json body
+func NewInternalMultipartAbortRequest(server string, body InternalMultipartAbortJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewInternalMultipartAbortRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewInternalMultipartAbortRequestWithBody constructs an http.Request for the InternalMultipartAbort method, with any body, and a specified content type
+func NewInternalMultipartAbortRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/data/multipart/abort")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3574,6 +3658,11 @@ type ClientWithResponsesInterface interface {
 
 	InternalInspectProjectScopesPostWithResponse(ctx context.Context, body InternalInspectProjectScopesPostJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalInspectProjectScopesPostResp, error)
 
+	// InternalMultipartAbortWithBodyWithResponse request with any body
+	InternalMultipartAbortWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartAbortResp, error)
+
+	InternalMultipartAbortWithResponse(ctx context.Context, body InternalMultipartAbortJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartAbortResp, error)
+
 	// InternalMultipartCompleteWithBodyWithResponse request with any body
 	InternalMultipartCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartCompleteResp, error)
 
@@ -3956,6 +4045,31 @@ func (r InternalInspectProjectScopesPostResp) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r InternalInspectProjectScopesPostResp) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type InternalMultipartAbortResp struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *APIError
+	JSON401      *APIError
+	JSON403      *APIError
+	JSON500      *APIError
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalMultipartAbortResp) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalMultipartAbortResp) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4693,6 +4807,23 @@ func (c *ClientWithResponses) InternalInspectProjectScopesPostWithResponse(ctx c
 		return nil, err
 	}
 	return ParseInternalInspectProjectScopesPostResp(rsp)
+}
+
+// InternalMultipartAbortWithBodyWithResponse request with arbitrary body returning *InternalMultipartAbortResp
+func (c *ClientWithResponses) InternalMultipartAbortWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InternalMultipartAbortResp, error) {
+	rsp, err := c.InternalMultipartAbortWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalMultipartAbortResp(rsp)
+}
+
+func (c *ClientWithResponses) InternalMultipartAbortWithResponse(ctx context.Context, body InternalMultipartAbortJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalMultipartAbortResp, error) {
+	rsp, err := c.InternalMultipartAbort(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalMultipartAbortResp(rsp)
 }
 
 // InternalMultipartCompleteWithBodyWithResponse request with arbitrary body returning *InternalMultipartCompleteResp
@@ -5670,6 +5801,63 @@ func ParseInternalInspectProjectScopesPostResp(rsp *http.Response) (*InternalIns
 				return nil, err
 			}
 			response.JSON200 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON400 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON401 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON403 = &dest
+
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+			var dest APIError
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON500 = &dest
+
+		}
+
+		return response, nil
+	}()
+	// Error responses may use legacy or proxy payloads outside the schema.
+	if decodeErr != nil && rsp.StatusCode/100 != 2 {
+		return response, nil
+	}
+	return decoded, decodeErr
+}
+
+// ParseInternalMultipartAbortResp parses an HTTP response from a InternalMultipartAbortWithResponse call
+func ParseInternalMultipartAbortResp(rsp *http.Response) (*InternalMultipartAbortResp, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalMultipartAbortResp{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	decoded, decodeErr := func() (*InternalMultipartAbortResp, error) {
+		switch {
+		case rsp.StatusCode == 204:
+			break // No content-type
 
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 			var dest APIError
@@ -7077,6 +7265,9 @@ type ServerInterface interface {
 	// (POST /data/inspect/project-scopes)
 	InternalInspectProjectScopesPost(c fiber.Ctx) error
 
+	// (POST /data/multipart/abort)
+	InternalMultipartAbort(c fiber.Ctx) error
+
 	// (POST /data/multipart/complete)
 	InternalMultipartComplete(c fiber.Ctx) error
 
@@ -7432,6 +7623,24 @@ func (siw *ServerInterfaceWrapper) InternalInspectProjectScopesPost(c fiber.Ctx)
 
 	handler := func(c fiber.Ctx) error {
 		return siw.Handler.InternalInspectProjectScopesPost(c)
+	}
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		m := siw.HandlerMiddlewares[i]
+		next := handler
+		handler = func(c fiber.Ctx) error {
+			return m(c, next)
+		}
+	}
+
+	return handler(c)
+}
+
+// InternalMultipartAbort operation middleware
+func (siw *ServerInterfaceWrapper) InternalMultipartAbort(c fiber.Ctx) error {
+
+	handler := func(c fiber.Ctx) error {
+		return siw.Handler.InternalMultipartAbort(c)
 	}
 
 	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
@@ -8100,6 +8309,8 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Post(options.BaseURL+"/data/inspect/project-scopes", wrapper.InternalInspectProjectScopesPost)
 
+	router.Post(options.BaseURL+"/data/multipart/abort", wrapper.InternalMultipartAbort)
+
 	router.Post(options.BaseURL+"/data/multipart/complete", wrapper.InternalMultipartComplete)
 
 	router.Post(options.BaseURL+"/data/multipart/init", wrapper.InternalMultipartInit)
@@ -8742,6 +8953,58 @@ func (response InternalInspectProjectScopesPost403JSONResponse) VisitInternalIns
 type InternalInspectProjectScopesPost500JSONResponse APIError
 
 func (response InternalInspectProjectScopesPost500JSONResponse) VisitInternalInspectProjectScopesPostResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(500)
+
+	return ctx.JSON(&response)
+}
+
+type InternalMultipartAbortRequestObject struct {
+	Body *InternalMultipartAbortJSONRequestBody
+}
+
+type InternalMultipartAbortResponseObject interface {
+	VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error
+}
+
+type InternalMultipartAbort204Response struct {
+}
+
+func (response InternalMultipartAbort204Response) VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error {
+	ctx.Status(204)
+	return nil
+}
+
+type InternalMultipartAbort400JSONResponse APIError
+
+func (response InternalMultipartAbort400JSONResponse) VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(400)
+
+	return ctx.JSON(&response)
+}
+
+type InternalMultipartAbort401JSONResponse APIError
+
+func (response InternalMultipartAbort401JSONResponse) VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(401)
+
+	return ctx.JSON(&response)
+}
+
+type InternalMultipartAbort403JSONResponse APIError
+
+func (response InternalMultipartAbort403JSONResponse) VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(403)
+
+	return ctx.JSON(&response)
+}
+
+type InternalMultipartAbort500JSONResponse APIError
+
+func (response InternalMultipartAbort500JSONResponse) VisitInternalMultipartAbortResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(500)
 
@@ -9943,6 +10206,9 @@ type StrictServerInterface interface {
 	// (POST /data/inspect/project-scopes)
 	InternalInspectProjectScopesPost(ctx context.Context, request InternalInspectProjectScopesPostRequestObject) (InternalInspectProjectScopesPostResponseObject, error)
 
+	// (POST /data/multipart/abort)
+	InternalMultipartAbort(ctx context.Context, request InternalMultipartAbortRequestObject) (InternalMultipartAbortResponseObject, error)
+
 	// (POST /data/multipart/complete)
 	InternalMultipartComplete(ctx context.Context, request InternalMultipartCompleteRequestObject) (InternalMultipartCompleteResponseObject, error)
 
@@ -10346,6 +10612,37 @@ func (sh *strictHandler) InternalInspectProjectScopesPost(ctx fiber.Ctx) error {
 		return err
 	} else if validResponse, ok := response.(InternalInspectProjectScopesPostResponseObject); ok {
 		if err := validResponse.VisitInternalInspectProjectScopesPostResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// InternalMultipartAbort operation middleware
+func (sh *strictHandler) InternalMultipartAbort(ctx fiber.Ctx) error {
+	var request InternalMultipartAbortRequestObject
+
+	var body InternalMultipartAbortJSONRequestBody
+	if err := ctx.Bind().Body(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx fiber.Ctx, request interface{}) (interface{}, error) {
+		return sh.ssi.InternalMultipartAbort(ctx.Context(), request.(InternalMultipartAbortRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InternalMultipartAbort")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(InternalMultipartAbortResponseObject); ok {
+		if err := validResponse.VisitInternalMultipartAbortResponse(ctx); err != nil {
 			return err
 		}
 	} else if response != nil {

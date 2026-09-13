@@ -315,6 +315,60 @@ func (db *Store) ListObjectIDsPageByScope(ctx context.Context, organization, pro
 	return scanObjectIDs(rows)
 }
 
+func (db *Store) ListObjectIDsPageByAuthorizedScope(ctx context.Context, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
+	organization = strings.TrimSpace(organization)
+	project = strings.TrimSpace(project)
+	startAfter = strings.TrimSpace(startAfter)
+	if limit <= 0 {
+		return []string{}, nil
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	args := make([]any, 0, 8)
+	conditions := make([]string, 0, 4)
+	if organization != "" {
+		resourceCondition, resourceArgs, err := scopeResourceCondition("ca_scope.resource", organization, project)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, resourceArgs...)
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM drs_object_controlled_access ca_scope WHERE ca_scope.object_id = o.id AND `+resourceCondition+`)`)
+	}
+	if restrictToResources {
+		resources = clientaccess.NormalizeAccessResources(resources)
+		parts := make([]string, 0, 2)
+		if len(resources) > 0 {
+			resourceCondition, resourceArgs := db.dialect.ListArgs("ca_auth.resource", resources)
+			parts = append(parts, `EXISTS (SELECT 1 FROM drs_object_controlled_access ca_auth WHERE ca_auth.object_id = o.id AND `+resourceCondition+`)`)
+			args = append(args, resourceArgs...)
+		}
+		if includeUnscoped {
+			parts = append(parts, `NOT EXISTS (SELECT 1 FROM drs_object_controlled_access ca_auth WHERE ca_auth.object_id = o.id)`)
+		}
+		if len(parts) == 0 {
+			return []string{}, nil
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	if startAfter != "" {
+		args = append(args, startAfter)
+		conditions = append(conditions, "o.id > ?")
+	}
+	query := `SELECT DISTINCT o.id FROM drs_object o`
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	query += " ORDER BY o.id LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	rows, err := db.queryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanObjectIDs(rows)
+}
+
 func (db *Store) ListObjectIDsPageByURL(ctx context.Context, objectURL, organization, project, startAfter string, limit, offset int, resources []string, includeUnscoped, restrictToResources bool) ([]string, error) {
 	objectURL = strings.TrimSpace(objectURL)
 	organization = strings.TrimSpace(organization)

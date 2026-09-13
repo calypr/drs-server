@@ -3,6 +3,7 @@ package objects_test
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"testing"
 	"time"
@@ -243,6 +244,15 @@ func TestListRecords_UsesTypedScopeAndPagePolicy(t *testing.T) {
 	}
 }
 
+func TestListRecordsRejectsPageWindowOverflow(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := objects.NewService(database)
+	_, err := service.ListObjects(context.Background(), objects.RecordListQuery{Limit: 2, Page: math.MaxInt})
+	if err == nil {
+		t.Fatal("ListObjects accepted an overflowing page window")
+	}
+}
+
 func TestLookupChecksumQueries_PreservesInputOrderAndDuplicates(t *testing.T) {
 	database := newSQLiteDatabase(t)
 	service := objects.NewService(database)
@@ -318,6 +328,51 @@ func TestListRecordsFiltersUnauthorizedScopes(t *testing.T) {
 	}
 	if len(ids) != 0 {
 		t.Fatalf("expected authz fallback to filter ids, got %+v", ids)
+	}
+}
+
+func TestListRecordsPreservesBroadWriteAuthorizationWithOptionalPager(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := objects.NewService(database)
+	registerScopedCandidate(t, service, "broad-write", "5656565656565656565656565656565656565656565656565656565656565656", "secure", "p1")
+	ctx := buildLocalAuthzContext(map[string]map[string]bool{
+		"/programs": {"update": true},
+	})
+
+	records, err := service.ListObjects(ctx, objects.RecordListQuery{
+		Scope:          objects.Scope{Organization: "secure", Project: "p1"},
+		RequiredMethod: "update",
+		Limit:          10,
+	})
+	if err != nil {
+		t.Fatalf("ListObjects returned an error: %v", err)
+	}
+	if len(records) != 1 || records[0].Id != "broad-write" {
+		t.Fatalf("ListObjects returned %+v, want broad-write", records)
+	}
+}
+
+func TestListRecordsBroadReadDoesNotExposePrivateOrphans(t *testing.T) {
+	database := newSQLiteDatabase(t)
+	service := objects.NewService(database)
+	registerScopedCandidate(t, service, "private-orphan", "5757575757575757575757575757575757575757575757575757575757575757", "secure", "retired")
+	resource := "/organization/secure/project/retired"
+	deleteCtx := buildLocalAuthzContext(map[string]map[string]bool{
+		resource: {"delete": true},
+	})
+	if removed, err := service.DeleteBulkByScope(deleteCtx, "secure", "retired"); err != nil || removed != 1 {
+		t.Fatalf("DeleteBulkByScope removed %d records with error %v, want 1 record and no error", removed, err)
+	}
+
+	readCtx := buildLocalAuthzContext(map[string]map[string]bool{
+		"/programs": {"read": true},
+	})
+	records, err := service.ListObjects(readCtx, objects.RecordListQuery{RequiredMethod: "read", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListObjects returned an error: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("ListObjects returned private orphan %+v, want no records", records)
 	}
 }
 

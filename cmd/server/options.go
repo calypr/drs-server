@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/calypr/syfon/apigen/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/access/authentication"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
@@ -30,7 +30,8 @@ type serverRuntime struct {
 	listener         net.Listener
 	closeOnce        sync.Once
 	closeErr         error
-	serviceInfo      drs.Service
+	serviceInfo      generated.N200ServiceInfo
+	health           *httpapi.Health
 	objectService    *objects.Service
 	transferService  *transfers.Service
 	lfsService       *transferlfs.Service
@@ -40,6 +41,8 @@ type serverRuntime struct {
 	bucketService    *buckets.Service
 	authzHandler     fiber.Handler
 	requestIDHandler fiber.Handler
+	multipartCancel  context.CancelFunc
+	multipartWG      sync.WaitGroup
 }
 
 // firstAcceptListener reports that the Fiber server has reached its serving
@@ -66,6 +69,13 @@ func (rt *serverRuntime) Close(ctx context.Context) error {
 		}
 
 		var cleanupErrors []error
+		if rt.health != nil {
+			rt.health.StopServing()
+		}
+		if rt.multipartCancel != nil {
+			rt.multipartCancel()
+			rt.multipartWG.Wait()
+		}
 		if rt.app != nil {
 			if err := rt.app.ShutdownWithContext(ctx); err != nil && !errors.Is(err, fiber.ErrNotRunning) {
 				cleanupErrors = append(cleanupErrors, err)
@@ -106,6 +116,7 @@ func registerServerRoutes(rt *serverRuntime) {
 		ProjectStorage: rt.projectStorage,
 		Authorization:  rt.authzHandler,
 		RequestIDs:     rt.requestIDHandler,
+		Health:         rt.health,
 	}, httpapi.Options{
 		Docs:     rt.cfg.Routes.Docs,
 		GA4GH:    rt.cfg.Routes.Ga4gh,
@@ -118,5 +129,6 @@ func registerServerRoutes(rt *serverRuntime) {
 			RequestLimitPerMinute:        rt.cfg.LFS.RequestLimitPerMinute,
 			BandwidthLimitBytesPerMinute: rt.cfg.LFS.BandwidthLimitBytesPerMinute,
 		},
+		MaxBulkRequestLength: rt.cfg.DRS.MaxBulkRequestLength,
 	})
 }

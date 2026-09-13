@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -26,6 +27,15 @@ type Runtime struct {
 // NewRuntime assembles configured authentication mechanisms and swallows plugin
 // startup failures so request handling retains the existing fallback behavior.
 func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
+	runtime, _ := newRuntime(logger, auth, false)
+	return runtime
+}
+
+func NewRuntimeStrict(logger *slog.Logger, auth config.AuthConfig) (*Runtime, error) {
+	return newRuntime(logger, auth, true)
+}
+
+func newRuntime(logger *slog.Logger, auth config.AuthConfig, strict bool) (*Runtime, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -45,6 +55,9 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 			if err != nil {
 				runtime.localAuthzError = err
 				logger.Error("failed to load local authz csv", "path", localCSV, "err", err)
+				if strict {
+					return nil, fmt.Errorf("failed to load local authz csv %q: %w", localCSV, err)
+				}
 			} else {
 				localUsers = users
 				runtime.localAuthzForSubject = users.authzForSubject
@@ -53,13 +66,25 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 	}
 
 	if pluginPath := auth.PluginPaths.Authz; pluginPath != "" {
-		if authorizer, err := newAuthorizationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
+		authorizer, err := newAuthorizationPluginManager(pluginPath, append([]string(nil), childEnv...))
+		if err != nil {
+			if strict {
+				runtime.Close()
+				return nil, fmt.Errorf("failed to start authorization plugin %q: %w", pluginPath, err)
+			}
+		} else {
 			runtime.authorization = authorizer
 			runtime.pluginProcesses = append(runtime.pluginProcesses, authorizer.client.client)
 		}
 	}
 	if pluginPath := auth.PluginPaths.Authn; pluginPath != "" {
-		if authenticator, err := newAuthenticationPluginManager(pluginPath, append([]string(nil), childEnv...)); err == nil {
+		authenticator, err := newAuthenticationPluginManager(pluginPath, append([]string(nil), childEnv...))
+		if err != nil {
+			if strict {
+				runtime.Close()
+				return nil, fmt.Errorf("failed to start authentication plugin %q: %w", pluginPath, err)
+			}
+		} else {
 			runtime.authentication = authenticator
 			runtime.pluginProcesses = append(runtime.pluginProcesses, authenticator.client.client)
 		}
@@ -80,7 +105,7 @@ func NewRuntime(logger *slog.Logger, auth config.AuthConfig) *Runtime {
 		}
 	}
 
-	return runtime
+	return runtime, nil
 }
 
 // Close terminates plugin processes owned by this runtime in reverse startup

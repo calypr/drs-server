@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -10,6 +11,30 @@ import (
 )
 
 func validateConfig(cfg *Config) error {
+	cfg.Profile = strings.ToLower(strings.TrimSpace(cfg.Profile))
+	if cfg.Profile == "" {
+		cfg.Profile = ProfileDevelopment
+	}
+	if cfg.Profile != ProfileDevelopment && cfg.Profile != ProfileProduction {
+		return fmt.Errorf("invalid profile %q: expected %q or %q", cfg.Profile, ProfileDevelopment, ProfileProduction)
+	}
+	if cfg.DRS.MaxBulkRequestLength < 1 {
+		return fmt.Errorf("drs.max_bulk_request_length must be >= 1")
+	}
+	if cfg.Multipart.CleanupIntervalSeconds < 0 || cfg.Multipart.InactiveTimeoutSeconds < 0 || cfg.Multipart.CompletedRetentionSeconds < 0 || cfg.Multipart.BatchSize < 0 {
+		return fmt.Errorf("multipart cleanup values must be >= 0")
+	}
+	if cfg.Multipart.CleanupIntervalSeconds > 0 {
+		if cfg.Multipart.InactiveTimeoutSeconds == 0 {
+			return fmt.Errorf("multipart.inactive_timeout_seconds must be >= 1 when cleanup is enabled")
+		}
+		if cfg.Multipart.InactiveTimeoutSeconds < cfg.Multipart.CleanupIntervalSeconds {
+			return fmt.Errorf("multipart.inactive_timeout_seconds must be at least cleanup_interval_seconds")
+		}
+		if cfg.Multipart.BatchSize == 0 {
+			return fmt.Errorf("multipart.batch_size must be >= 1 when cleanup is enabled")
+		}
+	}
 	// Final Validation: Exactly one DB must be specified
 	if cfg.Database.Sqlite != nil && cfg.Database.Postgres != nil {
 		// If both are set, but one is the default "drs.db" and the other was explicitly set by user,
@@ -143,7 +168,56 @@ func validateConfig(cfg *Config) error {
 	if cfg.LFS.BandwidthLimitBytesPerMinute < 0 {
 		return fmt.Errorf("lfs.bandwidth_limit_bytes_per_minute must be >= 0")
 	}
+	if cfg.Database.Postgres != nil {
+		pg := cfg.Database.Postgres
+		if pg.MaxOpenConnections < 0 || pg.MaxIdleConnections < 0 || pg.ConnectionMaxLifetimeSeconds < 0 || pg.ConnectionMaxIdleTimeSeconds < 0 {
+			return fmt.Errorf("postgres connection pool values must be >= 0")
+		}
+		if pg.MaxOpenConnections > 0 && pg.MaxIdleConnections > pg.MaxOpenConnections {
+			return fmt.Errorf("postgres.max_idle_connections cannot exceed max_open_connections")
+		}
+	}
+	if cfg.Profile == ProfileProduction {
+		if cfg.Database.Sqlite != nil {
+			return fmt.Errorf("production profile requires PostgreSQL; SQLite is not supported")
+		}
+		if cfg.Auth.AllowUnauthenticated || cfg.Auth.Mock.Enabled || inheritedMockAuthEnabled() {
+			return fmt.Errorf("production profile forbids unauthenticated or mock authentication")
+		}
+		if cfg.Routes.Docs {
+			return fmt.Errorf("production profile requires routes.docs=false")
+		}
+		if cfg.Database.Postgres == nil {
+			return fmt.Errorf("production profile requires PostgreSQL")
+		}
+		pg := cfg.Database.Postgres
+		if strings.EqualFold(strings.TrimSpace(pg.SSLMode), "disable") || strings.TrimSpace(pg.SSLMode) == "" {
+			if !pg.AllowInsecureTransport {
+				return fmt.Errorf("production profile requires PostgreSQL TLS; set database.postgres.allow_insecure_transport=true only for an explicit trusted network")
+			}
+		}
+		if pg.MaxOpenConnections < 1 {
+			return fmt.Errorf("production profile requires postgres.max_open_connections >= 1")
+		}
+		if !stableCredentialEncryptionConfigured(cfg) {
+			return fmt.Errorf("production profile requires stable credential encryption configuration")
+		}
+		if strings.TrimSpace(cfg.Service.ID) == "" || strings.TrimSpace(cfg.Service.Name) == "" || strings.TrimSpace(cfg.Service.Organization) == "" || strings.TrimSpace(cfg.Service.OrganizationURL) == "" {
+			return fmt.Errorf("production profile requires service id, name, organization, and organization_url")
+		}
+	}
 	return nil
+}
+
+func stableCredentialEncryptionConfigured(cfg *Config) bool {
+	if strings.TrimSpace(cfg.CredentialEncryption.MasterKey) != "" || strings.TrimSpace(cfg.CredentialEncryption.LocalKeyFile) != "" {
+		return true
+	}
+	if strings.TrimSpace(os.Getenv("DRS_CREDENTIAL_MASTER_KEY")) != "" || strings.TrimSpace(os.Getenv("DRS_CREDENTIAL_LOCAL_KEY_FILE")) != "" || strings.TrimSpace(os.Getenv("DRS_CREDENTIAL_KMS_KEY_ID")) != "" {
+		return true
+	}
+	manager := strings.ToLower(strings.TrimSpace(os.Getenv("DRS_CREDENTIAL_KEY_MANAGER")))
+	return manager != "" && manager != "local" && manager != "file"
 }
 
 func normalizeBucketScope(scope BucketScopeConfig, source string, credentialIDsByBucket map[string][]string) (BucketScopeConfig, error) {

@@ -94,7 +94,7 @@ func TestBulkAccessResponsePreservesFailureCategories(t *testing.T) {
 		Events:  bulkAccessEvents{},
 	})
 	app := fiber.New()
-	registerDRSRoutes(app, nil, accessService, generated.Service{})
+	registerDRSRoutes(app, nil, accessService, generated.N200ServiceInfo{})
 
 	requestBody := []byte(`{"bulk_object_access_ids":[` +
 		`{"bulk_object_id":"ok","bulk_access_ids":["access"]},` +
@@ -149,5 +149,25 @@ func TestBulkAccessResponsePreservesFailureCategories(t *testing.T) {
 	wantOrder := []int{http.StatusNotFound, http.StatusForbidden, http.StatusServiceUnavailable, http.StatusInternalServerError}
 	if !reflect.DeepEqual(gotOrder, wantOrder) {
 		t.Fatalf("failure status order = %v, want %v", gotOrder, wantOrder)
+	}
+}
+
+func TestBulkAccessRejectsConfiguredLimitBeforeExpansion(t *testing.T) {
+	accessService := transfers.NewService(transfers.Dependencies{
+		Objects: bulkAccessObjectPort{records: map[string]*generated.DrsObject{}, errors: map[string]error{}},
+		Storage: bulkAccessStorage{},
+	})
+	app := fiber.New()
+	registerDRSRoutes(app, nil, accessService, generated.N200ServiceInfo{}, 1)
+	requestBody := []byte(`{"bulk_object_access_ids":[` +
+		`{"bulk_object_id":"object-1","bulk_access_ids":["a","b"]},` +
+		`{"bulk_object_id":"object-2","bulk_access_ids":["c"]}]}`)
+	response, err := app.Test(httptest.NewRequest(http.MethodPost, "/objects/access", bytes.NewReader(requestBody)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusRequestEntityTooLarge)
 	}
 }

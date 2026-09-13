@@ -121,7 +121,8 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	authRuntime := authentication.NewRuntime(logger, config.AuthConfig{Mode: config.AuthModeLocal})
 	authzHandler := httpapi.AuthorizationHandler(httpapi.AuthzOptions{Mode: "local", Evaluator: authRuntime})
 	requestIDHandler := httpapi.RequestIDHandler(logger)
-	cfg := &config.Config{Routes: routes}
+	cfg := testServiceInfoConfig()
+	cfg.Routes = routes
 	dependencies := mockServerDependencies(objectStore, bucketStore)
 	objectService := objects.NewService(dependencies.objects)
 	usageService := usage.NewService(usage.Dependencies{Reports: dependencies.usageReports, Objects: objectService})
@@ -134,7 +135,7 @@ func buildMockServerRouterWithRoutes(routes config.RoutesConfig) *fiber.App {
 	rt := &serverRuntime{
 		app:              app,
 		cfg:              cfg,
-		serviceInfo:      serviceInfoForBackend(true),
+		serviceInfo:      serviceInfoForConfig(cfg),
 		objectService:    objectService,
 		transferService:  transferService,
 		lfsService:       lfsService,

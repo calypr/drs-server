@@ -35,6 +35,8 @@ import (
 
 var configFile string
 
+const productionSchemaCheckTimeout = 3 * time.Minute
+
 func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Logger) (_ *serverRuntime, err error) {
 	var runtime *serverRuntime
 	defer func() {
@@ -72,7 +74,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	} else if cfg.Database.Postgres != nil {
 		dsn := postgresDSN(*cfg.Database.Postgres)
 		logger.Info("initializing postgres database", "host", cfg.Database.Postgres.Host, "database", cfg.Database.Postgres.Database)
-		database, errDb = postgres.NewPostgresDB(dsn, cipher)
+		database, errDb = openPostgresDatabase(ctx, cfg, dsn, cipher)
 		if errDb == nil {
 			backend = serverBackendForStore(database)
 		}
@@ -84,6 +86,9 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		return nil, fmt.Errorf("failed to initialize database: %w", errDb)
 	}
 	runtime = &serverRuntime{database: database}
+	runtime.health = httpapi.NewHealth(func(pingCtx context.Context) error {
+		return database.DB().PingContext(pingCtx)
+	}, 2*time.Second)
 
 	needsStorage := cfg.Routes.Ga4gh || cfg.Routes.Internal || cfg.Routes.LFS
 	var invalidator *storageInvalidator
@@ -151,6 +156,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 		MultipartSessions:    database,
 		DefaultSigningExpiry: signingExpiry,
 	})
+	startMultipartReconciler(ctx, runtime, transferService, cfg.Multipart)
 	lfsService := transferlfs.NewService(transferService, objectService, bucketService, backend.pending, backend.usageIngest, nil)
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
@@ -176,7 +182,15 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	// Build the authorization and request ID handlers.
 	// We use a standard slog.Logger for data-client compatibility
 	slogLogger := logger
-	authRuntime := authentication.NewRuntime(slogLogger, cfg.Auth)
+	var authRuntime *authentication.Runtime
+	if cfg.Profile == config.ProfileProduction {
+		authRuntime, err = authentication.NewRuntimeStrict(slogLogger, cfg.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize authentication runtime: %w", err)
+		}
+	} else {
+		authRuntime = authentication.NewRuntime(slogLogger, cfg.Auth)
+	}
 	runtime.authRuntime = authRuntime
 	authzHandler := httpapi.AuthorizationHandler(httpapi.AuthzOptions{
 		Mode:      cfg.Auth.Mode,
@@ -186,7 +200,7 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 
 	runtime.app = app
 	runtime.cfg = cfg
-	runtime.serviceInfo = serviceInfoForBackend(cfg.Database.Sqlite != nil)
+	runtime.serviceInfo = serviceInfoForConfig(cfg)
 	runtime.objectService = objectService
 	runtime.transferService = transferService
 	runtime.lfsService = lfsService
@@ -197,6 +211,74 @@ func buildServerRuntime(ctx context.Context, cfg *config.Config, logger *slog.Lo
 	runtime.authzHandler = authzHandler
 	runtime.requestIDHandler = requestIDHandler
 	return runtime, nil
+}
+
+func openPostgresDatabase(ctx context.Context, cfg *config.Config, dsn string, cipher store.CredentialCodec) (*store.Store, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	options := postgres.OpenOptions{
+		SchemaMode:         postgres.SchemaModeAuto,
+		MaxOpenConnections: cfg.Database.Postgres.MaxOpenConnections,
+		MaxIdleConnections: cfg.Database.Postgres.MaxIdleConnections,
+		PingTimeout:        10 * time.Second,
+	}
+	if cfg.Database.Postgres.ConnectionMaxLifetimeSeconds > 0 {
+		options.ConnectionMaxLifetime = time.Duration(cfg.Database.Postgres.ConnectionMaxLifetimeSeconds) * time.Second
+	}
+	if cfg.Database.Postgres.ConnectionMaxIdleTimeSeconds > 0 {
+		options.ConnectionMaxIdleTime = time.Duration(cfg.Database.Postgres.ConnectionMaxIdleTimeSeconds) * time.Second
+	}
+	if cfg.Profile != config.ProfileProduction {
+		return postgres.NewPostgresDBWithOptions(dsn, cipher, options)
+	}
+
+	options.SchemaMode = postgres.SchemaModeCheck
+	checkCtx, cancel := context.WithTimeout(ctx, productionSchemaCheckTimeout)
+	defer cancel()
+	var lastErr error
+	for {
+		if deadline, ok := checkCtx.Deadline(); ok {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				return nil, fmt.Errorf("production schema check timed out: %w (last error: %v)", checkCtx.Err(), lastErr)
+			}
+			if remaining < options.PingTimeout {
+				options.PingTimeout = remaining
+			}
+		}
+		database, err := postgres.NewPostgresDBWithOptions(dsn, cipher, options)
+		if err == nil {
+			return database, nil
+		}
+		lastErr = err
+		if !retryProductionSchemaCheck(err) {
+			return nil, err
+		}
+		select {
+		case <-checkCtx.Done():
+			return nil, fmt.Errorf("production schema check timed out: %w (last error: %v)", checkCtx.Err(), lastErr)
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+func retryProductionSchemaCheck(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, fragment := range []string{
+		"failed to ping database",
+		"schema migration ledger is missing",
+		"required schema relation",
+		"database schema is behind",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 const maxSigningExpirySeconds = int64((1<<63 - 1) / int64(time.Second))
@@ -320,6 +402,33 @@ func applyCredentialEncryptionConfig(cfg *config.Config) {
 			os.Setenv(credentialcipher.DatabaseSQLiteFileEnv, sqliteFile)
 		}
 	}
+}
+
+func startMultipartReconciler(ctx context.Context, runtime *serverRuntime, service *transfers.Service, policy config.MultipartConfig) {
+	if runtime == nil || service == nil || policy.CleanupIntervalSeconds <= 0 || policy.BatchSize <= 0 {
+		return
+	}
+	reconcileCtx, cancel := context.WithCancel(ctx)
+	runtime.multipartCancel = cancel
+	runtime.multipartWG.Add(1)
+	interval := time.Duration(policy.CleanupIntervalSeconds) * time.Second
+	inactive := time.Duration(policy.InactiveTimeoutSeconds) * time.Second
+	retention := time.Duration(policy.CompletedRetentionSeconds) * time.Second
+	go func() {
+		defer runtime.multipartWG.Done()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-reconcileCtx.Done():
+				return
+			case <-ticker.C:
+				if err := service.ReconcileMultipartSessions(reconcileCtx, inactive, retention, policy.BatchSize); err != nil {
+					slog.Default().Warn("multipart reconciliation failed", "err", err)
+				}
+			}
+		}
+	}()
 }
 
 func init() {

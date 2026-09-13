@@ -53,6 +53,20 @@ func Open(db *sql.DB, dialect Dialect, cipher CredentialCodec) (*Store, error) {
 	return &Store{db: db, dialect: dialect, cipher: cipher}, nil
 }
 
+// OpenPrepared adopts an already validated database handle without running
+// dialect bootstrap. Production PostgreSQL startup uses this path after a
+// read-only schema check. Schema writes stay in the SQL mounted into the
+// cluster DB-init Job.
+func OpenPrepared(db *sql.DB, dialect Dialect, cipher CredentialCodec) (*Store, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database is required")
+	}
+	if dialect == nil {
+		return nil, fmt.Errorf("database dialect is required")
+	}
+	return &Store{db: db, dialect: dialect, cipher: cipher}, nil
+}
+
 // Close closes the database handle owned by the store.
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {

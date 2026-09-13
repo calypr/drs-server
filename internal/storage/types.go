@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -56,9 +57,28 @@ type BeginMultipartRequest struct {
 	CompletionID string
 }
 
+type AbortMultipartRequest struct {
+	Target       Target
+	UploadID     UploadID
+	CompletionID string
+}
+
 func MultipartPartObjectKey(key string, uploadID UploadID, partNumber int32) string {
 	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
 	return path.Join(".syfon-multipart", strings.TrimSpace(string(uploadID)), cleanKey, "parts", strconv.Itoa(int(partNumber)))
+}
+
+func MultipartUploadPrefix(key string, uploadID UploadID) (string, error) {
+	id := strings.TrimSpace(string(uploadID))
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\\`) {
+		return "", fmt.Errorf("invalid multipart upload ID")
+	}
+	cleanKey := strings.Trim(strings.TrimSpace(key), "/")
+	normalizedKey := path.Clean(cleanKey)
+	if cleanKey == "" || normalizedKey != cleanKey || normalizedKey == "." || normalizedKey == ".." || strings.HasPrefix(normalizedKey, "../") {
+		return "", fmt.Errorf("invalid multipart object key")
+	}
+	return path.Join(".syfon-multipart", id, normalizedKey) + "/", nil
 }
 
 type CompletedPart struct {

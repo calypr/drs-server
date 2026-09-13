@@ -47,6 +47,22 @@ func TestServerRuntimeCloseClosesSQLiteDatabaseIdempotently(t *testing.T) {
 	}
 }
 
+func TestProductionRuntimeRejectsInvalidAuthenticationPlugin(t *testing.T) {
+	t.Setenv(credentialcipher.CredentialMasterKeyEnv, "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authn-plugin")
+	runtime, err := buildServerRuntime(context.Background(), &config.Config{
+		Profile:  config.ProfileProduction,
+		Database: config.DatabaseConfig{Sqlite: &config.SqliteConfig{File: ":memory:"}},
+		Auth:     config.AuthConfig{Mode: config.AuthModeLocal, Basic: config.BasicAuthConfig{Username: "user", Password: "pass"}, PluginPaths: config.PluginPaths{Authn: missingPlugin}},
+	}, slog.Default())
+	if runtime != nil {
+		t.Fatalf("production runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authentication plugin") {
+		t.Fatalf("production runtime error = %v, want authentication plugin failure", err)
+	}
+}
+
 func TestFailedRuntimeConstructionClosesSQLiteDatabase(t *testing.T) {
 	lsof, err := exec.LookPath("lsof")
 	if err != nil {

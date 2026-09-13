@@ -405,16 +405,19 @@ func newSyfonTestServer(t *testing.T) *fiberTestServer {
 	environment := "test"
 	createdAt := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
 	updatedAt := time.Date(2024, time.January, 3, 4, 5, 6, 0, time.UTC)
-	serviceInfo := drs.Service{
-		Id:          "drs-service-test",
-		Name:        "Calypr Test DRS Server",
-		Type:        drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.2.0"},
-		Description: &description,
-		CreatedAt:   &createdAt,
-		UpdatedAt:   &updatedAt,
-		Environment: &environment,
-		Version:     "1.0.0",
+	serviceInfo := drs.N200ServiceInfo{
+		Id:                   "drs-service-test",
+		Name:                 "Calypr Test DRS Server",
+		Type:                 drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.5.0"},
+		Description:          &description,
+		CreatedAt:            &createdAt,
+		UpdatedAt:            &updatedAt,
+		Environment:          &environment,
+		Version:              "1.0.0",
+		MaxBulkRequestLength: 100,
 	}
+	serviceInfo.Organization.Name = "Calypr"
+	serviceInfo.Organization.Url = "https://github.com/calypr/syfon"
 	projectStorageService := projectstorage.NewService(projectstorage.Dependencies{
 		ScopeResolver: bucketService,
 		Credentials:   bucketService,

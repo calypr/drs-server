@@ -46,3 +46,10 @@ type ObjectStore interface {
 	ListObjectIDsPageByScope(context.Context, string, string, string, int, int) ([]string, error)
 	ListObjectIDsPageByURL(context.Context, string, string, string, string, int, int, []string, bool, bool) ([]string, error)
 }
+
+// AuthorizedScopePager is an optional database capability. It allows the
+// production store to apply authorization filters before paging, while
+// alternate stores retain the materialized fallback in ListObjects.
+type AuthorizedScopePager interface {
+	ListObjectIDsPageByAuthorizedScope(context.Context, string, string, string, int, int, []string, bool, bool) ([]string, error)
+}

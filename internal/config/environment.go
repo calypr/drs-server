@@ -8,6 +8,9 @@ import (
 
 func applyEnvironmentOverrides(cfg *Config) error {
 	// 3. Override with Environment Variables (if set)
+	if v := os.Getenv("DRS_PROFILE"); v != "" {
+		cfg.Profile = v
+	}
 	if portStr := os.Getenv("DRS_PORT"); portStr != "" {
 		p, err := strconv.Atoi(portStr)
 		if err != nil {
@@ -71,6 +74,41 @@ func applyEnvironmentOverrides(cfg *Config) error {
 			return fmt.Errorf("invalid DRS_SIGNING_DEFAULT_EXPIRY_SECONDS: %s", v)
 		}
 		cfg.Signing.DefaultExpirySeconds = i
+	}
+	if v := os.Getenv("DRS_MAX_BULK_REQUEST_LENGTH"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid DRS_MAX_BULK_REQUEST_LENGTH: %s", v)
+		}
+		cfg.DRS.MaxBulkRequestLength = i
+	}
+	if v := os.Getenv("DRS_MULTIPART_CLEANUP_INTERVAL_SECONDS"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid DRS_MULTIPART_CLEANUP_INTERVAL_SECONDS: %s", v)
+		}
+		cfg.Multipart.CleanupIntervalSeconds = i
+	}
+	if v := os.Getenv("DRS_MULTIPART_INACTIVE_TIMEOUT_SECONDS"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid DRS_MULTIPART_INACTIVE_TIMEOUT_SECONDS: %s", v)
+		}
+		cfg.Multipart.InactiveTimeoutSeconds = i
+	}
+	if v := os.Getenv("DRS_MULTIPART_COMPLETED_RETENTION_SECONDS"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid DRS_MULTIPART_COMPLETED_RETENTION_SECONDS: %s", v)
+		}
+		cfg.Multipart.CompletedRetentionSeconds = i
+	}
+	if v := os.Getenv("DRS_MULTIPART_BATCH_SIZE"); v != "" {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid DRS_MULTIPART_BATCH_SIZE: %s", v)
+		}
+		cfg.Multipart.BatchSize = i
 	}
 	if v := os.Getenv("DRS_ENABLE_DOCS"); v != "" {
 		b, err := strconv.ParseBool(v)
@@ -153,6 +191,30 @@ func applyEnvironmentOverrides(cfg *Config) error {
 		}
 		if v := os.Getenv("DRS_DB_SSLMODE"); v != "" {
 			cfg.Database.Postgres.SSLMode = v
+		}
+		if v := os.Getenv("DRS_DB_ALLOW_INSECURE_TRANSPORT"); v != "" {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid DRS_DB_ALLOW_INSECURE_TRANSPORT: %s", v)
+			}
+			cfg.Database.Postgres.AllowInsecureTransport = b
+		}
+		for _, setting := range []struct {
+			env  string
+			dest *int
+		}{
+			{env: "DRS_DB_MAX_OPEN_CONNECTIONS", dest: &cfg.Database.Postgres.MaxOpenConnections},
+			{env: "DRS_DB_MAX_IDLE_CONNECTIONS", dest: &cfg.Database.Postgres.MaxIdleConnections},
+			{env: "DRS_DB_CONNECTION_MAX_LIFETIME_SECONDS", dest: &cfg.Database.Postgres.ConnectionMaxLifetimeSeconds},
+			{env: "DRS_DB_CONNECTION_MAX_IDLE_TIME_SECONDS", dest: &cfg.Database.Postgres.ConnectionMaxIdleTimeSeconds},
+		} {
+			if v := os.Getenv(setting.env); v != "" {
+				i, err := strconv.Atoi(v)
+				if err != nil {
+					return fmt.Errorf("invalid %s: %s", setting.env, v)
+				}
+				*setting.dest = i
+			}
 		}
 	}
 

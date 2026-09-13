@@ -46,6 +46,42 @@ type MultipartSessionStore interface {
 	FinishMultipartCompletion(context.Context, string, string, string, time.Time) (bool, error)
 }
 
+// Optional multipart capabilities preserve compatibility for callers with
+// lightweight session stores while the durable store can persist operation
+// intent and completion inputs atomically.
+type MultipartCompletionPartsClaimer interface {
+	ClaimMultipartCompletionWithParts(context.Context, string, string, string, []CompletedPart, time.Time, time.Time) (MultipartSession, bool, error)
+}
+
+type MultipartAbortStore interface {
+	ClaimMultipartAbort(context.Context, string, string, time.Time, time.Time) (MultipartSession, bool, error)
+	FinishMultipartAbort(context.Context, string, string, time.Time) (bool, error)
+}
+
+type MultipartActivityStore interface {
+	TouchMultipartSession(context.Context, string, time.Time) error
+}
+
+type MultipartCompletionReceipt struct {
+	UploadID          string
+	Authorization     MultipartAuthorization
+	PartsFingerprint  string
+	CompletedLocation string
+}
+
+type MultipartCompletionReceiptStore interface {
+	GetMultipartCompletionReceipt(context.Context, string) (MultipartCompletionReceipt, error)
+}
+
+type MultipartReconcilerStore interface {
+	ListMultipartSessionsForReconcile(context.Context, time.Time, time.Time, int) ([]MultipartSession, error)
+	CompactCompletedMultipartSessions(context.Context, time.Time, int) error
+}
+
+type MultipartAborter interface {
+	AbortMultipart(context.Context, storage.AbortMultipartRequest) error
+}
+
 type Dependencies struct {
 	Objects              ObjectPort
 	Storage              StoragePort

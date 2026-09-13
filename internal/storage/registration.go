@@ -13,6 +13,13 @@ type Provider interface {
 	CompleteMultipart(context.Context, ProviderBinding, CompleteMultipartRequest) error
 }
 
+// MultipartAborter is optional so existing provider implementations remain
+// source-compatible. Production providers implement exact, provider-native
+// cleanup semantics where the backend supports them.
+type MultipartAborter interface {
+	AbortMultipart(context.Context, ProviderBinding, AbortMultipartRequest) error
+}
+
 type Invalidator interface {
 	InvalidateBucket(string)
 }
@@ -36,6 +43,7 @@ type Registration struct {
 	prober      Prober
 	inventory   Inventoryer
 	deleter     Deleter
+	aborter     MultipartAborter
 	closer      io.Closer
 }
 
@@ -55,6 +63,9 @@ func NewRegistration(provider string, backend Provider) Registration {
 	}
 	if deleter, ok := backend.(Deleter); ok && !isNilInterface(deleter) {
 		registration.deleter = deleter
+	}
+	if aborter, ok := backend.(MultipartAborter); ok && !isNilInterface(aborter) {
+		registration.aborter = aborter
 	}
 	if closer, ok := backend.(io.Closer); ok && !isNilInterface(closer) {
 		registration.closer = closer

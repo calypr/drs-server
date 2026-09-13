@@ -46,6 +46,8 @@ type fakeBackend struct {
 	completedUploadID  string
 	completedParts     []transfer.MultipartPart
 	completeErr        error
+	abortErr           error
+	abortedUploadID    string
 	uploadChunkSize    int
 	uploadChunkDelay   time.Duration
 	uploadDone         func()
@@ -184,6 +186,13 @@ func (f *fakeBackend) MultipartComplete(ctx context.Context, key string, uploadI
 	return f.completeErr
 }
 
+func (f *fakeBackend) MultipartAbort(_ context.Context, uploadID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.abortedUploadID = uploadID
+	return f.abortErr
+}
+
 func (f *fakeBackend) Delete(ctx context.Context, guid string) error { return nil }
 
 func readAllChunked(r io.Reader, chunkSize int, delay time.Duration) ([]byte, error) {
@@ -258,8 +267,8 @@ func TestChunkHelpers(t *testing.T) {
 	if _, err := CheckpointPath("/tmp/other.bin", "guid-2"); err != nil {
 		t.Fatalf("CheckpointPath cleanup call returned error: %v", err)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("expected stale checkpoint cleanup, stat err=%v", err)
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale checkpoint containing a provider upload ID was removed: %v", err)
 	}
 }
 

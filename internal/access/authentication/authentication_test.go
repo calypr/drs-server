@@ -105,6 +105,46 @@ func TestNewRuntimeSwallowsStartupErrors(t *testing.T) {
 	}
 }
 
+func TestNewRuntimeStrictRejectsInvalidAuthorizationPlugin(t *testing.T) {
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authz-plugin")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		PluginPaths: config.PluginPaths{Authz: missingPlugin},
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authorization plugin") {
+		t.Fatalf("strict runtime error = %v, want authorization plugin failure", err)
+	}
+}
+
+func TestNewRuntimeStrictRejectsInvalidAuthenticationPlugin(t *testing.T) {
+	missingPlugin := filepath.Join(t.TempDir(), "missing-authn-plugin")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		PluginPaths: config.PluginPaths{Authn: missingPlugin},
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "authentication plugin") {
+		t.Fatalf("strict runtime error = %v, want authentication plugin failure", err)
+	}
+}
+
+func TestNewRuntimeStrictRejectsInvalidLocalAuthorizationCSV(t *testing.T) {
+	missingCSV := filepath.Join(t.TempDir(), "missing-authz.csv")
+	runtime, err := NewRuntimeStrict(slog.Default(), config.AuthConfig{
+		Mode:          config.AuthModeLocal,
+		LocalAuthzCSV: missingCSV,
+	})
+	if runtime != nil {
+		t.Fatalf("strict runtime = %v, want nil", runtime)
+	}
+	if err == nil || !strings.Contains(err.Error(), "local authz csv") {
+		t.Fatalf("strict runtime error = %v, want local authz csv failure", err)
+	}
+}
+
 func TestPluginEnvironmentPreservesUnrelatedKeysAndAvoidsDefaults(t *testing.T) {
 	t.Setenv("PATH", "/test/path")
 	t.Setenv("SYFON_UNRELATED_PLUGIN_SETTING", "keep-me")

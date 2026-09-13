@@ -229,6 +229,60 @@ func TestCompleteMultipartUploadLeavesPartsOnMissingPartFailure(t *testing.T) {
 	}
 }
 
+func TestAbortMultipartRejectsPathTraversalWithoutDeletingFiles(t *testing.T) {
+	root := t.TempDir()
+	b, err := newBackend(root)
+	if err != nil {
+		t.Fatalf("newBackend failed: %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+
+	victim := filepath.Join(root, "victim", "keep.txt")
+	if err := os.MkdirAll(filepath.Dir(victim), 0o755); err != nil {
+		t.Fatalf("create victim directory: %v", err)
+	}
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatalf("create victim file: %v", err)
+	}
+
+	err = b.AbortMultipart(context.Background(), storage.ProviderBinding{}, storage.AbortMultipartRequest{
+		Target:   storage.Target{Key: "../../victim"},
+		UploadID: "upload",
+	})
+	if err == nil {
+		t.Error("AbortMultipart accepted a traversal key")
+	}
+	if content, readErr := os.ReadFile(victim); readErr != nil || string(content) != "keep" {
+		t.Fatalf("victim file after abort = %q, error = %v", content, readErr)
+	}
+}
+
+func TestAbortMultipartDeletesOnlyTheRequestedUploadParts(t *testing.T) {
+	root := t.TempDir()
+	b, err := newBackend(root)
+	if err != nil {
+		t.Fatalf("newBackend failed: %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+
+	requested := storage.MultipartPartObjectKey("nested/object.bin", "requested", 1)
+	unrelated := storage.MultipartPartObjectKey("nested/object.bin", "unrelated", 1)
+	writeBlob(t, b, requested, "remove")
+	writeBlob(t, b, unrelated, "keep")
+	if err := b.AbortMultipart(context.Background(), storage.ProviderBinding{}, storage.AbortMultipartRequest{
+		Target:   storage.Target{Key: "nested/object.bin"},
+		UploadID: "requested",
+	}); err != nil {
+		t.Fatalf("AbortMultipart failed: %v", err)
+	}
+	if exists, err := b.rootBucket.Exists(context.Background(), requested); err != nil || exists {
+		t.Fatalf("requested part exists = %v, error = %v; want false, nil", exists, err)
+	}
+	if exists, err := b.rootBucket.Exists(context.Background(), unrelated); err != nil || !exists {
+		t.Fatalf("unrelated part exists = %v, error = %v; want true, nil", exists, err)
+	}
+}
+
 func TestCompleteMultipartUploadRejectsEmptyParts(t *testing.T) {
 	b, err := newBackend(t.TempDir())
 	if err != nil {

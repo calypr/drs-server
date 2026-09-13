@@ -131,6 +131,25 @@ func (m *Manager) CompleteMultipart(ctx context.Context, request CompleteMultipa
 	return wrapProviderError(registration.complete.CompleteMultipart(ctx, binding, request), binding.Provider, "multipart")
 }
 
+// AbortMultipart asks a provider to discard an in-progress multipart upload.
+// Providers that cannot expose an abort API are reported as unsupported and
+// the durable session remains available for a later retry.
+func (m *Manager) AbortMultipart(ctx context.Context, request AbortMultipartRequest) error {
+	binding, target, err := m.resolveTarget(ctx, request.Target, "multipart", false)
+	if err != nil {
+		return err
+	}
+	registration, err := m.registration(binding.Provider, "multipart abort")
+	if err != nil {
+		return err
+	}
+	if registration.aborter == nil {
+		return operationError(ErrorUnsupported, binding.Provider, "multipart abort", nil)
+	}
+	request.Target = target
+	return wrapProviderError(registration.aborter.AbortMultipart(ctx, binding, request), binding.Provider, "multipart abort")
+}
+
 func (m *Manager) Probe(ctx context.Context, targets []ProbeTarget) []ProbeResult {
 	if len(targets) == 0 {
 		return nil

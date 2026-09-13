@@ -6,6 +6,9 @@ const (
 )
 
 type Config struct {
+	// Profile selects stricter operational defaults at the application
+	// boundary. An empty profile preserves the historical development behavior.
+	Profile              string                     `json:"profile,omitempty" yaml:"profile,omitempty"`
 	Port                 int                        `json:"port" yaml:"port"`
 	Database             DatabaseConfig             `json:"database" yaml:"database"`
 	Buckets              []BucketConfig             `json:"buckets,omitempty" yaml:"buckets,omitempty"`
@@ -16,6 +19,36 @@ type Config struct {
 	LFS                  LFSConfig                  `json:"lfs" yaml:"lfs"`
 	Signing              SigningConfig              `json:"signing" yaml:"signing"`
 	Routes               RoutesConfig               `json:"routes" yaml:"routes"`
+	Service              ServiceConfig              `json:"service" yaml:"service"`
+	DRS                  DRSConfig                  `json:"drs" yaml:"drs"`
+	Multipart            MultipartConfig            `json:"multipart" yaml:"multipart"`
+}
+
+const (
+	ProfileDevelopment = "development"
+	ProfileProduction  = "production"
+)
+
+type ServiceConfig struct {
+	ID               string `json:"id" yaml:"id"`
+	Name             string `json:"name" yaml:"name"`
+	Description      string `json:"description" yaml:"description"`
+	Environment      string `json:"environment" yaml:"environment"`
+	Organization     string `json:"organization" yaml:"organization"`
+	OrganizationURL  string `json:"organization_url" yaml:"organization_url"`
+	ContactURL       string `json:"contact_url" yaml:"contact_url"`
+	DocumentationURL string `json:"documentation_url" yaml:"documentation_url"`
+}
+
+type DRSConfig struct {
+	MaxBulkRequestLength int `json:"max_bulk_request_length" yaml:"max_bulk_request_length"`
+}
+
+type MultipartConfig struct {
+	CleanupIntervalSeconds    int `json:"cleanup_interval_seconds" yaml:"cleanup_interval_seconds"`
+	InactiveTimeoutSeconds    int `json:"inactive_timeout_seconds" yaml:"inactive_timeout_seconds"`
+	CompletedRetentionSeconds int `json:"completed_retention_seconds" yaml:"completed_retention_seconds"`
+	BatchSize                 int `json:"batch_size" yaml:"batch_size"`
 }
 
 type RoutesConfig struct {
@@ -36,12 +69,17 @@ type SqliteConfig struct {
 }
 
 type PostgresConfig struct {
-	Host     string `json:"host" yaml:"host"`
-	Port     int    `json:"port" yaml:"port"`
-	User     string `json:"user" yaml:"user"`
-	Password string `json:"password" yaml:"password"`
-	Database string `json:"database" yaml:"database"`
-	SSLMode  string `json:"sslmode" yaml:"sslmode"`
+	Host                         string `json:"host" yaml:"host"`
+	Port                         int    `json:"port" yaml:"port"`
+	User                         string `json:"user" yaml:"user"`
+	Password                     string `json:"password" yaml:"password"`
+	Database                     string `json:"database" yaml:"database"`
+	SSLMode                      string `json:"sslmode" yaml:"sslmode"`
+	AllowInsecureTransport       bool   `json:"allow_insecure_transport" yaml:"allow_insecure_transport"`
+	MaxOpenConnections           int    `json:"max_open_connections" yaml:"max_open_connections"`
+	MaxIdleConnections           int    `json:"max_idle_connections" yaml:"max_idle_connections"`
+	ConnectionMaxLifetimeSeconds int    `json:"connection_max_lifetime_seconds" yaml:"connection_max_lifetime_seconds"`
+	ConnectionMaxIdleTimeSeconds int    `json:"connection_max_idle_time_seconds" yaml:"connection_max_idle_time_seconds"`
 }
 
 type CredentialEncryptionConfig struct {

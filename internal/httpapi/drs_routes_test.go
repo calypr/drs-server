@@ -99,7 +99,7 @@ func TestGeneratedAccessMethodsPreserveDurableWireShape(t *testing.T) {
 
 func newDRSTestApp(services *testDRSServicesFixture) *fiber.App {
 	app := fiber.New()
-	registerDRSRoutes(app, services.objectService, services.transferService, generated.Service{})
+	registerDRSRoutes(app, services.objectService, services.transferService, generated.N200ServiceInfo{})
 	return app
 }
 
@@ -460,7 +460,7 @@ func TestDeleteAndAccessMethodRoutes(t *testing.T) {
 
 func TestUnsupportedChecksumRoutesReturnDRSError(t *testing.T) {
 	app := fiber.New()
-	registerDRSRoutes(app, nil, nil, generated.Service{})
+	registerDRSRoutes(app, nil, nil, generated.N200ServiceInfo{})
 
 	for _, path := range []string{"/objects/checksums", "/objects/object-1/checksums"} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodPut, path, nil))

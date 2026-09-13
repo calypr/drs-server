@@ -58,11 +58,6 @@ const (
 	DrsServiceDrsSupportedUploadMethodTypesSftp  DrsServiceDrsSupportedUploadMethodTypes = "sftp"
 )
 
-// Defines values for DrsServiceTypeArtifact.
-const (
-	Drs DrsServiceTypeArtifact = "drs"
-)
-
 // Defines values for UploadMethodType.
 const (
 	UploadMethodTypeFtp    UploadMethodType = "ftp"
@@ -263,6 +258,89 @@ type DeleteRequest struct {
 	Passports *[]string `json:"passports,omitempty"`
 }
 
+// DrsCapabilities defines model for DrsCapabilities.
+type DrsCapabilities struct {
+	// AccessMethodUpdateSupported Indicates whether this DRS server supports updating access methods for existing objects. If true, clients can update access methods using `/objects/{object_id}/access-methods` and `/objects/access-methods` endpoints. If false or missing, the server does not support access method updates.
+	AccessMethodUpdateSupported *bool `json:"accessMethodUpdateSupported,omitempty"`
+
+	// ChecksumAdditionSupported Indicates whether this DRS server supports adding new checksums for for existing objects. If true, clients can update access methods using `/objects/{object_id}/checksums` and `/objects/checksums` endpoints. If false or missing, the server does not support checksum addition.
+	ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
+
+	// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
+	//
+	// Example: ga4gh-passport-url-claim
+	ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
+
+	// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
+	//
+	// Example: open-access-read
+	ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
+
+	// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
+	ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
+
+	// DeleteStorageDataSupported Indicates whether this DRS server supports attempting to delete underlying storage data when clients request it. If true, the server will attempt to delete both metadata and storage files when `delete_storage_data: true` is specified in delete requests. If false or missing, the server only supports metadata deletion regardless of client request, preserving underlying storage data. Only present when deleteSupported is true. This is a capability flag indicating what the server can attempt, not a default behavior setting. Note: Storage deletion attempts may fail due to permissions, network issues, or storage service errors.
+	DeleteStorageDataSupported *bool `json:"deleteStorageDataSupported,omitempty"`
+
+	// DeleteSupported Indicates whether this DRS server supports delete operations via the delete endpoints. If true, clients can delete DRS objects using PUT requests to `/objects/{object_id}/delete` and `/objects/delete`. If false or missing, the server does not support delete operations and will return 404 for delete endpoint requests. Like upload functionality, delete support is entirely optional and servers remain DRS compliant without it.
+	DeleteSupported *bool `json:"deleteSupported,omitempty"`
+
+	// FetchByChecksumSupported Indicates whether this DRS server supports fetching objects by checksum. If true, clients can fetch DRS objects using `/objects/checksum/{checksum}`, noting that it is possible for  multiple objects to have the same checksum. If false or missing, the server does not support fetching by cejcsum.
+	FetchByChecksumSupported *bool `json:"fetchByChecksumSupported,omitempty"`
+
+	// MaxBulkAccessMethodUpdateLength Maximum number of objects that can be updated in a single bulk access method update request. Only present when accessMethodUpdateSupported is true. If not specified, defaults to maxBulkRequestLength.
+	MaxBulkAccessMethodUpdateLength *int `json:"maxBulkAccessMethodUpdateLength,omitempty"`
+
+	// MaxBulkChecksumAdditionLength Maximum number of objects that can be updated in a single bulk checksum addition request. Only present when checksumAdditionSupported is true. If not specified, defaults to maxBulkRequestLength.
+	MaxBulkChecksumAdditionLength *int `json:"maxBulkChecksumAdditionLength,omitempty"`
+
+	// MaxBulkDeleteLength Maximum number of objects that can be deleted in a single bulk delete request via `/objects/delete`. Only present when deleteSupported is true. If not specified when delete is supported, defaults to the same value as maxBulkRequestLength. Servers may enforce lower limits for delete operations compared to other bulk operations for safety reasons.
+	MaxBulkDeleteLength *int `json:"maxBulkDeleteLength,omitempty"`
+
+	// MaxBulkRequestLength The max length the bulk request endpoints can handle (>= 1) before generating a 413 error e.g. how long can the arrays bulk_object_ids and bulk_object_access_ids be for this server.
+	MaxBulkRequestLength int `json:"maxBulkRequestLength"`
+
+	// MaxRegisterRequestLength Maximum number of candidate objects that can be included in a single registration request. Only present when objectRegistrationSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
+	MaxRegisterRequestLength *int `json:"maxRegisterRequestLength,omitempty"`
+
+	// MaxUploadRequestLength Maximum number of files that can be included in a single upload request. Only present when uploadRequestSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
+	MaxUploadRequestLength *int `json:"maxUploadRequestLength,omitempty"`
+
+	// MaxUploadSize Maximum file size in bytes that can be uploaded via the upload endpoints. Only present when uploadRequestSupported is true. If not specified, there is no explicit size limit.
+	MaxUploadSize *int64 `json:"maxUploadSize,omitempty"`
+
+	// MetadataRetentionSupported Indicates whether this DRS server supports preserving object metadata after deletion. If true, the server honours `delete_object_metadata: false` in delete requests by marking the object as deleted rather than permanently removing it. Read and access endpoints return 410 Gone for objects in this state. Only present when deleteSupported is true.
+	MetadataRetentionSupported *bool `json:"metadataRetentionSupported,omitempty"`
+
+	// ObjectCount The total number of objects in this DRS service.
+	ObjectCount *int `json:"objectCount,omitempty"`
+
+	// ObjectRegistrationSupported Indicates whether this DRS server supports object registration operations via the `/objects/register` endpoint. If true, clients can register uploaded files or existing data as DRS objects. If false or missing, the server does not support object registration.
+	ObjectRegistrationSupported *bool `json:"objectRegistrationSupported,omitempty"`
+
+	// RelatedFileStorageSupported Indicates whether this DRS server supports storing files from the same upload request under a common prefix or folder structure. If true, the server will organize related files together in storage, enabling bioinformatics workflows that expect co-located files (e.g., CRAM + CRAI, VCF + TBI). If false or missing, the server may distribute files across different storage locations or prefixes. Only present when uploadRequestSupported is true. This feature is particularly valuable for genomics tools like samtools that expect index files to be co-located with data files.
+	RelatedFileStorageSupported *bool `json:"relatedFileStorageSupported,omitempty"`
+
+	// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
+	// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
+	SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
+
+	// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
+	TotalObjectSize *int `json:"totalObjectSize,omitempty"`
+
+	// UploadRequestSupported Indicates whether this DRS server supports upload request operations via the `/upload-request` endpoint. If true, clients can request upload methods and credentials for uploading files. If false or missing, the server does not support upload request coordination.
+	UploadRequestSupported *bool `json:"uploadRequestSupported,omitempty"`
+
+	// ValidateAccessMethods Indicates whether this DRS server validates access methods by following the URLs to check that they resolve to the expected objects  (e.g. by checking that the file sizes and checksums match) If true, the server will attempt to verify checksums/content before accepting access methods. If false or missing, the server trusts client-provided access methods without validation. Only present when at least one of objectRegistrationSupported or accessMethodUpdateSupported are true.
+	ValidateAccessMethods *bool `json:"validateAccessMethods,omitempty"`
+
+	// ValidateChecksums Indicates whether this DRS server validates file checksums against the provided metadata. If true, the server will verify that uploaded and registered files match their declared checksums and may reject objects with mismatches. If false or missing, the server does not perform checksum validation and relies on client-provided metadata. Only present when at least one of uploadRequestSupported or objectRegistrationSupported or checksumAdditionSupported are true.
+	ValidateChecksums *bool `json:"validateChecksums,omitempty"`
+
+	// ValidateFileSizes Indicates whether this DRS server validates file sizes against the provided metadata. If true, the server will verify that uploaded files match their declared sizes and may reject uploads with mismatches. If false or missing, the server does not perform file size validation and relies on client-provided metadata. Only present when uploadRequestSupported or objectRegistrationSupported is true.
+	ValidateFileSizes *bool `json:"validateFileSizes,omitempty"`
+}
+
 // DrsObject defines model for DrsObject.
 type DrsObject struct {
 	// AccessMethods The list of access methods that can be used to fetch the `DrsObject`.
@@ -416,94 +494,10 @@ type DrsObjectCandidate struct {
 
 // DrsService defines model for DrsService.
 type DrsService struct {
-	Drs *struct {
-		// AccessMethodUpdateSupported Indicates whether this DRS server supports updating access methods for existing objects. If true, clients can update access methods using `/objects/{object_id}/access-methods` and `/objects/access-methods` endpoints. If false or missing, the server does not support access method updates.
-		AccessMethodUpdateSupported *bool `json:"accessMethodUpdateSupported,omitempty"`
-
-		// ChecksumAdditionSupported Indicates whether this DRS server supports adding new checksums for for existing objects. If true, clients can update access methods using `/objects/{object_id}/checksums` and `/objects/checksums` endpoints. If false or missing, the server does not support checksum addition.
-		ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
-
-		// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-		//
-		// Example: ga4gh-passport-url-claim
-		ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
-
-		// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-		//
-		// Example: open-access-read
-		ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
-
-		// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
-		ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
-
-		// DeleteStorageDataSupported Indicates whether this DRS server supports attempting to delete underlying storage data when clients request it. If true, the server will attempt to delete both metadata and storage files when `delete_storage_data: true` is specified in delete requests. If false or missing, the server only supports metadata deletion regardless of client request, preserving underlying storage data. Only present when deleteSupported is true. This is a capability flag indicating what the server can attempt, not a default behavior setting. Note: Storage deletion attempts may fail due to permissions, network issues, or storage service errors.
-		DeleteStorageDataSupported *bool `json:"deleteStorageDataSupported,omitempty"`
-
-		// DeleteSupported Indicates whether this DRS server supports delete operations via the delete endpoints. If true, clients can delete DRS objects using PUT requests to `/objects/{object_id}/delete` and `/objects/delete`. If false or missing, the server does not support delete operations and will return 404 for delete endpoint requests. Like upload functionality, delete support is entirely optional and servers remain DRS compliant without it.
-		DeleteSupported *bool `json:"deleteSupported,omitempty"`
-
-		// FetchByChecksumSupported Indicates whether this DRS server supports fetching objects by checksum. If true, clients can fetch DRS objects using `/objects/checksum/{checksum}`, noting that it is possible for  multiple objects to have the same checksum. If false or missing, the server does not support fetching by cejcsum.
-		FetchByChecksumSupported *bool `json:"fetchByChecksumSupported,omitempty"`
-
-		// MaxBulkAccessMethodUpdateLength Maximum number of objects that can be updated in a single bulk access method update request. Only present when accessMethodUpdateSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkAccessMethodUpdateLength *int `json:"maxBulkAccessMethodUpdateLength,omitempty"`
-
-		// MaxBulkChecksumAdditionLength Maximum number of objects that can be updated in a single bulk checksum addition request. Only present when checksumAdditionSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkChecksumAdditionLength *int `json:"maxBulkChecksumAdditionLength,omitempty"`
-
-		// MaxBulkDeleteLength Maximum number of objects that can be deleted in a single bulk delete request via `/objects/delete`. Only present when deleteSupported is true. If not specified when delete is supported, defaults to the same value as maxBulkRequestLength. Servers may enforce lower limits for delete operations compared to other bulk operations for safety reasons.
-		MaxBulkDeleteLength *int `json:"maxBulkDeleteLength,omitempty"`
-
-		// MaxBulkRequestLength The max length the bulk request endpoints can handle (>= 1) before generating a 413 error e.g. how long can the arrays bulk_object_ids and bulk_object_access_ids be for this server.
-		MaxBulkRequestLength int `json:"maxBulkRequestLength"`
-
-		// MaxRegisterRequestLength Maximum number of candidate objects that can be included in a single registration request. Only present when objectRegistrationSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxRegisterRequestLength *int `json:"maxRegisterRequestLength,omitempty"`
-
-		// MaxUploadRequestLength Maximum number of files that can be included in a single upload request. Only present when uploadRequestSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxUploadRequestLength *int `json:"maxUploadRequestLength,omitempty"`
-
-		// MaxUploadSize Maximum file size in bytes that can be uploaded via the upload endpoints. Only present when uploadRequestSupported is true. If not specified, there is no explicit size limit.
-		MaxUploadSize *int64 `json:"maxUploadSize,omitempty"`
-
-		// MetadataRetentionSupported Indicates whether this DRS server supports preserving object metadata after deletion. If true, the server honours `delete_object_metadata: false` in delete requests by marking the object as deleted rather than permanently removing it. Read and access endpoints return 410 Gone for objects in this state. Only present when deleteSupported is true.
-		MetadataRetentionSupported *bool `json:"metadataRetentionSupported,omitempty"`
-
-		// ObjectCount The total number of objects in this DRS service.
-		ObjectCount *int `json:"objectCount,omitempty"`
-
-		// ObjectRegistrationSupported Indicates whether this DRS server supports object registration operations via the `/objects/register` endpoint. If true, clients can register uploaded files or existing data as DRS objects. If false or missing, the server does not support object registration.
-		ObjectRegistrationSupported *bool `json:"objectRegistrationSupported,omitempty"`
-
-		// RelatedFileStorageSupported Indicates whether this DRS server supports storing files from the same upload request under a common prefix or folder structure. If true, the server will organize related files together in storage, enabling bioinformatics workflows that expect co-located files (e.g., CRAM + CRAI, VCF + TBI). If false or missing, the server may distribute files across different storage locations or prefixes. Only present when uploadRequestSupported is true. This feature is particularly valuable for genomics tools like samtools that expect index files to be co-located with data files.
-		RelatedFileStorageSupported *bool `json:"relatedFileStorageSupported,omitempty"`
-
-		// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
-		// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
-		SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
-
-		// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
-		TotalObjectSize *int `json:"totalObjectSize,omitempty"`
-
-		// UploadRequestSupported Indicates whether this DRS server supports upload request operations via the `/upload-request` endpoint. If true, clients can request upload methods and credentials for uploading files. If false or missing, the server does not support upload request coordination.
-		UploadRequestSupported *bool `json:"uploadRequestSupported,omitempty"`
-
-		// ValidateAccessMethods Indicates whether this DRS server validates access methods by following the URLs to check that they resolve to the expected objects  (e.g. by checking that the file sizes and checksums match) If true, the server will attempt to verify checksums/content before accepting access methods. If false or missing, the server trusts client-provided access methods without validation. Only present when at least one of objectRegistrationSupported or accessMethodUpdateSupported are true.
-		ValidateAccessMethods *bool `json:"validateAccessMethods,omitempty"`
-
-		// ValidateChecksums Indicates whether this DRS server validates file checksums against the provided metadata. If true, the server will verify that uploaded and registered files match their declared checksums and may reject objects with mismatches. If false or missing, the server does not perform checksum validation and relies on client-provided metadata. Only present when at least one of uploadRequestSupported or objectRegistrationSupported or checksumAdditionSupported are true.
-		ValidateChecksums *bool `json:"validateChecksums,omitempty"`
-
-		// ValidateFileSizes Indicates whether this DRS server validates file sizes against the provided metadata. If true, the server will verify that uploaded files match their declared sizes and may reject uploads with mismatches. If false or missing, the server does not perform file size validation and relies on client-provided metadata. Only present when uploadRequestSupported or objectRegistrationSupported is true.
-		ValidateFileSizes *bool `json:"validateFileSizes,omitempty"`
-	} `json:"drs,omitempty"`
+	Drs *DrsCapabilities `json:"drs,omitempty"`
 
 	// MaxBulkRequestLength DEPRECATED - In 2.0 this will move to under the drs section of service info and not at the root level. The max length the bulk request endpoints can handle (>= 1) before generating a 413 error e.g. how long can the arrays bulk_object_ids and bulk_object_access_ids be for this server.
 	MaxBulkRequestLength int `json:"maxBulkRequestLength"`
-	Type                 struct {
-		// Artifact Example: drs
-		Artifact DrsServiceTypeArtifact `json:"artifact"`
-	} `json:"type"`
 }
 
 // DrsServiceDrsControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
@@ -518,9 +512,6 @@ type DrsServiceDrsControlledAccessDefault string
 
 // DrsServiceDrsSupportedUploadMethodTypes defines model for DrsServiceDrsSupportedUploadMethodTypes.
 type DrsServiceDrsSupportedUploadMethodTypes string
-
-// DrsServiceTypeArtifact Example: drs
-type DrsServiceTypeArtifact string
 
 // Error A stable Syfon API error.
 type Error = externalRef0.APIError
@@ -813,88 +804,8 @@ type N200ServiceInfo struct {
 	// DocumentationUrl URL of the documentation of this service (RFC 3986 format). This should help someone learn how to use your service, including any specifics required to access data, e.g. authentication.
 	//
 	// Example: https://docs.myservice.example.com
-	DocumentationUrl *string `json:"documentationUrl,omitempty"`
-	Drs              *struct {
-		// AccessMethodUpdateSupported Indicates whether this DRS server supports updating access methods for existing objects. If true, clients can update access methods using `/objects/{object_id}/access-methods` and `/objects/access-methods` endpoints. If false or missing, the server does not support access method updates.
-		AccessMethodUpdateSupported *bool `json:"accessMethodUpdateSupported,omitempty"`
-
-		// ChecksumAdditionSupported Indicates whether this DRS server supports adding new checksums for for existing objects. If true, clients can update access methods using `/objects/{object_id}/checksums` and `/objects/checksums` endpoints. If false or missing, the server does not support checksum addition.
-		ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
-
-		// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-		//
-		// Example: ga4gh-passport-url-claim
-		ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
-
-		// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-		//
-		// Example: open-access-read
-		ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
-
-		// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
-		ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
-
-		// DeleteStorageDataSupported Indicates whether this DRS server supports attempting to delete underlying storage data when clients request it. If true, the server will attempt to delete both metadata and storage files when `delete_storage_data: true` is specified in delete requests. If false or missing, the server only supports metadata deletion regardless of client request, preserving underlying storage data. Only present when deleteSupported is true. This is a capability flag indicating what the server can attempt, not a default behavior setting. Note: Storage deletion attempts may fail due to permissions, network issues, or storage service errors.
-		DeleteStorageDataSupported *bool `json:"deleteStorageDataSupported,omitempty"`
-
-		// DeleteSupported Indicates whether this DRS server supports delete operations via the delete endpoints. If true, clients can delete DRS objects using PUT requests to `/objects/{object_id}/delete` and `/objects/delete`. If false or missing, the server does not support delete operations and will return 404 for delete endpoint requests. Like upload functionality, delete support is entirely optional and servers remain DRS compliant without it.
-		DeleteSupported *bool `json:"deleteSupported,omitempty"`
-
-		// FetchByChecksumSupported Indicates whether this DRS server supports fetching objects by checksum. If true, clients can fetch DRS objects using `/objects/checksum/{checksum}`, noting that it is possible for  multiple objects to have the same checksum. If false or missing, the server does not support fetching by cejcsum.
-		FetchByChecksumSupported *bool `json:"fetchByChecksumSupported,omitempty"`
-
-		// MaxBulkAccessMethodUpdateLength Maximum number of objects that can be updated in a single bulk access method update request. Only present when accessMethodUpdateSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkAccessMethodUpdateLength *int `json:"maxBulkAccessMethodUpdateLength,omitempty"`
-
-		// MaxBulkChecksumAdditionLength Maximum number of objects that can be updated in a single bulk checksum addition request. Only present when checksumAdditionSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkChecksumAdditionLength *int `json:"maxBulkChecksumAdditionLength,omitempty"`
-
-		// MaxBulkDeleteLength Maximum number of objects that can be deleted in a single bulk delete request via `/objects/delete`. Only present when deleteSupported is true. If not specified when delete is supported, defaults to the same value as maxBulkRequestLength. Servers may enforce lower limits for delete operations compared to other bulk operations for safety reasons.
-		MaxBulkDeleteLength *int `json:"maxBulkDeleteLength,omitempty"`
-
-		// MaxBulkRequestLength The max length the bulk request endpoints can handle (>= 1) before generating a 413 error e.g. how long can the arrays bulk_object_ids and bulk_object_access_ids be for this server.
-		MaxBulkRequestLength int `json:"maxBulkRequestLength"`
-
-		// MaxRegisterRequestLength Maximum number of candidate objects that can be included in a single registration request. Only present when objectRegistrationSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxRegisterRequestLength *int `json:"maxRegisterRequestLength,omitempty"`
-
-		// MaxUploadRequestLength Maximum number of files that can be included in a single upload request. Only present when uploadRequestSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxUploadRequestLength *int `json:"maxUploadRequestLength,omitempty"`
-
-		// MaxUploadSize Maximum file size in bytes that can be uploaded via the upload endpoints. Only present when uploadRequestSupported is true. If not specified, there is no explicit size limit.
-		MaxUploadSize *int64 `json:"maxUploadSize,omitempty"`
-
-		// MetadataRetentionSupported Indicates whether this DRS server supports preserving object metadata after deletion. If true, the server honours `delete_object_metadata: false` in delete requests by marking the object as deleted rather than permanently removing it. Read and access endpoints return 410 Gone for objects in this state. Only present when deleteSupported is true.
-		MetadataRetentionSupported *bool `json:"metadataRetentionSupported,omitempty"`
-
-		// ObjectCount The total number of objects in this DRS service.
-		ObjectCount *int `json:"objectCount,omitempty"`
-
-		// ObjectRegistrationSupported Indicates whether this DRS server supports object registration operations via the `/objects/register` endpoint. If true, clients can register uploaded files or existing data as DRS objects. If false or missing, the server does not support object registration.
-		ObjectRegistrationSupported *bool `json:"objectRegistrationSupported,omitempty"`
-
-		// RelatedFileStorageSupported Indicates whether this DRS server supports storing files from the same upload request under a common prefix or folder structure. If true, the server will organize related files together in storage, enabling bioinformatics workflows that expect co-located files (e.g., CRAM + CRAI, VCF + TBI). If false or missing, the server may distribute files across different storage locations or prefixes. Only present when uploadRequestSupported is true. This feature is particularly valuable for genomics tools like samtools that expect index files to be co-located with data files.
-		RelatedFileStorageSupported *bool `json:"relatedFileStorageSupported,omitempty"`
-
-		// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
-		// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
-		SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
-
-		// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
-		TotalObjectSize *int `json:"totalObjectSize,omitempty"`
-
-		// UploadRequestSupported Indicates whether this DRS server supports upload request operations via the `/upload-request` endpoint. If true, clients can request upload methods and credentials for uploading files. If false or missing, the server does not support upload request coordination.
-		UploadRequestSupported *bool `json:"uploadRequestSupported,omitempty"`
-
-		// ValidateAccessMethods Indicates whether this DRS server validates access methods by following the URLs to check that they resolve to the expected objects  (e.g. by checking that the file sizes and checksums match) If true, the server will attempt to verify checksums/content before accepting access methods. If false or missing, the server trusts client-provided access methods without validation. Only present when at least one of objectRegistrationSupported or accessMethodUpdateSupported are true.
-		ValidateAccessMethods *bool `json:"validateAccessMethods,omitempty"`
-
-		// ValidateChecksums Indicates whether this DRS server validates file checksums against the provided metadata. If true, the server will verify that uploaded and registered files match their declared checksums and may reject objects with mismatches. If false or missing, the server does not perform checksum validation and relies on client-provided metadata. Only present when at least one of uploadRequestSupported or objectRegistrationSupported or checksumAdditionSupported are true.
-		ValidateChecksums *bool `json:"validateChecksums,omitempty"`
-
-		// ValidateFileSizes Indicates whether this DRS server validates file sizes against the provided metadata. If true, the server will verify that uploaded files match their declared sizes and may reject uploads with mismatches. If false or missing, the server does not perform file size validation and relies on client-provided metadata. Only present when uploadRequestSupported or objectRegistrationSupported is true.
-		ValidateFileSizes *bool `json:"validateFileSizes,omitempty"`
-	} `json:"drs,omitempty"`
+	DocumentationUrl *string          `json:"documentationUrl,omitempty"`
+	Drs              *DrsCapabilities `json:"drs,omitempty"`
 
 	// Environment Environment the service is running in. Use this to distinguish between production, development and testing/staging deployments. Suggested values are prod, test, dev, staging. However this is advised and not enforced.
 	//
@@ -926,10 +837,9 @@ type N200ServiceInfo struct {
 		// Example: https://example.com
 		Url string `json:"url"`
 	} `json:"organization"`
-	Type struct {
-		// Artifact Example: drs
-		Artifact DrsServiceTypeArtifact `json:"artifact"`
-	} `json:"type"`
+
+	// Type Type of a GA4GH service
+	Type ServiceType `json:"type"`
 
 	// UpdatedAt Timestamp describing when the service was last updated (RFC 3339 format)
 	//
@@ -3757,6 +3667,7 @@ type PostUploadRequestResponse struct {
 	JSON400      *N400BadRequest
 	JSON401      *N401Unauthorized
 	JSON403      *N403Forbidden
+	JSON413      *N413RequestTooLarge
 	JSON500      *N500InternalServerError
 }
 
@@ -5251,6 +5162,13 @@ func ParsePostUploadRequestResponse(rsp *http.Response) (*PostUploadRequestRespo
 			}
 			response.JSON403 = &dest
 
+		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+			var dest N413RequestTooLarge
+			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+				return nil, err
+			}
+			response.JSON413 = &dest
+
 		case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 			var dest N500InternalServerError
 			if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -5940,88 +5858,8 @@ type N200ServiceInfoJSONResponse struct {
 	// DocumentationUrl URL of the documentation of this service (RFC 3986 format). This should help someone learn how to use your service, including any specifics required to access data, e.g. authentication.
 	//
 	// Example: https://docs.myservice.example.com
-	DocumentationUrl *string `json:"documentationUrl,omitempty"`
-	Drs              *struct {
-		// AccessMethodUpdateSupported Indicates whether this DRS server supports updating access methods for existing objects. If true, clients can update access methods using `/objects/{object_id}/access-methods` and `/objects/access-methods` endpoints. If false or missing, the server does not support access method updates.
-		AccessMethodUpdateSupported *bool `json:"accessMethodUpdateSupported,omitempty"`
-
-		// ChecksumAdditionSupported Indicates whether this DRS server supports adding new checksums for for existing objects. If true, clients can update access methods using `/objects/{object_id}/checksums` and `/objects/checksums` endpoints. If false or missing, the server does not support checksum addition.
-		ChecksumAdditionSupported *bool `json:"checksumAdditionSupported,omitempty"`
-
-		// ControlledAccessClaimFormat Describes the expected format for entries in the `controlled_access` array. The value `ga4gh-passport-url-claim` indicates that claims are represented as strings using URL claim semantics compatible with GA4GH Passport visa claim values.
-		//
-		// Example: ga4gh-passport-url-claim
-		ControlledAccessClaimFormat *DrsServiceDrsControlledAccessClaimFormat `json:"controlledAccessClaimFormat,omitempty"`
-
-		// ControlledAccessDefault Describes how the service interprets a missing or empty `controlled_access` array. The value `open-access-read` means that if `controlled_access` is missing or empty, the `DrsObject` is treated as open access for read operations.
-		//
-		// Example: open-access-read
-		ControlledAccessDefault *DrsServiceDrsControlledAccessDefault `json:"controlledAccessDefault,omitempty"`
-
-		// ControlledAccessSupported Indicates whether this DRS server supports the `controlled_access` field on `DrsObject` and `DrsObjectCandidate`. If true, clients may include controlled-access claims when registering objects and may expect returned `DrsObject` resources to include controlled-access claims when applicable. If false or missing, the server does not advertise support for controlled-access claims.
-		ControlledAccessSupported *bool `json:"controlledAccessSupported,omitempty"`
-
-		// DeleteStorageDataSupported Indicates whether this DRS server supports attempting to delete underlying storage data when clients request it. If true, the server will attempt to delete both metadata and storage files when `delete_storage_data: true` is specified in delete requests. If false or missing, the server only supports metadata deletion regardless of client request, preserving underlying storage data. Only present when deleteSupported is true. This is a capability flag indicating what the server can attempt, not a default behavior setting. Note: Storage deletion attempts may fail due to permissions, network issues, or storage service errors.
-		DeleteStorageDataSupported *bool `json:"deleteStorageDataSupported,omitempty"`
-
-		// DeleteSupported Indicates whether this DRS server supports delete operations via the delete endpoints. If true, clients can delete DRS objects using PUT requests to `/objects/{object_id}/delete` and `/objects/delete`. If false or missing, the server does not support delete operations and will return 404 for delete endpoint requests. Like upload functionality, delete support is entirely optional and servers remain DRS compliant without it.
-		DeleteSupported *bool `json:"deleteSupported,omitempty"`
-
-		// FetchByChecksumSupported Indicates whether this DRS server supports fetching objects by checksum. If true, clients can fetch DRS objects using `/objects/checksum/{checksum}`, noting that it is possible for  multiple objects to have the same checksum. If false or missing, the server does not support fetching by cejcsum.
-		FetchByChecksumSupported *bool `json:"fetchByChecksumSupported,omitempty"`
-
-		// MaxBulkAccessMethodUpdateLength Maximum number of objects that can be updated in a single bulk access method update request. Only present when accessMethodUpdateSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkAccessMethodUpdateLength *int `json:"maxBulkAccessMethodUpdateLength,omitempty"`
-
-		// MaxBulkChecksumAdditionLength Maximum number of objects that can be updated in a single bulk checksum addition request. Only present when checksumAdditionSupported is true. If not specified, defaults to maxBulkRequestLength.
-		MaxBulkChecksumAdditionLength *int `json:"maxBulkChecksumAdditionLength,omitempty"`
-
-		// MaxBulkDeleteLength Maximum number of objects that can be deleted in a single bulk delete request via `/objects/delete`. Only present when deleteSupported is true. If not specified when delete is supported, defaults to the same value as maxBulkRequestLength. Servers may enforce lower limits for delete operations compared to other bulk operations for safety reasons.
-		MaxBulkDeleteLength *int `json:"maxBulkDeleteLength,omitempty"`
-
-		// MaxBulkRequestLength The max length the bulk request endpoints can handle (>= 1) before generating a 413 error e.g. how long can the arrays bulk_object_ids and bulk_object_access_ids be for this server.
-		MaxBulkRequestLength int `json:"maxBulkRequestLength"`
-
-		// MaxRegisterRequestLength Maximum number of candidate objects that can be included in a single registration request. Only present when objectRegistrationSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxRegisterRequestLength *int `json:"maxRegisterRequestLength,omitempty"`
-
-		// MaxUploadRequestLength Maximum number of files that can be included in a single upload request. Only present when uploadRequestSupported is true. If not specified, defaults to the same value as maxBulkRequestLength.
-		MaxUploadRequestLength *int `json:"maxUploadRequestLength,omitempty"`
-
-		// MaxUploadSize Maximum file size in bytes that can be uploaded via the upload endpoints. Only present when uploadRequestSupported is true. If not specified, there is no explicit size limit.
-		MaxUploadSize *int64 `json:"maxUploadSize,omitempty"`
-
-		// MetadataRetentionSupported Indicates whether this DRS server supports preserving object metadata after deletion. If true, the server honours `delete_object_metadata: false` in delete requests by marking the object as deleted rather than permanently removing it. Read and access endpoints return 410 Gone for objects in this state. Only present when deleteSupported is true.
-		MetadataRetentionSupported *bool `json:"metadataRetentionSupported,omitempty"`
-
-		// ObjectCount The total number of objects in this DRS service.
-		ObjectCount *int `json:"objectCount,omitempty"`
-
-		// ObjectRegistrationSupported Indicates whether this DRS server supports object registration operations via the `/objects/register` endpoint. If true, clients can register uploaded files or existing data as DRS objects. If false or missing, the server does not support object registration.
-		ObjectRegistrationSupported *bool `json:"objectRegistrationSupported,omitempty"`
-
-		// RelatedFileStorageSupported Indicates whether this DRS server supports storing files from the same upload request under a common prefix or folder structure. If true, the server will organize related files together in storage, enabling bioinformatics workflows that expect co-located files (e.g., CRAM + CRAI, VCF + TBI). If false or missing, the server may distribute files across different storage locations or prefixes. Only present when uploadRequestSupported is true. This feature is particularly valuable for genomics tools like samtools that expect index files to be co-located with data files.
-		RelatedFileStorageSupported *bool `json:"relatedFileStorageSupported,omitempty"`
-
-		// SupportedUploadMethodTypes List of upload methods supported by this DRS server. Only present when uploadRequestSupported is true. Clients can use this information to determine which upload methods are available before making upload requests.
-		// - **s3**: Direct S3 upload with temporary AWS credentials - **gs**: Google Cloud Storage upload with access tokens   - **https**: Presigned POST URL for HTTP uploads - **ftp**: File Transfer Protocol uploads - **sftp**: Secure File Transfer Protocol uploads - **gsiftp**: GridFTP secure file transfer - **globus**: Globus transfer service for high-performance data movement
-		SupportedUploadMethodTypes *[]DrsServiceDrsSupportedUploadMethodTypes `json:"supportedUploadMethodTypes,omitempty"`
-
-		// TotalObjectSize The total size of all objects in this DRS service in bytes.  As a general best practice, file bytes are counted for each unique file and not cloud mirrors or other redundant copies.
-		TotalObjectSize *int `json:"totalObjectSize,omitempty"`
-
-		// UploadRequestSupported Indicates whether this DRS server supports upload request operations via the `/upload-request` endpoint. If true, clients can request upload methods and credentials for uploading files. If false or missing, the server does not support upload request coordination.
-		UploadRequestSupported *bool `json:"uploadRequestSupported,omitempty"`
-
-		// ValidateAccessMethods Indicates whether this DRS server validates access methods by following the URLs to check that they resolve to the expected objects  (e.g. by checking that the file sizes and checksums match) If true, the server will attempt to verify checksums/content before accepting access methods. If false or missing, the server trusts client-provided access methods without validation. Only present when at least one of objectRegistrationSupported or accessMethodUpdateSupported are true.
-		ValidateAccessMethods *bool `json:"validateAccessMethods,omitempty"`
-
-		// ValidateChecksums Indicates whether this DRS server validates file checksums against the provided metadata. If true, the server will verify that uploaded and registered files match their declared checksums and may reject objects with mismatches. If false or missing, the server does not perform checksum validation and relies on client-provided metadata. Only present when at least one of uploadRequestSupported or objectRegistrationSupported or checksumAdditionSupported are true.
-		ValidateChecksums *bool `json:"validateChecksums,omitempty"`
-
-		// ValidateFileSizes Indicates whether this DRS server validates file sizes against the provided metadata. If true, the server will verify that uploaded files match their declared sizes and may reject uploads with mismatches. If false or missing, the server does not perform file size validation and relies on client-provided metadata. Only present when uploadRequestSupported or objectRegistrationSupported is true.
-		ValidateFileSizes *bool `json:"validateFileSizes,omitempty"`
-	} `json:"drs,omitempty"`
+	DocumentationUrl *string          `json:"documentationUrl,omitempty"`
+	Drs              *DrsCapabilities `json:"drs,omitempty"`
 
 	// Environment Environment the service is running in. Use this to distinguish between production, development and testing/staging deployments. Suggested values are prod, test, dev, staging. However this is advised and not enforced.
 	//
@@ -6053,10 +5891,9 @@ type N200ServiceInfoJSONResponse struct {
 		// Example: https://example.com
 		Url string `json:"url"`
 	} `json:"organization"`
-	Type struct {
-		// Artifact Example: drs
-		Artifact DrsServiceTypeArtifact `json:"artifact"`
-	} `json:"type"`
+
+	// Type Type of a GA4GH service
+	Type ServiceType `json:"type"`
 
 	// UpdatedAt Timestamp describing when the service was last updated (RFC 3339 format)
 	//
@@ -7385,6 +7222,17 @@ type PostUploadRequest403JSONResponse struct{ N403ForbiddenJSONResponse }
 func (response PostUploadRequest403JSONResponse) VisitPostUploadRequestResponse(ctx fiber.Ctx) error {
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(403)
+
+	return ctx.JSON(&response)
+}
+
+type PostUploadRequest413JSONResponse struct {
+	N413RequestTooLargeJSONResponse
+}
+
+func (response PostUploadRequest413JSONResponse) VisitPostUploadRequestResponse(ctx fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(413)
 
 	return ctx.JSON(&response)
 }

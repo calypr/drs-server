@@ -13,17 +13,27 @@ import (
 type DataService struct {
 	gen        internalapi.ClientWithResponsesInterface
 	httpClient request.HTTPDoer
+	serverURL  string
 	logger     *logs.Gen3Logger
 	drs        *DRSService
 }
 
 func NewDataService(gen internalapi.ClientWithResponsesInterface, client request.HTTPDoer, l *logs.Gen3Logger, drs *DRSService) *DataService {
-	return &DataService{
+	service := &DataService{
 		gen:        gen,
 		httpClient: client,
 		logger:     l,
 		drs:        drs,
 	}
+	if generated, ok := gen.(*internalapi.ClientWithResponses); ok {
+		if raw, ok := generated.ClientInterface.(*internalapi.Client); ok {
+			service.serverURL = raw.Server
+			if service.httpClient == nil {
+				service.httpClient = raw.Client
+			}
+		}
+	}
+	return service
 }
 
 func (d *DataService) UploadBlank(ctx context.Context, req internalapi.InternalUploadBlankRequest) (internalapi.InternalUploadBlankOutput, error) {

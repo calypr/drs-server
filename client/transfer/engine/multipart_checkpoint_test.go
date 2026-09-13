@@ -138,7 +138,7 @@ func TestUploadCheckpointAtomicReaderVisibility(t *testing.T) {
 	}
 }
 
-func TestMultipartCheckpointAgeCleanupRetainsCriticalPhases(t *testing.T) {
+func TestMultipartCheckpointAgeDoesNotDiscardProviderUploadIdentity(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("DATA_CLIENT_CACHE_DIR", cache)
 	base := filepath.Join(cache, "syfon", "multipart")
@@ -148,11 +148,10 @@ func TestMultipartCheckpointAgeCleanupRetainsCriticalPhases(t *testing.T) {
 	old := time.Now().Add(-25 * time.Hour)
 	uploader := &GenericUploader{}
 	for _, test := range []struct {
-		name   string
-		phase  uploadCheckpointPhase
-		remove bool
+		name  string
+		phase uploadCheckpointPhase
 	}{
-		{name: "uploading", phase: uploadCheckpointUploading, remove: true},
+		{name: "uploading", phase: uploadCheckpointUploading},
 		{name: "completing", phase: uploadCheckpointCompleting},
 		{name: "completed", phase: uploadCheckpointCompleted},
 	} {
@@ -167,12 +166,7 @@ func TestMultipartCheckpointAgeCleanupRetainsCriticalPhases(t *testing.T) {
 			if _, err := CheckpointPath("other-"+test.name, "guid"); err != nil {
 				t.Fatal(err)
 			}
-			_, err := os.Stat(path)
-			if test.remove {
-				if !os.IsNotExist(err) {
-					t.Fatalf("expired uploading checkpoint still exists, stat err=%v", err)
-				}
-			} else if err != nil {
+			if _, err := os.Stat(path); err != nil {
 				t.Fatalf("critical %s checkpoint was removed, stat err=%v", test.phase, err)
 			}
 		})
@@ -199,6 +193,53 @@ func TestMultipartCheckpointAgeCleanupRetainsCriticalPhases(t *testing.T) {
 			t.Fatalf("unreadable or legacy checkpoint was removed: %s: %v", name, err)
 		}
 	}
+}
+
+func TestAbortMultipartRemovesCheckpointOnlyAfterRemoteAbort(t *testing.T) {
+	t.Setenv("DATA_CLIENT_CACHE_DIR", t.TempDir())
+	upload := func(t *testing.T, backend *fakeBackend) (*GenericUploader, string) {
+		t.Helper()
+		uploader := &GenericUploader{Backend: backend}
+		checkpoint, err := CheckpointPath("source", "guid")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := uploader.saveState(checkpoint, &uploaderResumeState{
+			SourcePath: "source",
+			GUID:       "guid",
+			UploadID:   "provider-upload",
+			Phase:      uploadCheckpointUploading,
+			Completed:  map[int]string{},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return uploader, checkpoint
+	}
+
+	t.Run("success", func(t *testing.T) {
+		backend := &fakeBackend{}
+		uploader, checkpoint := upload(t, backend)
+		if err := uploader.AbortMultipart(context.Background(), "source", "guid"); err != nil {
+			t.Fatalf("AbortMultipart failed: %v", err)
+		}
+		if backend.abortedUploadID != "provider-upload" {
+			t.Fatalf("aborted upload ID = %q, want provider-upload", backend.abortedUploadID)
+		}
+		if _, err := os.Stat(checkpoint); !os.IsNotExist(err) {
+			t.Fatalf("checkpoint remains after remote abort: %v", err)
+		}
+	})
+
+	t.Run("remote failure", func(t *testing.T) {
+		backend := &fakeBackend{abortErr: errors.New("remote abort failed")}
+		uploader, checkpoint := upload(t, backend)
+		if err := uploader.AbortMultipart(context.Background(), "source", "guid"); err == nil {
+			t.Fatal("AbortMultipart succeeded after remote failure")
+		}
+		if _, err := os.Stat(checkpoint); err != nil {
+			t.Fatalf("checkpoint removed after remote failure: %v", err)
+		}
+	})
 }
 
 func TestMultipartCompletionIntentPrecedesProviderCall(t *testing.T) {

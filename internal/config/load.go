@@ -14,10 +14,15 @@ import (
 const (
 	DefaultSigningExpirySeconds = 900
 
-	defaultLFSMaxBatchObjects                    = 1000
-	defaultLFSMaxBatchBodyBytes            int64 = 10 * 1024 * 1024
-	defaultLFSRequestLimitPerMinute              = 1200
-	defaultLFSBandwidthLimitBytesPerMinute int64 = 0
+	defaultLFSMaxBatchObjects                       = 1000
+	defaultLFSMaxBatchBodyBytes               int64 = 10 * 1024 * 1024
+	defaultLFSRequestLimitPerMinute                 = 1200
+	defaultLFSBandwidthLimitBytesPerMinute    int64 = 0
+	defaultDRSMaxBulkRequestLength                  = 1000
+	defaultMultipartCleanupIntervalSeconds          = 60
+	defaultMultipartInactiveTimeoutSeconds          = 24 * 60 * 60
+	defaultMultipartCompletedRetentionSeconds       = 60 * 60
+	defaultMultipartBatchSize                       = 100
 )
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -37,6 +42,7 @@ func LoadConfig(configFile string) (*Config, error) {
 
 func defaultConfig() *Config {
 	return &Config{
+		Profile:  ProfileDevelopment,
 		Port:     8080,
 		Database: DatabaseConfig{},
 		Auth:     AuthConfig{},
@@ -54,6 +60,23 @@ func defaultConfig() *Config {
 			BandwidthLimitBytesPerMinute: defaultLFSBandwidthLimitBytesPerMinute,
 		},
 		Signing: SigningConfig{DefaultExpirySeconds: DefaultSigningExpirySeconds},
+		Service: ServiceConfig{
+			ID:               "drs-service-calypr",
+			Name:             "Calypr DRS Server",
+			Description:      "Calypr-backed DRS server",
+			Environment:      "dev",
+			Organization:     "Calypr",
+			OrganizationURL:  "https://github.com/calypr/syfon",
+			ContactURL:       "https://github.com/calypr/syfon/issues",
+			DocumentationURL: "https://github.com/calypr/syfon",
+		},
+		DRS: DRSConfig{MaxBulkRequestLength: defaultDRSMaxBulkRequestLength},
+		Multipart: MultipartConfig{
+			CleanupIntervalSeconds:    defaultMultipartCleanupIntervalSeconds,
+			InactiveTimeoutSeconds:    defaultMultipartInactiveTimeoutSeconds,
+			CompletedRetentionSeconds: defaultMultipartCompletedRetentionSeconds,
+			BatchSize:                 defaultMultipartBatchSize,
+		},
 	}
 }
 

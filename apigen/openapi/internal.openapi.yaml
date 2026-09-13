@@ -1518,6 +1518,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIError'
+  /data/multipart/abort:
+    post:
+      tags:
+        - internal-data
+      operationId: internalMultipartAbort
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalMultipartAbortRequest'
+      responses:
+        '204':
+          description: Upload aborted
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIError'
 components:
   schemas:
     APIError:
@@ -2366,3 +2404,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InternalMultipartPart'
+    InternalMultipartAbortRequest:
+      type: object
+      required:
+        - uploadId
+      properties:
+        uploadId:
+          type: string

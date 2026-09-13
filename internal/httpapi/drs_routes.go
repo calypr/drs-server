@@ -34,6 +34,9 @@ func (s *drsServer) GetBulkAccessURL(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&body); err != nil || body.BulkObjectAccessIds == nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
+	if err := s.rejectBulkTooLarge(c, len(*body.BulkObjectAccessIds)); err != nil {
+		return err
+	}
 
 	requests := make([]transfers.AccessLookupRequest, 0, len(*body.BulkObjectAccessIds))
 	for _, item := range *body.BulkObjectAccessIds {
@@ -117,6 +120,9 @@ func (s *drsServer) PostUploadRequest(c fiber.Ctx) error {
 	if len(req.Requests) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
+	if err := s.rejectBulkTooLarge(c, len(req.Requests)); err != nil {
+		return err
+	}
 	for _, item := range req.Requests {
 		key := strings.TrimSpace(item.Name)
 		if oid, ok := objects.CanonicalSHA256(item.Checksums); ok && oid != "" {
@@ -165,6 +171,9 @@ func (s *drsServer) BulkUpdateAccessMethods(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&body); err != nil || len(body.Updates) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 	}
+	if err := s.rejectBulkTooLarge(c, len(body.Updates)); err != nil {
+		return err
+	}
 
 	for _, update := range body.Updates {
 		id := strings.TrimSpace(update.ObjectId)
@@ -191,6 +200,9 @@ func (s *drsServer) BulkDeleteObjects(c fiber.Ctx) error {
 	}
 	if len(body.BulkObjectIds) == 0 {
 		return Reject(c, fiber.StatusBadRequest, "bulk_object_ids cannot be empty")
+	}
+	if err := s.rejectBulkTooLarge(c, len(body.BulkObjectIds)); err != nil {
+		return err
 	}
 
 	ids := make([]string, 0, len(body.BulkObjectIds))
@@ -245,6 +257,9 @@ func (s *drsServer) GetBulkObjects(c fiber.Ctx, _ generated.GetBulkObjectsParams
 	var body generated.GetBulkObjectsJSONBody
 	if err := c.Bind().JSON(&body); err != nil {
 		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	if err := s.rejectBulkTooLarge(c, len(body.BulkObjectIds)); err != nil {
+		return err
 	}
 
 	objects, err := s.objectService.GetBulkObjects(c.Context(), body.BulkObjectIds, "")
@@ -306,6 +321,9 @@ func (s *drsServer) RegisterObjects(c fiber.Ctx) error {
 			return Reject(c, fiber.StatusBadRequest, "Invalid request body")
 		}
 	}
+	if err := s.rejectBulkTooLarge(c, len(candidates)); err != nil {
+		return err
+	}
 
 	registered, err := s.objectService.RegisterCandidates(c.Context(), candidates)
 	if err != nil {
@@ -318,20 +336,26 @@ func (s *drsServer) RegisterObjects(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(generated.N201ObjectsCreated{Objects: registered})
 }
 
-func registerDRSRoutes(router fiber.Router, objectService *objects.Service, accessService *transfers.Service, serviceInfo generated.Service) {
+func registerDRSRoutes(router fiber.Router, objectService *objects.Service, accessService *transfers.Service, serviceInfo generated.N200ServiceInfo, maxBulkRequestLength ...int) {
+	maxBulk := 0
+	if len(maxBulkRequestLength) > 0 {
+		maxBulk = maxBulkRequestLength[0]
+	}
 	handlers := &drsServer{
-		objectService: objectService,
-		accessService: accessService,
-		serviceInfo:   serviceInfo,
+		objectService:        objectService,
+		accessService:        accessService,
+		serviceInfo:          serviceInfo,
+		maxBulkRequestLength: maxBulk,
 	}
 
 	generated.RegisterHandlers(router, handlers)
 }
 
 type drsServer struct {
-	objectService *objects.Service
-	accessService *transfers.Service
-	serviceInfo   generated.Service
+	objectService        *objects.Service
+	accessService        *transfers.Service
+	serviceInfo          generated.N200ServiceInfo
+	maxBulkRequestLength int
 }
 
 var _ generated.ServerInterface = (*drsServer)(nil)
@@ -343,6 +367,13 @@ func (s *drsServer) OptionsObject(c fiber.Ctx, _ generated.ObjectId) error {
 }
 
 func (s *drsServer) GetServiceInfo(c fiber.Ctx) error { return c.JSON(s.serviceInfo) }
+
+func (s *drsServer) rejectBulkTooLarge(c fiber.Ctx, length int) error {
+	if s.maxBulkRequestLength > 0 && length > s.maxBulkRequestLength {
+		return Reject(c, fiber.StatusRequestEntityTooLarge, "bulk request exceeds maxBulkRequestLength")
+	}
+	return nil
+}
 
 func setDRSIdentity(object *generated.DrsObject) {
 	if object == nil || object.Id == "" {

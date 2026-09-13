@@ -16,6 +16,7 @@ import (
 )
 
 var _ interface {
+	MultipartAbort(context.Context, string) error
 	MultipartCompletionReplaySafe(context.Context, string, string, []transfer.MultipartPart) bool
 } = (*DataService)(nil)
 
@@ -132,6 +133,40 @@ func (d *DataService) MultipartPart(ctx context.Context, guid string, uploadID s
 func (d *DataService) MultipartComplete(ctx context.Context, guid string, uploadID string, parts []transfer.MultipartPart) error {
 	_, err := d.MultipartCompleteWithLocation(ctx, guid, uploadID, parts)
 	return err
+}
+
+// MultipartAbort releases a server-side multipart session. It is safe to
+// repeat and does not run automatically for transient upload failures, so
+// callers retain resumability until they explicitly abandon an upload.
+func (d *DataService) MultipartAbort(ctx context.Context, uploadID string) error {
+	payload, err := json.Marshal(struct {
+		UploadID string `json:"uploadId"`
+	}{UploadID: uploadID})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(d.serverURL) == "" || d.httpClient == nil {
+		return fmt.Errorf("multipart abort requires a configured internal API client")
+	}
+	requestURL := strings.TrimRight(d.serverURL, "/") + "/data/multipart/abort"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read multipart abort response: %w", err)
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		return apierror.FromResponse(resp, body)
+	}
+	return nil
 }
 
 // MultipartCompletionReplaySafe reports that the server makes completion retries idempotent.

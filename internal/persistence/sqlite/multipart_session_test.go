@@ -75,4 +75,20 @@ func TestMultipartSessionPersistsAcrossDatabaseHandles(t *testing.T) {
 	if completed.State != transfers.MultipartStateCompleted || completed.CompletedLocation != session.Target.CanonicalURL {
 		t.Fatalf("completed multipart session = %+v", completed)
 	}
+	if err := second.CompactCompletedMultipartSessions(ctx, now.Add(3*time.Hour), 10); err != nil {
+		t.Fatalf("compact completed multipart session: %v", err)
+	}
+	if _, err := first.GetMultipartSession(ctx, session.UploadID); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+		t.Fatalf("compacted session lookup error = %v, want multipart upload not found", err)
+	}
+	receipt, err := first.GetMultipartCompletionReceipt(ctx, session.UploadID)
+	if err != nil {
+		t.Fatalf("load multipart completion receipt: %v", err)
+	}
+	if receipt.CompletedLocation != session.Target.CanonicalURL || receipt.PartsFingerprint != "parts" || receipt.Authorization.Scope == nil || receipt.Authorization.Scope.Project != "project" {
+		t.Fatalf("multipart completion receipt = %+v", receipt)
+	}
+	if err := first.SaveMultipartSession(ctx, replacement); !errors.Is(err, errorapi.ErrConflict) {
+		t.Fatalf("compacted upload ID reuse error = %v, want conflict", err)
+	}
 }

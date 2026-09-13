@@ -17,10 +17,14 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-const RouteHealthz = "/healthz"
+const (
+	RouteHealthz = "/healthz"
+	RouteLivez   = "/livez"
+	RouteReadyz  = "/readyz"
+)
 
 type Dependencies struct {
-	ServiceInfo    generated.Service
+	ServiceInfo    generated.N200ServiceInfo
 	Objects        *objects.Service
 	Transfers      *transfers.Service
 	LFS            *transferlfs.Service
@@ -30,15 +34,17 @@ type Dependencies struct {
 	ProjectStorage *projectstorage.Service
 	Authorization  fiber.Handler
 	RequestIDs     fiber.Handler
+	Health         *Health
 }
 
 type Options struct {
-	Docs        bool
-	GA4GH       bool
-	Metrics     bool
-	Internal    bool
-	LFS         bool
-	LFSProtocol LFSOptions
+	Docs                 bool
+	GA4GH                bool
+	Metrics              bool
+	Internal             bool
+	LFS                  bool
+	LFSProtocol          LFSOptions
+	MaxBulkRequestLength int
 }
 
 type internalServer struct {
@@ -63,6 +69,10 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 	app.Get(RouteHealthz, func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
+	if deps.Health != nil {
+		app.Get(RouteLivez, deps.Health.live)
+		app.Get(RouteReadyz, deps.Health.ready)
+	}
 
 	if !options.Docs && !options.GA4GH && !options.Metrics && !options.Internal && !options.LFS {
 		return
@@ -84,7 +94,7 @@ func RegisterRoutes(app fiber.Router, deps Dependencies, options Options) {
 		apidocs.RegisterSwaggerRoutes(api)
 	}
 	if options.GA4GH {
-		registerDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo)
+		registerDRSRoutes(api.Group("/ga4gh/drs/v1"), deps.Objects, deps.Transfers, deps.ServiceInfo, options.MaxBulkRequestLength)
 	}
 	if options.Metrics {
 		registerMetricsRoutes(api, deps.UsageReports, deps.UsageIngest)

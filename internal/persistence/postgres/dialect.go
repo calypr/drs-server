@@ -281,7 +281,7 @@ func (s *postgresSchemaBootstrap) ensureMultipartUploadSchema() error {
 			upload_id TEXT PRIMARY KEY,
 			completion_id TEXT NOT NULL DEFAULT '',
 			target_json TEXT NOT NULL,
-			authorization_json TEXT NOT NULL,
+			authorization_json JSONB NOT NULL,
 			state TEXT NOT NULL CHECK(state IN ('active','completing','completed')),
 			completion_token TEXT NOT NULL DEFAULT '',
 			parts_fingerprint TEXT NOT NULL DEFAULT '',
@@ -291,7 +291,16 @@ func (s *postgresSchemaBootstrap) ensureMultipartUploadSchema() error {
 		)`,
 		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS parts_fingerprint TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS completion_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS operation TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE multipart_upload_session ADD COLUMN IF NOT EXISTS completion_parts_json TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX IF NOT EXISTS idx_multipart_upload_session_state_updated ON multipart_upload_session(state, updated_time)`,
+		`CREATE TABLE IF NOT EXISTS multipart_completion_receipt (
+			upload_id TEXT PRIMARY KEY,
+			authorization_json TEXT NOT NULL,
+			parts_fingerprint TEXT NOT NULL,
+			completed_location TEXT NOT NULL,
+			completed_time TIMESTAMPTZ NOT NULL
+		)`,
 	}
 	for _, query := range queries {
 		if _, err := s.db.Exec(query); err != nil {

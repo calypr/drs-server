@@ -194,6 +194,41 @@ func TestNativeMultipartAccessUsesRequestedExpiry(t *testing.T) {
 	}
 }
 
+func TestAbortMultipartDeletesOnlyExactUploadPrefix(t *testing.T) {
+	var deleted []string
+	transport := roundTripperFunc(func(r *http.Request) *http.Response {
+		switch r.Method {
+		case http.MethodGet:
+			if got := r.URL.Query().Get("prefix"); got != ".syfon-multipart/upload/nested/file.txt/" {
+				t.Fatalf("list prefix = %q", got)
+			}
+			return responseFor(r, http.StatusOK, `{"items":[{"name":".syfon-multipart/upload/nested/file.txt/parts/1"},{"name":".syfon-multipart/upload/nested/file.txt/parts/2"}]}`)
+		case http.MethodDelete:
+			deleted = append(deleted, r.URL.Path)
+			return responseFor(r, http.StatusNoContent, "")
+		default:
+			return responseFor(r, http.StatusNotFound, "")
+		}
+	})
+	previous := newClient
+	newClient = func(ctx context.Context, _ *buckets.Credential) (*storage.Client, error) {
+		return testClient(ctx, transport)
+	}
+	defer func() { newClient = previous }()
+
+	b := &backend{}
+	binding := storageports.ProviderBinding{LookupKey: "bucket", PhysicalBucket: "bucket", Credential: &buckets.Credential{Bucket: "bucket"}}
+	if err := b.AbortMultipart(context.Background(), binding, storageports.AbortMultipartRequest{Target: storageports.Target{Key: "nested/file.txt"}, UploadID: "upload"}); err != nil {
+		t.Fatalf("AbortMultipart returned error: %v", err)
+	}
+	if len(deleted) != 2 {
+		t.Fatalf("deleted paths = %d, want 2", len(deleted))
+	}
+	if client, ok := b.cache.Load("bucket"); ok {
+		_ = client.(*storage.Client).Close()
+	}
+}
+
 func TestCompleteMultipartSortsComposesInBatchesAndCleansUp(t *testing.T) {
 	var composePaths []string
 	var deletePaths []string

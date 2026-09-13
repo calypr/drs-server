@@ -62,6 +62,10 @@ type multipartCompletionReplaySafety interface {
 	MultipartCompletionReplaySafe(context.Context, string, string, []transfer.MultipartPart) bool
 }
 
+type multipartAborter interface {
+	MultipartAbort(context.Context, string) error
+}
+
 var errMultipartCompletionRecoveryRequired = errors.New("multipart completion requires recovery")
 var errMultipartCompletionUncertain = errors.New("multipart completion outcome is uncertain")
 
@@ -119,6 +123,28 @@ func effectiveObjectKey(req transfer.TransferRequest) string {
 func (u *GenericUploader) Upload(ctx context.Context, req transfer.TransferRequest) error {
 	_, err := u.UploadWithLocation(ctx, req)
 	return err
+}
+
+func (u *GenericUploader) AbortMultipart(ctx context.Context, sourcePath, guid string) error {
+	checkpointPath, err := CheckpointPath(sourcePath, guid)
+	if err != nil {
+		return err
+	}
+	state, loaded := u.loadState(checkpointPath)
+	if !loaded || state == nil || strings.TrimSpace(state.UploadID) == "" {
+		return nil
+	}
+	aborter, ok := u.Backend.(multipartAborter)
+	if !ok {
+		return fmt.Errorf("multipart abort is not supported by the upload backend")
+	}
+	if err := aborter.MultipartAbort(ctx, state.UploadID); err != nil {
+		return err
+	}
+	if err := removeMultipartCheckpoint(checkpointPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove multipart checkpoint: %w", err)
+	}
+	return nil
 }
 
 // UploadWithLocation returns the completed multipart target when the backend supplies it.

@@ -2,11 +2,14 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/calypr/syfon/apigen/errorapi"
 	"github.com/calypr/syfon/internal/storage"
 	"github.com/calypr/syfon/internal/transfers"
+	"github.com/google/uuid"
 )
 
 func TestPostgresMultipartCompletionClaimAndRetryState(t *testing.T) {
@@ -14,12 +17,13 @@ func TestPostgresMultipartCompletionClaimAndRetryState(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	session := transfers.MultipartSession{
-		UploadID:     "postgres-multipart-session",
-		CompletionID: "postgres-completion-id",
-		Target:       storage.Target{Provider: "s3", PhysicalBucket: "bucket", Key: "project/file", CanonicalURL: "s3://bucket/project/file"},
-		State:        transfers.MultipartStateActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		UploadID:      "postgres-multipart-session-" + uuid.NewString(),
+		CompletionID:  "postgres-completion-id",
+		Target:        storage.Target{Provider: "s3", PhysicalBucket: "bucket", Key: "project/file", CanonicalURL: "s3://bucket/project/file"},
+		Authorization: transfers.MultipartAuthorization{Scope: &transfers.AccessScope{Organization: "org", Project: "project"}, Methods: []string{"file_upload", "create"}},
+		State:         transfers.MultipartStateActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := database.SaveMultipartSession(ctx, session); err != nil {
 		t.Fatal(err)
@@ -46,5 +50,21 @@ func TestPostgresMultipartCompletionClaimAndRetryState(t *testing.T) {
 	}
 	if completed.State != transfers.MultipartStateCompleted || completed.CompletedLocation != session.Target.CanonicalURL || completed.PartsFingerprint != "parts" {
 		t.Fatalf("completed multipart session = %+v", completed)
+	}
+	if err := database.CompactCompletedMultipartSessions(ctx, now.Add(3*time.Hour), 10); err != nil {
+		t.Fatalf("compact completed multipart session: %v", err)
+	}
+	if _, err := database.GetMultipartSession(ctx, session.UploadID); !errors.Is(err, errorapi.ErrMultipartUploadNotFound) {
+		t.Fatalf("compacted session lookup error = %v, want multipart upload not found", err)
+	}
+	receipt, err := database.GetMultipartCompletionReceipt(ctx, session.UploadID)
+	if err != nil {
+		t.Fatalf("load multipart completion receipt: %v", err)
+	}
+	if receipt.CompletedLocation != session.Target.CanonicalURL || receipt.PartsFingerprint != "parts" || receipt.Authorization.Scope == nil || receipt.Authorization.Scope.Project != "project" {
+		t.Fatalf("multipart completion receipt = %+v", receipt)
+	}
+	if err := database.SaveMultipartSession(ctx, session); !errors.Is(err, errorapi.ErrConflict) {
+		t.Fatalf("compacted upload ID reuse error = %v, want conflict", err)
 	}
 }

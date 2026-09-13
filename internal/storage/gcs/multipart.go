@@ -14,6 +14,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
 	"github.com/calypr/syfon/internal/buckets"
@@ -41,6 +42,36 @@ var newClient = func(ctx context.Context, cred *buckets.Credential) (*storage.Cl
 
 func (b *backend) BeginMultipart(context.Context, storageports.ProviderBinding, storageports.BeginMultipartRequest) (storageports.UploadID, error) {
 	return storageports.UploadID(uuid.NewString()), nil
+}
+
+func (b *backend) AbortMultipart(ctx context.Context, binding storageports.ProviderBinding, request storageports.AbortMultipartRequest) error {
+	client, release, err := b.acquireClient(ctx, binding)
+	if err != nil {
+		return err
+	}
+	defer release()
+	prefix, err := storageports.MultipartUploadPrefix(request.Target.Key, request.UploadID)
+	if err != nil {
+		return err
+	}
+	objects := client.Bucket(binding.PhysicalBucket).Objects(ctx, &storage.Query{Prefix: prefix})
+	var cleanupErrs []error
+	for {
+		object, iterErr := objects.Next()
+		if iterErr == iterator.Done {
+			break
+		}
+		if iterErr != nil {
+			return fmt.Errorf("list gcs multipart components: %w", iterErr)
+		}
+		if object == nil || object.Name == "" {
+			continue
+		}
+		if deleteErr := client.Bucket(binding.PhysicalBucket).Object(object.Name).Delete(ctx); deleteErr != nil && !isNotFound(deleteErr) {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete gcs multipart component %s: %w", object.Name, deleteErr))
+		}
+	}
+	return errors.Join(cleanupErrs...)
 }
 
 func (b *backend) SignMultipartPart(_ context.Context, binding storageports.ProviderBinding, request storageports.MultipartPartRequest) (storageports.SignedAccess, error) {

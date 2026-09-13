@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/calypr/syfon/apigen/drs"
+	generated "github.com/calypr/syfon/apigen/drs"
 	"github.com/calypr/syfon/internal/buckets"
 	"github.com/calypr/syfon/internal/config"
 	"github.com/calypr/syfon/internal/objects"
@@ -17,24 +17,67 @@ import (
 	"github.com/calypr/syfon/internal/version"
 )
 
-func serviceInfoForBackend(sqlite bool) drs.Service {
-	description := "Calypr-backed DRS server"
-	if sqlite {
-		description += " (SQLite)"
+func serviceInfoForConfig(cfg *config.Config) generated.N200ServiceInfo {
+	if cfg == nil {
+		return generated.N200ServiceInfo{}
 	}
-	createdAt := time.Now()
-	updatedAt := time.Now()
-	environment := "prod"
-	return drs.Service{
-		Id:          "drs-service-calypr",
-		Name:        "Calypr DRS Server",
-		Type:        drs.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.2.0"},
-		Description: &description,
-		CreatedAt:   &createdAt,
-		UpdatedAt:   &updatedAt,
-		Environment: &environment,
-		Version:     version.Version,
+	service := cfg.Service
+	environment := service.Environment
+	if environment == "" {
+		environment = cfg.Profile
 	}
+	if environment == "" {
+		environment = "dev"
+	}
+	description := service.Description
+	if description == "" {
+		description = "Calypr-backed DRS server"
+	}
+	maxBulk := cfg.DRS.MaxBulkRequestLength
+	enabled := cfg.Routes.Ga4gh
+	disabled := false
+	claimFormat := generated.DrsServiceDrsControlledAccessClaimFormat("ga4gh-passport-url-claim")
+	claimDefault := generated.DrsServiceDrsControlledAccessDefault("open-access-read")
+	now := time.Now().UTC()
+	result := generated.N200ServiceInfo{
+		Id:                   service.ID,
+		Name:                 service.Name,
+		Description:          &description,
+		Version:              version.Version,
+		Environment:          &environment,
+		Type:                 generated.ServiceType{Group: "org.ga4gh", Artifact: "drs", Version: "1.5.0"},
+		CreatedAt:            &now,
+		UpdatedAt:            &now,
+		MaxBulkRequestLength: maxBulk,
+		Drs: &generated.DrsCapabilities{
+			MaxBulkRequestLength:            maxBulk,
+			ObjectRegistrationSupported:     &enabled,
+			DeleteSupported:                 &enabled,
+			DeleteStorageDataSupported:      &disabled,
+			MetadataRetentionSupported:      &disabled,
+			AccessMethodUpdateSupported:     &enabled,
+			ChecksumAdditionSupported:       &disabled,
+			FetchByChecksumSupported:        &enabled,
+			ControlledAccessSupported:       &enabled,
+			ControlledAccessClaimFormat:     &claimFormat,
+			ControlledAccessDefault:         &claimDefault,
+			ValidateAccessMethods:           &disabled,
+			ValidateChecksums:               &disabled,
+			ValidateFileSizes:               &disabled,
+			MaxBulkAccessMethodUpdateLength: &maxBulk,
+			MaxBulkDeleteLength:             &maxBulk,
+			MaxRegisterRequestLength:        &maxBulk,
+		},
+	}
+	result.Organization.Name = service.Organization
+	result.Organization.Url = service.OrganizationURL
+	if service.ContactURL != "" {
+		result.ContactUrl = &service.ContactURL
+	}
+	if service.DocumentationURL != "" {
+		result.DocumentationUrl = &service.DocumentationURL
+	}
+	return result
 }
 
 type serverBackend struct {

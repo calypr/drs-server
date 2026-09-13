@@ -3,15 +3,11 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/calypr/syfon/client/common"
 )
-
-const multipartCheckpointMaxAge = 24 * time.Hour
 
 // OptimalChunkSize returns a recommended chunk size for the given file size.
 func OptimalChunkSize(fileSize int64) int64 {
@@ -44,46 +40,8 @@ func CheckpointPath(sourcePath, guid string) (string, error) {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return "", err
 	}
-	cleanupStaleMultipartCheckpoints(base, multipartCheckpointMaxAge)
-
 	sum := sha256.Sum256([]byte(sourcePath + "|" + guid))
 	return filepath.Join(base, hex.EncodeToString(sum[:])+".json"), nil
-}
-
-func cleanupStaleMultipartCheckpoints(base string, maxAge time.Duration) {
-	if maxAge <= 0 {
-		return
-	}
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		return
-	}
-	cutoff := time.Now().Add(-maxAge)
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil || info.ModTime().After(cutoff) {
-			continue
-		}
-		if !expiredUploadingCheckpoint(filepath.Join(base, entry.Name())) {
-			continue
-		}
-		_ = os.Remove(filepath.Join(base, entry.Name()))
-	}
-}
-
-func expiredUploadingCheckpoint(path string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	var state uploaderResumeState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return false
-	}
-	return state.Phase == uploadCheckpointUploading && state.UploadID != ""
 }
 
 func scaleLinear(size, minSize, maxSize, minChunk, maxChunk int64) int64 {

@@ -56,6 +56,9 @@ func hasObjectMethod(ctx context.Context, obj *drs.DrsObject, method string, pub
 			}
 		}
 	}
+	if access.HasMethodAccess(ctx, method, []string{"/programs"}) || access.HasMethodAccess(ctx, method, []string{"/data_file"}) {
+		return true
+	}
 	return access.HasObjectMethodAccess(ctx, method, AccessResources(obj))
 }
 

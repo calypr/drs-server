@@ -32,6 +32,9 @@ func (s *Service) ListObjects(ctx context.Context, query RecordListQuery) ([]drs
 		}
 		offset = query.Page * query.Limit
 	}
+	if query.Limit > 0 && offset > int(^uint(0)>>1)-query.Limit {
+		return nil, fmt.Errorf("page window is too large")
+	}
 	if query.Limit == 0 {
 		return []drs.DrsObject{}, nil
 	}
@@ -110,7 +113,8 @@ func (s *Service) prepareScopedRecords(ctx context.Context, records []drs.DrsObj
 
 func (s *Service) listScopeRecords(ctx context.Context, query RecordListQuery, offset int) ([]drs.DrsObject, error) {
 	resources, unscoped, restricted := objectMethodResourceFilter(ctx, query.RequiredMethod)
-	databasePage := !restricted && len(resources) == 0 && unscoped
+	pageByAuthorization, canPageByAuthorization := s.store.(AuthorizedScopePager)
+	databasePage := (!restricted && len(resources) == 0 && unscoped) || (restricted && canPageByAuthorization)
 	var allIDs []string
 	if !databasePage {
 		var err error
@@ -120,14 +124,19 @@ func (s *Service) listScopeRecords(ctx context.Context, query RecordListQuery, o
 		}
 	}
 	target := query.Limit + offset
-	batchSize := max(target, 100)
+	batchSize := query.Limit
+	if batchSize < 100 {
+		batchSize = 100
+	}
 	rawStart := query.StartAfter
-	collected := make([]drs.DrsObject, 0, target)
-	seen := make(map[string]struct{}, target)
+	collected := make([]drs.DrsObject, 0)
+	seen := make(map[string]struct{})
 	for len(collected) < target {
 		var ids []string
 		var err error
-		if databasePage {
+		if databasePage && restricted && canPageByAuthorization {
+			ids, err = pageByAuthorization.ListObjectIDsPageByAuthorizedScope(ctx, query.Scope.Organization, query.Scope.Project, rawStart, batchSize, 0, resources, unscoped, restricted)
+		} else if databasePage {
 			ids, err = s.store.ListObjectIDsPageByScope(ctx, query.Scope.Organization, query.Scope.Project, rawStart, batchSize, 0)
 		} else {
 			ids = pageIDs(allIDs, rawStart, batchSize, 0)

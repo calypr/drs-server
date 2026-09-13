@@ -125,6 +125,23 @@ func (s *internalServer) InternalMultipartComplete(c fiber.Ctx) error {
 	return c.JSON(internalapi.InternalMultipartCompleteOutput{ObjectUrl: location})
 }
 
+func (s *internalServer) InternalMultipartAbort(c fiber.Ctx) error {
+	if access.MissingGen3AuthHeader(c.Context()) {
+		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	var req internalapi.InternalMultipartAbortRequest
+	if err := c.Bind().JSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		return Reject(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	if req.UploadId == "" {
+		return Reject(c, fiber.StatusBadRequest, "uploadId is required")
+	}
+	if err := s.transfers.AbortMultipart(c.Context(), req.UploadId); err != nil {
+		return HandleError(c, err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func (s *internalServer) InternalUploadBlank(c fiber.Ctx) error {
 	if access.MissingGen3AuthHeader(c.Context()) {
 		return Reject(c, fiber.StatusUnauthorized, "Unauthorized")

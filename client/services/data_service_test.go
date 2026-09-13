@@ -276,6 +276,33 @@ func TestDataServiceOperationsAndTransferHelpers(t *testing.T) {
 	}
 }
 
+func TestDataServiceMultipartAbortUsesAdditiveInternalRoute(t *testing.T) {
+	var uploadID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/data/multipart/abort" {
+			http.NotFound(w, r)
+			return
+		}
+		var request struct {
+			UploadID string `json:"uploadId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		uploadID = request.UploadID
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	service := NewDataService(mustInternalClient(t, server.URL), server.Client(), discardLogger(), nil)
+	if err := service.MultipartAbort(context.Background(), "provider-upload"); err != nil {
+		t.Fatalf("MultipartAbort failed: %v", err)
+	}
+	if uploadID != "provider-upload" {
+		t.Fatalf("upload ID = %q, want provider-upload", uploadID)
+	}
+}
+
 func TestDataServiceMultipartInitPreservesServerMessage(t *testing.T) {
 	t.Parallel()
 
