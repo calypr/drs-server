@@ -276,6 +276,9 @@ func (s *drsServer) GetObjectsByChecksum(c fiber.Ctx, checksum generated.Checksu
 		return HandleError(c, err)
 	}
 	fetched := byChecksum[key]
+	if fetched == nil {
+		fetched = []generated.DrsObject{}
+	}
 
 	for i := range fetched {
 		setDRSIdentity(&fetched[i])

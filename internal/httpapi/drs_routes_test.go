@@ -166,6 +166,29 @@ func TestRegisterObjectsRejectsMissingAccessMethods(t *testing.T) {
 	}
 }
 
+func TestGetObjectsByChecksumReturnsEmptyArrayForNoMatches(t *testing.T) {
+	db := newDRSObjectStore(t, nil)
+	app := newDRSTestApp(testDRSServices(db, nil))
+
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/objects/checksum/missing", nil))
+	if err != nil {
+		t.Fatalf("checksum request failed: %v", err)
+	}
+	parsed, err := generated.ParseGetObjectsByChecksumResponse(response)
+	if err != nil {
+		t.Fatalf("parse checksum response: %v", err)
+	}
+	if parsed.JSON200 == nil {
+		t.Fatalf("checksum response was not recognized as JSON 200: status=%d body=%s", parsed.StatusCode(), parsed.Body)
+	}
+	if parsed.JSON200.ResolvedDrsObject == nil {
+		t.Fatalf("resolved_drs_object = null, want []: body=%s", parsed.Body)
+	}
+	if len(*parsed.JSON200.ResolvedDrsObject) != 0 {
+		t.Fatalf("resolved_drs_object = %+v, want []", *parsed.JSON200.ResolvedDrsObject)
+	}
+}
+
 func (m *drsCaptureStorageAccess) Sign(_ context.Context, request storage.SignRequest) (storage.SignedAccess, error) {
 	m.lastOptions = request
 	m.lastURL = request.Target.OriginalURL
